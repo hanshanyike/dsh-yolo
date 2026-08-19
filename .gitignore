@@ -1,0 +1,43 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+*.tsbuildinfo
+.tsdowncache/
+
+# runtime SQLite (NOT committed; rebuildable from snapshots)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.db-journal
+data/*.db-sqlite
+
+# NOTE: data/snapshots/*.md ARE committed — human-readable, versionable memory
+
+# env / secrets
+.env
+.env.local
+*.env
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# pnpm / corepack
+.pnpm-debug.log*
+
+# dev host: cloned deepseek-harness is NOT part of the yolo repo
+host/
+
+# logs
+*.log
+logs/
+
+# test artifacts
+coverage/
+.vitest-cache/

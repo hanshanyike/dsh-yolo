@@ -1,0 +1,5 @@
+# YOLO release patch (references the built package by name; resolved via Node module resolution).
+# Used after `pnpm build` when the package is installed into a dsh profile.
+- insert:
+  - id: yolo
+    name: dsh-plugin-yolo
