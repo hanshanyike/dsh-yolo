@@ -121,8 +121,8 @@ reviewable record — you can restore the DB from a snapshot at any time.
 | **M1** | ✅ done | `ctx.yolo` storage Service + SQLite/FTS5/snapshots + memory tools — **14/14 tests pass** |
 | **M2** | ✅ done | hybrid extraction (rules + turn-end LLM) + dedup — **40/40 tests pass** |
 | **M3** | ✅ done | injection: systemPrompt preamble/recall + reminders + session-start replay |
-| **M4** | 🟡 partial | host settings section + Config + client UI shell (SettingsCard + dashboard tab); live data binding & registry tab in follow-up |
-| **M5** | 🟡 partial | daily snapshot scheduling + scheduler hardening; coverage ≥80% deferred (tool blocked by env) |
+| **M4** | ✅ done | host settings section + Config + client UI shell (SettingsCard + dashboard tab + header chip) + **live data channel** (host publishes `yolo/snapshot` durable events → client conversation node/view renders the real dashboard; `/yolo` command) |
+| **M5** | ✅ done | daily + every_10_turns snapshot scheduling + scheduler hardening + **coverage ≥80%** (82.24% stmts / 83 tests) |
 
 ## 📚 Docs
 
