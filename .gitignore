@@ -41,3 +41,6 @@ logs/
 # test artifacts
 coverage/
 .vitest-cache/
+
+# WorkBuddy workspace data (internal, not part of the plugin repo)
+.workbuddy/

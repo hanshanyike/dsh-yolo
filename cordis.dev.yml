@@ -1,6 +1,8 @@
 # YOLO development patch (load plugin from source, no build needed).
 # Use with: pnpm dsh web --patch D:/Code/WorkBuddy/dsh-yolo/cordis.dev.yml
-# `name` is an absolute path to the plugin entry module; dsh loader resolves .ts directly.
+# IMPORTANT (Windows): `name` must be a `file://` URL, NOT a bare `D:/...` path.
+# Node's ESM loader treats a bare `D:/...` as protocol "d:" and rejects it
+# (ERR_UNSUPPORTED_ESM_URL_SCHEME). Use the file:///<drive>/abs/path form.
 - insert:
   - id: yolo
-    name: 'D:/Code/WorkBuddy/dsh-yolo/src/index.ts'
+    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/index.ts'

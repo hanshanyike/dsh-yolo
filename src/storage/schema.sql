@@ -1,0 +1,166 @@
+-- YOLO storage schema (SQLite + FTS5)
+-- Used by src/storage/db.ts on first open (idempotent — CREATE IF NOT EXISTS).
+-- Scope: see scope.ts; scope_key = sha1(cwd) + '/' + (git branch or 'default').
+
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+PRAGMA synchronous = NORMAL;
+
+-- scope metadata (single-row per scope db)
+CREATE TABLE IF NOT EXISTS meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+-- user profile (singleton row, id=1)
+CREATE TABLE IF NOT EXISTS user_profile (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  display_name TEXT,
+  timezone     TEXT,                 -- IANA, e.g. Asia/Shanghai (drives reminder + ISO date)
+  working_hours TEXT,                -- JSON { "start": "09:00", "end": "18:00" }
+  traits       TEXT,                 -- JSON array of strings (learned preferences/style)
+  updated_at   INTEGER NOT NULL
+);
+
+-- milestones
+CREATE TABLE IF NOT EXISTS milestones (
+  id          TEXT PRIMARY KEY,      -- ULID
+  title       TEXT NOT NULL,
+  description TEXT,
+  target_date TEXT,                  -- ISO8601 date YYYY-MM-DD (nullable)
+  status      TEXT NOT NULL DEFAULT 'planned',  -- planned|active|done|abandoned
+  scope_key   TEXT NOT NULL,
+  source      TEXT,                  -- rule|llm|tool|manual
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_milestones_date   ON milestones(target_date) WHERE target_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_milestones_status  ON milestones(status);
+CREATE INDEX IF NOT EXISTS idx_milestones_scope  ON milestones(scope_key);
+
+-- todos
+CREATE TABLE IF NOT EXISTS todos (
+  id            TEXT PRIMARY KEY,    -- ULID
+  title         TEXT NOT NULL,
+  detail        TEXT,
+  status        TEXT NOT NULL DEFAULT 'pending',  -- pending|in_progress|done|cancelled
+  priority      TEXT,                -- low|medium|high|urgent
+  due_at        TEXT,                -- ISO8601 datetime (nullable)
+  milestone_id  TEXT REFERENCES milestones(id) ON DELETE SET NULL,
+  scope_key     TEXT NOT NULL,
+  dedup_key     TEXT,                -- rule/llm dedup (see extract/merge.ts)
+  source        TEXT,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  completed_at  INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_todos_due      ON todos(due_at) WHERE due_at IS NOT NULL AND status IN ('pending','in_progress');
+CREATE INDEX IF NOT EXISTS idx_todos_status   ON todos(status);
+CREATE INDEX IF NOT EXISTS idx_todos_dedup    ON todos(dedup_key) WHERE dedup_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_todos_milestone ON todos(milestone_id);
+CREATE INDEX IF NOT EXISTS idx_todos_scope   ON todos(scope_key);
+
+-- goals
+CREATE TABLE IF NOT EXISTS goals (
+  id           TEXT PRIMARY KEY,     -- ULID
+  title        TEXT NOT NULL,
+  description  TEXT,
+  progress     INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  status       TEXT NOT NULL DEFAULT 'active',  -- active|achieved|abandoned
+  milestone_id TEXT REFERENCES milestones(id) ON DELETE SET NULL,
+  scope_key    TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
+CREATE INDEX IF NOT EXISTS idx_goals_scope  ON goals(scope_key);
+
+-- preferences (key-value, confidence-weighted)
+CREATE TABLE IF NOT EXISTS preferences (
+  id         TEXT PRIMARY KEY,       -- ULID
+  key        TEXT NOT NULL,           -- e.g. coding_style, communication_lang
+  value      TEXT NOT NULL,
+  confidence REAL DEFAULT 0.5,
+  scope_key  TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(key, scope_key)
+);
+CREATE INDEX IF NOT EXISTS idx_prefs_key   ON preferences(key);
+CREATE INDEX IF NOT EXISTS idx_prefs_scope ON preferences(scope_key);
+
+-- timeline events (append-only; references source session)
+CREATE TABLE IF NOT EXISTS events (
+  id          TEXT PRIMARY KEY,      -- ULID
+  kind        TEXT NOT NULL,         -- note|decision|milestone_reached|reminder_fired|...
+  summary     TEXT NOT NULL,
+  detail      TEXT,
+  session_id  TEXT,                  -- originating dsh session (nullable)
+  occurred_at INTEGER NOT NULL,
+  scope_key   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_time ON events(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_scope ON events(scope_key);
+
+-- extraction audit log + dedup guard
+CREATE TABLE IF NOT EXISTS extraction_log (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id    TEXT NOT NULL,
+  turn_seq      INTEGER NOT NULL,    -- which turn within the session
+  strategy      TEXT NOT NULL,      -- rule|llm
+  status        TEXT NOT NULL,       -- ok|empty|error
+  error         TEXT,
+  extracted_json TEXT,              -- raw LLM JSON return (audit)
+  token_in      INTEGER,
+  token_out     INTEGER,
+  duration_ms   INTEGER,
+  created_at    INTEGER NOT NULL,
+  UNIQUE(session_id, turn_seq, strategy)
+);
+CREATE INDEX IF NOT EXISTS idx_extlog_session ON extraction_log(session_id);
+
+-- pending reminders queued while no active session (replayed on agent/session-start)
+CREATE TABLE IF NOT EXISTS pending_reminders (
+  id           TEXT PRIMARY KEY,     -- ULID
+  todo_id      TEXT REFERENCES todos(id) ON DELETE CASCADE,
+  milestone_id TEXT REFERENCES milestones(id) ON DELETE CASCADE,
+  fire_at      INTEGER NOT NULL,
+  payload      TEXT NOT NULL,        -- reminder text to inject
+  scope_key    TEXT NOT NULL,
+  session_hint TEXT                  -- preferred session to inject into (nullable)
+);
+CREATE INDEX IF NOT EXISTS idx_pending_fire ON pending_reminders(fire_at);
+
+-- FTS5 full-text index covering searchable text rows.
+-- NOTE: tokenize choice validated at M1.
+--   - If better-sqlite3 ships trigram (SQLite >= 3.34): use tokenize='trigram' (good for CJK).
+--   - Else: unicode61 + application-layer bigram pre-processing written into `body`.
+CREATE VIRTUAL TABLE IF NOT EXISTS yolo_fts USING fts5(
+  row_type,        -- todo|milestone|goal|preference|event
+  row_id UNINDEXED,
+  title,
+  body,
+  tokenize = 'unicode61'
+);
+
+-- triggers keep FTS in sync with row writes (one direction: row -> fts).
+-- delete handled in repository.ts on update/delete to keep it explicit.
+CREATE TRIGGER IF NOT EXISTS trg_todos_ai AFTER INSERT ON todos BEGIN
+  INSERT INTO yolo_fts(row_type, row_id, title, body)
+  VALUES ('todo', new.id, new.title, COALESCE(new.detail,''));
+END;
+CREATE TRIGGER IF NOT EXISTS trg_milestones_ai AFTER INSERT ON milestones BEGIN
+  INSERT INTO yolo_fts(row_type, row_id, title, body)
+  VALUES ('milestone', new.id, new.title, COALESCE(new.description,''));
+END;
+CREATE TRIGGER IF NOT EXISTS trg_goals_ai AFTER INSERT ON goals BEGIN
+  INSERT INTO yolo_fts(row_type, row_id, title, body)
+  VALUES ('goal', new.id, new.title, COALESCE(new.description,''));
+END;
+CREATE TRIGGER IF NOT EXISTS trg_preferences_ai AFTER INSERT ON preferences BEGIN
+  INSERT INTO yolo_fts(row_type, row_id, title, body)
+  VALUES ('preference', new.id, new.key, new.value);
+END;
+CREATE TRIGGER IF NOT EXISTS trg_events_ai AFTER INSERT ON events BEGIN
+  INSERT INTO yolo_fts(row_type, row_id, title, body)
+  VALUES ('event', new.id, new.summary, COALESCE(new.detail,''));
+END;
