@@ -1,8 +1,11 @@
-# YOLO development patch (load plugin from source, no build needed).
-# Use with: pnpm dsh web --patch D:/Code/WorkBuddy/dsh-yolo/cordis.dev.yml
+# YOLO development patch (load plugins from source, no build needed).
+# Use with: node --import tsx/esm <host>/apps/cli/src/bin.ts web --patch D:/Code/WorkBuddy/dsh-yolo/cordis.dev.yml --no-open
 # IMPORTANT (Windows): `name` must be a `file://` URL, NOT a bare `D:/...` path.
 # Node's ESM loader treats a bare `D:/...` as protocol "d:" and rejects it
 # (ERR_UNSUPPORTED_ESM_URL_SCHEME). Use the file:///<drive>/abs/path form.
 - insert:
-  - id: yolo
-    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/index.ts'
+  # M1: storage service (ctx.yolo) + memory tools. M2+ appends extract/reminder/ui.
+  - id: yolo-storage
+    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/storage/index.ts'
+  - id: yolo-memory
+    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/memory/index.ts'

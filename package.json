@@ -23,6 +23,10 @@
     "@deepseek-ai/cordis": "*"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "link:./host/deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-tools": "link:./host/deepseek-harness/packages/core/tools",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.0",
     "tsdown": "^0.6.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"

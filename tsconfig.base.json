@@ -4,6 +4,7 @@
     "lib": ["ES2022"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "types": ["node"],
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -13,7 +14,8 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "declaration": false,
-    "outDir": "dist",
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "rootDir": "."
   }
 }

@@ -59,6 +59,18 @@ node --import tsx/esm apps/cli/src/bin.ts web --patch D:/Code/WorkBuddy/dsh-yolo
 # → [yolo] plugin loaded  ;  http://127.0.0.1:3080
 ```
 
+## M1 — storage Service + memory tools (verified 2026-08-20)
+
+- **A plugin module must DEFAULT-export its plugin** (function, or object/class with an `apply` method). A bare named export (`export class Yolo`) makes the loader pass the whole module namespace to `ctx.plugin` → `invalid plugin, expect function or object with an "apply" method, received object`. Fix: `export default class Yolo extends Service`.
+- **`@deepseek-ai/cordis` (vendor/cordis) + `@deepseek-ai/dsh-tools` (packages/core/tools) are linked into yolo as `link:` devDeps** so `tsc` sees real types; at runtime the host provides them. `dsh-tools` already augments `Context.tools` via `declare module '@deepseek-ai/cordis'`.
+- **`defineTool` output.schema needs `additionalProperties: true` for object schemas** (`ObjectValueSchemaSpec` requires the field).
+- **Vitest MUST exclude `host/**`** — default include sweeps the dev host's 200+ spec files and hangs (killed task, empty output). `vitest.config.ts` sets `include: ['tests/**/*.test.ts']`, `exclude: ['host/**', ...]`, `pool: 'forks'`.
+- **FTS5 trigram verified** in better-sqlite3 11.10.0 (Win/x64 + Node 22): good CJK recall for queries ≥ 3 chars; 2-char queries fall back to substring scan (may miss). Schema uses `tokenize='trigram'`.
+- **better-sqlite3 native binding**: pnpm ignores build scripts by default → `pnpm install` alone leaves no `build/Release/better_sqlite3.node`. Fix: `pnpm-workspace.yaml` `onlyBuiltDependencies: [better-sqlite3, esbuild]` + run `prebuild-install` manually once (or rebuild). 
+- **`ctx.logger.info` does NOT print to the host terminal** — dsh logger routes elsewhere. M0's visible `[yolo] plugin loaded` came from the `console.log` fallback. For terminal-visible markers use `console.log`.
+- **EADDRINUSE 3080**: a killed-but-leftover dsh web process holds the port; clear with PowerShell `Get-NetTCPConnection -LocalPort 3080 ... | Stop-Process`.
+- M1 host boot result: `dsh web: http://127.0.0.1:3080` (HTTP 200), no loader errors → `ctx.yolo` Service + 4 memory tools registered without failure. `pnpm test`: 14/14.
+
 ## Open questions to resolve at the right milestone
 
 | # | question | milestone |

@@ -131,15 +131,16 @@ CREATE TABLE IF NOT EXISTS pending_reminders (
 CREATE INDEX IF NOT EXISTS idx_pending_fire ON pending_reminders(fire_at);
 
 -- FTS5 full-text index covering searchable text rows.
--- NOTE: tokenize choice validated at M1.
---   - If better-sqlite3 ships trigram (SQLite >= 3.34): use tokenize='trigram' (good for CJK).
---   - Else: unicode61 + application-layer bigram pre-processing written into `body`.
+-- M1 verified: better-sqlite3 11.10.0 on Win/x64 + Node 22 ships trigram (SQLite >= 3.34).
+-- trigram gives good CJK recall for queries >= 3 chars. For 2-char queries trigram
+-- falls back to substring scan (slower, may miss). M5 may switch to index-side bigram
+-- if 2-char recall becomes a problem in practice.
 CREATE VIRTUAL TABLE IF NOT EXISTS yolo_fts USING fts5(
   row_type,        -- todo|milestone|goal|preference|event
   row_id UNINDEXED,
   title,
   body,
-  tokenize = 'unicode61'
+  tokenize = 'trigram'
 );
 
 -- triggers keep FTS in sync with row writes (one direction: row -> fts).
