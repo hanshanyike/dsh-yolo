@@ -105,3 +105,13 @@ node --import tsx/esm apps/cli/src/bin.ts web --patch D:/Code/WorkBuddy/dsh-yolo
 - **pnpm `link:` again produced empty dirs for dsh-system-prompt** (only when declared via package.json) — manual junction instead; keep this pattern for any further host type packages.
 - M3 host boot result: **4 plugins** (storage/memory/extract/reminder) load cleanly, `dsh web` 200 OK. `pnpm test`: 38/38.
 
+## M4a — host UI infrastructure (verified 2026-08-20)
+
+- **Settings card, host half**: `installSettingsSection(ctx, ns, Config, config, { setSource?, onChange?, validate? })` from `@deepseek-ai/dsh-settings`; `settingsNamespace('yolo')` is the join key with the client half. `Config` uses schemastery `z<Config>` pattern (explicit interface + `export const Config: z<Config>`) — **`z.literal`/`z.union`/`z.infer` are unavailable in this schemastery build** (host plugins use `z.string()` + min/max/default).
+- **No `inject: ['settings']` needed** for installSettingsSection (cookbook example has none).
+- **`conversation.view` (tab) is NOT a plain slot** — it's `ctx.conversationViews.register(ConversationViewDefinition)` (ClientRuntime registry, snapshot-builder based). `conversation.chat.node` IS a slot (`ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({name,key}, View))`) wired to `ctx.conversationEvents.register(definition)`.
+- **Custom durable events**: `declare module '@deepseek-ai/dsh-session/types' { interface SessionEventMap { 'yolo/snapshot': {...} } }` in a module imported for side effects.
+- **pnpm empty-dir bug now also breaks tsdown 0.22 build**: tsdown's own deps (ansis, tinyexec, ...) are created as EMPTY dirs in `.pnpm/tsdown@0.22.14.../node_modules/` → `Cannot find package .../ansis/index.js`. Per-dep junctions are whack-a-mole. **M4b must fix the toolchain** (candidate: `pnpm install --force` / node-linker=hoisted / use host's tsdown) before client-bundle building.
+- `dsh.client` field (`./client` export + browser entry) is declared in package.json; client entry skeleton `client/index.ts` added.
+- M4a host boot result: **5 plugins** (storage/memory/extract/reminder/ui) load cleanly, `dsh web` 200 OK. `pnpm test`: 38/38.
+

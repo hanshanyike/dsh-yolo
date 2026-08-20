@@ -13,3 +13,5 @@
     name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/extract/index.ts'
   - id: yolo-reminder
     name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/reminder/index.ts'
+  - id: yolo-ui
+    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/ui/index.ts'
