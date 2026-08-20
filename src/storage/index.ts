@@ -10,7 +10,7 @@ import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { openDb, type DB } from './db.ts'
+import { getMeta, openDb, setMeta, type DB } from './db.ts'
 import { computeScopeKey, resolveDataDir, dbFileName } from './scope.ts'
 import * as repo from './repository.ts'
 import { ftsSearch } from './search.ts'
@@ -186,6 +186,13 @@ export default class Yolo extends Service {
   writeSnapshot(cwd: string, dateStr?: string): string {
     const h = this.resolve(cwd)
     return writeSnapshot(h.db, h.scopeKey, h.dataDir, cwd, dateStr)
+  }
+  /** Date of the last daily snapshot (YYYY-MM-DD), for snapshot scheduling (M5). */
+  lastSnapshotDate(cwd: string): string | undefined {
+    return getMeta(this.resolve(cwd).db, 'last_snapshot_date')
+  }
+  setSnapshotDate(cwd: string, date: string): void {
+    setMeta(this.resolve(cwd).db, 'last_snapshot_date', date)
   }
 }
 

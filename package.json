@@ -4,10 +4,10 @@
   "description": "YOLO (You Only Live/Look Once) — personal ultimate intelligent assistant plugin for deepseek-harness. Extracts milestones/todos/goals/preferences from every session, stores them, proactively reminds, and renders a native dashboard.",
   "type": "module",
   "license": "MIT",
-  "main": "./dist/index.js",
+  "main": "./dist/src/index.mjs",
   "exports": {
-    ".": "./dist/index.js",
-    "./client": "./dist/client/index.js"
+    ".": "./dist/src/index.mjs",
+    "./client": "./dist/client/index.mjs"
   },
   "dsh": {
     "bundle": "./cordis.bundle.yml",
@@ -33,6 +33,8 @@
     "@deepseek-ai/dsh-tools": "link:./host/deepseek-harness/packages/core/tools",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.0",
+    "@types/react": "^18.3.31",
+    "react": "^18.3.1",
     "tsdown": "^0.22.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"

@@ -31,6 +31,15 @@ export function reminderText(title: string, dueAt?: string | null): string {
   return `⏰ 提醒: ${title}${dueAt ? ` (到期 ${dueAt})` : ''}`
 }
 
+/** Write today's Markdown snapshot once per calendar day. Returns the path or null. */
+export function maybeWriteDailySnapshot(yolo: Yolo, cwd: () => string): string | null {
+  const today = new Date().toISOString().slice(0, 10)
+  if (yolo.lastSnapshotDate(cwd()) === today) return null
+  const path = yolo.writeSnapshot(cwd(), today)
+  yolo.setSnapshotDate(cwd(), today)
+  return path
+}
+
 /** One scheduler pass — pure enough to unit test with a mocked yolo. */
 export function runReminderTick(deps: {
   yolo: Yolo
@@ -70,6 +79,7 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
   const tick = (): void => {
     try {
       runReminderTick({ yolo: deps.yolo, cwd: deps.cwd, aheadMs, getLatestAgent: deps.getLatestAgent })
+      maybeWriteDailySnapshot(deps.yolo, deps.cwd)
     } catch (e) {
       ctx.logger?.warn?.('[yolo-reminder] tick failed: %s', e instanceof Error ? e.message : String(e))
     }

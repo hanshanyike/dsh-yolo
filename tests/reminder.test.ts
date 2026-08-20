@@ -1,8 +1,8 @@
-// M3 reminder tests — scheduler tick logic with mocked storage/agent.
+// M3/M5 reminder tests — scheduler tick + daily snapshot logic with mocked storage.
 
 import { describe, it, expect, vi } from 'vitest'
 import type Yolo from '../src/storage/index.ts'
-import { reminderText, runReminderTick } from '../src/reminder/scheduler.ts'
+import { reminderText, runReminderTick, maybeWriteDailySnapshot } from '../src/reminder/scheduler.ts'
 import type { Todo } from '../src/storage/types.ts'
 
 function todo(id: string, title: string, dueAt?: string): Todo {
@@ -22,6 +22,9 @@ function mockYolo(todos: Todo[]) {
     listDueTodos: vi.fn(() => todos),
     queueReminder: vi.fn(),
     setTodoReminded: vi.fn(),
+    lastSnapshotDate: vi.fn(() => undefined),
+    writeSnapshot: vi.fn(() => '/tmp/snap.md'),
+    setSnapshotDate: vi.fn(),
   } as unknown as Yolo
 }
 
@@ -60,5 +63,23 @@ describe('runReminderTick', () => {
     const [cwd, iso] = (yolo.listDueTodos as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string]
     expect(cwd).toBe('/tmp')
     expect(new Date(iso).getTime()).toBeGreaterThan(Date.now() - 1000)
+  })
+})
+
+describe('maybeWriteDailySnapshot', () => {
+  it('writes once per day and stamps the date', () => {
+    const yolo = mockYolo([])
+    const p1 = maybeWriteDailySnapshot(yolo, () => '/tmp')
+    expect(p1).toBe('/tmp/snap.md')
+    expect(yolo.writeSnapshot).toHaveBeenCalledTimes(1)
+    expect(yolo.setSnapshotDate).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips when already snapshotted today', () => {
+    const yolo = mockYolo([])
+    ;(yolo.lastSnapshotDate as ReturnType<typeof vi.fn>).mockReturnValue(new Date().toISOString().slice(0, 10))
+    const p = maybeWriteDailySnapshot(yolo, () => '/tmp')
+    expect(p).toBeNull()
+    expect(yolo.writeSnapshot).not.toHaveBeenCalled()
   })
 })
