@@ -45,5 +45,9 @@ coverage/
 # lockfile not portable (devDeps use link: to the local host checkout)
 pnpm-lock.yaml
 
+# tool-generated temp artifacts
+.dsh-sdk-client-relcwd*/
+vitest.config.ts.timestamp-*
+
 # WorkBuddy workspace data (internal, not part of the plugin repo)
 .workbuddy/
