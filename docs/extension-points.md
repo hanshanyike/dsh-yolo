@@ -115,3 +115,16 @@ node --import tsx/esm apps/cli/src/bin.ts web --patch D:/Code/WorkBuddy/dsh-yolo
 - `dsh.client` field (`./client` export + browser entry) is declared in package.json; client entry skeleton `client/index.ts` added.
 - M4a host boot result: **5 plugins** (storage/memory/extract/reminder/ui) load cleanly, `dsh web` 200 OK. `pnpm test`: 38/38.
 
+## M4b / M5 — client UI shell + snapshot scheduling (verified 2026-08-20)
+
+- **Toolchain fixed via `nodeLinker: hoisted`** in pnpm-workspace.yaml: pnpm's `.pnpm` virtual store created EMPTY dependency dirs on this machine (tsdown deps, react, ...). Hoisted layout avoids the store → `tsdown 0.22` builds (`dist/src/index.mjs`, `dist/client/index.mjs`, React bundled, 107 kB). Better-sqlite3 binding needed `prebuild-install` again after the forced reinstall.
+- **tsdown 0.22 output layout**: entry `src/index.ts` → `dist/src/index.mjs` (keeps dir + `.mjs`); `package.json` exports/main updated accordingly.
+- **Client bundle (browser half)**: `dsh.client` field + `./client` export + `client/index.ts` apply. We use **structural (duck-typed) ctx** (slots/conversationViews) to avoid linking the deep dsh-client-runtime type chain; SettingsCard + YoloTab are React components (jsx react-jsx). Runtime: real ClientContext satisfies the shape.
+- **Snapshot scheduling**: `maybeWriteDailySnapshot` in the reminder tick — once per calendar day via `meta.last_snapshot_date` (`storage.lastSnapshotDate/setSnapshotDate`). `every_10_turns` / `manual` intervals remain config surface only.
+- **Coverage tool blocked by safe-delete shim**: `pnpm add -D @vitest/coverage-v8` fails under the Git Bash safe-delete shim (`genie-safe-delete.cjs` trash). M5 coverage measurement deferred; 40 tests already cover storage/extract/reminder core paths.
+- `pnpm test`: 40/40. Host boots 5 plugins clean.
+
+## Known follow-ups (next session)
+- M4b deep: live data binding for the dashboard tab (host projection or yolo_query), registry-based `conversation.view` via `ConversationViewRegistry.register(ConversationViewDefinition)`, header button (`conversation.session.header.actions`) + `/yolo` command, in-host browser verification of the client bundle.
+- M5b: coverage >= 80% once `@vitest/coverage-v8` installs (needs safe-delete workaround), every_10_turns snapshot, reminder hardening (overdue escalation).
+
