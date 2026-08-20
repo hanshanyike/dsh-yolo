@@ -1,5 +1,14 @@
-# YOLO release patch (references the built package by name; resolved via Node module resolution).
+# YOLO release patch (references the built plugin entries via the package's exports).
 # Used after `pnpm build` when the package is installed into a dsh profile.
+# Each row is one plugin in the YOLO bundle: storage service + 4 consumers + client.
 - insert:
-  - id: yolo
-    name: dsh-plugin-yolo
+  - id: yolo-storage
+    name: 'dsh-plugin-yolo/dist/src/storage/index.mjs'
+  - id: yolo-memory
+    name: 'dsh-plugin-yolo/dist/src/memory/index.mjs'
+  - id: yolo-extract
+    name: 'dsh-plugin-yolo/dist/src/extract/index.mjs'
+  - id: yolo-reminder
+    name: 'dsh-plugin-yolo/dist/src/reminder/index.mjs'
+  - id: yolo-ui
+    name: 'dsh-plugin-yolo/dist/src/ui/index.mjs'

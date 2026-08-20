@@ -13,5 +13,13 @@ export default defineConfig({
     poolOptions: {
       forks: { singleFork: true },
     },
+    coverage: {
+      provider: 'v8',
+      // only instrument YOLO's own sources — never the dev host checkout
+      include: ['src/**/*.ts', 'client/**/*.ts', 'client/**/*.tsx'],
+      exclude: ['host/**', 'node_modules/**', 'dist/**', 'src/**/*.d.ts'],
+      reporter: ['text', 'text-summary'],
+      reportsDirectory: './coverage',
+    },
   },
 })

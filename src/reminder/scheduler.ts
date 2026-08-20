@@ -40,6 +40,17 @@ export function maybeWriteDailySnapshot(yolo: Yolo, cwd: () => string): string |
   return path
 }
 
+/**
+ * Write a timestamped Markdown snapshot on a turn cadence ('every_10_turns').
+ * The caller counts turns; this fires once per N turns with a unique filename.
+ * Returns the path or null when the cadence has not been reached.
+ */
+export function maybeWriteTurnSnapshot(yolo: Yolo, cwd: () => string, turnCount: number, every = 10): string | null {
+  if (turnCount <= 0 || turnCount % every !== 0) return null
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  return yolo.writeSnapshot(cwd(), `turn-${turnCount}-${stamp}`)
+}
+
 /** One scheduler pass — pure enough to unit test with a mocked yolo. */
 export function runReminderTick(deps: {
   yolo: Yolo

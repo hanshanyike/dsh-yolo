@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import type Yolo from '../src/storage/index.ts'
-import { reminderText, runReminderTick, maybeWriteDailySnapshot } from '../src/reminder/scheduler.ts'
+import { reminderText, runReminderTick, maybeWriteDailySnapshot, maybeWriteTurnSnapshot } from '../src/reminder/scheduler.ts'
 import type { Todo } from '../src/storage/types.ts'
 
 function todo(id: string, title: string, dueAt?: string): Todo {
@@ -80,6 +80,25 @@ describe('maybeWriteDailySnapshot', () => {
     ;(yolo.lastSnapshotDate as ReturnType<typeof vi.fn>).mockReturnValue(new Date().toISOString().slice(0, 10))
     const p = maybeWriteDailySnapshot(yolo, () => '/tmp')
     expect(p).toBeNull()
+    expect(yolo.writeSnapshot).not.toHaveBeenCalled()
+  })
+})
+
+describe('maybeWriteTurnSnapshot', () => {
+  it('writes at every Nth turn with a timestamped name', () => {
+    const yolo = mockYolo([])
+    ;(yolo.writeSnapshot as ReturnType<typeof vi.fn>).mockReturnValue('/tmp/turn-snap.md')
+    const p = maybeWriteTurnSnapshot(yolo, () => '/tmp', 10)
+    expect(p).toBe('/tmp/turn-snap.md')
+    expect(yolo.writeSnapshot).toHaveBeenCalledTimes(1)
+    const [cwd, dateStr] = (yolo.writeSnapshot as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string]
+    expect(cwd).toBe('/tmp')
+    expect(dateStr).toMatch(/^turn-10-/)
+  })
+
+  it('skips turns not on the cadence', () => {
+    const yolo = mockYolo([])
+    expect(maybeWriteTurnSnapshot(yolo, () => '/tmp', 9)).toBeNull()
     expect(yolo.writeSnapshot).not.toHaveBeenCalled()
   })
 })

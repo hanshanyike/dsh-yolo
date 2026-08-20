@@ -1,16 +1,21 @@
-// YOLO reminder plugin — wires the scheduler + session-start replay.
+// YOLO reminder plugin — wires the scheduler, session-start replay, and the
+// turn-cadence snapshot trigger ('every_10_turns' storage interval).
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type Yolo from '../storage/index.ts'
-import { startReminderScheduler, type AgentLike } from './scheduler.ts'
+import { startReminderScheduler, maybeWriteTurnSnapshot, type AgentLike } from './scheduler.ts'
 
 export const name = 'yolo-reminder'
-export const inject = ['yolo', 'agents'] as const
+export const inject = ['yolo', 'agents', 'settings'] as const
 
 interface ReminderCtx extends Context {
   yolo: Yolo
 }
+
+/** Storage snapshot cadence the user can pick in Settings. */
+export const YOLO_NS = settingsNamespace('yolo')
 
 export function apply(ctx: Context): void {
   const yctx = ctx as unknown as ReminderCtx
@@ -30,6 +35,24 @@ export function apply(ctx: Context): void {
       } catch (e) {
         ctx.logger?.warn?.('[yolo-reminder] replay failed: %s', e instanceof Error ? e.message : String(e))
       }
+    }
+  })
+
+  // turn-cadence snapshot: 'every_10_turns' writes a timestamped Markdown
+  // snapshot every 10 finished turns (config read live via ctx.settings)
+  let turnCount = 0
+  ctx.on('agent/turn-stopping', () => {
+    turnCount++
+    try {
+      const config = (ctx as unknown as { settings?: { get(ns: unknown): { storage?: { snapshotInterval?: string } } | undefined } })
+        .settings?.get(YOLO_NS)
+      if (config?.storage?.snapshotInterval === 'every_10_turns') {
+        const cwd = process.cwd()
+        const path = maybeWriteTurnSnapshot(yctx.yolo, () => cwd, turnCount)
+        if (path) ctx.logger?.info?.('[yolo-reminder] turn snapshot written: %s', path)
+      }
+    } catch (e) {
+      ctx.logger?.warn?.('[yolo-reminder] turn snapshot failed: %s', e instanceof Error ? e.message : String(e))
     }
   })
 

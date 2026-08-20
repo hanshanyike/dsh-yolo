@@ -14,6 +14,9 @@ data/*.db-shm
 data/*.db-journal
 data/*.db-sqlite
 
+# workspace-scope runtime data (created at the repo root by dsh runs)
+.dsh/
+
 # NOTE: data/snapshots/*.md ARE committed — human-readable, versionable memory
 
 # env / secrets

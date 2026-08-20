@@ -24,8 +24,8 @@ function mockYolo(): Yolo {
     scope_key: 'test/main',
   }
   const pref: Preference = {
-    id: 'p1', key: '语言', value: '简体中文', scope_key: 'test/main',
-    created_at: now, updated_at: now,
+    id: 'p1', key: '语言', value: '简体中文', confidence: 1, scope_key: 'test/main',
+    updated_at: now,
   }
   return {
     resolve: () => ({ scopeKey: 'test/main', db: {}, dataDir: '' }),

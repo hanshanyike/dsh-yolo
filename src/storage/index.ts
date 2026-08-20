@@ -51,6 +51,20 @@ export default class Yolo extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'yolo')
+    // close cached DB handles on host shutdown / plugin unload (Windows-safe)
+    ;(ctx as { on?: (event: string, cb: () => void) => unknown }).on?.('dispose', () => this.close())
+  }
+
+  /** Close every cached DB handle (idempotent). Called on dispose and in tests. */
+  close(): void {
+    for (const h of this.scopes.values()) {
+      try {
+        h.db.close()
+      } catch {
+        // already closed
+      }
+    }
+    this.scopes.clear()
   }
 
   /** Resolve (and lazily open+cache) the DB handle for a scope. */
