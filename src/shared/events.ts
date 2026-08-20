@@ -1,13 +1,16 @@
 // YOLO custom durable session event types (declaration merge).
-// Emitted by the ui plugin when the dashboard is opened; consumed by the
-// client conversation node renderer (M4b) via the Conversation Node engine.
+// The host ui plugin appends 'yolo/snapshot' carrying the dashboard projection;
+// the client conversation node renderer matches it to materialize the YOLO tab.
+
+import type { YoloDashboardData } from './dashboard.ts'
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
-    /** The user opened the YOLO dashboard in this session. */
+    /** Host-published dashboard projection for the YOLO conversation view. */
     'yolo/snapshot': {
       createdAt: number
       scopeKey: string
+      data: YoloDashboardData
     }
   }
 }
