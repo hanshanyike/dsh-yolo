@@ -9,3 +9,5 @@
     name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/storage/index.ts'
   - id: yolo-memory
     name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/memory/index.ts'
+  - id: yolo-extract
+    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/extract/index.ts'

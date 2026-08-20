@@ -80,5 +80,16 @@ node --import tsx/esm apps/cli/src/bin.ts web --patch D:/Code/WorkBuddy/dsh-yolo
 | 3 | `ConversationNodeDefinition` registered via `registerConversationNodes` or `slots.inject`? | M4 |
 | 4 | custom durable event `yolo/snapshot` emit API (`session.append`? `agent.emit`?) | M4 |
 | 5 | is `dsh-client-ui-input-trigger` loaded by default (can we inject composer button)? | M4 |
-| 6 | does `ctx.llm` accept `purpose` for traffic segregation? | M2 |
+| ~~6~~ | ~~ctx.llm purpose~~ → **answered M2**: host only accepts `'compaction' | 'session-title'`; no custom tag | M2 |
 | 7 | does better-sqlite3 ship with trigram FTS5 tokenizer on Windows x64 + Node 22? | M1 |
+
+## M2 — hybrid extraction (verified 2026-08-20)
+
+- **`GenerateOptions.purpose` is a closed union** `'compaction' | 'session-title'` — the planned custom `'yolo-extract'` tag does NOT exist in host v0.1.0-rc.8. **Decision: use `'session-title'`** to segregate auxiliary traffic; revisit if the host adds an open purpose.
+- **`agent/turn-stopping` payload**: `{ agent, turn, signal }` (serial). `agent.session` is the live `Session`; `session.deriveMessages(): Message[]` gives model-visible history. Scope cwd: prefer `session.meta?.cwd`, fall back to `process.cwd()`.
+- **`session/event`** (emit): `(session, event)` — `event.type: 'user/message' | 'assistant/message'` carry `event.data.content: ContentBlock[]`; text via text-block extraction.
+- **`ctx.llm.stream(GenerateOptions)`**: `AsyncIterable<StreamChunk>` → fold with `BlockAssembler` (`push(chunk)` then `blocks()`). `StreamChunk` variants: `block-start/text-delta/block-end/usage/finish` (verified shape).
+- **pnpm `link:` to dsh-llm / dsh-session created EMPTY DIRECTORIES** (not symlinks) in `node_modules/@deepseek-ai/` — tsc then can't resolve them. Fix: delete the empty dirs, `New-Item -ItemType Junction` to the host package. (cordis & dsh-tools link fine — likely they were installed in an earlier pass.) Watch for this after every `pnpm install`.
+- Rule regexes must allow **zero-space Chinese phrases** (`我决定采用SQLite`, `我喜欢用中文回复`) — use `\s*` not `\s+` after trigger words; dates like `8/20 前` need `\s*` around the separator.
+- M2 host boot result: 3 plugins (storage + memory + extract) load cleanly, `dsh web` 200 OK. End-to-end rule→DB and LLM pull need a configured model key (user-side, M2 host run).
+

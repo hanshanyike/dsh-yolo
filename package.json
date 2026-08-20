@@ -24,6 +24,8 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:./host/deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-llm": "link:./host/deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:./host/deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-tools": "link:./host/deepseek-harness/packages/core/tools",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.0",
