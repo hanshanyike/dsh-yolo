@@ -173,9 +173,14 @@ export function listTodos(db: DB, scopeKey: string, status?: TodoStatus): Todo[]
 export function listDueTodos(db: DB, scopeKey: string, beforeIso: string): Todo[] {
   return db
     .prepare(
-      `SELECT * FROM todos WHERE scope_key = ? AND due_at IS NOT NULL AND due_at <= ? AND status IN ('pending','in_progress') ORDER BY due_at ASC`,
+      `SELECT * FROM todos WHERE scope_key = ? AND due_at IS NOT NULL AND due_at <= ? AND status IN ('pending','in_progress') AND last_reminded_at IS NULL ORDER BY due_at ASC`,
     )
     .all(scopeKey, beforeIso) as Todo[]
+}
+
+/** Stamp a todo as reminded so the scheduler does not re-fire it. */
+export function setTodoReminded(db: DB, id: string, ts = now()): void {
+  db.prepare('UPDATE todos SET last_reminded_at = ? WHERE id = ?').run(ts, id)
 }
 
 function syncTodoFts(db: DB, id: string, title: string, detail: string | null): void {

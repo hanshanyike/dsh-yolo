@@ -47,6 +47,7 @@ export interface Todo {
   created_at: number
   updated_at: number
   completed_at?: number | null
+  last_reminded_at?: number | null
 }
 
 export interface Goal {

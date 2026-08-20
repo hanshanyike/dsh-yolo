@@ -27,7 +27,19 @@ export function openDb(dbPath: string): DB {
   db.pragma('foreign_keys = ON')
   db.pragma('synchronous = NORMAL')
   db.exec(loadSchema())
+  migrate(db)
   return db
+}
+
+/**
+ * Lightweight forward migrations for DBs created before a schema change.
+ * SQLite has no "ADD COLUMN IF NOT EXISTS" — check PRAGMA table_info instead.
+ */
+function migrate(db: DB): void {
+  const cols = db.prepare('PRAGMA table_info(todos)').all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'last_reminded_at')) {
+    db.exec('ALTER TABLE todos ADD COLUMN last_reminded_at INTEGER')
+  }
 }
 
 export function setMeta(db: DB, key: string, value: string): void {

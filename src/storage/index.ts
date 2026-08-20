@@ -86,6 +86,9 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.listDueTodos(h.db, h.scopeKey, beforeIso)
   }
+  setTodoReminded(cwd: string, id: string, ts?: number): void {
+    repo.setTodoReminded(this.resolve(cwd).db, id, ts)
+  }
 
   // ---- milestones ----
   addMilestone(

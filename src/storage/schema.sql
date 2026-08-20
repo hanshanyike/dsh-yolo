@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS todos (
   source        TEXT,
   created_at    INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,
-  completed_at  INTEGER
+  completed_at  INTEGER,
+  last_reminded_at INTEGER          -- reminder dedup stamp (M3)
 );
 CREATE INDEX IF NOT EXISTS idx_todos_due      ON todos(due_at) WHERE due_at IS NOT NULL AND status IN ('pending','in_progress');
 CREATE INDEX IF NOT EXISTS idx_todos_status   ON todos(status);

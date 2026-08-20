@@ -93,3 +93,15 @@ node --import tsx/esm apps/cli/src/bin.ts web --patch D:/Code/WorkBuddy/dsh-yolo
 - Rule regexes must allow **zero-space Chinese phrases** (`我决定采用SQLite`, `我喜欢用中文回复`) — use `\s*` not `\s+` after trigger words; dates like `8/20 前` need `\s*` around the separator.
 - M2 host boot result: 3 plugins (storage + memory + extract) load cleanly, `dsh web` 200 OK. End-to-end rule→DB and LLM pull need a configured model key (user-side, M2 host run).
 
+## M3 — injection & reminders (verified 2026-08-20)
+
+- **`AssembleContext` is only `{ scope?, signal? }`** — NO `userMessage` (plan assumed one). **Decision: memory plugin caches the latest `user/message` text via `session/event`; the recall context reads that cache.** Same caveat as M2's `purpose` — plan deviation due to rc.8 API surface.
+- **`ctx.systemPrompt.section({name, order, text: string | ((ctx: AssembleContext) => string), complete?})`** and **`ctx.systemPrompt.context({name, order, text})`** confirmed (duplicate name throws). Orders: 120 prefs / 220 recall.
+- **`agent/session-start`** payload `{ agent, source }` — used to (a) track the latest active agent for reminder injection, (b) replay queued `pending_reminders`.
+- **`Agent.inject(message)` / `Agent.followup(message)` / `Agent.steer(message)`** take a `UserMessage`. **`createUserMessage` REQUIRES `source`** (`{ kind: 'user' }`) — missing it fails typecheck.
+- **`AgentRegistry`** (`ctx.agents`): `get(id)` + `currentInitiator()` — no "list active agents" API. Reminder keeps its own `latestAgent` from `agent/session-start`.
+- **Schema migration pattern**: SQLite has no `ADD COLUMN IF NOT EXISTS` — `openDb()` checks `PRAGMA table_info(todos)` and `ALTER TABLE ... ADD COLUMN last_reminded_at` for pre-M3 DBs.
+- **`ctx.effect(() => start())`** returns cleanup (`clearInterval`) — cordis effect cleanup contract confirmed.
+- **pnpm `link:` again produced empty dirs for dsh-system-prompt** (only when declared via package.json) — manual junction instead; keep this pattern for any further host type packages.
+- M3 host boot result: **4 plugins** (storage/memory/extract/reminder) load cleanly, `dsh web` 200 OK. `pnpm test`: 38/38.
+
