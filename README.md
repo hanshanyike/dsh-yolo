@@ -8,6 +8,7 @@
 
 *Model thinks, Harness acts, YOLO remembers.*
 
+[![CI](https://github.com/hanshanyike/dsh-yolo/actions/workflows/ci.yml/badge.svg)](https://github.com/hanshanyike/dsh-yolo/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](package.json)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.19-339933?logo=node.js&logoColor=white)](package.json)
@@ -138,7 +139,7 @@ time.
 | **M3** | ✅ done | injection: systemPrompt preamble/recall + reminders + session-start replay |
 | **M4** | ✅ done | settings section + client UI shell + **live data channel** (host publishes `yolo/snapshot` durable events → dashboard tab renders real data; `/yolo` command) |
 | **M5** | ✅ done | snapshot scheduling (daily + every 10 turns) + scheduler hardening + coverage push |
-| **M6** | 🔜 next | **release engineering** — npm-publishable plugin (install with one command, no host checkout), GitHub Actions CI (typecheck + tests on Linux/macOS/Windows), coverage badge, `v0.2.0` |
+| **M6** | 🔨 in progress | **release engineering** — ✅ GitHub Actions CI (typecheck + tests + build on Linux & Windows, coverage artifact) · ✅ npm-ready manifest (registry deps, `files`, `publishConfig`) · ✅ community files (issue/PR templates) · ⏳ first `npm publish` + `v0.2.0` tag |
 | **M7** | 🗓 planned | **memory portability** — snapshot import/export CLI, DB rebuild-from-snapshot tooling, workspace merge |
 | **M8** | 🗓 planned | **recall quality** — hybrid ranking (FTS + semantic embeddings), recall feedback loop measuring whether injected memories actually helped |
 | **M9** | 🗓 planned | **multi-workspace aggregation** — cross-project global timeline, auto-generated weekly review digest |

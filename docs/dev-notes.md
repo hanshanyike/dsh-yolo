@@ -298,31 +298,28 @@ Get-NetTCPConnection -LocalPort 4080 -ErrorAction SilentlyContinue |
 
 ## 六、本仓库自身的依赖
 
-YOLO 的 `package.json` 把 `@deepseek-ai/cordis`、`dsh-llm`、`dsh-session`、`dsh-tools` 声明为 `link:` peerDeps，指向 `./host/deepseek-harness/...`。`better-sqlite3` 是 `dependencies`（native binding，需 pnpm `allowBuilds` 放行编译脚本）。
+> **2026-08-21 更新（M6）**：devDependencies 已从 `link:./host/...` 全面切换到 npm registry 的
+> `@deepseek-ai/*@0.1.1-rc.2` 版本线。原因：`link:` 使 pnpm-lock 不可移植、CI 无法冻结安装。
+> 现在仓库根目录一条 `pnpm install` 即可完成 check/test/build，**不再需要 host checkout**——
+> host 仍由 `scripts/dev.mjs` 按需 clone，仅供**运行时**（dsh web 启动）使用。
 
-`scripts/dev.mjs` 会自动在 YOLO 根目录跑 `pnpm install`（步骤 4）。`pnpm-workspace.yaml` 的 `allowBuilds: { better-sqlite3: true, esbuild: true }` 确保 native binding 被构建。
-
-### tsc / vitest
-
-`pnpm check`（tsc）和 `pnpm test`（vitest）需要 `host/deepseek-harness` 就位：
+- `@deepseek-ai/cordis` 同时是 peerDependency（host 运行时提供）与 devDependency（类型 + 测试）。
+- `better-sqlite3` 是唯一的 `dependencies`（native binding，需 pnpm `allowBuilds` 放行编译）。
+- `pnpm-workspace.yaml` 的 `minimumReleaseAge: 0` 跳过 pnpm 11 对刚发布包的冷却期（rc 依赖线全是新包）。
+- `pnpm-lock.yaml` **已提交**（registry deps 后可移植），CI 用 `--frozen-lockfile`。
 
 ```bash
-node scripts/dev.mjs --setup   # 先准备 host + YOLO 依赖
-pnpm check                      # tsc --noEmit
-pnpm test                       # vitest（仅 tests/，host/** 已 exclude）
+pnpm install   # 仅装 YOLO 自身依赖（无 host）
+pnpm check     # tsc --noEmit
+pnpm test      # vitest（仅 tests/，host/** 已 exclude）
+pnpm build     # tsdown host + client + wrap-client + copy-assets
 ```
 
-### pnpm link 空目录坑
+### 历史坑：pnpm link 空目录 / 手工 junction（已随 M6 依赖切换作废）
 
-pnpm `link:` 偶尔会在 `node_modules/@deepseek-ai/` 下生成**空目录**而非 junction，导致 tsc 无法解析。若 `pnpm check` 报 `Cannot find module '@deepseek-ai/dsh-llm'`，在 PowerShell：
-
-```powershell
-Remove-Item -Recurse -Force node_modules/@deepseek-ai/dsh-llm -ErrorAction SilentlyContinue
-New-Item -ItemType Junction -Path node_modules/@deepseek-ai/dsh-llm `
-  -Target host/deepseek-harness/packages/llm/llm
-```
-
-对 `dsh-session`、`dsh-tools` 同理。
+切换前，`@deepseek-ai/*` 靠 `link:` devDeps + 手工 junction 指向 host checkout，且 pnpm `link:`
+偶尔生成空目录导致 `Cannot find module`。如检出的是旧提交需要复现该环境，参照
+`git log` 中 M6 之前的 `package.json`（`link:` 写法）与 host 目录布局。
 
 ---
 

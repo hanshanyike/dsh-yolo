@@ -3,6 +3,7 @@
 allowBuilds:
   better-sqlite3: true
   esbuild: true
-# hoisted linker: pnpm's .pnpm virtual store creates EMPTY dependency dirs on
-# this machine (tsdown deps, react, etc.) — hoisted layout avoids the store.
+minimumReleaseAge: 0  # rc deps: skip pnpm's new-package cool-down
+# hoisted linker: flat npm-style layout (deterministic for CI; avoids the
+# .pnpm virtual store empty-dir quirk seen with linked host packages).
 nodeLinker: hoisted
