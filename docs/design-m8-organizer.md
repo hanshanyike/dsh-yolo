@@ -1,6 +1,6 @@
 # M8 设计文档 · Phase 1 Organizer（组织）
 
-> 状态：已评审，实施中
+> 状态：✅ 已交付（2026-08-22，提交 0da3136 → 2d2f49a）
 > 对应愿景：[VISION.md](VISION.md)「能力弧线」第二级 **组织** —— *把记住的事整理成一份有状态的计划（谁在做、到哪了、卡在哪）*，以及「产品形态」中的 **提醒即对话，可就地操作**。
 > 上游调研：宿主平台已验证 `ctx.webServer` 支持 POST（handler 收到完整 `(req, res)`，自行判断 method）、`ctx.agents.create()` 可编程创建会话（本期不用，留给 Phase 2）。
 
@@ -133,6 +133,9 @@ Milestones: [active] v0.3 发布 (target 2026-09-01)
 
 这是"提醒即对话"的落地：提醒消息自带路由指引，agent 拿着工具就能就地兑现用户的自然语言回复。注入路径不变（`agent.inject` + `followup`）。
 
+> **交付修正**：实测发现 `inject()` 只驻留上下文不唤醒 driver、裸 `followup()` 会抛异常，
+> 最终实现改为**单个 `agent.followup(msg)`**（见 architecture.md 已验证平台行为）。
+
 ### 3.4 交互层 B：看板就地操作与计划视图（G4）
 
 **HTTP**：`POST /yolo/actions`（`src/ui/actions.ts`，prefix 路由 `/yolo/actions`）：
@@ -174,7 +177,7 @@ Milestones: [active] v0.3 发布 (target 2026-09-01)
 2. 会话 R2：陈述"已完成/进行中/推迟" → 验证状态迁移 + 事件时间线；
 3. 看板：curl `POST /yolo/actions` 完成/推迟任务 → GET 验证数据与操作结果一致；
 4. 提醒链路：造到期任务、缩短调度间隔 → 验证带 id 的提醒注入 → 以"推迟到明天"回复 → 验证 due_at 变化与事件；
-5. 回归：既有 114 用例全绿、`tsc --noEmit` 干净。
+5. 回归：既有用例全绿（交付时 20 文件 / 175 用例）、`tsc --noEmit` 干净。
 
 ## 六、实施顺序与提交切分
 

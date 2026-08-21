@@ -31,7 +31,7 @@ dsh-plugin-yolo
 ├── src/storage/          # dsh-yolo-storage  — Service ctx.yolo
 ├── src/extract/          # dsh-yolo-extract  — conversation → records
 ├── src/memory/           # dsh-yolo-memory   — tools + prompt injection
-├── src/reminder/         # dsh-yolo-reminder — scheduler + agent.inject
+├── src/reminder/         # dsh-yolo-reminder — scheduler + reply-able wake-ups
 ├── src/ui/               # dsh-yolo-ui       — settings + dashboard API
 ├── src/shared/           # constants, dashboard projection, text utils
 └── client/               # browser bundle — sidebar dashboard, settings card
@@ -47,11 +47,11 @@ dsh-plugin-yolo
 
 | plugin | provides | consumes |
 |---|---|---|
-| **storage** | `ctx.yolo` service: SQLite (WAL + FTS5 trigram) repository, Markdown snapshots, scope resolution | nothing (leaf service) |
-| **extract** | conversation → structured records | `ctx.yolo`, `agent/turn-stopping`, `ctx.llm`, settings |
-| **memory** | `memory_search/write/forget` + `yolo_query` tools, systemPrompt sections/context | `ctx.yolo`, `ctx.tools`, `ctx.systemPrompt`, `session/event` |
-| **reminder** | time-triggered reminders | `ctx.yolo`, `agent.inject`, `agent/followup`, `agent/session-start` |
-| **ui** | `GET /yolo/dashboard` JSON API, settings section | `ctx.yolo`, `ctx.webServer`, `agent/turn-stopping` |
+| **storage** | `ctx.yolo` service: SQLite (WAL + FTS5 trigram) repository, Markdown snapshots, scope resolution; **domain actions** (`applyTodoAction` / `applyGoalProgress` / `applyMilestoneStatus`) with event audit + fuzzy title finders | nothing (leaf service) |
+| **extract** | conversation → structured records (new items **+ state-change `updates[]`**) | `ctx.yolo`, `agent/turn-stopping`, `ctx.llm`, settings |
+| **memory** | `memory_search/write/forget` + `yolo_query` / `yolo_action` tools, systemPrompt sections/context | `ctx.yolo`, `ctx.tools`, `ctx.systemPrompt`, `session/event` |
+| **reminder** | time-triggered **reply-able** reminders (todo id + `yolo_action` routing in the message) | `ctx.yolo`, `agent/followup`, `agent/session-start` |
+| **ui** | `GET /yolo/dashboard` + `POST /yolo/actions` JSON APIs, settings section | `ctx.yolo`, `ctx.webServer`, `agent/turn-stopping` |
 
 ## Module dependency graph
 
@@ -94,11 +94,16 @@ extract: fold turn messages into one bounded text blob (tail-keeping, 8k chars)
    │
    ▼
 LLM semantic pull (throttled per session, temperature 0, JSON-only output)
-   │   ▲ known-memories digest (todos/goals/milestones/prefs/events already stored)
+   │   ▲ known-memories digest (items already stored, WITH status/progress/due)
    ▼
-validate + coerce JSON ──► ctx.yolo.upsert*  ──►  SQLite + FTS5 index
-                                              │
-                                              └──►  Markdown snapshot (daily / every 10 turns)
+validate + coerce JSON
+   │
+   ├─► ctx.yolo.upsert*            (new items; milestone_title → milestone_id link)
+   ├─► applyYoloAction / apply*    (updates[]: state changes via domain actions)
+   ▼
+SQLite + FTS5 index ──► each state change also writes a timeline event
+   │
+   └──►  Markdown snapshot (daily / every 10 turns)
 ```
 
 Extraction is **LLM-only by design**. The early per-message regex fast path was
@@ -111,24 +116,38 @@ deduplicated by feeding the model a compact digest of what is already stored
 ("do not re-extract unchanged facts"), so repeat turns cost tokens only when
 something actually changed.
 
+M8 extends the same pull with an `updates[]` output: changes to *already-known*
+items (completed / started / postponed / progress statements) are returned as
+state changes, not as duplicate items. The digest carries each item's status,
+progress and due date so the model can tell what moved. `mergeExtraction`
+upserts new items first and applies updates after — so "created and finished in
+the same turn" works — resolving each update by fuzzy title match; unmatched
+updates are dropped silently (hallucinated titles are the norm, not an error).
+
 ### Read path — memory reaches the model
 
 ```
 ┌── static:   systemPrompt section "yolo-prefs"     (preferences, always on)
 ├── dynamic:  systemPrompt context "yolo-recall"    (FTS vs latest user text)
 ├── on demand: yolo_query / memory_search tools     (agent pulls views)
-└── push:     reminder scheduler → agent.inject     (due todos wake the agent)
+└── push:     reminder scheduler → agent.followup(msg)   (due todos wake the agent)
 ```
 
 Dynamic recall FTS-searches the latest user message against the trigram index
 and renders up to `recallTopK` hits under a `Related memory` heading. Reminders
 queue while the host is offline and replay on `agent/session-start`.
 
+M8 makes the push *reply-able*: the reminder message carries the todo id and
+explicit routing instructions, so the agent can answer a natural-language reply
+(「已完成 / 推迟到明天 / 再提醒一次」) by calling the `yolo_action` tool in place.
+
 ### UI path — memory reaches the human
 
 ```
 ctx.yolo ──► ui plugin serves GET /yolo/dashboard (JSON projection)
-          ──► client bundle: global sidebar dashboard (fetch + 30s poll while open)
+          ──► ui plugin accepts POST /yolo/actions (domain actions)
+          ──► client bundle: global sidebar dashboard (fetch + 30s poll while open,
+                              in-place ✓ 完成 / +1d / ✕ buttons)
 ```
 
 The dashboard is a **global surface, not a per-session one**: memory outlives any
@@ -137,6 +156,11 @@ and its scope follows the workspace of the most recent session. The earlier
 per-session dashboard tab (and the `yolo/snapshot` durable events that fed it)
 was removed in M7 — publishing a full memory snapshot into every session log was
 pure bloat.
+
+M8 makes the dashboard *actionable*: open todos carry ✓ 完成 / +1d / ✕ buttons
+that POST `/yolo/actions`, which dispatches through the same
+`applyYoloAction` path as the `yolo_action` model tool — so a click and a chat
+reply produce identical state changes and audit events.
 
 ## Storage design
 
@@ -154,6 +178,17 @@ data/
 - **Snapshots are the source of truth**: the DB is a rebuildable cache. The
   snapshot cadence is daily plus every 10 turns (`DEFAULTS.snapshotKeepDays`
   bounds retention on disk).
+- **Domain actions with event audit (M8)** — state never changes by direct
+  column writes anymore. Todos flow through `applyTodoAction` (`complete` /
+  `cancel` / `postpone` / `remind_again` / `start`), goals through
+  `applyGoalProgress` (0–100, ≥100 auto-achieves), milestones through
+  `applyMilestoneStatus` — and every transition writes a timeline event
+  (`todo_completed/cancelled/postponed/started`, `todo_remind_again`,
+  `goal_progress`, `milestone_status`). The `events.kind` column is free-form
+  (no CHECK constraint), so the new kinds needed no schema migration. When an
+  item is referenced by title instead of id, `findTodoByTitle` /
+  `findGoalByTitle` / `findMilestoneByTitle` locate it by normalized
+  containment match (only among non-terminal items).
 
 Key design decisions and their rationale:
 
@@ -165,6 +200,9 @@ Key design decisions and their rationale:
 | Markdown as durable record | git-diffable, human-reviewable, survives DB schema changes |
 | workspace+branch scoping | projects and experiments stay isolated; branch scope keys make long-running branches their own memory context |
 | shared constants module | dsh is v0.1.0-rc; API drift should be a one-place change |
+| domain actions with event audit (M8) | one state-transition path shared by extraction, chat replies and the dashboard — behavior and audit stay identical, and the timeline becomes the auditable answer to "到哪了" |
+| reply-able reminders (M8) | the reminder message carries the todo id + routing instructions, so the agent can act on natural-language replies instead of just echoing them |
+| fuzzy title matching for updates (M8) | LLM output rarely reproduces stored titles exactly; normalized containment lookup locates items without ids, and unmatched updates drop silently — hallucinated titles are the norm, not an error |
 
 ## Extension points used
 
@@ -174,11 +212,11 @@ Key design decisions and their rationale:
 | `session/event` (`user/message`, …) | memory | latest-user-text tracking for dynamic recall |
 | `agent/turn-stopping` | extract, ui | turn-end LLM pull; latest-session-workspace tracking |
 | `ctx.llm.stream` | extract | structured extraction prompt (`purpose: 'session-title'` segregates auxiliary traffic) |
-| `ctx.tools.register` | memory | `memory_*` + `yolo_query` |
+| `ctx.tools.register` | memory | `memory_*` + `yolo_query` + `yolo_action` |
 | `ctx.systemPrompt.section/context` | memory | prefs preamble + dynamic recall |
-| `agent/inject`, `agent/followup` | reminder | proactive wake-ups |
+| `agent/followup` | reminder | reply-able wake-ups (single `followup(msg)` — see verified behavior) |
 | `agent/session-start` | reminder | queue replay |
-| `ctx.webServer` (prefix route) | ui | `GET /yolo/dashboard` JSON API |
+| `ctx.webServer` (prefix route) | ui | `GET /yolo/dashboard` + `POST /yolo/actions` JSON APIs |
 | `sidebar.footer.action`, `settings.plugin.item` slots | client | global dashboard button + settings card |
 
 ## Verified platform behavior (dsh v0.1.0-rc.8)
@@ -210,11 +248,11 @@ used is recorded. These override assumptions whenever they conflict.
 
 | fact | consequence |
 |---|---|
-| `agent/turn-stopping` payload is `{ agent, turn, signal }` (serial) | `agent.session` is the live `Session`; `session.deriveMessages()` gives model-visible history; scope cwd: prefer `session.meta?.cwd`, fall back to `process.cwd()` |
+| `agent/turn-stopping` payload is `{ agent, turn, signal }` (serial) | `agent.session` is the live `Session`; `session.deriveMessages()` gives model-visible history; scope cwd: read `session.header.cwd` via `sessionCwd()` — the old `session.meta?.cwd` read never existed on the class and silently fell back to `process.cwd()` (M8 fix) |
 | `session/event` emits `(session, event)` | `event.type: 'user/message' \| 'assistant/message'` carry `event.data.content: ContentBlock[]` |
 | `AssembleContext` is **only** `{ scope?, signal? }` — no `userMessage` | the memory plugin caches the latest user text via `session/event`; the recall context reads that cache |
 | `agent/session-start` payload is `{ agent, source }` | used to track the latest active agent and replay queued reminders |
-| `Agent.inject/followup/steer` take a `UserMessage` | `createUserMessage` **requires** `source` (`{ kind: 'user' }`) or typecheck fails |
+| `Agent.inject/followup/steer` take a `UserMessage` | `createUserMessage` **requires** `source` (`{ kind: 'user' }`) or typecheck fails. **M8 finding:** `inject()` parks context without waking the driver, and a bare `followup()` throws — the reminder path uses a single `followup(msg)` |
 | `AgentRegistry` has no "list active agents" API | the reminder plugin keeps its own `latestAgent` from `agent/session-start` |
 | `ctx.systemPrompt.section({name, order, text, complete?})` / `.context({name, order, text})` | duplicate `name` throws; YOLO orders: 120 prefs / 220 recall |
 | `ctx.effect(() => start())` returns the cleanup function | cordis effect cleanup contract confirmed |
@@ -256,13 +294,17 @@ the correct local run path.
 | you want to change | start here |
 |---|---|
 | schema / indexes / FTS | `src/storage/schema.sql` + `repository.ts` |
-| extraction prompt / taxonomy | `src/extract/prompt.ts` |
+| domain actions / event audit / title finders | `src/storage/repository.ts` + `src/storage/index.ts` |
+| shared action contract (tool + HTTP + extract) | `src/shared/actions.ts` |
+| session scope / id helpers | `src/shared/session.ts` |
+| extraction prompt / taxonomy / updates[] | `src/extract/prompt.ts` |
 | extraction trigger / throttle / merge | `src/extract/index.ts` + `llm-extract.ts` |
 | model-visible tools | `src/memory/tools.ts` |
 | system-prompt injection / dynamic recall | `src/memory/recall.ts` |
-| reminder scheduling / snapshot cadence | `src/reminder/scheduler.ts` + `index.ts` |
+| reminder scheduling / reply-able text / snapshot cadence | `src/reminder/scheduler.ts` + `index.ts` |
 | config schema / defaults | `src/ui/config.ts` + `src/shared/constants.ts` |
 | dashboard JSON shape | `src/shared/dashboard.ts` + `src/ui/dashboard.ts` |
+| dashboard action API | `src/ui/actions.ts` |
 | sidebar dashboard UI | `client/sidebar/YoloSidebarDashboard.tsx` |
 | build / run / ACL | `scripts/dev.mjs`, `wrap-client.mjs`, `copy-assets.mjs` |
 | adding a test | [testing.md](testing.md) |

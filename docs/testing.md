@@ -1,7 +1,7 @@
 # 测试文档（Testing Guide）
 
 > 面向开发者的测试体系说明：如何运行、每个测试文件测什么、测试手法、如何新增测试。
-> 当前状态：**16 个测试文件 / 114 个用例全部通过**，`tsc --noEmit` clean。
+> 当前状态：**20 个测试文件 / 175 个用例全部通过**，`tsc --noEmit` clean。
 
 ---
 
@@ -48,22 +48,26 @@ pnpm test:run -- --coverage   # 带覆盖率报告（输出到 ./coverage/）
 | 测试文件 | 用例数 | 测什么 |
 |---|---|---|
 | `storage.test.ts` | 23 | 存储层纯函数：建表、去重、状态流转、FTS 搜索与软删、快照渲染、待提醒、抽取日志（用**内存 SQLite**） |
+| `storage-actions.test.ts` | 16 | **M8 领域动作**：状态迁移、FTS 软删、事件写入、标题模糊匹配边界 |
+| `memory-tools.test.ts` | 14 | 5 个模型可见工具的 `execute()`：读写各类记忆、搜索、软删、状态流转、快照、待提醒、`yolo_action` 分支 |
+| `shared-dashboard.test.ts` | 13 | 看板载荷：行投影形状（含 overdue/stale/milestone_title）、todoSummary、空载荷往返 |
+| `ui-actions.test.ts` | 12 | **M8 `POST /yolo/actions`**：正常/坏 JSON/未知动作/not-found |
+| `extract-updates.test.ts` | 11 | **M8 状态变化提取**：prompt 含状态摘要、validateExtraction 强转、mergeExtraction 应用 updates + milestone 关联 |
 | `extract-index.test.ts` | 9 | extract 插件接线：turn 结束抽取、节流、配置开关、去重摘要、失败隔离 |
-| `memory-tools.test.ts` | 9 | 4 个模型可见工具的 `execute()`：读写各类记忆、搜索、软删、状态流转、快照、待提醒 |
+| `reminder.test.ts` | 9 | 提醒逻辑：到期文本（含可回复指引）、注入/排队、每日快照、N 轮快照 |
 | `memory-index.test.ts` | 8 | memory 插件接线：注册工具与 prompt、跟踪最新用户消息、FTS5 语法字符回归 |
-| `reminder.test.ts` | 8 | 提醒逻辑：到期文本、注入/排队、每日快照、N 轮快照 |
 | `extract-llm.test.ts` | 8 | LLM 提取核心：JSON 解析容错、stream 折叠、畸形条目处理 |
 | `scope.test.ts` | 8 | 作用域解析：scope key、数据目录、DB 文件名、git 分支回退 |
 | `shared-text.test.ts` | 8 | 文本工具：内容块拼接、标题归一化、本地日期 |
-| `extract-prompt.test.ts` | 6 | 提取提示词：日期内嵌、JSON-only 约束、scheduled commitments 分类、去重摘要上限 |
+| `extract-prompt.test.ts` | 7 | 提取提示词：日期内嵌、JSON-only 约束、scheduled commitments 分类、去重摘要上限、updates[] |
+| `ui-dashboard.test.ts` | 6 | 看板投影：五类数据投影、JSON 序列化、端点 200/500 |
 | `memory-recall.test.ts` | 5 | 动态召回：section/context 注册、偏好渲染、FTS 命中渲染 |
 | `ui-index.test.ts` | 5 | ui 插件接线：`config: undefined` 回归、端点注册、scope 跟随最近会话 |
-| `ui-dashboard.test.ts` | 4 | 看板投影：五类数据投影、JSON 序列化、端点 200/500 |
 | `reminder-index.test.ts` | 4 | reminder 插件接线：session-start 回放、turn 快照触发 |
-| `shared-dashboard.test.ts` | 4 | 看板载荷：行投影形状、todoSummary、空载荷往返 |
+| `shared-session.test.ts` | 4 | **M8 session 工具**：`sessionCwd`/`sessionId` 从 header 读取、legacy `meta` 形状不复活 |
 | `ui-config.test.ts` | 3 | 配置 schema：默认值、覆盖、越界校验 |
 | `reminder-scheduler.test.ts` | 2 | 调度器生命周期：间隔 tick、失败隔离、cleanup |
-| **合计** | **114** | |
+| **合计** | **175** | |
 
 > `tests/fixtures/` 目前是空目录（保留给未来的测试夹具）。
 
@@ -113,6 +117,11 @@ const ctx = { on: (ev, fn) => { handlers.set(ev, fn) }, ... }
   （`memory-index`、`storage` 的 `it.each`）。
 - **`config: undefined`**：loader 不传 config 时 `apply(ctx, undefined)` 不抛（`ui-index`）。
 - **失败隔离**：模型/存储抛错时 handler 不向 agent 循环抛（`extract-index`、`reminder-index`、`reminder-scheduler`）。
+- **领域动作与审计**：任何状态迁移必须写事件、完成/取消要 FTS 软删（`storage-actions`）。
+- **session 作用域**：`sessionCwd`/`sessionId` 只认 `header`，`meta` 形状必须返回 `undefined`
+  （`shared-session`，防 scope 失效回归）。
+- **三入口动作一致性**：`yolo_action` 工具、`POST /yolo/actions`、提取 updates 走同一条
+  `applyYoloAction`（`tools-action`、`ui-actions`、`extract-updates`）。
 
 ---
 
@@ -136,6 +145,7 @@ pnpm test:run -- --coverage
 ```
 
 - 只统计 `src/**` 与 `client/**`（dev host 不计入）。
-- 历史基线（M4b 时）：Statements 82.24% / Branches 80.5% / Functions 84.09%。
+- 当前基线（M8 后）：Statements 73.94% / Branches 86.25%（M8 新增领域动作与 HTTP 分支，
+  语句覆盖略降、分支覆盖上升；README 徽章同步为 74% stmts / 86% branches）。
 - CI（`.github/workflows/ci.yml`）在 Linux 与 Windows 上跑 typecheck + tests + build，
   并上传覆盖率报告产物。

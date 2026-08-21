@@ -12,8 +12,8 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](package.json)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.19-339933?logo=node.js&logoColor=white)](package.json)
-[![Tests](https://img.shields.io/badge/tests-114%20passing-brightgreen)](tests/)
-[![Coverage](https://img.shields.io/badge/coverage-76%25%20stmts%20%7C%2082%25%20branches-green)](vitest.config.ts)
+[![Tests](https://img.shields.io/badge/tests-175%20passing-brightgreen)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-74%25%20stmts%20%7C%2086%25%20branches-green)](vitest.config.ts)
 [![Built on](https://img.shields.io/badge/built%20on-deepseek--harness-1E90FF)](https://github.com/deepseek-ai/deepseek-harness)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -30,10 +30,15 @@ assistant that keeps your work and life on track, for
   **todos**, **milestones**, **goals**, **preferences** and timeline **events**.
 - It **manages them across sessions** in a workspace-scoped, searchable store that
   stays with you no matter how many windows you open.
+- It **keeps the plan alive**: say "做完了 / 进行中 / 推迟到周五 / 写了一半" in any
+  later session and task status, goal progress and due dates update themselves —
+  every change audited on the timeline.
 - It **reminds you when things are due** — proactively, even if the host was
-  offline when the deadline passed.
+  offline when the deadline passed — and the reminder is *reply-able*: answer
+  「推迟到明天 / 已完成 / 再提醒一次」 and it just happens.
 - It **shows your day at a glance** in a global dashboard right in the dsh sidebar
-  — timeline, task board, goal progress, milestones & preferences.
+  — timeline, task board, goal progress, milestones & preferences — and lets you
+  complete / postpone / cancel todos without leaving it.
 
 YOLO doesn't just *remember* — it *understands*. At every turn end, an LLM
 semantic pass (the same pattern as [Mem0](https://github.com/mem0ai/mem0) or
@@ -45,12 +50,13 @@ accurate without spamming your tokens.
 
 | | |
 |---|---|
-| 🧠 **LLM semantic extraction** | One structured pull at every turn end: the model reads the whole exchange and returns todos / milestones / goals / preferences / events — deduplicated against known memories, throttled per session |
+| 🧠 **LLM semantic extraction** | One structured pull at every turn end: the model reads the whole exchange and returns todos / milestones / goals / preferences / events **plus state-change `updates[]`** — deduplicated against a known-memories digest that carries status, progress and due dates |
 | 🗄️ **Layered storage** | SQLite (WAL + FTS5 trigram, CJK-aware) as the fast store; human-readable **Markdown snapshots** — your memory is versionable & diffable |
-| 🔎 **Model-visible tools** | `memory_search` / `memory_write` / `memory_forget` / `yolo_query` — the agent reads and manages your memory itself |
+| 📈 **Stateful plan with event audit** | Todos flow `pending → in_progress → done/cancelled` (+ postpone / start / remind-again), goals track 0–100 progress, milestones carry status — one set of domain actions serves extraction, chat replies and the dashboard, and every transition lands on the timeline |
+| 🔎 **Model-visible tools** | `memory_search` / `memory_write` / `memory_forget` / `yolo_query` / `yolo_action` — the agent reads, manages *and advances* your plan itself |
 | 📝 **Automatic recall** | Preferences ride along in every system prompt; related memories are FTS-recalled against your latest message — no "remember that?" needed |
-| 🔔 **Proactive reminders** | Time-triggered `agent.inject` + `followup` wake-ups, with queue-and-replay on session start so nothing is lost while the host is offline |
-| 📊 **Sidebar dashboard** | A global YOLO panel in the dsh sidebar footer: timeline, task board, goal progress, milestones & preferences — session-independent, live-polled, no separate server |
+| 🔔 **Reply-able reminders** | Time-triggered `agent.followup` wake-ups carrying the todo id + routing instructions — answer「已完成 / 推迟到明天 / 再提醒一次」and the agent applies it via `yolo_action`; queue-and-replay on session start so nothing is lost while the host is offline |
+| 📊 **Actionable sidebar dashboard** | A global YOLO panel in the dsh sidebar footer: timeline, task board, goal progress, milestones & preferences — session-independent, live-polled, and open todos carry ✓ 完成 / +1d / ✕ buttons that act in place |
 | 🧩 **Everything is a plugin** | 5 cooperating plugins over Cordis capability seams; each piece swappable, HMR-friendly |
 
 ## 🏗️ Architecture
@@ -66,20 +72,22 @@ accurate without spamming your tokens.
         │                                                    │
         │  dsh-yolo-storage   Service `ctx.yolo`             │
         │    └─ SQLite + FTS5 + Markdown snapshot + scopes   │
+        │       + domain actions w/ event audit (M8)         │
         │  dsh-yolo-extract   turn-end LLM semantic pull     │
-        │  dsh-yolo-memory    memory_* tools + systemPrompt   │
-        │  dsh-yolo-reminder  scheduler + agent.inject        │
-        │  dsh-yolo-ui        settings + /yolo/dashboard API  │
+        │    └─ new items + state-change updates[]           │
+        │  dsh-yolo-memory    memory_* + yolo_action tools   │
+        │  dsh-yolo-reminder  scheduler + reply-able wake-ups│
+        │  dsh-yolo-ui        settings + dashboard/actions   │
         └────────────────────────────────────────────────────┘
 ```
 
 | plugin | role |
 |---|---|
-| `dsh-yolo-storage` | **Service** (`ctx.yolo`): SQLite + FTS5 + Markdown snapshots, workspace-scoped |
-| `dsh-yolo-extract` | LLM semantic extraction at turn end (todos / milestones / goals / preferences / events), dedup + throttle |
-| `dsh-yolo-memory` | model-visible `memory_search/write/forget` + `yolo_query` tools, persistent preamble + dynamic recall |
-| `dsh-yolo-reminder` | time-triggered reminders (`agent.inject` + `followup` + `session-start` replay) |
-| `dsh-yolo-ui` | settings section + `GET /yolo/dashboard` JSON API feeding the global sidebar dashboard |
+| `dsh-yolo-storage` | **Service** (`ctx.yolo`): SQLite + FTS5 + Markdown snapshots, workspace-scoped; domain actions (`applyTodoAction` / `applyGoalProgress` / `applyMilestoneStatus`) with event audit + fuzzy title finders |
+| `dsh-yolo-extract` | LLM semantic extraction at turn end (todos / milestones / goals / preferences / events + state-change `updates[]`), dedup + throttle + milestone linking |
+| `dsh-yolo-memory` | model-visible `memory_search/write/forget` + `yolo_query` / `yolo_action` tools, persistent preamble + dynamic recall |
+| `dsh-yolo-reminder` | time-triggered reply-able reminders (`agent.followup(msg)` + `session-start` replay) |
+| `dsh-yolo-ui` | settings section + `GET /yolo/dashboard` / `POST /yolo/actions` JSON APIs feeding the global sidebar dashboard |
 
 ## 🚀 Quick Start
 
@@ -112,9 +120,12 @@ timeline, task board, and goal progress.
 you:  帮我下周完成季度报告，然后记得周二开会前提醒我
 yolo:  [extract] +todo "季度报告" due=2026-08-27 priority=high
        [extract] +todo "周二会议" due=2026-08-25
-       [remind] ⏰ scheduler armed — will inject a reminder before the meeting
+       [remind] ⏰ scheduler armed — will wake the agent before the meeting
 you:  (next morning, new session)
-yolo:  ⏰ "周二会议" is due today — prep before the standup.
+yolo:  ⏰ "周二会议" is due today — reply to postpone or mark it done.
+you:  推迟到明天，报告已经写了一半
+yolo:  [yolo_action] postpone "周二会议" → due 2026-08-26 ✓
+       [extract] updates: "季度报告" → in_progress, goal 进度 50%
       (recalled automatically: prefs say you prefer Chinese summaries)
 ```
 
@@ -140,8 +151,8 @@ doing your work**, and always staying zero-external-service.
 
 | Phase | Goal | Status |
 |---|---|---|
-| **0 · Keeper** (anchor) | remembers well, stable `0.2.0` | 🔨 in progress (M6 release engineering) |
-| **1 · Organizer** | tasks get state, goals get progress, preferences take effect; YOLO as its own reply-able conversation (postpone / complete / reshape) | 🗓 planned (absorbs M8) |
+| **0 · Keeper** (anchor) | remembers well, stable `0.2.0` | ✅ delivered (M0–M5, M7) · ⏳ stable `0.2.0` release (M6) |
+| **1 · Organizer** | tasks get state, goals get progress, preferences take effect; YOLO as its own reply-able conversation (postpone / complete / reshape) | ✅ shipped (M8) |
 | **2 · Manager** | a YOLO conversation that reminds you — right-time, right-tone, reply-to-act; cross-workspace aggregation | 🗓 planned (absorbs M9, M10) |
 | **3 · Companion** | pairs with your coding agent, plans your day, deeply personal | 🌱 future (the Jarvis endgame) |
 
@@ -158,8 +169,9 @@ doing your work**, and always staying zero-external-service.
 | **M4–M5** | 0 | settings + dashboard shell · snapshot scheduling + scheduler hardening |
 | **M7** | 0 | semantic-first extraction (no regex) · global sidebar dashboard · crash & scope fixes |
 | **M6** | 0 | **release engineering** — CI · npm manifest · name claimed ([`0.2.0-alpha.1`](https://www.npmjs.com/package/dsh-plugin-yolo)) · ⏳ stable `v0.2.0` |
+| **M8** | 1 | **Organizer** — stateful tasks & goals with event audit · state-change extraction · `yolo_action` + reply-able reminders · actionable dashboard (maps to the `0.3.0` line) |
 
-Current quality bar: **114 tests passing**, `tsc --noEmit` clean.
+Current quality bar: **175 tests passing**, `tsc --noEmit` clean.
 
 ## 📚 Docs
 
@@ -177,7 +189,7 @@ Start at the [docs index](docs/README.md) — it maps every document to its audi
 ## 🤝 Contributing
 
 - Found a bug or have an idea? Open an **issue** — architecture/ADR-style discussions welcome.
-- Want to help? Pick a roadmap milestone (M6 next) — each is a self-contained deliverable.
+- Want to help? Pick a roadmap milestone (M9 semantic recall next) — each is a self-contained deliverable.
 - Keep `pnpm check` clean and `pnpm test` green before opening a PR.
 
 ```bash
