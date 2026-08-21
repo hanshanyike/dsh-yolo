@@ -11,6 +11,7 @@
 | 了解整体架构、设计决策、已验证的平台行为 | [架构设计](architecture.md)（英文） |
 | 查某个模块的文件/类型/API | [模块设计](modules.md)（中文） |
 | 跑测试 / 加测试 | [测试文档](testing.md)（中文） |
+| 看 M8（Phase 1 Organizer）怎么做 | [M8 设计文档](design-m8-organizer.md)（中文） |
 | 发版流程 | [发布流程](release.md)（英文） |
 | 版本历史 | [CHANGELOG](../CHANGELOG.md) |
 | 项目总览与快速开始 | [README](../README.md) |
