@@ -1,10 +1,23 @@
 // Host-side dashboard publisher (M4b).
 // Builds the global YOLO projection from `ctx.yolo` and appends it to a session
 // as the durable 'yolo/snapshot' event. The browser bundle's conversation node
-// engine picks it up and renders the YOLO tab.
+// engine picks it up and renders the YOLO tab. Also serves the same projection
+// as JSON over HTTP (/yolo/dashboard) for the global sidebar button.
 
 import type Yolo from '../storage/index.ts'
 import type { YoloDashboardData } from '../shared/dashboard.ts'
+
+/** Minimal webServer view (dsh's node half provides ctx.webServer). */
+export interface WebServerLike {
+  register(opts: {
+    kind: 'prefix'
+    path: string
+    handler: (req: unknown, res: {
+      writeHead(status: number, headers?: Record<string, string>): void
+      end(body?: unknown): void
+    }) => Promise<void> | void
+  }): unknown
+}
 
 /** Build the full dashboard projection for a cwd (workspace scope). */
 export function buildDashboardData(yolo: Yolo, cwd: string): YoloDashboardData {
@@ -76,4 +89,28 @@ export function publishDashboard(yolo: Yolo, session: SessionLike, cwd: string):
   } catch {
     // never crash the host on a publish failure; the tab shows last snapshot
   }
+}
+
+/**
+ * Register a JSON endpoint serving the live dashboard projection. The global
+ * sidebar button (client half) fetches this — it is session-independent.
+ */
+export function registerDashboardEndpoint(ctx: { webServer?: WebServerLike }, yolo: Yolo, cwd: () => string): void {
+  ctx.webServer?.register({
+    kind: 'prefix',
+    path: '/yolo/dashboard',
+    handler: async (_req, res) => {
+      try {
+        const data = buildDashboardData(yolo, cwd())
+        res.writeHead(200, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-cache',
+        })
+        res.end(JSON.stringify(data))
+      } catch (e) {
+        res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }))
+      }
+    },
+  })
 }

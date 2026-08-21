@@ -20,7 +20,7 @@
     "client": { "platform": "web" }
   },
   "scripts": {
-    "build": "tsdown && tsdown -c tsdown.client.config.ts && node scripts/wrap-client.mjs",
+    "build": "tsdown && tsdown -c tsdown.client.config.ts && node scripts/wrap-client.mjs && node scripts/copy-assets.mjs",
     "dev": "tsdown --watch",
     "dev:web": "node scripts/dev.mjs",
     "dev:web:setup": "node scripts/dev.mjs --setup",

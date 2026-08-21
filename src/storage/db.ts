@@ -1,5 +1,6 @@
 // YOLO SQLite connection — opens a DB, applies the schema, exposes pragma helpers.
-// Schema is read from schema.sql next to this file (dev: src/storage/; built: dist/storage/).
+// Schema is read from schema.sql next to this file (dev: src/storage/;
+// built: dist/src/storage/ — scripts/copy-assets.mjs copies it there).
 
 import Database from 'better-sqlite3'
 import { readFileSync } from 'node:fs'

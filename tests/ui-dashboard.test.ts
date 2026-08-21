@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import type Yolo from '../src/storage/index.ts'
-import { buildDashboardData, publishDashboard, type SessionLike } from '../src/ui/dashboard.ts'
+import { buildDashboardData, publishDashboard, registerDashboardEndpoint, type SessionLike } from '../src/ui/dashboard.ts'
 import type { Todo, Goal, Milestone, TimelineEvent, Preference } from '../src/storage/types.ts'
 
 function mockYolo(): Yolo {
@@ -70,5 +70,32 @@ describe('publishDashboard', () => {
       append: () => { throw new Error('durable store down') },
     }
     expect(() => publishDashboard(mockYolo(), session, '/ws/alpha')).not.toThrow()
+  })
+})
+
+describe('registerDashboardEndpoint', () => {
+  it('serves the dashboard JSON on request', async () => {
+    const res = {
+      writeHead: vi.fn(),
+      end: vi.fn(),
+    }
+    const server = { register: vi.fn((opts: { handler: (req: unknown, r: typeof res) => Promise<void> | void }) => {
+      void opts.handler({}, res)
+    }) }
+    registerDashboardEndpoint({ webServer: server } as never, mockYolo(), () => '/tmp/proj')
+    expect(server.register).toHaveBeenCalledWith(expect.objectContaining({ kind: 'prefix', path: '/yolo/dashboard' }))
+    expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({ 'content-type': 'application/json; charset=utf-8' }))
+    const body = JSON.parse(String(res.end.mock.calls[0]?.[0]))
+    expect(body.todos[0].title).toBe('完成报告')
+  })
+
+  it('returns 500 JSON on failure', async () => {
+    const res = { writeHead: vi.fn(), end: vi.fn() }
+    const server = { register: vi.fn((opts: { handler: (req: unknown, r: typeof res) => Promise<void> | void }) => {
+      void opts.handler({}, res)
+    }) }
+    const broken = { resolve: () => { throw new Error('db gone') } } as unknown as Yolo
+    registerDashboardEndpoint({ webServer: server } as never, broken, () => '/tmp/proj')
+    expect(res.writeHead).toHaveBeenCalledWith(500, expect.objectContaining({ 'content-type': 'application/json; charset=utf-8' }))
   })
 })

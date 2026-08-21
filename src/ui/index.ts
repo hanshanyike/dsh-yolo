@@ -8,17 +8,18 @@ import type { Context } from '@deepseek-ai/cordis'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import '../shared/events.ts'
 import { Config, type Config as ConfigSchema } from './config.ts'
-import { publishDashboard, type SessionLike } from './dashboard.ts'
+import { publishDashboard, registerDashboardEndpoint, type SessionLike } from './dashboard.ts'
 import { contentBlocksToText } from '../extract/llm-extract.ts'
 
 /** The namespace is the join key shared with the client half (settings.plugin.item). */
 export const YOLO_NS = settingsNamespace('yolo')
 
 export const name = 'yolo-ui'
-export const inject = ['yolo'] as const
+export const inject = ['yolo', 'webServer'] as const
 
 interface UiCtx extends Context {
   yolo: import('../storage/index.ts').default
+  webServer: import('./dashboard.ts').WebServerLike
 }
 
 /** Extract plain text from a user message's content blocks. */
@@ -44,6 +45,9 @@ export function apply(ctx: UiCtx, config: ConfigSchema): void {
     const cwd = session.meta?.cwd ?? process.cwd()
     publishDashboard(ctx.yolo, session, cwd)
   }
+
+  // global JSON endpoint for the sidebar button (session-independent)
+  registerDashboardEndpoint(ctx, ctx.yolo, () => process.cwd())
 
   // publish after every finished turn so the tab always reflects latest state
   ctx.on('agent/turn-stopping', (payload) => {
