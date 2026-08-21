@@ -36,6 +36,7 @@ See the **Quick Start** in the [README](README.md#-quick-start) —
 builds everything; `pnpm dev:web` boots it with the YOLO patch applied.
 
 Architecture context: [`docs/architecture.md`](docs/architecture.md).
+Releasing: [`docs/release.md`](docs/release.md).
 
 ## Questions?
 

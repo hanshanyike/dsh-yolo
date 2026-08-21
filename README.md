@@ -151,6 +151,7 @@ coverage, `tsc --noEmit` clean.
 
 - [`docs/architecture.md`](docs/architecture.md) — data flow, plugin seams, design decisions
 - [`docs/extension-points.md`](docs/extension-points.md) — verified dsh extension points & platform gotchas (Windows boot recipe, loader rules, FTS5 notes)
+- [`docs/release.md`](docs/release.md) — how to cut a release & publish to npm
 - [`CHANGELOG.md`](CHANGELOG.md) — release history
 - [`src/storage/schema.sql`](src/storage/schema.sql) — the full SQLite schema
 
