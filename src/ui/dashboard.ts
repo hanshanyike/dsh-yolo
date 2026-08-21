@@ -3,9 +3,14 @@
 // (GET /yolo/dashboard). No per-session durable events: the dashboard is a
 // global, session-independent surface, so publishing 'yolo/snapshot' into
 // every session log was pure bloat.
+//
+// M8: rows now carry the plan context (milestone_title) and the "where is it
+// stuck" signals (overdue / stale), so the dashboard can render a stateful
+// plan instead of a flat read-only list.
 
 import type Yolo from '../storage/index.ts'
 import type { YoloDashboardData } from '../shared/dashboard.ts'
+import { isTodoOverdue, isTodoStale } from '../shared/dashboard.ts'
 
 export interface WebServerLike {
   register(opts: {
@@ -20,24 +25,32 @@ export interface WebServerLike {
 
 /** Build the full dashboard projection for a workspace scope. */
 export function buildDashboardData(yolo: Yolo, cwd: string): YoloDashboardData {
+  const now = Date.now()
+  const milestones = yolo.listMilestones(cwd)
+  const msTitle = new Map(milestones.map((m) => [m.id, m.title]))
   return {
     scopeKey: yolo.resolve(cwd).scopeKey,
     cwd,
-    at: Date.now(),
+    at: now,
     todos: yolo.listTodos(cwd).map((t) => ({
       id: t.id,
       title: t.title,
       status: t.status,
       priority: t.priority,
       due_at: t.due_at,
+      milestone_title: t.milestone_id ? msTitle.get(t.milestone_id) ?? null : null,
+      updated_at: t.updated_at,
+      overdue: isTodoOverdue(t.due_at, t.status, new Date(now)),
+      stale: isTodoStale(t.status, t.updated_at, now),
     })),
     goals: yolo.listGoals(cwd).map((g) => ({
       id: g.id,
       title: g.title,
       status: g.status,
       progress: g.progress,
+      milestone_title: g.milestone_id ? msTitle.get(g.milestone_id) ?? null : null,
     })),
-    milestones: yolo.listMilestones(cwd).map((m) => ({
+    milestones: milestones.map((m) => ({
       id: m.id,
       title: m.title,
       status: m.status,

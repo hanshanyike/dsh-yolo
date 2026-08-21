@@ -11,6 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type Yolo from '../storage/index.ts'
+import { registerActionsEndpoint } from './actions.ts'
 import { Config, type Config as ConfigSchema } from './config.ts'
 import { registerDashboardEndpoint, type WebServerLike } from './dashboard.ts'
 
@@ -61,6 +62,8 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   })
 
   registerDashboardEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
+  // M8: in-place dashboard operations (complete/postpone/cancel + goal/milestone)
+  registerActionsEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
 
   ctx.logger?.info?.('[yolo] ui plugin loaded')
 }

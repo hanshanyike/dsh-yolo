@@ -3,9 +3,14 @@
 // dashboard drawer beside the sidebar (NOT the old compact floating popover):
 // five sections, counts, manual refresh, and a 30s poll while open.
 // Session-independent: it fetches /yolo/dashboard directly.
+//
+// M8: the drawer is no longer read-only — open todos carry ✓ 完成 / +1d / ✕
+// buttons that POST /yolo/actions (same domain actions as the yolo_action
+// model tool), rows show state badges (进行中/逾期/滞留/里程碑), goals render
+// progress bars, and the timeline labels the new state-flow event kinds.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { YoloDashboardData } from '../../src/shared/dashboard.ts'
+import type { YoloDashboardData, YoloTodoRow } from '../../src/shared/dashboard.ts'
 import { YoloLogo } from '../YoloLogo.tsx'
 
 interface YoloSidebarDashboardProps {
@@ -31,6 +36,28 @@ function fmtTime(ms: number): string {
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return ''
   return iso.length > 10 ? iso.slice(0, 10) : iso
+}
+
+/** Local-time "YYYY-MM-DD" of tomorrow — the +1d postpone target. */
+function tomorrowStr(): string {
+  const d = new Date(Date.now() + 86_400_000)
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** Timeline labels for the M8 state-flow event kinds. */
+const EVENT_LABELS: Record<string, string> = {
+  note: '记录',
+  decision: '决策',
+  milestone_reached: '里程碑',
+  reminder_fired: '提醒',
+  todo_completed: '完成',
+  todo_cancelled: '取消',
+  todo_postponed: '推迟',
+  todo_remind_again: '再提醒',
+  todo_started: '开始',
+  goal_progress: '进度',
+  milestone_status: '里程碑状态',
 }
 
 /** Dismiss the drawer on clicks/touches outside the button and panel. */
@@ -66,9 +93,34 @@ function useDismissOnEscape(open: boolean, onClose: () => void): void {
   }, [open, onClose])
 }
 
+const badgeStyle: React.CSSProperties = {
+  display: 'inline-block',
+  marginLeft: 5,
+  padding: '0 5px',
+  borderRadius: 999,
+  fontSize: 10,
+  lineHeight: '15px',
+  verticalAlign: 1,
+  whiteSpace: 'nowrap',
+}
+
+const actionButtonStyle: React.CSSProperties = {
+  padding: '1px 6px',
+  borderRadius: 5,
+  border: '1px solid var(--border, #ddd)',
+  background: 'transparent',
+  color: 'inherit',
+  fontSize: 11,
+  lineHeight: '16px',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+}
+
 export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<LoadState>({ loading: false, error: null, data: null })
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const [anchorLeft, setAnchorLeft] = useState<number | undefined>()
@@ -113,6 +165,26 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
     window.addEventListener('resize', place)
     return () => { window.removeEventListener('resize', place) }
   }, [open])
+
+  // M8: in-place operations — POST /yolo/actions, then refresh immediately.
+  const act = useCallback(async (id: string, action: string, extra?: { due_at?: string }): Promise<void> => {
+    setBusyId(id)
+    setActionError(null)
+    try {
+      const r = await fetch('/yolo/actions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action, kind: 'todo', id, ...extra }),
+      })
+      const body = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+      if (!r.ok || !body?.ok) throw new Error(body?.error ?? `HTTP ${r.status}`)
+      await load()
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyId(null)
+    }
+  }, [load])
 
   const close = useCallback(() => { setOpen(false) }, [])
   useDismissOnOutsidePointer(buttonRef, panelRef, open, close)
@@ -254,6 +326,9 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
             {state.error && (
               <p style={{ color: '#c0392b', margin: '0 0 10px' }}>加载失败：{state.error}（插件未加载或服务未启动？）</p>
             )}
+            {actionError && (
+              <p style={{ color: '#c0392b', margin: '0 0 10px' }}>操作失败：{actionError}</p>
+            )}
 
             {!state.error && state.data === null && !state.loading && (
               <p style={{ opacity: 0.6, margin: 0 }}>尚未加载数据。</p>
@@ -279,16 +354,10 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
                     <SectionTitle emoji="📋" label={`待办任务 · ${openTodos.length}`} />
                     <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.8 }}>
                       {dueTodos.slice(0, 12).map((t) => (
-                        <li key={t.id}>
-                          {t.title}
-                          {t.due_at && <span style={{ opacity: 0.55, marginLeft: 4 }}>({fmtDate(t.due_at)} 截止)</span>}
-                          {t.priority && t.priority !== 'low' && (
-                            <span style={{ opacity: 0.55, marginLeft: 4 }}>[{t.priority}]</span>
-                          )}
-                        </li>
+                        <TodoRow key={t.id} t={t} busy={busyId === t.id} onAct={act} />
                       ))}
                       {otherTodos.slice(0, 4).map((t) => (
-                        <li key={t.id}>{t.title}</li>
+                        <TodoRow key={t.id} t={t} busy={busyId === t.id} onAct={act} />
                       ))}
                     </ul>
                   </section>
@@ -297,13 +366,26 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
                 {activeGoals.length > 0 && (
                   <section>
                     <SectionTitle emoji="🎯" label={`进行中目标 · ${activeGoals.length}`} />
-                    <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.8 }}>
+                    <ul style={{ margin: 0, paddingLeft: 16 }}>
                       {activeGoals.slice(0, 8).map((g) => (
-                        <li key={g.id}>
-                          {g.title}
-                          {typeof g.progress === 'number' && g.progress > 0 && (
-                            <span style={{ opacity: 0.55, marginLeft: 4 }}>{g.progress}%</span>
+                        <li key={g.id} style={{ marginBottom: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.title}</span>
+                            <span style={{ fontSize: 11, opacity: 0.7, minWidth: 32, textAlign: 'right' }}>{g.progress}%</span>
+                          </div>
+                          {g.milestone_title && (
+                            <div style={{ fontSize: 11, opacity: 0.55, marginBottom: 2 }}>🚩 {g.milestone_title}</div>
                           )}
+                          <div style={{ height: 4, borderRadius: 2, background: 'rgba(128,128,128,0.25)' }}>
+                            <div
+                              style={{
+                                width: `${Math.max(0, Math.min(100, g.progress))}%`,
+                                height: '100%',
+                                borderRadius: 2,
+                                background: 'var(--accent, #2f6fed)',
+                              }}
+                            />
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -317,6 +399,7 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
                       {openMilestones.slice(0, 8).map((m) => (
                         <li key={m.id}>
                           {m.title}
+                          {m.status === 'active' && <span style={{ ...badgeStyle, background: 'rgba(47,111,237,0.15)', color: 'var(--accent, #2f6fed)' }}>进行中</span>}
                           {m.target_date && <span style={{ opacity: 0.55, marginLeft: 4 }}>({fmtDate(m.target_date)})</span>}
                         </li>
                       ))}
@@ -343,7 +426,7 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
                         <li key={e.id}>
                           <span style={{ opacity: 0.55, marginRight: 4 }}>{fmtTime(e.occurred_at)}</span>
                           {e.summary}
-                          {e.kind === 'decision' && <span style={{ opacity: 0.45, marginLeft: 4 }}>[决策]</span>}
+                          {EVENT_LABELS[e.kind] && <span style={{ opacity: 0.45, marginLeft: 4 }}>[{EVENT_LABELS[e.kind]}]</span>}
                         </li>
                       ))}
                     </ul>
@@ -369,6 +452,43 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
         </div>
       )}
     </>
+  )
+}
+
+function TodoRow({ t, busy, onAct }: { t: YoloTodoRow; busy: boolean; onAct: (id: string, action: string, extra?: { due_at?: string }) => void }): JSX.Element {
+  const overdue = !!t.overdue
+  return (
+    <li style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          color: overdue ? '#c0392b' : t.stale ? 'var(--foreground-secondary, #999)' : undefined,
+        }}
+        title={`${t.title}${t.milestone_title ? ` · 🚩 ${t.milestone_title}` : ''}`}
+      >
+        {t.title}
+        {t.status === 'in_progress' && <span style={{ ...badgeStyle, background: 'rgba(47,111,237,0.15)', color: 'var(--accent, #2f6fed)' }}>进行中</span>}
+        {t.due_at && (
+          <span style={{ opacity: 0.55, marginLeft: 4 }}>
+            ({fmtDate(t.due_at)} 截止{overdue ? ' · 逾期' : ''})
+          </span>
+        )}
+        {t.stale && <span style={{ ...badgeStyle, background: 'rgba(128,128,128,0.18)', color: 'var(--foreground-secondary, #888)' }}>滞留</span>}
+        {t.priority && t.priority !== 'low' && t.priority !== 'normal' && (
+          <span style={{ opacity: 0.55, marginLeft: 4 }}>[{t.priority}]</span>
+        )}
+        {t.milestone_title && <span style={{ opacity: 0.5, marginLeft: 4 }}>🚩{t.milestone_title}</span>}
+      </span>
+      <span style={{ display: 'flex', gap: 3, flex: 'none' }}>
+        <button type="button" disabled={busy} title="标记完成" style={{ ...actionButtonStyle, opacity: busy ? 0.5 : 1 }} onClick={() => { onAct(t.id, 'complete') }}>✓</button>
+        <button type="button" disabled={busy} title={`推迟到 ${tomorrowStr()}`} style={{ ...actionButtonStyle, opacity: busy ? 0.5 : 1 }} onClick={() => { onAct(t.id, 'postpone', { due_at: tomorrowStr() }) }}>+1d</button>
+        <button type="button" disabled={busy} title="取消该待办" style={{ ...actionButtonStyle, opacity: busy ? 0.5 : 1 }} onClick={() => { onAct(t.id, 'cancel') }}>✕</button>
+      </span>
+    </li>
   )
 }
 

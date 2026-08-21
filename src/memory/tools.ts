@@ -4,7 +4,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool, type JsonValue } from '@deepseek-ai/dsh-tools'
 import type Yolo from '../storage/index.ts'
-import type { MilestoneStatus, Priority, RowType, TodoAction, TodoStatus, GoalStatus } from '../storage/types.ts'
+import type { MilestoneStatus, Priority, RowType, TodoStatus, GoalStatus } from '../storage/types.ts'
+import { applyYoloAction } from '../shared/actions.ts'
 
 /** Context augmented with the yolo service (register via inject ['yolo']). */
 export interface YoloContext extends Context {
@@ -145,41 +146,17 @@ export function registerYoloTools(ctx: YoloContext): void {
         render: (_a, v) => [{ type: 'text', text: JSON.stringify(v) }],
       },
       async execute(args) {
-        const action = String(args.action ?? '')
-        const kind = String(args.kind ?? '')
-        const ref: { id?: string; title?: string } = {
-          id: typeof args.id === 'string' ? args.id : undefined,
-          title: typeof args.title === 'string' ? args.title : undefined,
-        }
-        if (!ref.id && !ref.title) return json({ ok: false, error: 'pass id or title' })
-
-        if (action === 'set_progress') {
-          if (kind !== 'goal' || typeof args.progress !== 'number') {
-            return json({ ok: false, error: 'set_progress requires kind=goal and progress' })
-          }
-          const g = y.applyGoalProgress(cwd(), ref, args.progress, typeof args.note === 'string' ? args.note : undefined)
-          return g ? json({ ok: true, item: g }) : json({ ok: false, error: 'goal not found' })
-        }
-
-        if (action === 'set_status') {
-          const status = String(args.status ?? '')
-          const valid: readonly MilestoneStatus[] = ['planned', 'active', 'done', 'abandoned']
-          if (kind !== 'milestone' || !valid.includes(status as MilestoneStatus)) {
-            return json({ ok: false, error: 'set_status requires kind=milestone and status in planned|active|done|abandoned' })
-          }
-          const m = y.applyMilestoneStatus(cwd(), ref, status as MilestoneStatus)
-          return m ? json({ ok: true, item: m }) : json({ ok: false, error: 'milestone not found' })
-        }
-
-        const todoActions: readonly TodoAction[] = ['complete', 'start', 'cancel', 'postpone', 'remind_again']
-        if (kind !== 'todo' || !todoActions.includes(action as TodoAction)) {
-          return json({ ok: false, error: `unsupported action "${action}" for kind "${kind}"` })
-        }
-        if (action === 'postpone' && typeof args.due_at !== 'string') {
-          return json({ ok: false, error: 'postpone requires due_at (absolute date YYYY-MM-DD)' })
-        }
-        const t = y.applyTodoAction(cwd(), ref, action as TodoAction, action === 'postpone' ? { due_at: args.due_at as string } : undefined)
-        return t ? json({ ok: true, item: t }) : json({ ok: false, error: 'todo not found' })
+        // shared validation + dispatch (same path as POST /yolo_actions)
+        return json(applyYoloAction(y, cwd(), {
+          action: args.action,
+          kind: args.kind,
+          id: args.id,
+          title: args.title,
+          due_at: args.due_at,
+          progress: args.progress,
+          status: args.status,
+          note: args.note,
+        }))
       },
     }),
   )

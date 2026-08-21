@@ -1,28 +1,39 @@
 // M7 dashboard projection tests — buildDashboardData + the GET /yolo/dashboard
 // endpoint, with a mocked Yolo service. The per-session publish path is gone:
 // the dashboard is a global sidebar surface served over HTTP.
+//
+// M8: the projection now joins milestone titles onto todos/goals and computes
+// the overdue/stale "stuck" signals.
 
 import { describe, it, expect, vi } from 'vitest'
 import type Yolo from '../src/storage/index.ts'
 import { buildDashboardData, registerDashboardEndpoint } from '../src/ui/dashboard.ts'
 import type { Todo, Goal, Milestone, TimelineEvent, Preference } from '../src/storage/types.ts'
+import { localDateStr } from '../src/shared/text.ts'
+
+const DAY_MS = 86_400_000
+
+function dateStr(offsetDays: number): string {
+  return localDateStr(new Date(Date.now() + offsetDays * DAY_MS))
+}
 
 function mockYolo(): Yolo {
   const now = Date.now()
   const todo: Todo = {
     id: 't1', title: '完成报告', status: 'pending', priority: 'high',
-    due_at: '2026-08-25', scope_key: 'test/main', created_at: now, updated_at: now,
+    due_at: dateStr(-2), milestone_id: 'm1', scope_key: 'test/main',
+    created_at: now, updated_at: now - 8 * DAY_MS,
   }
   const goal: Goal = {
     id: 'g1', title: '发布 yolo 插件', status: 'active', progress: 40,
-    scope_key: 'test/main', created_at: now, updated_at: now,
+    milestone_id: 'm1', scope_key: 'test/main', created_at: now, updated_at: now,
   }
   const milestone: Milestone = {
     id: 'm1', title: 'M5 完成', status: 'active', target_date: '2026-08-30',
     scope_key: 'test/main', created_at: now, updated_at: now,
   }
   const event: TimelineEvent = {
-    id: 'e1', kind: 'decision', summary: '确定 SQLite 为主存储', occurred_at: now,
+    id: 'e1', kind: 'todo_completed', summary: '完成：写设计文档', occurred_at: now,
     scope_key: 'test/main',
   }
   const pref: Preference = {
@@ -46,11 +57,40 @@ describe('buildDashboardData', () => {
     expect(data.cwd).toBe('/tmp/proj')
     expect(data.at).toBeGreaterThan(0)
     expect(data.todos).toHaveLength(1)
-    expect(data.todos[0]).toMatchObject({ id: 't1', title: '完成报告', status: 'pending', due_at: '2026-08-25' })
+    expect(data.todos[0]).toMatchObject({ id: 't1', title: '完成报告', status: 'pending', due_at: dateStr(-2) })
     expect(data.goals[0]).toMatchObject({ progress: 40 })
     expect(data.milestones[0]).toMatchObject({ target_date: '2026-08-30' })
-    expect(data.events[0]).toMatchObject({ kind: 'decision' })
+    expect(data.events[0]).toMatchObject({ kind: 'todo_completed' })
     expect(data.preferences[0]).toMatchObject({ key: '语言', value: '简体中文' })
+  })
+
+  it('joins milestone titles and computes overdue/stale (M8)', () => {
+    const data = buildDashboardData(mockYolo(), '/tmp/proj')
+    expect(data.todos[0].milestone_title).toBe('M5 完成')
+    expect(data.todos[0].overdue).toBe(true)
+    expect(data.todos[0].stale).toBe(true)
+    expect(data.todos[0].updated_at).toBeGreaterThan(0)
+    expect(data.goals[0].milestone_title).toBe('M5 完成')
+  })
+
+  it('unlinked items project milestone_title null and no stuck signals', () => {
+    const now = Date.now()
+    const fresh: Todo = {
+      id: 't2', title: '新鲜任务', status: 'pending',
+      due_at: dateStr(3), scope_key: 'test/main', created_at: now, updated_at: now,
+    }
+    const yolo = {
+      resolve: () => ({ scopeKey: 'test/main', db: {}, dataDir: '' }),
+      listTodos: () => [fresh],
+      listGoals: () => [],
+      listMilestones: () => [],
+      listEvents: () => [],
+      listPreferences: () => [],
+    } as unknown as Yolo
+    const data = buildDashboardData(yolo, '/tmp/proj')
+    expect(data.todos[0].milestone_title).toBeNull()
+    expect(data.todos[0].overdue).toBe(false)
+    expect(data.todos[0].stale).toBe(false)
   })
 
   it('serializes cleanly to JSON', () => {
@@ -74,6 +114,7 @@ describe('registerDashboardEndpoint', () => {
     expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({ 'content-type': 'application/json; charset=utf-8' }))
     const body = JSON.parse(String(res.end.mock.calls[0]?.[0]))
     expect(body.todos[0].title).toBe('完成报告')
+    expect(body.todos[0].overdue).toBe(true)
   })
 
   it('returns 500 JSON on failure', async () => {
