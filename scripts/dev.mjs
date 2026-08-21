@@ -22,7 +22,7 @@
 //   --port N  custom port (default 4080 — 3080 is the running dsh GUI itself)
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -124,10 +124,11 @@ if (!existsSync(join(ROOT, 'node_modules'))) {
 
 // 5. YOLO build (host plugins + wrapped client bundle)
 step(5, 'YOLO build (client bundle)')
-const hostEntries = ['src', 'storage', 'memory', 'extract', 'reminder', 'ui'].map((m) =>
+const rootEntry = join(ROOT, 'dist', 'src', 'index.mjs')
+const hostEntries = ['storage', 'memory', 'extract', 'reminder', 'ui'].map((m) =>
   join(ROOT, 'dist', 'src', m, 'index.mjs'),
 )
-if (!existsSync(join(ROOT, 'dist', 'client', 'index.mjs')) || hostEntries.some((p) => !existsSync(p))) {
+if (!existsSync(join(ROOT, 'dist', 'client', 'index.mjs')) || !existsSync(rootEntry) || hostEntries.some((p) => !existsSync(p))) {
   run('pnpm', ['build'], ROOT)
 } else {
   console.log('[dev] YOLO dist present')
@@ -137,18 +138,29 @@ if (!existsSync(join(ROOT, 'dist', 'client', 'index.mjs')) || hostEntries.some((
 //    node_modules; a Windows junction (no admin needed) keeps this repo live.
 step(6, 'profile junction')
 mkdirSync(LINK_DIR, { recursive: true })
-if (existsSync(LINK)) {
-  // Bypass the WorkBuddy safe-delete shim on Windows: it tries to trash the
-  // junction and aborts. `rmdir` via cmd removes the junction link only.
-  if (win) execFileSync('cmd', ['/c', 'rmdir', LINK])
-  else rmSync(LINK, { recursive: true, force: true })
+const linkOk = () => {
+  try {
+    return readlinkSync(LINK).toLowerCase() === ROOT.toLowerCase()
+  } catch {
+    return false
+  }
 }
-try {
-  symlinkSync(ROOT, LINK, 'junction')
-  console.log(`[dev] junction: ${LINK} -> ${ROOT}`)
-} catch (e) {
-  console.error(`[dev] junction failed: ${e.message}`)
-  process.exit(1)
+if (linkOk()) {
+  console.log('[dev] junction present')
+} else {
+  if (existsSync(LINK)) {
+    // Bypass the WorkBuddy safe-delete shim on Windows: it tries to trash the
+    // junction and aborts. `rmdir` via cmd removes the junction link only.
+    if (win) execFileSync('cmd', ['/c', 'rmdir', LINK])
+    else rmSync(LINK, { recursive: true, force: true })
+  }
+  try {
+    symlinkSync(ROOT, LINK, 'junction')
+    console.log(`[dev] junction: ${LINK} -> ${ROOT}`)
+  } catch (e) {
+    console.error(`[dev] junction failed: ${e.message}`)
+    process.exit(1)
+  }
 }
 
 // 7. runtime patch — package-name entries (bare name for ClientModuleRegistry
