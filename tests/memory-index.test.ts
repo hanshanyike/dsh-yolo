@@ -52,11 +52,11 @@ function makeCtx() {
 }
 
 describe('memory apply()', () => {
-  it('registers the four memory tools and the prompt contributions', () => {
+  it('registers the five memory tools and the prompt contributions', () => {
     const { ctx, tools, sections, contexts } = makeCtx()
     apply(ctx as never)
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ['memory_forget', 'memory_search', 'memory_write', 'yolo_query'].sort(),
+      ['memory_forget', 'memory_search', 'memory_write', 'yolo_action', 'yolo_query'].sort(),
     )
     expect(sections.map((s) => s.name)).toEqual(['yolo-instructions', 'yolo-prefs'])
     expect(contexts.map((c) => c.name)).toEqual(['yolo-recall'])

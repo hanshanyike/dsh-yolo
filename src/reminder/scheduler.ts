@@ -28,8 +28,23 @@ export interface TickResult {
   queued: number
 }
 
-export function reminderText(title: string, dueAt?: string | null): string {
-  return `⏰ 提醒: ${title}${dueAt ? ` (到期 ${dueAt})` : ''}`
+/**
+ * Reminder text injected into the conversation (M8: reply-able).
+ * Carries the todo id plus routing instructions so the agent can honor the
+ * user's natural-language reply — 完成/推迟/再提醒 — with the yolo_action tool.
+ */
+export function reminderText(title: string, dueAt?: string | null, id?: string): string {
+  const head = `⏰ YOLO 提醒：${title}${dueAt ? `（到期 ${dueAt}）` : ''}`
+  if (!id) return head
+  return [
+    head,
+    `（待办 id: ${id}）`,
+    '用户可能就此回复「已完成 / 推迟到X / 再提醒我一次」，请用 yolo_action 工具就地处理：',
+    `- 已完成 → yolo_action(action="complete", kind="todo", id="${id}")`,
+    `- 推迟到X → yolo_action(action="postpone", kind="todo", id="${id}", due_at="解析出的绝对日期")`,
+    `- 再提醒 → yolo_action(action="remind_again", kind="todo", id="${id}")`,
+    '操作成功后向用户简短确认即可，不必展开解释。',
+  ].join('\n')
 }
 
 /** Format a Date as local-time "YYYY-MM-DDTHH:mm:ss" (no timezone suffix). */
@@ -75,7 +90,7 @@ export function runReminderTick(deps: {
   let reminded = 0
   let queued = 0
   for (const t of due) {
-    const text = reminderText(t.title, t.due_at)
+    const text = reminderText(t.title, t.due_at, t.id)
     const msg = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
     const agent = deps.getLatestAgent()
     if (agent) {

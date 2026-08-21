@@ -52,9 +52,9 @@ function tool(name: string): CapturedTool {
 }
 
 describe('registerYoloTools', () => {
-  it('registers the four model-visible tools', () => {
+  it('registers the five model-visible tools', () => {
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ['memory_forget', 'memory_search', 'memory_write', 'yolo_query'].sort(),
+      ['memory_forget', 'memory_search', 'memory_write', 'yolo_action', 'yolo_query'].sort(),
     )
     for (const t of tools) {
       expect(t.description.length).toBeGreaterThan(10)
@@ -104,6 +104,60 @@ describe('memory_write + yolo_query', () => {
   it('rejects unknown kind and unknown view', async () => {
     await expect(tool('memory_write').execute({ kind: 'nope', title: 'x' })).rejects.toThrow(/unknown memory kind/)
     await expect(tool('yolo_query').execute({ view: 'nope' })).rejects.toThrow(/unknown view/)
+  })
+})
+
+describe('yolo_action', () => {
+  it('completes a todo by id (the reminder-reply flow)', async () => {
+    const t = yolo.addTodo(cwd, { title: '写季度报告', source: 'llm' })
+    const res = (await tool('yolo_action').execute({ action: 'complete', kind: 'todo', id: t.id })) as { ok: boolean; item: { status: string } }
+    expect(res.ok).toBe(true)
+    expect(res.item.status).toBe('done')
+    expect(yolo.listEvents(cwd).some((e) => e.kind === 'todo_completed')).toBe(true)
+  })
+
+  it('postpones by fuzzy title and moves the due date', async () => {
+    yolo.addTodo(cwd, { title: '写季度报告初稿', due_at: '2026-08-22', source: 'llm' })
+    const res = (await tool('yolo_action').execute({ action: 'postpone', kind: 'todo', title: '季度报告', due_at: '2026-08-25' })) as { ok: boolean; item: { due_at: string } }
+    expect(res.ok).toBe(true)
+    expect(res.item.due_at).toBe('2026-08-25')
+    expect(yolo.listTodos(cwd)[0].due_at).toBe('2026-08-25')
+  })
+
+  it('start / cancel / remind_again work and set_goal progress flips achieved', async () => {
+    const t = yolo.addTodo(cwd, { title: '修登录', source: 'llm' })
+    await tool('yolo_action').execute({ action: 'start', kind: 'todo', id: t.id })
+    expect(yolo.listTodos(cwd)[0].status).toBe('in_progress')
+
+    yolo.setTodoReminded(cwd, t.id)
+    await tool('yolo_action').execute({ action: 'remind_again', kind: 'todo', id: t.id })
+    expect(yolo.listTodos(cwd)[0].last_reminded_at ?? null).toBeNull()
+
+    await tool('yolo_action').execute({ action: 'cancel', kind: 'todo', id: t.id })
+    expect(yolo.listTodos(cwd)[0].status).toBe('cancelled')
+
+    yolo.addGoal(cwd, { title: '学会 Rust' })
+    const g = (await tool('yolo_action').execute({ action: 'set_progress', kind: 'goal', title: '学会 Rust', progress: 100 })) as { ok: boolean; item: { status: string } }
+    expect(g.ok).toBe(true)
+    expect(g.item.status).toBe('achieved')
+  })
+
+  it('set_status transitions a milestone', async () => {
+    yolo.addMilestone(cwd, { title: 'v0.3 发布' })
+    const res = (await tool('yolo_action').execute({ action: 'set_status', kind: 'milestone', title: 'v0.3 发布', status: 'done' })) as { ok: boolean; item: { status: string } }
+    expect(res.ok).toBe(true)
+    expect(res.item.status).toBe('done')
+  })
+
+  it('validates combos and unknown items', async () => {
+    const noRef = (await tool('yolo_action').execute({ action: 'complete', kind: 'todo' })) as { ok: boolean }
+    expect(noRef.ok).toBe(false)
+    const badCombo = (await tool('yolo_action').execute({ action: 'complete', kind: 'goal', title: 'x' })) as { ok: boolean }
+    expect(badCombo.ok).toBe(false)
+    const noDue = (await tool('yolo_action').execute({ action: 'postpone', kind: 'todo', title: 'x' })) as { ok: boolean }
+    expect(noDue.ok).toBe(false)
+    const missing = (await tool('yolo_action').execute({ action: 'complete', kind: 'todo', title: '不存在的任务' })) as { ok: boolean }
+    expect(missing.ok).toBe(false)
   })
 })
 
