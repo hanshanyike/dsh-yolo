@@ -4,7 +4,21 @@ export type MilestoneStatus = 'planned' | 'active' | 'done' | 'abandoned'
 export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'cancelled'
 export type GoalStatus = 'active' | 'achieved' | 'abandoned'
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
-export type EventKind = 'note' | 'decision' | 'milestone_reached' | 'reminder_fired'
+// M8: state-flow kinds (todo_completed/postponed/…) have no CHECK constraint
+// in schema.sql — the column is free-form by design.
+export type EventKind =
+  | 'note'
+  | 'decision'
+  | 'milestone_reached'
+  | 'reminder_fired'
+  | 'todo_completed'
+  | 'todo_cancelled'
+  | 'todo_postponed'
+  | 'todo_remind_again'
+  | 'goal_progress'
+  | 'milestone_status'
+/** Domain action applicable to a todo (M8 Organizer). */
+export type TodoAction = 'complete' | 'cancel' | 'postpone' | 'remind_again'
 export type ExtractionStrategy = 'rule' | 'llm'
 export type ExtractionStatus = 'ok' | 'empty' | 'error'
 export type ScopeMode = 'workspace' | 'user' | 'global'

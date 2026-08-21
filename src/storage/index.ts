@@ -28,6 +28,7 @@ import type {
   Source,
   TimelineEvent,
   Todo,
+  TodoAction,
   TodoStatus,
   ExtractionLog,
   ExtractionStatus,
@@ -102,6 +103,33 @@ export default class Yolo extends Service {
   }
   setTodoReminded(cwd: string, id: string, ts?: number): void {
     repo.setTodoReminded(this.resolve(cwd).db, id, ts)
+  }
+
+  // ---- domain actions (M8 Organizer: state flow + event audit) ----
+  // Shared entry point for extraction updates, the yolo_action tool and the
+  // dashboard POST endpoint. `ref` prefers id, falls back to fuzzy title match.
+  applyTodoAction(
+    cwd: string,
+    ref: { id?: string; title?: string },
+    action: TodoAction,
+    args?: { due_at?: string | null },
+  ): Todo | null {
+    const h = this.resolve(cwd)
+    const id = ref.id ?? (ref.title ? repo.findTodoByTitle(h.db, h.scopeKey, ref.title)?.id : undefined)
+    if (!id) return null
+    return repo.applyTodoAction(h.db, id, action, args)
+  }
+  applyGoalProgress(cwd: string, ref: { id?: string; title?: string }, progress: number, note?: string | null): Goal | null {
+    const h = this.resolve(cwd)
+    const id = ref.id ?? (ref.title ? repo.findGoalByTitle(h.db, h.scopeKey, ref.title)?.id : undefined)
+    if (!id) return null
+    return repo.applyGoalProgress(h.db, id, progress, note)
+  }
+  applyMilestoneStatus(cwd: string, ref: { id?: string; title?: string }, status: MilestoneStatus): Milestone | null {
+    const h = this.resolve(cwd)
+    const id = ref.id ?? (ref.title ? repo.findMilestoneByTitle(h.db, h.scopeKey, ref.title)?.id : undefined)
+    if (!id) return null
+    return repo.applyMilestoneStatus(h.db, id, status)
   }
 
   // ---- milestones ----

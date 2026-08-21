@@ -19,6 +19,7 @@ import type {
   Source,
   TimelineEvent,
   Todo,
+  TodoAction,
   TodoStatus,
   EventKind,
 } from './types.ts'
@@ -80,6 +81,16 @@ export function listMilestones(db: DB, scopeKey: string, status?: MilestoneStatu
   const where = status ? 'WHERE scope_key = ? AND status = ?' : 'WHERE scope_key = ?'
   const params = status ? [scopeKey, status] : [scopeKey]
   return db.prepare(`SELECT * FROM milestones ${where} ORDER BY created_at DESC`).all(...params) as Milestone[]
+}
+
+/** Fuzzy-locate a non-terminal milestone by title (M8): exact normalized match
+ * first, then bidirectional containment (shorter side >= 3 chars to avoid noise). */
+export function findMilestoneByTitle(db: DB, scopeKey: string, title: string): Milestone | undefined {
+  if (!normalize(title)) return undefined
+  const rows = db
+    .prepare("SELECT * FROM milestones WHERE scope_key = ? AND status IN ('planned','active')")
+    .all(scopeKey) as Milestone[]
+  return rows.find((m) => looseMatch(m.title, title))
 }
 
 // ---------- todos ----------
@@ -182,6 +193,16 @@ export function setTodoReminded(db: DB, id: string, ts = now()): void {
   db.prepare('UPDATE todos SET last_reminded_at = ? WHERE id = ?').run(ts, id)
 }
 
+/** Fuzzy-locate a non-terminal todo by title (M8): exact normalized match first,
+ * then bidirectional containment (shorter side >= 3 chars to avoid noise). */
+export function findTodoByTitle(db: DB, scopeKey: string, title: string): Todo | undefined {
+  if (!normalize(title)) return undefined
+  const rows = db
+    .prepare("SELECT * FROM todos WHERE scope_key = ? AND status IN ('pending','in_progress')")
+    .all(scopeKey) as Todo[]
+  return rows.find((t) => looseMatch(t.title, title))
+}
+
 function syncTodoFts(db: DB, id: string, title: string, detail: string | null): void {
   db.prepare("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id = ?").run(id)
   db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('todo', id, title, detail ?? '')
@@ -231,6 +252,13 @@ export function listGoals(db: DB, scopeKey: string, status?: GoalStatus): Goal[]
   const where = status ? 'WHERE scope_key = ? AND status = ?' : 'WHERE scope_key = ?'
   const params = status ? [scopeKey, status] : [scopeKey]
   return db.prepare(`SELECT * FROM goals ${where} ORDER BY created_at DESC`).all(...params) as Goal[]
+}
+
+/** Fuzzy-locate an active goal by title (M8): same strategy as todos. */
+export function findGoalByTitle(db: DB, scopeKey: string, title: string): Goal | undefined {
+  if (!normalize(title)) return undefined
+  const rows = db.prepare("SELECT * FROM goals WHERE scope_key = ? AND status = 'active'").all(scopeKey) as Goal[]
+  return rows.find((g) => looseMatch(g.title, title))
 }
 
 // ---------- preferences ----------
@@ -301,6 +329,108 @@ export function listEvents(db: DB, scopeKey: string, limit = 50): TimelineEvent[
   return db
     .prepare('SELECT * FROM events WHERE scope_key = ? ORDER BY occurred_at DESC LIMIT ?')
     .all(scopeKey, limit) as TimelineEvent[]
+}
+
+// ---------- fuzzy title matching (M8) ----------
+// normalizeTitle collapses separators to spaces, which keeps CJK and ASCII
+// comparable but makes "修 登录bug" != "修登录bug". The finders additionally
+// compare space-stripped forms so LLM echoes with different spacing still hit.
+
+function looseKey(s: string): string {
+  return normalize(s).replace(/\s+/g, '')
+}
+
+function looseMatch(stored: string, query: string): boolean {
+  const a = looseKey(stored)
+  const b = looseKey(query)
+  if (!a || !b) return false
+  if (a === b) return true
+  return Math.min(a.length, b.length) >= 3 && (a.includes(b) || b.includes(a))
+}
+
+// ---------- domain actions (M8 Organizer) ----------
+// State transitions that ALSO write a timeline event, so "where did it go"
+// is always auditable. Shared by extraction updates, the yolo_action tool and
+// the dashboard POST endpoint — never bypass these with bare setXxxStatus calls.
+
+const MILESTONE_STATUS_LABEL: Record<MilestoneStatus, string> = {
+  planned: '计划中',
+  active: '进行中',
+  done: '已完成',
+  abandoned: '已放弃',
+}
+
+/** Apply a domain action to a todo. Terminal todos and unknown ids no-op
+ * (return the row as-is / null) — callers decide whether that is an error. */
+export function applyTodoAction(
+  db: DB,
+  id: string,
+  action: TodoAction,
+  args?: { due_at?: string | null },
+): Todo | null {
+  const t = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
+  if (!t) return null
+  if (t.status === 'done' || t.status === 'cancelled') return t
+  const ts = now()
+  switch (action) {
+    case 'complete':
+      setTodoStatus(db, id, 'done')
+      addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts })
+      break
+    case 'cancel':
+      setTodoStatus(db, id, 'cancelled')
+      addEvent(db, { kind: 'todo_cancelled', summary: `取消：${t.title}`, scope_key: t.scope_key, occurred_at: ts })
+      break
+    case 'postpone': {
+      if (!args?.due_at) return t
+      db.prepare('UPDATE todos SET due_at = ?, last_reminded_at = NULL, updated_at = ? WHERE id = ?').run(
+        args.due_at,
+        ts,
+        id,
+      )
+      addEvent(db, {
+        kind: 'todo_postponed',
+        summary: `推迟：「${t.title}」→ ${args.due_at}`,
+        scope_key: t.scope_key,
+        occurred_at: ts,
+      })
+      break
+    }
+    case 'remind_again':
+      db.prepare('UPDATE todos SET last_reminded_at = NULL, updated_at = ? WHERE id = ?').run(ts, id)
+      addEvent(db, { kind: 'todo_remind_again', summary: `再次提醒：「${t.title}」`, scope_key: t.scope_key, occurred_at: ts })
+      break
+  }
+  return db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo
+}
+
+/** Set goal progress with a timeline event; >= 100 flips status to achieved. */
+export function applyGoalProgress(db: DB, id: string, progress: number, note?: string | null): Goal | null {
+  const g = db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal | undefined
+  if (!g) return null
+  const clamped = Math.max(0, Math.min(100, Math.round(progress)))
+  setGoalProgress(db, id, clamped)
+  addEvent(db, {
+    kind: 'goal_progress',
+    summary: `目标「${g.title}」进度 ${clamped}%`,
+    detail: note ?? null,
+    scope_key: g.scope_key,
+  })
+  return db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal
+}
+
+/** Transition a milestone status with a timeline event. */
+export function applyMilestoneStatus(db: DB, id: string, status: MilestoneStatus): Milestone | null {
+  const m = db.prepare('SELECT * FROM milestones WHERE id = ?').get(id) as Milestone | undefined
+  if (!m) return null
+  if (m.status === status) return m
+  setMilestoneStatus(db, id, status)
+  addEvent(db, {
+    kind: 'milestone_status',
+    summary: `里程碑「${m.title}」${MILESTONE_STATUS_LABEL[status]}`,
+    scope_key: m.scope_key,
+  })
+  return db.prepare('SELECT * FROM milestones WHERE id = ?').get(id) as Milestone
 }
 
 // ---------- extraction log ----------
