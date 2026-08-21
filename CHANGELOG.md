@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Documentation suite.** New `docs/README.md` index plus three new guides so
+  contributors stop having to read the source to find things: `docs/modules.md`
+  (per-module reference — files, key types, public APIs, gotchas), `docs/usage.md`
+  (user guide — install, config, features, data storage) and `docs/testing.md`
+  (test suite — how to run, what each file covers, how to add tests).
+  `docs/architecture.md` gained a module dependency graph and a "where to look
+  when changing X" table; README/CONTRIBUTING now link the new docs.
+
 ### Changed
 
 - **M7 — LLM-only semantic extraction.** The per-message regex fast path (rules / candidate buffer / merge) was removed entirely: regexes cannot judge semantics, produced noise, and missed anything phrased unusually. Extraction is now a single LLM structured pull at every `agent/turn-stopping`, following the industry pattern (Mem0, Claude Code auto-memory). The extraction prompt was rewritten around durable-knowledge selection, and the model now receives a compact **known-memories digest** so it never re-extracts unchanged facts. Live-session testing exposed a taxonomy gap in the first prompt cut — scheduled commitments (trips, appointments) fell between "task" and "decision" and were silently dropped — the todo/event definitions now explicitly cover them (verified against the real API both ways: extracts the trip, still respects "don't record this").

@@ -2,7 +2,7 @@
 
 <img src="docs/logo.svg" width="120" alt="YOLO logo"/>
 
-# YOLO — You Only Live/Look Once
+# YOLO
 
 **The persistent memory layer for your AI coding agent.**
 
@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](package.json)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.19-339933?logo=node.js&logoColor=white)](package.json)
-[![Tests](https://img.shields.io/badge/tests-113%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-114%20passing-brightgreen)](tests/)
 [![Coverage](https://img.shields.io/badge/coverage-76%25%20stmts%20%7C%2082%25%20branches-green)](vitest.config.ts)
 [![Built on](https://img.shields.io/badge/built%20on-deepseek--harness-1E90FF)](https://github.com/deepseek-ai/deepseek-harness)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -147,12 +147,18 @@ time.
 | **M9** | 🗓 planned | **recall quality** — hybrid ranking (FTS + semantic embeddings), recall feedback loop measuring whether injected memories actually helped |
 | **M10** | 🗓 planned | **multi-workspace aggregation** — cross-project global timeline, auto-generated weekly review digest |
 
-Current quality bar: **113 tests passing**, `tsc --noEmit` clean.
+Current quality bar: **114 tests passing**, `tsc --noEmit` clean.
 
 ## 📚 Docs
 
+Start at the [docs index](docs/README.md) — it maps every document to its audience:
+
 - [`docs/architecture.md`](docs/architecture.md) — data flow, plugin seams, design decisions
+- [`docs/modules.md`](docs/modules.md) — per-module reference: files, key types, public APIs, gotchas (改代码前先查这里)
+- [`docs/usage.md`](docs/usage.md) — user guide: install, config, features, data storage
+- [`docs/testing.md`](docs/testing.md) — test suite: how to run, what's covered, how to add tests
 - [`docs/extension-points.md`](docs/extension-points.md) — verified dsh extension points & platform gotchas (Windows boot recipe, loader rules, FTS5 notes)
+- [`docs/dev-notes.md`](docs/dev-notes.md) — build contract & troubleshooting
 - [`docs/release.md`](docs/release.md) — how to cut a release & publish to npm
 - [`CHANGELOG.md`](CHANGELOG.md) — release history
 - [`src/storage/schema.sql`](src/storage/schema.sql) — the full SQLite schema

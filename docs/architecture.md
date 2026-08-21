@@ -5,6 +5,11 @@ plus a browser client**, riding deepseek-harness's *"everything is a plugin"*
 microkernel. This document explains the layout, the data flows, and the design
 decisions behind them.
 
+> **Docs map** — this is the *why* (design decisions & data flows). For the *what*
+> (per-module files, types, public APIs) see [modules.md](modules.md); for *how to
+> use* see [usage.md](usage.md); for *how to test* see [testing.md](testing.md);
+> for runtime-verified extension-point behavior see [extension-points.md](extension-points.md).
+
 ## Design goals
 
 1. **Zero external services.** Memory must work with no server, no embedding
@@ -47,6 +52,35 @@ dsh-plugin-yolo
 | **memory** | `memory_search/write/forget` + `yolo_query` tools, systemPrompt sections/context | `ctx.yolo`, `ctx.tools`, `ctx.systemPrompt`, `session/event` |
 | **reminder** | time-triggered reminders | `ctx.yolo`, `agent.inject`, `agent/followup`, `agent/session-start` |
 | **ui** | `GET /yolo/dashboard` JSON API, settings section | `ctx.yolo`, `ctx.webServer`, `agent/turn-stopping` |
+
+## Module dependency graph
+
+```
+┌────────────────────────────── deepseek-harness host ──────────────────────────────┐
+│                                                                                    │
+│   src/index.ts   package identity (load marker only)                               │
+│                                                                                    │
+│   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐        │
+│   │ src/storage  │◄──│ src/extract  │   │ src/memory   │   │ src/reminder │        │
+│   │ ctx.yolo     │   │ 语义提取      │   │ 工具+上下文   │   │ 调度器+提醒   │        │
+│   │ (Service)    │   └──────────────┘   └──────────────┘   └──────────────┘        │
+│   └──────┬───────┘                            ▲                    ▲               │
+│          │ inject ctx.yolo                    │                    │               │
+│   ┌──────▼───────┐   ┌──────────────┐   ┌─────┴──────────┐        │               │
+│   │ src/ui       │   │ src/shared   │   │ client/        │        │               │
+│   │ 设置+看板API  │   │ 常量/投影/文本 │   │ 侧边栏看板+设置卡 │        │               │
+│   └──────────────┘   └──────────────┘   └────────────────┘        │               │
+│                                                                                    │
+│   scripts/dev.mjs / wrap-client.mjs / copy-assets.mjs   build & run                │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- `storage` is the leaf service — no YOLO-internal dependencies (only `shared/text`).
+- `extract` / `memory` / `reminder` / `ui` all `inject: ['yolo']`.
+- `shared` is used by every module — **prefer additive changes** (it has the widest blast radius).
+- `client/` talks to the host `ui` plugin over `GET /yolo/dashboard` (HTTP JSON), never touches SQLite directly.
+
+Per-module file maps, key types and public APIs: [modules.md](modules.md).
 
 ## Data flows
 
@@ -150,3 +184,22 @@ Key design decisions and their rationale:
 Runtime-verified details and platform gotchas live in
 [extension-points.md](extension-points.md); the build contract and
 troubleshooting live in [dev-notes.md](dev-notes.md).
+
+## Where to look when changing X
+
+| you want to change | start here |
+|---|---|
+| schema / indexes / FTS | `src/storage/schema.sql` + `repository.ts` |
+| extraction prompt / taxonomy | `src/extract/prompt.ts` |
+| extraction trigger / throttle / merge | `src/extract/index.ts` + `llm-extract.ts` |
+| model-visible tools | `src/memory/tools.ts` |
+| system-prompt injection / dynamic recall | `src/memory/recall.ts` |
+| reminder scheduling / snapshot cadence | `src/reminder/scheduler.ts` + `index.ts` |
+| config schema / defaults | `src/ui/config.ts` + `src/shared/constants.ts` |
+| dashboard JSON shape | `src/shared/dashboard.ts` + `src/ui/dashboard.ts` |
+| sidebar dashboard UI | `client/sidebar/YoloSidebarDashboard.tsx` |
+| build / run / ACL | `scripts/dev.mjs`, `wrap-client.mjs`, `copy-assets.mjs` |
+| adding a test | [testing.md](testing.md) |
+
+The full per-module reference (files, types, public APIs, gotchas) is
+[modules.md](modules.md).

@@ -15,6 +15,10 @@ Thanks for considering contributing! YOLO is a small, opinionated plugin bundle 
 - **Document platform gotchas** in [`docs/extension-points.md`](docs/extension-points.md)
   and build-contract/troubleshooting notes in [`docs/dev-notes.md`](docs/dev-notes.md)
   (dsh is v0.1.0-rc — anything you verify at runtime belongs there).
+- **Keep the docs in sync with code.** If you change a module's structure, public API,
+  config option, or test layout, update the matching section in
+  [`docs/modules.md`](docs/modules.md), [`docs/usage.md`](docs/usage.md) or
+  [`docs/testing.md`](docs/testing.md) — the docs index is [`docs/README.md`](docs/README.md).
 - **No secrets.** Never commit API keys, `.env`, or personal data.
 
 ## Milestones worth picking up
@@ -36,6 +40,8 @@ See the **Quick Start** in the [README](README.md#-quick-start) —
 builds everything; `pnpm dev:web` boots it with the YOLO patch applied.
 
 Architecture context: [`docs/architecture.md`](docs/architecture.md).
+Module reference: [`docs/modules.md`](docs/modules.md).
+Testing: [`docs/testing.md`](docs/testing.md).
 Releasing: [`docs/release.md`](docs/release.md).
 
 ## Questions?
