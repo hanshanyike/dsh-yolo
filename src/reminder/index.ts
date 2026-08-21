@@ -45,8 +45,7 @@ export function apply(ctx: Context): void {
     const pending = yctx.yolo.listPendingReminders(cwd)
     for (const p of pending.slice(0, 5)) {
       try {
-        agent.inject(createUserMessage({ content: [{ type: 'text', text: p.payload }], source: { kind: 'user' } }))
-        agent.followup()
+        agent.followup(createUserMessage({ content: [{ type: 'text', text: p.payload }], source: { kind: 'user' } }))
         yctx.yolo.deletePendingReminder(cwd, p.id)
       } catch (e) {
         ctx.logger?.warn?.('[yolo-reminder] replay failed: %s', e instanceof Error ? e.message : String(e))

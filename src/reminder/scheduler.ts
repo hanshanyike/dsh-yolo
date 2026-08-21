@@ -9,10 +9,14 @@ import type Yolo from '../storage/index.ts'
 import { DEFAULTS } from '../shared/constants.ts'
 import { localDateStr } from '../shared/text.ts'
 
-/** Minimal structural view of a dsh Agent (avoids linking the agent package). */
+/**
+ * Minimal structural view of a dsh Agent (avoids linking the agent package).
+ * followup(message) queues the message as its own next turn AND wakes the
+ * driver — inject() alone parks context without waking an idle agent, and
+ * followup() without a message is invalid on the real API.
+ */
 export interface AgentLike {
-  inject(message: unknown): void
-  followup(message?: unknown): void
+  followup(message: unknown): void
 }
 
 export interface SchedulerDeps {
@@ -94,8 +98,7 @@ export function runReminderTick(deps: {
     const msg = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
     const agent = deps.getLatestAgent()
     if (agent) {
-      agent.inject(msg)
-      agent.followup()
+      agent.followup(msg)
       reminded++
     } else {
       // no active session — queue for replay on agent/session-start

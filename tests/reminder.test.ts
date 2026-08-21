@@ -47,14 +47,17 @@ describe('reminderText', () => {
 })
 
 describe('runReminderTick', () => {
-  it('injects + followups when an agent is active', () => {
+  it('followups the reminder as a user turn when an agent is active', () => {
     const yolo = mockYolo([todo('t1', '交报告', '2026-08-21')])
-    const agent = { inject: vi.fn(), followup: vi.fn() }
+    const agent = { followup: vi.fn() }
     const r = runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 60000, getLatestAgent: () => agent })
     expect(r.reminded).toBe(1)
     expect(r.queued).toBe(0)
-    expect(agent.inject).toHaveBeenCalledTimes(1)
     expect(agent.followup).toHaveBeenCalledTimes(1)
+    const arg = (agent.followup as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      content: { type: string; text: string }[]
+    }
+    expect(arg.content[0].text).toContain('交报告')
     expect(yolo.setTodoReminded).toHaveBeenCalledWith('/tmp', 't1')
   })
 

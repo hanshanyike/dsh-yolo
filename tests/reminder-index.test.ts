@@ -45,12 +45,15 @@ describe('reminder apply: session-start replay', () => {
     const { ctx, handlers } = makeCtx(yolo)
     apply(ctx as never)
 
-    const agent = { inject: vi.fn(), followup: vi.fn() }
+    const agent = { followup: vi.fn() }
     const onStart = handlers.get('agent/session-start')!
     onStart({ agent })
 
-    expect(agent.inject).toHaveBeenCalledTimes(2)
     expect(agent.followup).toHaveBeenCalledTimes(2)
+    const first = (agent.followup as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      content: { text: string }[]
+    }
+    expect(first.content[0].text).toContain('交报告')
     expect(yolo.deletePendingReminder).toHaveBeenCalledTimes(2)
   })
 
@@ -62,7 +65,7 @@ describe('reminder apply: session-start replay', () => {
     const { ctx, handlers } = makeCtx(yolo)
     apply(ctx as never)
 
-    const agent = { inject: vi.fn(() => { throw new Error('boom') }), followup: vi.fn() }
+    const agent = { followup: vi.fn(() => { throw new Error('boom') }) }
     const onStart = handlers.get('agent/session-start')!
     expect(() => onStart({ agent })).not.toThrow()
   })
