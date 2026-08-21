@@ -15,10 +15,11 @@ export type EventKind =
   | 'todo_cancelled'
   | 'todo_postponed'
   | 'todo_remind_again'
+  | 'todo_started'
   | 'goal_progress'
   | 'milestone_status'
 /** Domain action applicable to a todo (M8 Organizer). */
-export type TodoAction = 'complete' | 'cancel' | 'postpone' | 'remind_again'
+export type TodoAction = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again'
 export type ExtractionStrategy = 'rule' | 'llm'
 export type ExtractionStatus = 'ok' | 'empty' | 'error'
 export type ScopeMode = 'workspace' | 'user' | 'global'

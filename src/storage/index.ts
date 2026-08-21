@@ -131,6 +131,11 @@ export default class Yolo extends Service {
     if (!id) return null
     return repo.applyMilestoneStatus(h.db, id, status)
   }
+  /** Fuzzy title -> milestone id (M8 extraction linking); null when unmatched. */
+  findMilestoneId(cwd: string, title: string): string | null {
+    const h = this.resolve(cwd)
+    return repo.findMilestoneByTitle(h.db, h.scopeKey, title)?.id ?? null
+  }
 
   // ---- milestones ----
   addMilestone(

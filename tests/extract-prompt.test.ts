@@ -1,5 +1,5 @@
-// M7 extraction prompt tests — the semantic-extraction system prompt and the
-// known-memories dedup digest rendering.
+// M7+M8 extraction prompt tests — the semantic-extraction system prompt and the
+// known-memories dedup digest rendering (M8: rows carry state).
 
 import { describe, expect, it } from 'vitest'
 import { buildExtractionPrompt, buildKnownContext } from '../src/extract/prompt.ts'
@@ -25,6 +25,16 @@ describe('buildExtractionPrompt', () => {
     expect(prompt).toContain('trips')
     expect(prompt).toContain('scheduled plans')
   })
+
+  it('declares the updates array for state changes of known items (M8)', () => {
+    const prompt = buildExtractionPrompt(new Date())
+    expect(prompt).toContain('"updates"')
+    expect(prompt).toContain('STATE CHANGES')
+    expect(prompt).toContain('match_title')
+    expect(prompt).toContain('state materially changed')
+    // unknown-item state changes must not go to updates
+    expect(prompt).toContain('NOT in Known memories')
+  })
 })
 
 describe('buildKnownContext', () => {
@@ -32,24 +42,28 @@ describe('buildKnownContext', () => {
     expect(buildKnownContext({ todos: [], goals: [], milestones: [], preferences: [], events: [] })).toBeNull()
   })
 
-  it('renders one line per category', () => {
+  it('renders one line per category with state markers (M8)', () => {
     const text = buildKnownContext({
-      todos: ['写周报', '修复登录'],
-      goals: ['发布插件'],
-      milestones: ['M7'],
+      todos: [
+        { title: '写周报', status: 'pending', due_at: '2026-08-25' },
+        { title: '修复登录', status: 'in_progress' },
+      ],
+      goals: [{ title: '发布插件', progress: 40 }],
+      milestones: [{ title: 'M7', status: 'active' }],
       preferences: [{ key: 'lang', value: 'zh' }],
       events: ['选定 SQLite'],
     })
-    expect(text).toContain('Todos: 写周报 | 修复登录')
-    expect(text).toContain('Goals: 发布插件')
-    expect(text).toContain('Milestones: M7')
+    expect(text).toContain('[pending] 写周报 (due 2026-08-25)')
+    expect(text).toContain('[in_progress] 修复登录')
+    expect(text).toContain('[40%] 发布插件')
+    expect(text).toContain('[active] M7')
     expect(text).toContain('Preferences: lang=zh')
     expect(text).toContain('Recent events: 选定 SQLite')
   })
 
   it('caps the digest at 1500 chars — a hint, not a payload', () => {
     const text = buildKnownContext({
-      todos: Array.from({ length: 200 }, (_, i) => `todo-item-with-a-fairly-long-title-number-${i}`),
+      todos: Array.from({ length: 200 }, (_, i) => ({ title: `todo-item-with-a-fairly-long-title-number-${i}`, status: 'pending' })),
       goals: [],
       milestones: [],
       preferences: [],

@@ -12,9 +12,9 @@ import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { LlmRuntime, Message } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type Yolo from '../storage/index.ts'
-import type { Priority } from '../storage/types.ts'
+import type { MilestoneStatus, Priority } from '../storage/types.ts'
 import { DEFAULTS } from '../shared/constants.ts'
-import { contentBlocksToText, llmExtract, type ExtractionResult } from './llm-extract.ts'
+import { contentBlocksToText, llmExtract, type ExtractionResult, type ExtractedUpdate } from './llm-extract.ts'
 import { buildKnownContext } from './prompt.ts'
 
 export const name = 'yolo-extract'
@@ -63,11 +63,19 @@ function messagesToText(messages: readonly Message[], maxChars = 8000): string {
 }
 
 /** Merge an LLM ExtractionResult into storage. Upserts dedup by title/key;
- * events are deduped against recent timeline summaries (they have no key). */
+ * events are deduped against recent timeline summaries (they have no key).
+ * M8: todos/goals link to milestones by title, and updates[] apply state
+ * changes to known items AFTER new items land (so "created + finished in one
+ * turn" works). Unmatched updates are dropped silently — hallucinated titles
+ * are the norm, not the exception. */
 function mergeExtraction(yolo: Yolo, cwd: string, r: ExtractionResult): void {
   for (const m of r.milestones) yolo.addMilestone(cwd, { title: m.title, target_date: m.target_date, description: m.description, source: 'llm' })
-  for (const t of r.todos) yolo.addTodo(cwd, { title: t.title, due_at: t.due_at, priority: toPriority(t.priority), source: 'llm' })
-  for (const g of r.goals) yolo.addGoal(cwd, { title: g.title, description: g.description })
+  const link = (title: string | null | undefined): string | null =>
+    title ? yolo.findMilestoneId(cwd, title) : null
+  for (const t of r.todos) {
+    yolo.addTodo(cwd, { title: t.title, due_at: t.due_at, priority: toPriority(t.priority), milestone_id: link(t.milestone_title), source: 'llm' })
+  }
+  for (const g of r.goals) yolo.addGoal(cwd, { title: g.title, description: g.description, milestone_id: link(g.milestone_title) })
   for (const p of r.preferences) yolo.addPreference(cwd, { key: p.key, value: p.value })
   const recentSummaries = new Set(yolo.listEvents(cwd, 30).map((e) => e.summary))
   for (const e of r.events) {
@@ -75,15 +83,35 @@ function mergeExtraction(yolo: Yolo, cwd: string, r: ExtractionResult): void {
     recentSummaries.add(e.summary)
     yolo.addEvent(cwd, { kind: e.kind, summary: e.summary, occurred_at: e.occurred_at ? Date.parse(e.occurred_at) || undefined : undefined })
   }
+  applyUpdates(yolo, cwd, r.updates)
 }
 
-/** Compact digest of what is already stored, so the model skips unchanged facts. */
+const MILESTONE_STATUSES: readonly MilestoneStatus[] = ['planned', 'active', 'done', 'abandoned']
+
+/** Route LLM state-change updates onto the storage domain actions (M8). */
+function applyUpdates(yolo: Yolo, cwd: string, updates: readonly ExtractedUpdate[]): void {
+  for (const u of updates) {
+    if (u.kind === 'todo') {
+      if (u.status === 'done') yolo.applyTodoAction(cwd, { title: u.match_title }, 'complete')
+      else if (u.status === 'cancelled') yolo.applyTodoAction(cwd, { title: u.match_title }, 'cancel')
+      else if (u.status === 'in_progress') yolo.applyTodoAction(cwd, { title: u.match_title }, 'start')
+      else if (u.due_at) yolo.applyTodoAction(cwd, { title: u.match_title }, 'postpone', { due_at: u.due_at })
+    } else if (u.kind === 'goal') {
+      if (typeof u.progress === 'number') yolo.applyGoalProgress(cwd, { title: u.match_title }, u.progress, u.note ?? undefined)
+    } else if (u.kind === 'milestone' && u.status && MILESTONE_STATUSES.includes(u.status as MilestoneStatus)) {
+      yolo.applyMilestoneStatus(cwd, { title: u.match_title }, u.status as MilestoneStatus)
+    }
+  }
+}
+
+/** Compact digest of what is already stored, so the model skips unchanged facts
+ * and can target state changes (M8: rows carry status/progress/due). */
 function knownDigest(yolo: Yolo, cwd: string): string | null {
   try {
     return buildKnownContext({
-      todos: yolo.listTodos(cwd).map((t) => t.title),
-      goals: yolo.listGoals(cwd).map((g) => g.title),
-      milestones: yolo.listMilestones(cwd).map((m) => m.title),
+      todos: yolo.listTodos(cwd).map((t) => ({ title: t.title, status: t.status, due_at: t.due_at })),
+      goals: yolo.listGoals(cwd).map((g) => ({ title: g.title, progress: g.progress })),
+      milestones: yolo.listMilestones(cwd).map((m) => ({ title: m.title, status: m.status })),
       preferences: yolo.listPreferences(cwd).map((p) => ({ key: p.key, value: p.value })),
       events: yolo.listEvents(cwd, 15).map((e) => e.summary),
     })
@@ -126,7 +154,8 @@ export function apply(ctx: Context): void {
       })
 
       mergeExtraction(yctx.yolo, cwd, result)
-      const hasContent = result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0
+      const hasContent =
+        result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0 || result.updates.length > 0
       yctx.yolo.logExtraction(cwd, {
         session_id: session.id,
         turn_seq: turn,

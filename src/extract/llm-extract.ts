@@ -23,6 +23,7 @@ export interface ExtractedMilestone {
 export interface ExtractedGoal {
   title: string
   description?: string | null
+  milestone_title?: string | null
 }
 export interface ExtractedPreference {
   key: string
@@ -33,6 +34,15 @@ export interface ExtractedEvent {
   summary: string
   occurred_at?: string | null
 }
+/** M8: state change of an item already in Known memories (matched by title). */
+export interface ExtractedUpdate {
+  kind: 'todo' | 'goal' | 'milestone'
+  match_title: string
+  status?: string | null
+  progress?: number | null
+  due_at?: string | null
+  note?: string | null
+}
 
 export interface ExtractionResult {
   milestones: ExtractedMilestone[]
@@ -40,6 +50,7 @@ export interface ExtractionResult {
   goals: ExtractedGoal[]
   preferences: ExtractedPreference[]
   events: ExtractedEvent[]
+  updates: ExtractedUpdate[]
 }
 
 export const EMPTY_EXTRACTION: ExtractionResult = {
@@ -48,6 +59,7 @@ export const EMPTY_EXTRACTION: ExtractionResult = {
   goals: [],
   preferences: [],
   events: [],
+  updates: [],
 }
 
 /** Defensive parse of the model's JSON output. Returns empty result on any failure. */
@@ -69,7 +81,7 @@ export function parseExtractionJson(text: string): ExtractionResult {
 
 /** Shape-check + coerce parsed JSON into a well-typed ExtractionResult. */
 export function validateExtraction(raw: Partial<ExtractionResult> | null | undefined): ExtractionResult {
-  const result: ExtractionResult = { milestones: [], todos: [], goals: [], preferences: [], events: [] }
+  const result: ExtractionResult = { milestones: [], todos: [], goals: [], preferences: [], events: [], updates: [] }
   if (!raw || typeof raw !== 'object') return result
   for (const m of Array.isArray(raw.milestones) ? raw.milestones : []) {
     if (m && typeof m.title === 'string') {
@@ -95,6 +107,7 @@ export function validateExtraction(raw: Partial<ExtractionResult> | null | undef
       result.goals.push({
         title: g.title,
         description: typeof g.description === 'string' ? g.description : null,
+        milestone_title: typeof g.milestone_title === 'string' ? g.milestone_title : null,
       })
     }
   }
@@ -110,6 +123,18 @@ export function validateExtraction(raw: Partial<ExtractionResult> | null | undef
         kind,
         summary: e.summary,
         occurred_at: typeof e.occurred_at === 'string' ? e.occurred_at : null,
+      })
+    }
+  }
+  for (const u of Array.isArray(raw.updates) ? raw.updates : []) {
+    if (u && typeof u.match_title === 'string' && (u.kind === 'todo' || u.kind === 'goal' || u.kind === 'milestone')) {
+      result.updates.push({
+        kind: u.kind,
+        match_title: u.match_title,
+        status: typeof u.status === 'string' ? u.status : null,
+        progress: typeof u.progress === 'number' ? Math.round(u.progress) : null,
+        due_at: typeof u.due_at === 'string' ? u.due_at : null,
+        note: typeof u.note === 'string' ? u.note : null,
       })
     }
   }

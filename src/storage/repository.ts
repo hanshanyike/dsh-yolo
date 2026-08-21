@@ -373,6 +373,11 @@ export function applyTodoAction(
   if (t.status === 'done' || t.status === 'cancelled') return t
   const ts = now()
   switch (action) {
+    case 'start':
+      if (t.status === 'in_progress') return t
+      db.prepare('UPDATE todos SET status = ?, updated_at = ? WHERE id = ?').run('in_progress', ts, id)
+      addEvent(db, { kind: 'todo_started', summary: `开始：${t.title}`, scope_key: t.scope_key, occurred_at: ts })
+      break
     case 'complete':
       setTodoStatus(db, id, 'done')
       addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts })
