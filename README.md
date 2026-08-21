@@ -139,7 +139,7 @@ time.
 | **M3** | ✅ done | injection: systemPrompt preamble/recall + reminders + session-start replay |
 | **M4** | ✅ done | settings section + client UI shell + **live data channel** (host publishes `yolo/snapshot` durable events → dashboard tab renders real data; `/yolo` command) |
 | **M5** | ✅ done | snapshot scheduling (daily + every 10 turns) + scheduler hardening + coverage push |
-| **M6** | 🔨 in progress | **release engineering** — ✅ GitHub Actions CI (typecheck + tests + build on Linux & Windows, coverage artifact) · ✅ npm-ready manifest (registry deps, `files`, `publishConfig`) · ✅ community files (issue/PR templates) · ⏳ first `npm publish` + `v0.2.0` tag |
+| **M6** | 🔨 in progress | **release engineering** — ✅ GitHub Actions CI (typecheck + tests + build on Linux & Windows, coverage artifact) · ✅ npm-ready manifest (registry deps, `files`, `publishConfig`) · ✅ community files (issue/PR templates) · ✅ name claimed via [`0.2.0-alpha.1`](https://www.npmjs.com/package/dsh-plugin-yolo) (`alpha` dist-tag) · ⏳ stable `v0.2.0` |
 | **M7** | 🗓 planned | **memory portability** — snapshot import/export CLI, DB rebuild-from-snapshot tooling, workspace merge |
 | **M8** | 🗓 planned | **recall quality** — hybrid ranking (FTS + semantic embeddings), recall feedback loop measuring whether injected memories actually helped |
 | **M9** | 🗓 planned | **multi-workspace aggregation** — cross-project global timeline, auto-generated weekly review digest |

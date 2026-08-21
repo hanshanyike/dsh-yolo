@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.1] — 2026-08-21
+
+Name-claiming pre-release of the M6 line — same content as 0.1.0 plus release
+engineering. Published under the `alpha` dist-tag; `npm install dsh-plugin-yolo`
+resolves only after the stable `0.2.0`. Use `npm install dsh-plugin-yolo@alpha`
+to try it early.
+
 ### Added
 
 - GitHub Actions CI (`.github/workflows/ci.yml`): typecheck + tests + build + `npm pack` verification on Linux & Windows, plus a coverage job uploading the report artifact.
 - Community files: bug report / feature request issue templates and a pull request template.
-- README CI badge.
+- README CI badge; `docs/release.md` (publish checklist, artifact contents, versioning policy).
 
 ### Changed
 
@@ -27,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Events returned numeric rowids instead of stable ids — event creation now returns the generated UUID.
 - LLM extraction accepted invalid priority values — unknown priorities now coerce to `null`.
 - Tool outputs didn't match the declared schema — memory tools now return `{ rows: [...] }` shaped results.
+- Dead `toPosix`/`posixJoin` helpers removed after the first Linux CI run exposed their platform-dependent behavior.
 
 ### Removed
 
@@ -46,5 +54,6 @@ First working milestone set: the full memory loop (capture → store → recall 
 - **M5 — hardening.** Snapshot cadence (daily + every 10 turns), scheduler hardening, release build, test coverage push.
 - One-command dev setup: `scripts/dev.mjs` (clone → install → build → patch → boot), CJS client-bundle build contract with `__ModuleLoader__` wrapping and browser `process` shim.
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.2.0-alpha.1...HEAD
+[0.2.0-alpha.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.1.0...v0.2.0-alpha.1
 [0.1.0]: https://github.com/hanshanyike/dsh-yolo/releases/tag/v0.1.0
