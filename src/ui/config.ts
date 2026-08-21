@@ -1,13 +1,15 @@
 // YOLO plugin configuration — schemastery schema, surfaced in the dsh Settings page.
-// Mirrors the plan's E.5 fields. Pattern follows host plugins: explicit Config
-// interface + `export const Config: z<Config>` (z.infer is unavailable here).
+// Pattern follows host plugins: explicit Config interface + `export const
+// Config: z<Config>` (z.infer is unavailable here).
+//
+// M7: `enableRules` removed — the per-message regex fast path is gone; LLM
+// semantic extraction at turn end is the only extraction strategy.
 
 import z from '@deepseek-ai/schemastery'
 
 export interface Config {
   enabled: boolean
   extraction: {
-    enableRules: boolean
     enableLLM: boolean
     model: string
     minIntervalSec: number
@@ -30,7 +32,6 @@ export interface Config {
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(true),
   extraction: z.object({
-    enableRules: z.boolean().default(true),
     enableLLM: z.boolean().default(true),
     model: z.string().default('deepseek-chat'),
     minIntervalSec: z.number().default(30).min(10),

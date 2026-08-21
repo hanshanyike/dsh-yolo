@@ -7,12 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **M7 — LLM-only semantic extraction.** The per-message regex fast path (rules / candidate buffer / merge) was removed entirely: regexes cannot judge semantics, produced noise, and missed anything phrased unusually. Extraction is now a single LLM structured pull at every `agent/turn-stopping`, following the industry pattern (Mem0, Claude Code auto-memory). The extraction prompt was rewritten around durable-knowledge selection, and the model now receives a compact **known-memories digest** so it never re-extracts unchanged facts. Live-session testing exposed a taxonomy gap in the first prompt cut — scheduled commitments (trips, appointments) fell between "task" and "decision" and were silently dropped — the todo/event definitions now explicitly cover them (verified against the real API both ways: extracts the trip, still respects "don't record this").
+- **M7 — global sidebar dashboard.** The per-session dashboard tab (conversation view builder, chat node, header button, `/yolo` command, `yolo/snapshot` durable events) was removed — memory is cross-session by nature, so the dashboard now lives in the sidebar footer: a full-height drawer with open-todo badge, five sections, manual refresh and a 30s poll while open. Data comes from a new host endpoint `GET /yolo/dashboard` whose scope follows the most recent session's workspace.
+
 ### Fixed
 
+- `Cannot read properties of undefined (reading 'enabled')` on boot when the bundle yml has no config stanza for the ui plugin — config is now normalized with `Config(config ?? {})` before any property access.
+- `SetNamedSecurityInfoW failed (Win32 5)` on Windows when the workspace directory is owned by `BUILTIN\Administrators` — `scripts/dev.mjs` now runs an ACL preflight (`icacls`) before the host's sandbox grant, prints exact repair commands, and offers `--fix-acl` for an elevated one-shot repair (`takeown` + `icacls /grant`).
+- Recall and reminders read a different memory scope than extraction wrote to — `memory` and `reminder` now track the latest session's `meta.cwd` instead of falling back to `process.cwd()`.
+- The memory plugin crashed when a `session/event` payload arrived without a session object — the cwd tracking is now defensive.
 - User messages containing FTS5 syntax characters (`<`, quotes, parens, operators) crashed
   the whole turn with `fts5: syntax error near "<"` — search queries are now wrapped as
   quoted FTS5 phrases (every character literal) and capped at 64 chars; recall additionally
   degrades to empty instead of failing system-prompt assembly on storage errors.
+
+### Removed
+
+- `src/extract/rules.ts`, `src/extract/buffer.ts`, `src/extract/merge.ts`, `src/shared/events.ts`, `client/tab/`, `client/node/DashboardNode.ts`, `client/trigger/HeaderButton.ts` and the `extraction.enableRules` setting.
 
 ## [0.2.0-alpha.1] — 2026-08-21
 

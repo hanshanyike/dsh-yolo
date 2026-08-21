@@ -20,6 +20,7 @@
 //   --setup   run steps 1-7 only (prepare, do not start)
 //   --update  git pull the host first, then reinstall + rebuild, then start
 //   --port N  custom port (default 4080 — 3080 is the running dsh GUI itself)
+//   --fix-acl elevate once via UAC to repair the workspace ACL (Windows only)
 
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -41,18 +42,119 @@ function parsePort() {
 }
 const SETUP = process.argv.includes('--setup')
 const UPDATE = process.argv.includes('--update')
+const FIX_ACL = process.argv.includes('--fix-acl')
 
 const win = process.platform === 'win32'
 
+// ---------------------------------------------------------------------------
+// Windows ACL preflight.
+//
+// The dsh sandbox grants a workspace-write ACE on the workspace directory via
+// SetNamedSecurityInfoW, which needs WRITE_DAC. A directory created by an
+// ELEVATED process is owned by BUILTIN\Administrators and typically grants the
+// standard user only "Modify" (M) — no WRITE_DAC — so every confined tool then
+// fails with: "SetNamedSecurityInfoW failed (Win32 5): grantWrite(<dir>)".
+//
+// The preflight detects this BEFORE the host starts and prints the one-time
+// repair (take ownership + full-control grant). `--fix-acl` performs it via UAC.
+// ---------------------------------------------------------------------------
+
+/** Principals whose ACEs a non-elevated standard user can actually use. */
+const COVERING_PRINCIPALS = new Set([
+  'everyone',
+  'nt authority\\authenticated users',
+  'nt authority\\authenticated users@',
+  'builtin\\users',
+])
+
+function runCapture(cmd, args) {
+  const r = spawnSync(cmd, args, { encoding: 'utf8', shell: false, windowsHide: true })
+  return r.status === 0 ? `${r.stdout ?? ''}` : null
+}
+
+function windowsAclStatus(dir) {
+  const whoami = runCapture('whoami', [])
+  const me = whoami ? whoami.trim().toLowerCase() : null
+  const icacls = runCapture('icacls', [dir])
+  if (!icacls) return { ok: true, detail: 'icacls unavailable — skipping check' }
+
+  const covering = new Set([...COVERING_PRINCIPALS])
+  if (me) covering.add(me)
+
+  // ACE lines look like: "  PRINCIPAL:(I)(OI)(CI)(IO)(F)" — rights are the
+  // trailing parenthesized tokens. F (full) includes WRITE_DAC; explicit
+  // WDAC grants it too. BUILTIN\Administrators is deliberately NOT covering:
+  // a non-elevated token carries the group as deny-only.
+  for (const line of icacls.split(/\r?\n/)) {
+    const m = line.trim().match(/^(.+?):\(([^)]*)\)/)
+    if (!m) continue
+    const principal = m[1].toLowerCase()
+    if (!covering.has(principal)) continue
+    const rights = line.trim().slice(line.trim().lastIndexOf('(') + 1, -1).toLowerCase()
+    if (rights === 'f' || rights.includes('wdac')) {
+      return { ok: true, detail: `"${m[1]}" carries ${line.trim().endsWith('(F)') ? 'full control' : 'WRITE_DAC'}` }
+    }
+  }
+
+  // No full-control ACE — the last escape hatch is ownership (the owner
+  // implicitly holds WRITE_DAC).
+  const ps = runCapture('powershell.exe', [
+    '-NoProfile', '-Command',
+    `([System.IO.Directory]::GetAccessControl('${dir.replace(/'/g, "''")}')).Owner`,
+  ])
+  const owner = ps ? ps.trim() : null
+  if (owner && me && owner.toLowerCase() === me) {
+    return { ok: true, detail: `owner is ${owner} (implicit WRITE_DAC)` }
+  }
+  return {
+    ok: false,
+    detail: owner ? `owner=${owner}, user=${me}, no full-control ACE for the user` : 'no full-control ACE for the user',
+  }
+}
+
+function aclFixCommands(dir) {
+  const user = process.env.USERNAME ?? ''
+  return [
+    `takeown /f "${dir}"`,
+    `icacls "${dir}" /grant "${user}:(OI)(CI)F"`,
+  ]
+}
+
+function fixAclElevated(dir) {
+  const cmds = aclFixCommands(dir).join(' && ')
+  console.log(`[dev] requesting elevation to run:\n      ${cmds}`)
+  const r = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-Command', `Start-Process cmd -Verb RunAs -Wait -ArgumentList '/c ${cmds.replace(/"/g, '\\"')}'`],
+    { stdio: 'inherit', shell: false },
+  )
+  if (r.status !== 0) {
+    console.error('[dev] elevated repair failed or was declined.')
+    process.exit(r.status ?? 1)
+  }
+  const after = windowsAclStatus(dir)
+  console.log(after.ok
+    ? `[dev] ACL repaired (${after.detail}).`
+    : `[dev] ACL still not writable (${after.detail}). Run the two commands above manually from an elevated terminal.`)
+}
+
 function warnWindowsAcl() {
   if (!win) return
+  const status = windowsAclStatus(ROOT)
+  if (status.ok) {
+    console.log(`[dev] workspace ACL ok — ${status.detail}`)
+    return
+  }
   console.log(`
-[dev] Windows ACL note: dsh's sandbox grants a workspace-write ACE on the
-      current directory before running confined tools (Pwsh, etc.). If the
-      host later fails with "SetNamedSecurityInfoW failed (Win32 5):
-      grantWrite(...)", run this terminal / dsh as Administrator once so the
-      standing ACE can be created, or ensure the current user owns the
-      workspace directory and has "Change permissions" rights.
+[dev] WARNING: this workspace directory cannot change its own DACL
+      (${status.detail}). The dsh sandbox grants a workspace-write ACE
+      before running confined tools and WILL fail mid-session with:
+        SetNamedSecurityInfoW failed (Win32 5): grantWrite(${ROOT})
+
+      One-time repair — run these from an ELEVATED terminal:
+${aclFixCommands(ROOT).map((c) => `        ${c}`).join('\n')}
+      or: node scripts/dev.mjs --fix-acl   (prompts UAC, no terminal needed)
+
       See docs/extension-points.md#windows-acl--sandbox-permission-note.
 `)
 }

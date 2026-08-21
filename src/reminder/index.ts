@@ -22,16 +22,26 @@ interface SettingsLike {
 /** Storage snapshot cadence the user can pick in Settings. */
 export const YOLO_NS = settingsNamespace('yolo')
 
+/** Workspace cwd of an agent's session, when the payload carries one. */
+function agentCwd(agent: unknown): string | undefined {
+  const session = (agent as { session?: { meta?: { cwd?: string } } })?.session
+  return session?.meta?.cwd
+}
+
 export function apply(ctx: Context): void {
   const yctx = ctx as ReminderCtx
   const settings = (ctx as { settings?: SettingsLike }).settings
   let latestAgent: AgentLike | undefined
+  // the workspace reminders/snapshots operate on — follows the latest session
+  // (extraction writes under the session cwd; process.cwd() would miss it)
+  let latestCwd: string | undefined
 
   // remember the most recent active agent + replay any pending reminders
   ctx.on('agent/session-start', (payload: { agent: unknown }) => {
     const agent = payload.agent as AgentLike
     latestAgent = agent
-    const cwd = process.cwd()
+    const cwd = agentCwd(payload.agent) ?? process.cwd()
+    latestCwd = cwd
     const pending = yctx.yolo.listPendingReminders(cwd)
     for (const p of pending.slice(0, 5)) {
       try {
@@ -47,13 +57,14 @@ export function apply(ctx: Context): void {
   // turn-cadence snapshot: 'every_10_turns' writes a timestamped Markdown
   // snapshot every 10 finished turns (config read live via ctx.settings)
   let turnCount = 0
-  ctx.on('agent/turn-stopping', () => {
+  ctx.on('agent/turn-stopping', (payload: { agent?: { session?: unknown } }) => {
     turnCount++
     try {
+      const cwd = agentCwd(payload?.agent)
+      if (cwd) latestCwd = cwd
       const config = settings?.get(YOLO_NS)
       if (config?.storage?.snapshotInterval === 'every_10_turns') {
-        const cwd = process.cwd()
-        const path = maybeWriteTurnSnapshot(yctx.yolo, () => cwd, turnCount)
+        const path = maybeWriteTurnSnapshot(yctx.yolo, () => latestCwd ?? process.cwd(), turnCount)
         if (path) ctx.logger?.info?.('[yolo-reminder] turn snapshot written: %s', path)
       }
     } catch (e) {
@@ -65,7 +76,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() =>
     startReminderScheduler(ctx, {
       yolo: yctx.yolo,
-      cwd: () => process.cwd(),
+      cwd: () => latestCwd ?? process.cwd(),
       getLatestAgent: () => latestAgent,
     }),
   )

@@ -1,8 +1,10 @@
-// M4b dashboard publisher tests — build + publish with a mocked Yolo service.
+// M7 dashboard projection tests — buildDashboardData + the GET /yolo/dashboard
+// endpoint, with a mocked Yolo service. The per-session publish path is gone:
+// the dashboard is a global sidebar surface served over HTTP.
 
 import { describe, it, expect, vi } from 'vitest'
 import type Yolo from '../src/storage/index.ts'
-import { buildDashboardData, publishDashboard, registerDashboardEndpoint, type SessionLike } from '../src/ui/dashboard.ts'
+import { buildDashboardData, registerDashboardEndpoint } from '../src/ui/dashboard.ts'
 import type { Todo, Goal, Milestone, TimelineEvent, Preference } from '../src/storage/types.ts'
 
 function mockYolo(): Yolo {
@@ -50,26 +52,11 @@ describe('buildDashboardData', () => {
     expect(data.events[0]).toMatchObject({ kind: 'decision' })
     expect(data.preferences[0]).toMatchObject({ key: '语言', value: '简体中文' })
   })
-})
 
-describe('publishDashboard', () => {
-  it('appends the yolo/snapshot durable event with envelope', () => {
-    const append = vi.fn()
-    const session: SessionLike = { append, meta: { cwd: '/ws/alpha' } }
-    publishDashboard(mockYolo(), session, '/ws/alpha')
-    expect(append).toHaveBeenCalledTimes(1)
-    const [type, payload] = append.mock.calls[0] as [string, { createdAt: number; scopeKey: string; data: unknown }]
-    expect(type).toBe('yolo/snapshot')
-    expect(payload.createdAt).toBeGreaterThan(0)
-    expect(payload.scopeKey).toBe('test/main')
-    expect(payload.data).toBeDefined()
-  })
-
-  it('never throws when append fails', () => {
-    const session: SessionLike = {
-      append: () => { throw new Error('durable store down') },
-    }
-    expect(() => publishDashboard(mockYolo(), session, '/ws/alpha')).not.toThrow()
+  it('serializes cleanly to JSON', () => {
+    const json = JSON.stringify(buildDashboardData(mockYolo(), '/tmp/proj'))
+    const parsed = JSON.parse(json) as { todos: unknown[] }
+    expect(parsed.todos).toHaveLength(1)
   })
 })
 

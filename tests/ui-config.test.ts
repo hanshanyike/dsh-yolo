@@ -7,7 +7,6 @@ describe('YOLO Config schema', () => {
   it('applies defaults for an empty object', () => {
     const c = Config(undefined)
     expect(c.enabled).toBe(true)
-    expect(c.extraction.enableRules).toBe(true)
     expect(c.extraction.enableLLM).toBe(true)
     expect(c.extraction.model).toBe('deepseek-chat')
     expect(c.reminder.enabled).toBe(true)
@@ -21,7 +20,7 @@ describe('YOLO Config schema', () => {
     expect(c.enabled).toBe(false)
     expect(c.reminder.enabled).toBe(false)
     expect(c.recall.topK).toBe(8)
-    expect(c.extraction.enableRules).toBe(true) // untouched fields keep defaults
+    expect(c.extraction.enableLLM).toBe(true) // untouched fields keep defaults
   })
 
   it('rejects out-of-range numbers', () => {

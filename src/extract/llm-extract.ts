@@ -1,10 +1,11 @@
-// YOLO LLM extraction — the turn-end structured pass (the "hybrid" slow path).
+// YOLO LLM extraction — the turn-end semantic pass (the only extraction
+// strategy since M7; the per-message regex fast path was removed).
 // Folds ctx.llm.stream output via BlockAssembler, then parses strict JSON with
 // defensive fallbacks. Never throws into the caller: all failures return empty.
 
 import { BlockAssembler, type LlmRuntime, type Message } from '@deepseek-ai/dsh-llm'
 import { contentBlocksToText } from '../shared/text.ts'
-import { EXTRACTION_PROMPT } from './prompt.ts'
+import { buildExtractionPrompt } from './prompt.ts'
 
 export { contentBlocksToText }
 
@@ -120,6 +121,8 @@ export interface LlmExtractOptions {
   provider: string
   model: string
   turnText: string
+  /** Compact digest of already-stored memories — the model skips unchanged facts. */
+  knownContext?: string | null
   signal?: AbortSignal
 }
 
@@ -129,14 +132,18 @@ export interface LlmExtractOptions {
  * (no custom tag), so we use 'session-title' to segregate auxiliary traffic.
  */
 export async function llmExtract(opts: LlmExtractOptions): Promise<ExtractionResult> {
-  const { llm, provider, model, turnText, signal } = opts
+  const { llm, provider, model, turnText, knownContext, signal } = opts
   if (!turnText.trim()) return EMPTY_EXTRACTION
+
+  const userContent = knownContext
+    ? `Known memories (do not re-extract unchanged facts):\n${knownContext}\n\n--- Conversation turn ---\n${turnText}`
+    : turnText
 
   const stream = llm.stream({
     provider,
     model,
-    system: EXTRACTION_PROMPT,
-    messages: [{ role: 'user', content: [{ type: 'text', text: turnText }] }] as Message[],
+    system: buildExtractionPrompt(new Date()),
+    messages: [{ role: 'user', content: [{ type: 'text', text: userContent }] }] as Message[],
     temperature: 0,
     maxTokens: 2048,
     purpose: 'session-title',

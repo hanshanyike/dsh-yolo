@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](package.json)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.19-339933?logo=node.js&logoColor=white)](package.json)
-[![Tests](https://img.shields.io/badge/tests-111%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-113%20passing-brightgreen)](tests/)
 [![Coverage](https://img.shields.io/badge/coverage-76%25%20stmts%20%7C%2082%25%20branches-green)](vitest.config.ts)
 [![Built on](https://img.shields.io/badge/built%20on-deepseek--harness-1E90FF)](https://github.com/deepseek-ai/deepseek-harness)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -31,23 +31,25 @@ decisions and preferences you just discussed evaporate. **YOLO** fixes that for
   the agent itself can query via tools.
 - It **reminds you proactively** when deadlines arrive, even if the host was
   offline when they came due.
-- It **shows your world at a glance** in a native dashboard tab inside the dsh UI.
+- It **shows your world at a glance** in a global dashboard right in the dsh sidebar
+  — timeline, task board, goal progress, milestones & preferences.
 
-Unlike keyword-note plugins, YOLO *structurally decomposes* conversations with a
-hybrid extractor: cheap per-message rules catch signals instantly, then an LLM
-pass at turn end pulls clean, deduplicated records — so memory stays accurate
-without spamming your tokens.
+Unlike keyword-note plugins, YOLO *understands* conversations: at every turn end,
+an LLM semantic pass (the same pattern as [Mem0](https://github.com/mem0ai/mem0)
+or Claude Code's auto-memory) reads the whole exchange, extracts only durable
+knowledge, and deduplicates it against what is already stored — so memory stays
+accurate without spamming your tokens.
 
 ## ✨ Features
 
 | | |
 |---|---|
-| 🧠 **Hybrid extraction** | Per-message rule capture (todo / deadline / milestone / goal / preference signals) + turn-end LLM structured pull with dedup & throttling |
+| 🧠 **LLM semantic extraction** | One structured pull at every turn end: the model reads the whole exchange and returns todos / milestones / goals / preferences / events — deduplicated against known memories, throttled per session |
 | 🗄️ **Layered storage** | SQLite (WAL + FTS5 trigram, CJK-aware) as the fast store; human-readable **Markdown snapshots** — your memory is versionable & diffable |
 | 🔎 **Model-visible tools** | `memory_search` / `memory_write` / `memory_forget` / `yolo_query` — the agent reads and manages your memory itself |
 | 📝 **Automatic recall** | Preferences ride along in every system prompt; related memories are FTS-recalled against your latest message — no "remember that?" needed |
 | 🔔 **Proactive reminders** | Time-triggered `agent.inject` + `followup` wake-ups, with queue-and-replay on session start so nothing is lost while the host is offline |
-| 📊 **Native dashboard** | A YOLO tab in the dsh web UI: timeline, task board, goal progress, milestones & preferences — no separate server, no extra setup |
+| 📊 **Sidebar dashboard** | A global YOLO panel in the dsh sidebar footer: timeline, task board, goal progress, milestones & preferences — session-independent, live-polled, no separate server |
 | 🧩 **Everything is a plugin** | 5 cooperating plugins over Cordis capability seams; each piece swappable, HMR-friendly |
 
 ## 🏗️ Architecture
@@ -63,21 +65,20 @@ without spamming your tokens.
         │                                                    │
         │  dsh-yolo-storage   Service `ctx.yolo`             │
         │    └─ SQLite + FTS5 + Markdown snapshot + scopes   │
-        │  dsh-yolo-extract   session/event rules +          │
-        │                     agent/turn-stopping LLM pull    │
+        │  dsh-yolo-extract   turn-end LLM semantic pull     │
         │  dsh-yolo-memory    memory_* tools + systemPrompt   │
         │  dsh-yolo-reminder  scheduler + agent.inject        │
-        │  dsh-yolo-ui        conversation.view Tab + nodes   │
+        │  dsh-yolo-ui        settings + /yolo/dashboard API  │
         └────────────────────────────────────────────────────┘
 ```
 
 | plugin | role |
 |---|---|
 | `dsh-yolo-storage` | **Service** (`ctx.yolo`): SQLite + FTS5 + Markdown snapshots, workspace-scoped |
-| `dsh-yolo-extract` | hybrid extraction: per-message rules + turn-end LLM structured pull, dedup + throttle |
+| `dsh-yolo-extract` | LLM semantic extraction at turn end (todos / milestones / goals / preferences / events), dedup + throttle |
 | `dsh-yolo-memory` | model-visible `memory_search/write/forget` + `yolo_query` tools, persistent preamble + dynamic recall |
 | `dsh-yolo-reminder` | time-triggered reminders (`agent.inject` + `followup` + `session-start` replay) |
-| `dsh-yolo-ui` | native UI: `conversation.view` tab, conversation node, sidebar button, settings card |
+| `dsh-yolo-ui` | settings section + `GET /yolo/dashboard` JSON API feeding the global sidebar dashboard |
 
 ## 🚀 Quick Start
 
@@ -101,7 +102,8 @@ pnpm dev:web          # boots dsh web → http://127.0.0.1:4080
 
 Open **http://127.0.0.1:4080**, pick your workspace, and start talking.
 YOLO is already watching: mention a deadline, set a goal, or say *"remember this"* —
-then open the **YOLO** tab to see your timeline, task board, and goal progress.
+then open the **YOLO panel** at the bottom of the left sidebar to see your
+timeline, task board, and goal progress.
 
 ### How it works — a 10-second demo
 
@@ -135,17 +137,17 @@ time.
 |---|---|---|
 | **M0** | ✅ done | scaffold + git repo + dev host + minimal plugin loads |
 | **M1** | ✅ done | `ctx.yolo` storage Service + SQLite/FTS5/snapshots + memory tools |
-| **M2** | ✅ done | hybrid extraction (rules + turn-end LLM) + dedup |
+| **M2** | ✅ done | extraction: rules + turn-end LLM (later superseded by M7) |
 | **M3** | ✅ done | injection: systemPrompt preamble/recall + reminders + session-start replay |
-| **M4** | ✅ done | settings section + client UI shell + **live data channel** (host publishes `yolo/snapshot` durable events → dashboard tab renders real data; `/yolo` command) |
+| **M4** | ✅ done | settings section + client UI shell + live data channel (session dashboard tab — superseded by M7) |
 | **M5** | ✅ done | snapshot scheduling (daily + every 10 turns) + scheduler hardening + coverage push |
 | **M6** | 🔨 in progress | **release engineering** — ✅ GitHub Actions CI (typecheck + tests + build on Linux & Windows, coverage artifact) · ✅ npm-ready manifest (registry deps, `files`, `publishConfig`) · ✅ community files (issue/PR templates) · ✅ name claimed via [`0.2.0-alpha.1`](https://www.npmjs.com/package/dsh-plugin-yolo) (`alpha` dist-tag) · ⏳ stable `v0.2.0` |
-| **M7** | 🗓 planned | **memory portability** — snapshot import/export CLI, DB rebuild-from-snapshot tooling, workspace merge |
-| **M8** | 🗓 planned | **recall quality** — hybrid ranking (FTS + semantic embeddings), recall feedback loop measuring whether injected memories actually helped |
-| **M9** | 🗓 planned | **multi-workspace aggregation** — cross-project global timeline, auto-generated weekly review digest |
+| **M7** | ✅ done | **semantic extraction & UX rework** — regex fast path removed, LLM-only turn-end extraction with known-memory dedup context; per-session dashboard tab removed, global sidebar dashboard drawer (`GET /yolo/dashboard` + 30s poll); config-undefined & workspace-scope crashes fixed; Windows ACL preflight in `dev.mjs` |
+| **M8** | 🗓 planned | **memory portability** — snapshot import/export CLI, DB rebuild-from-snapshot tooling, workspace merge |
+| **M9** | 🗓 planned | **recall quality** — hybrid ranking (FTS + semantic embeddings), recall feedback loop measuring whether injected memories actually helped |
+| **M10** | 🗓 planned | **multi-workspace aggregation** — cross-project global timeline, auto-generated weekly review digest |
 
-Current quality bar: **112 tests passing**, 76% statements / 82% branches
-coverage, `tsc --noEmit` clean.
+Current quality bar: **113 tests passing**, `tsc --noEmit` clean.
 
 ## 📚 Docs
 

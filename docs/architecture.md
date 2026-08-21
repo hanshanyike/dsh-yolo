@@ -27,9 +27,9 @@ dsh-plugin-yolo
 ├── src/extract/          # dsh-yolo-extract  — conversation → records
 ├── src/memory/           # dsh-yolo-memory   — tools + prompt injection
 ├── src/reminder/         # dsh-yolo-reminder — scheduler + agent.inject
-├── src/ui/               # dsh-yolo-ui       — host UI + data channel
-├── src/shared/           # constants, dashboard projection, event types, text utils
-└── client/               # browser bundle — dashboard tab, sidebar, settings card
+├── src/ui/               # dsh-yolo-ui       — settings + dashboard API
+├── src/shared/           # constants, dashboard projection, text utils
+└── client/               # browser bundle — sidebar dashboard, settings card
 ```
 
 `cordis.bundle.yml` wires each entry; `tsdown` builds the host plugins (ESM,
@@ -43,36 +43,39 @@ dsh-plugin-yolo
 | plugin | provides | consumes |
 |---|---|---|
 | **storage** | `ctx.yolo` service: SQLite (WAL + FTS5 trigram) repository, Markdown snapshots, scope resolution | nothing (leaf service) |
-| **extract** | conversation → structured records | `ctx.yolo`, `session/event`, `agent/turn-stopping`, `ctx.llm` |
+| **extract** | conversation → structured records | `ctx.yolo`, `agent/turn-stopping`, `ctx.llm`, settings |
 | **memory** | `memory_search/write/forget` + `yolo_query` tools, systemPrompt sections/context | `ctx.yolo`, `ctx.tools`, `ctx.systemPrompt`, `session/event` |
 | **reminder** | time-triggered reminders | `ctx.yolo`, `agent.inject`, `agent/followup`, `agent/session-start` |
-| **ui** | dashboard data channel, settings section, client slots | `ctx.yolo`, durable events, `conversation.view`, `settings.plugin.item` |
+| **ui** | `GET /yolo/dashboard` JSON API, settings section | `ctx.yolo`, `ctx.webServer`, `agent/turn-stopping` |
 
 ## Data flows
 
 ### Write path — conversation becomes memory
 
 ```
-user message
-   │  session/event (per message)
+finished turn (agent/turn-stopping)
+   │
    ▼
-extract: rule engine ──hit──► candidate buffer (dedup by normalized title)
-   │  no hit / turn end
+extract: fold turn messages into one bounded text blob (tail-keeping, 8k chars)
+   │
    ▼
-agent/turn-stopping ──► LLM structured pull (throttled + token-budgeted)
-   │                        │
-   │  rules ◄── merge + dedup ──► LLM (later same-key candidates win)
+LLM semantic pull (throttled per session, temperature 0, JSON-only output)
+   │   ▲ known-memories digest (todos/goals/milestones/prefs/events already stored)
    ▼
-ctx.yolo.upsert*  ──►  SQLite (tables) + FTS5 index (trigram, CJK-aware)
-                        │
-                        └──►  Markdown snapshot (daily / every 10 turns)
+validate + coerce JSON ──► ctx.yolo.upsert*  ──►  SQLite + FTS5 index
+                                              │
+                                              └──►  Markdown snapshot (daily / every 10 turns)
 ```
 
-The rule engine is deliberately cheap — regex over a single message, no LLM
-call — so signals like *“8/30 之前完成 X”* are captured instantly. The turn-end
-LLM pass then produces cleaner, structured records; both paths converge on the
-same dedup key (lowercased, punctuation-stripped title), and the latest
-candidate for a key wins at flush time.
+Extraction is **LLM-only by design**. The early per-message regex fast path was
+removed in M7: regexes cannot judge semantics, so they produced noise (every
+greeting that happened to match a pattern) and missed everything phrased
+unusually. The industry converged on the opposite shape — [Mem0](https://github.com/mem0ai/mem0)
+and Claude Code's auto-memory both run one LLM pass *after* a useful
+interaction, not per message. YOLO follows that: one structured pull per turn,
+deduplicated by feeding the model a compact digest of what is already stored
+("do not re-extract unchanged facts"), so repeat turns cost tokens only when
+something actually changed.
 
 ### Read path — memory reaches the model
 
@@ -90,10 +93,16 @@ queue while the host is offline and replay on `agent/session-start`.
 ### UI path — memory reaches the human
 
 ```
-ctx.yolo ──► ui plugin builds dashboard projection
-          ──► durable event yolo/snapshot (SessionEventMap merge)
-          ──► client bundle: conversation.view tab + chat node + sidebar button
+ctx.yolo ──► ui plugin serves GET /yolo/dashboard (JSON projection)
+          ──► client bundle: global sidebar dashboard (fetch + 30s poll while open)
 ```
+
+The dashboard is a **global surface, not a per-session one**: memory outlives any
+single conversation, so the panel lives in the sidebar footer (session-independent)
+and its scope follows the workspace of the most recent session. The earlier
+per-session dashboard tab (and the `yolo/snapshot` durable events that fed it)
+was removed in M7 — publishing a full memory snapshot into every session log was
+pure bloat.
 
 ## Storage design
 
@@ -116,8 +125,9 @@ Key design decisions and their rationale:
 
 | decision | rationale |
 |---|---|
-| SQLite + FTS5, not a vector store | zero external services, deterministic, CJK-friendly substring recall; semantic recall is roadmap (M8), deliberately deferred |
-| hybrid rules + LLM extraction | rules are instant and free; LLM cleans structure; dedup-by-title keeps both from duplicating |
+| SQLite + FTS5, not a vector store | zero external services, deterministic, CJK-friendly substring recall; semantic recall is roadmap (M9), deliberately deferred |
+| LLM-only extraction, no regex fast path | regex cannot judge semantics — noise in, misses out; one model pass per turn with known-memory dedup matches the industry pattern (Mem0, Claude Code auto-memory) |
+| global sidebar dashboard, not a per-session tab | memory is cross-session by nature; per-session snapshots duplicated data into every session log |
 | Markdown as durable record | git-diffable, human-reviewable, survives DB schema changes |
 | workspace+branch scoping | projects and experiments stay isolated; branch scope keys make long-running branches their own memory context |
 | shared constants module | dsh is v0.1.0-rc; API drift should be a one-place change |
@@ -127,15 +137,15 @@ Key design decisions and their rationale:
 | dsh extension point | used by | purpose |
 |---|---|---|
 | `ctx.effect` / service provide | storage | the `ctx.yolo` service |
-| `session/event` (`user/message`, …) | extract, memory | per-message rules + latest-user-text tracking |
-| `agent/turn-stopping` | extract | turn-end LLM pull |
-| `ctx.llm.stream` | extract | structured extraction prompt |
+| `session/event` (`user/message`, …) | memory | latest-user-text tracking for dynamic recall |
+| `agent/turn-stopping` | extract, ui | turn-end LLM pull; latest-session-workspace tracking |
+| `ctx.llm.stream` | extract | structured extraction prompt (`purpose: 'session-title'` segregates auxiliary traffic) |
 | `ctx.tools.register` | memory | `memory_*` + `yolo_query` |
 | `ctx.systemPrompt.section/context` | memory | prefs preamble + dynamic recall |
 | `agent/inject`, `agent/followup` | reminder | proactive wake-ups |
 | `agent/session-start` | reminder | queue replay |
-| durable session events (`yolo/snapshot`) | ui ⇄ client | dashboard data channel |
-| `conversation.view`, `conversation.chat.node`, sidebar/settings slots | ui/client | native dashboard UI |
+| `ctx.webServer` (prefix route) | ui | `GET /yolo/dashboard` JSON API |
+| `sidebar.footer.action`, `settings.plugin.item` slots | client | global dashboard button + settings card |
 
 Runtime-verified details and platform gotchas live in
 [extension-points.md](extension-points.md); the build contract and

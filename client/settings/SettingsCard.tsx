@@ -7,10 +7,12 @@ export function SettingsCard(): JSX.Element {
     <div className="yolo-settings-card" style={{ padding: '12px 0' }}>
       <h3 style={{ margin: '0 0 8px', fontWeight: 600 }}>🎯 YOLO — 个人记忆助手</h3>
       <p style={{ margin: '4px 0', color: 'var(--foreground-secondary, #666)' }}>
-        从会话自动提取里程碑 / 待办 / 目标 / 偏好，结构化存储，主动提醒，并在对话中提供看板视图。
+        每轮对话结束后用大模型语义提取待办 / 目标 / 里程碑 / 偏好 / 决策，结构化存储并自动去重，跨会话记忆，主动提醒。
+        看板位于左侧边栏底部（全局，与具体会话无关）。
       </p>
       <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-        <li>抽取：逐消息规则 + 回合末 LLM</li>
+        <li>抽取：回合末 LLM 语义提取（可配置模型与节流间隔）</li>
+        <li>召回：新会话自动注入相关记忆与偏好</li>
         <li>提醒：到期任务自动注入对话</li>
         <li>存储：SQLite + 每日 Markdown 快照</li>
       </ul>

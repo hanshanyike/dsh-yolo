@@ -1,6 +1,6 @@
-// YOLO dashboard payload — the cross-boundary shape published by the host
-// (ui plugin) as a durable 'yolo/snapshot' session event and consumed by the
-// browser bundle to render the YOLO tab. Shared so both halves stay in sync.
+// YOLO dashboard payload — the cross-boundary shape served by the host
+// (ui plugin) at GET /yolo/dashboard and consumed by the browser bundle to
+// render the sidebar dashboard. Shared so both halves stay in sync.
 
 /** Compact row shapes (a projection of the storage rows, safe for serialization). */
 export interface YoloTodoRow {
@@ -34,7 +34,7 @@ export interface YoloPreferenceRow {
   value: string
 }
 
-/** Complete dashboard projection published by the host. */
+/** Complete dashboard projection served by the host. */
 export interface YoloDashboardData {
   scopeKey: string
   cwd: string
@@ -44,30 +44,6 @@ export interface YoloDashboardData {
   milestones: YoloMilestoneRow[]
   events: YoloEventRow[]
   preferences: YoloPreferenceRow[]
-}
-
-/** Immutable per-Session view snapshot produced by the browser builder. */
-export interface YoloSnapshot {
-  scopeKey: string
-  cwd: string
-  at: number
-  todos: readonly YoloTodoRow[]
-  goals: readonly YoloGoalRow[]
-  milestones: readonly YoloMilestoneRow[]
-  events: readonly YoloEventRow[]
-  preferences: readonly YoloPreferenceRow[]
-}
-
-/** Stable empty snapshot until a 'yolo/snapshot' event has assembled. */
-export const EMPTY_YOLO_SNAPSHOT: YoloSnapshot = {
-  scopeKey: '',
-  cwd: '',
-  at: 0,
-  todos: [],
-  goals: [],
-  milestones: [],
-  events: [],
-  preferences: [],
 }
 
 /** Latest user-facing text of one row, for compact list rendering. */

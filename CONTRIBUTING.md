@@ -19,15 +19,15 @@ Thanks for considering contributing! YOLO is a small, opinionated plugin bundle 
 
 ## Milestones worth picking up
 
-M0–M5 are done (see the [roadmap](README.md#-roadmap) and
+M0–M5 and M7 are done (see the [roadmap](README.md#-roadmap) and
 [CHANGELOG](CHANGELOG.md)). The next self-contained deliverables:
 
 | # | area | what's needed |
 |---|---|---|
 | M6 | release engineering | npm-publishable plugin (install without a host checkout), GitHub Actions CI, coverage badge, `v0.2.0` |
-| M7 | memory portability | snapshot import/export CLI, DB rebuild-from-snapshot, workspace merge |
-| M8 | recall quality | hybrid ranking (FTS + embeddings), recall feedback loop |
-| M9 | aggregation | cross-workspace timeline, weekly review digest |
+| M8 | memory portability | snapshot import/export CLI, DB rebuild-from-snapshot, workspace merge |
+| M9 | recall quality | hybrid ranking (FTS + embeddings), recall feedback loop |
+| M10 | aggregation | cross-workspace timeline, weekly review digest |
 
 ## Development setup
 

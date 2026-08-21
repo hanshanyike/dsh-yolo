@@ -1,16 +1,18 @@
-// YOLO UI plugin (host half) — M4a + M4b data channel.
-// Registers the YOLO settings namespace on the dsh Settings page, declares the
-// custom durable session events, and publishes the dashboard projection:
-//   - automatically after every finished turn (agent/turn-stopping)
-//   - on the '/yolo' text command (user message starting with /yolo)
+// YOLO UI plugin (host half) — settings section + sidebar dashboard data
+// channel. Registers the YOLO settings namespace on the dsh Settings page and
+// serves the global dashboard projection at GET /yolo/dashboard for the
+// browser-side sidebar dashboard.
+//
+// NOTE: the cordis loader passes `config` as undefined when the bundle yml has
+// no config stanza for this plugin — schemastery defaults only apply when we
+// normalize explicitly. Config(config ?? {}) is therefore REQUIRED before any
+// `.enabled` access (fixes "Cannot read properties of undefined").
 
 import type { Context } from '@deepseek-ai/cordis'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
-import '../shared/events.ts'
 import type Yolo from '../storage/index.ts'
-import { contentBlocksToText } from '../shared/text.ts'
 import { Config, type Config as ConfigSchema } from './config.ts'
-import { publishDashboard, registerDashboardEndpoint, type SessionLike, type WebServerLike } from './dashboard.ts'
+import { registerDashboardEndpoint, type WebServerLike } from './dashboard.ts'
 
 /** The namespace is the join key shared with the client half (settings.plugin.item). */
 export const YOLO_NS = settingsNamespace('yolo')
@@ -23,22 +25,23 @@ interface UiCtx extends Context {
   webServer: WebServerLike
 }
 
-/** Extract plain text from a user message's content blocks. */
-function userText(content?: unknown): string {
-  return contentBlocksToText(Array.isArray(content) ? content : undefined)
+/** Structural view of a session payload carrying a workspace cwd. */
+interface SessionLike {
+  meta?: { cwd?: string }
 }
 
-/** Narrow an unknown session payload to the structural shape publish needs. */
+/** Narrow an unknown session payload to the structural shape we read. */
 function toSessionLike(v: unknown): SessionLike | undefined {
-  if (typeof v === 'object' && v !== null && typeof (v as SessionLike).append === 'function') {
-    return v as SessionLike
-  }
+  if (typeof v === 'object' && v !== null) return v as SessionLike
   return undefined
 }
 
-export function apply(ctx: UiCtx, config: ConfigSchema): void {
-  installSettingsSection(ctx, YOLO_NS, Config, config, {
-    // config changes take effect live; host plugins read ctx config on next turn
+export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
+  // normalize: fill schemastery defaults even when the loader passed nothing
+  // (runtime accepts partial input and fills defaults; the cast states that)
+  const entry = Config((config ?? {}) as ConfigSchema) as ConfigSchema
+
+  installSettingsSection(ctx, YOLO_NS, Config, entry, {
     setSource: (current) => {
       void current
     },
@@ -47,42 +50,17 @@ export function apply(ctx: UiCtx, config: ConfigSchema): void {
     },
   })
 
-  // ---- dashboard data channel ----
-
-  /** Publish to a session, resolving cwd from its meta (falls back to process cwd). */
-  const publish = (session: SessionLike): void => {
-    const cwd = session.meta?.cwd ?? process.cwd()
-    publishDashboard(ctx.yolo, session, cwd)
-  }
-
-  // global JSON endpoint for the sidebar button (session-independent)
-  registerDashboardEndpoint(ctx, ctx.yolo, () => process.cwd())
-
-  // publish after every finished turn so the tab always reflects latest state
+  // ---- sidebar dashboard data channel ----
+  // The dashboard is global (session-independent), but its scope follows the
+  // workspace of the most recent session so the sidebar shows what the user is
+  // actually working on. Falls back to the host process cwd.
+  let latestSessionCwd: string | undefined
   ctx.on('agent/turn-stopping', (payload: { agent?: { session?: unknown } }) => {
-    if (!config.enabled) return
     const s = toSessionLike(payload.agent?.session)
-    if (!s) return
-    try {
-      publish(s)
-    } catch (e) {
-      ctx.logger?.warn?.('[yolo-ui] turn publish failed: %s', e instanceof Error ? e.message : String(e))
-    }
+    if (s?.meta?.cwd) latestSessionCwd = s.meta.cwd
   })
 
-  // '/yolo' text command — force a publish (and thus a tab refresh) on demand
-  ctx.on('session/event', (session, event) => {
-    if (event.type !== 'user/message') return
-    const text = userText((event.data as { content?: readonly unknown[] }).content)
-    if (/^\/yolo\b/.test(text.trim())) {
-      try {
-        const s = toSessionLike(session)
-        if (s) publish(s)
-      } catch (e) {
-        ctx.logger?.warn?.('[yolo-ui] /yolo publish failed: %s', e instanceof Error ? e.message : String(e))
-      }
-    }
-  })
+  registerDashboardEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
 
   ctx.logger?.info?.('[yolo] ui plugin loaded')
 }

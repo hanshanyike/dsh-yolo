@@ -1,10 +1,11 @@
-// M4b ui plugin wiring tests — the dashboard publish triggers:
-// automatic publish after each turn and on the '/yolo' text command.
+// M7 ui plugin wiring tests — settings section installation, the global
+// dashboard endpoint registration, and the endpoint's scope following the
+// latest session workspace. Includes the regression test for the loader
+// passing `config: undefined` (must not throw reading `.enabled`).
 
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/ui/index.ts'
 import type Yolo from '../src/storage/index.ts'
-import type { Config } from '../src/ui/config.ts'
 
 type Handler = (...args: any[]) => void
 
@@ -46,62 +47,70 @@ function mockYolo(): Yolo {
   } as unknown as Yolo
 }
 
-function config(over: Partial<Config> = {}): Config {
-  return {
-    enabled: true,
-    extraction: { enableRules: true, enableLLM: true, model: 'deepseek-chat', minIntervalSec: 30 },
-    reminder: { enabled: true, checkIntervalSec: 300, aheadMin: 60 },
-    storage: { scope: 'workspace', snapshotInterval: 'daily' },
-    recall: { maxTokens: 512, topK: 5 },
-    ...over,
-  }
-}
-
-function userMessage(text: string) {
-  return { type: 'user/message', data: { content: [{ type: 'text', text }] } }
-}
-
-describe('ui apply: dashboard publish', () => {
-  it('publishes a snapshot after every finished turn', () => {
-    const append = vi.fn()
-    const { ctx, handlers } = makeCtx(mockYolo())
-    apply(ctx as never, config())
-    const onTurn = handlers.get('agent/turn-stopping')!
-    onTurn({ agent: { session: { append, meta: { cwd: '/ws' } } } })
-    expect(append).toHaveBeenCalledTimes(1)
-    const [type, payload] = append.mock.calls[0] as [string, { scopeKey: string; data: { at: number } }]
-    expect(type).toBe('yolo/snapshot')
-    expect(payload.scopeKey).toBe('test/main')
-    expect(payload.data.at).toBeGreaterThan(0)
+describe('ui apply: config normalization (Bug 1 regression)', () => {
+  it('does not throw when the loader passes no config stanza at all', () => {
+    const { ctx } = makeCtx(mockYolo())
+    expect(() => apply(ctx as never, undefined)).not.toThrow()
   })
 
-  it('does not publish when the plugin is disabled', () => {
-    const append = vi.fn()
-    const { ctx, handlers } = makeCtx(mockYolo())
-    apply(ctx as never, config({ enabled: false }))
-    const onTurn = handlers.get('agent/turn-stopping')!
-    onTurn({ agent: { session: { append, meta: {} } } })
-    expect(append).not.toHaveBeenCalled()
+  it('does not throw on a partial config', () => {
+    const { ctx } = makeCtx(mockYolo())
+    expect(() => apply(ctx as never, { enabled: true } as never)).not.toThrow()
+  })
+})
+
+describe('ui apply: global dashboard endpoint', () => {
+  it('registers GET /yolo/dashboard exactly once', () => {
+    const { ctx } = makeCtx(mockYolo())
+    apply(ctx as never, undefined)
+    const calls = (ctx.webServer.register as ReturnType<typeof vi.fn>).mock.calls
+    const dashboards = calls.filter(([opts]) => opts.path === '/yolo/dashboard')
+    expect(dashboards).toHaveLength(1)
+    expect(dashboards[0][0].kind).toBe('prefix')
   })
 
-  it('publishes on the /yolo command and ignores other messages', () => {
-    const append = vi.fn()
-    const { ctx, handlers } = makeCtx(mockYolo())
-    apply(ctx as never, config())
-    const onEvent = handlers.get('session/event')!
+  it('serves the workspace of the most recent session, not process.cwd()', () => {
+    const cwds: string[] = []
+    const yolo = {
+      ...mockYolo(),
+      resolve: (c: string) => {
+        cwds.push(c)
+        return { scopeKey: 'test/main', db: {}, dataDir: '' }
+      },
+    } as unknown as Yolo
+    const { ctx, handlers } = makeCtx(yolo)
+    apply(ctx as never, undefined)
 
-    onEvent({ append, meta: {} }, userMessage('你好'))
-    expect(append).not.toHaveBeenCalled()
+    // a turn finished in another workspace — the endpoint must follow it
+    handlers.get('agent/turn-stopping')!({ agent: { session: { meta: { cwd: '/ws/alpha' } } } })
 
-    onEvent({ append, meta: { cwd: '/ws' } }, userMessage('/yolo'))
-    expect(append).toHaveBeenCalledTimes(1)
+    const register = (ctx.webServer.register as ReturnType<typeof vi.fn>).mock.calls
+      .find(([opts]) => opts.path === '/yolo/dashboard')![0] as { handler: (req: unknown, res: unknown) => Promise<void> }
+    const res = { writeHead: vi.fn(), end: vi.fn() }
+    void register.handler({}, res)
+
+    expect(cwds).toContain('/ws/alpha')
+    const body = JSON.parse(String(res.end.mock.calls[0]?.[0]))
+    expect(body.cwd).toBe('/ws/alpha')
   })
 
-  it('survives publish failures', () => {
-    const append = vi.fn(() => { throw new Error('durable down') })
-    const { ctx, handlers } = makeCtx(mockYolo())
-    apply(ctx as never, config())
-    const onTurn = handlers.get('agent/turn-stopping')!
-    expect(() => onTurn({ agent: { session: { append, meta: {} } } })).not.toThrow()
+  it('falls back to the process cwd before any session ran', () => {
+    const cwds: string[] = []
+    const yolo = {
+      ...mockYolo(),
+      resolve: (c: string) => {
+        cwds.push(c)
+        return { scopeKey: 'test/main', db: {}, dataDir: '' }
+      },
+    } as unknown as Yolo
+    const { ctx } = makeCtx(yolo)
+    apply(ctx as never, undefined)
+
+    const register = (ctx.webServer.register as ReturnType<typeof vi.fn>).mock.calls
+      .find(([opts]) => opts.path === '/yolo/dashboard')![0] as { handler: (req: unknown, res: unknown) => Promise<void> }
+    void register.handler({}, { writeHead: vi.fn(), end: vi.fn() })
+
+    expect(cwds).toHaveLength(1)
+    expect(cwds[0]).toBe(process.cwd())
   })
 })

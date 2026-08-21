@@ -17,6 +17,8 @@
 7. [与动态 Cordis 插件的关系](#七与动态-cordis-插件的关系)
 8. [故障排查](#八故障排查)
 9. [文件变更清单](#九文件变更清单)
+10. [最终运行状态](#十最终运行状态)
+11. [M7 语义提取与 UX 重构](#十一m7-语义提取与-ux-重构)
 
 ---
 
@@ -394,3 +396,42 @@ GET / → 200, dsh-plugin-yolo in boot graph      ← 看板已注册 ✓
 client.js → 200, 117428 bytes, CJS module.exports  ← client bundle ✓
 factory 返回 { apply, inject, name }（模拟浏览器验证） ← 注册契约 ✓
 ```
+
+---
+
+## 十一、M7 语义提取与 UX 重构（2026-08-22）
+
+第一阶段"能跑"之后的首轮真实体验反馈驱动的一次重构。用户报告了 3 个问题，排查过程中又发现了 2 个隐藏 bug。
+
+### 反馈与根因
+
+| # | 用户反馈 | 根因 | 修复 |
+|---|---|---|---|
+| 1a | `Cannot read properties of undefined (reading 'enabled')` | cordis loader 在 bundle yml 无该插件 config 段时传 `undefined`，schemastery 的 default 只在显式归一化时生效 | `src/ui/index.ts`：`Config((config ?? {}) as ConfigSchema)` 先归一化再访问 |
+| 1b | `SetNamedSecurityInfoW failed (Win32 5): grantWrite(...)` | 工作区目录 owner 是 `BUILTIN\Administrators`，当前用户无 `WRITE_DAC`，host 沙箱授权失败 | `scripts/dev.mjs`：启动前用 `icacls` 做 ACL 预检，打印修复命令；`--fix-acl` 走 UAC 提权执行 `takeown` + `icacls /grant` |
+| 2 | 每个会话一个 YOLO 看板 tab，侧边栏只有悬浮窗 | 记忆天然是跨会话的，逐会话发布 `yolo/snapshot` durable 事件纯属膨胀 | 见"UX 重构" |
+| 3 | 逐条消息正则提取不合适，应该用大模型语义提取 | 正则无法判断语义：打招呼匹配了就入库（噪声），换个说法就漏掉（漏召回） | 见"架构重构" |
+| 隐藏 1 | — | `memory` / `reminder` 用 `process.cwd()` 兜底，与提取写入的 session cwd 不是同一 scope → 召回和提醒读不到刚提取的记忆 | 两个插件都跟踪最近会话的 `meta.cwd` |
+| 隐藏 2 | — | `session/event` 载荷无 session 对象时 `session.meta` 直接崩（与 1a 同类：对外部载荷不做防御） | 空值防御 |
+
+### 架构重构：LLM-only 语义提取
+
+删除 `rules.ts` / `buffer.ts` / `merge.ts` 与 `extraction.enableRules` 配置。业界对齐
+（Mem0、Claude Code auto-memory）都是"一次有价值的交互之后做一次 LLM 提取"，
+而非逐消息打正则：
+
+- **触发**：仅 `agent/turn-stopping`，整轮消息折叠成一个 ≤8k 字符的文本（超长保尾部——最新消息承载本轮决策）。
+- **去重上下文**：调用前把已存记忆压缩成 digest（todos/goals/milestones/prefs/events 标题列表，≤1500 字符）随 prompt 下发，明示"不要再提取未变化的事实"——重复轮次不产生重复行。
+- **配置真正生效**：`extraction.enableLLM / model / minIntervalSec` 逐轮从 settings 读取（此前 `enableLLM` 写了但没人读）。
+- **流量隔离**：`ctx.llm.stream` 的 `purpose` 只接受 host 枚举，借用 `'session-title'` 把辅助流量与主对话分开。
+- **分类学修正（实测发现）**：初版 prompt 的 todos 定义是"有 owner 的任务"，实测模型把"明天 9 点赶高铁去上海出差"判为"非任务非目标非决策"而整体返回空。修正后 todos 明确覆盖 **scheduled commitments**（会议/出行/预约/交付），events 覆盖 **scheduled plans**。用真实 API 对拍验证：修正前全空，修正后正确产出 todo+event，且"随口一提不用记录"仍返回空（不过度提取）。
+
+### UX 重构：全局侧边栏看板
+
+- 删除会话级看板（`YoloTab` / `ViewBuilder` / `DashboardNode` / `HeaderButton` / `/yolo` 命令 / 每回合 `yolo/snapshot` 发布）。
+- 侧边栏 footer 升级为完整看板抽屉（`client/sidebar/YoloSidebarDashboard.tsx`）：打开待办角标、五板块、手动刷新、打开期间 30s 轮询、外点/Esc 关闭、锚定侧边栏右缘自适应宽度。
+- 数据通道改为 host 端 `GET /yolo/dashboard` JSON 端点，scope 跟随最近会话的工作区。
+
+### 测试
+
+删除 4 个针对已删模块的测试文件；改写 `extract-index`（LLM-only 行为 + 配置门控 + 去重上下文断言）、`ui-index`（含 1a 的回归测试：`apply(ctx, undefined)` 不抛）、`ui-dashboard`；新增 `extract-prompt`、`shared-dashboard`。16 文件 113 测试全过，`tsc --noEmit` clean。

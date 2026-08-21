@@ -1,25 +1,24 @@
-// Host-side dashboard publisher (M4b).
-// Builds the global YOLO projection from `ctx.yolo` and appends it to a session
-// as the durable 'yolo/snapshot' event. The browser bundle's conversation node
-// engine picks it up and renders the YOLO tab. Also serves the same projection
-// as JSON over HTTP (/yolo/dashboard) for the global sidebar button.
+// Host-side dashboard projection (M7) — the single data source for the
+// browser-side sidebar dashboard. Serves the projection as JSON over HTTP
+// (GET /yolo/dashboard). No per-session durable events: the dashboard is a
+// global, session-independent surface, so publishing 'yolo/snapshot' into
+// every session log was pure bloat.
 
 import type Yolo from '../storage/index.ts'
 import type { YoloDashboardData } from '../shared/dashboard.ts'
 
-/** Minimal webServer view (dsh's node half provides ctx.webServer). */
 export interface WebServerLike {
   register(opts: {
     kind: 'prefix'
     path: string
     handler: (req: unknown, res: {
-      writeHead(status: number, headers?: Record<string, string>): void
-      end(body?: unknown): void
+      writeHead(status: number, headers: Record<string, string>): void
+      end(body?: string): void
     }) => Promise<void> | void
-  }): unknown
+  }): void
 }
 
-/** Build the full dashboard projection for a cwd (workspace scope). */
+/** Build the full dashboard projection for a workspace scope. */
 export function buildDashboardData(yolo: Yolo, cwd: string): YoloDashboardData {
   return {
     scopeKey: yolo.resolve(cwd).scopeKey,
@@ -29,8 +28,8 @@ export function buildDashboardData(yolo: Yolo, cwd: string): YoloDashboardData {
       id: t.id,
       title: t.title,
       status: t.status,
-      priority: t.priority ?? null,
-      due_at: t.due_at ?? null,
+      priority: t.priority,
+      due_at: t.due_at,
     })),
     goals: yolo.listGoals(cwd).map((g) => ({
       id: g.id,
@@ -42,7 +41,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string): YoloDashboardData {
       id: m.id,
       title: m.title,
       status: m.status,
-      target_date: m.target_date ?? null,
+      target_date: m.target_date,
     })),
     events: yolo.listEvents(cwd, 30).map((e) => ({
       id: e.id,
@@ -58,43 +57,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string): YoloDashboardData {
   }
 }
 
-/** The exact durable payload appended for 'yolo/snapshot' (matches events.ts). */
-export interface YoloSnapshotEvent {
-  createdAt: number
-  scopeKey: string
-  data: YoloDashboardData
-}
-
-/**
- * Minimal structural Session view. The real dsh Session satisfies this shape
- * once the 'yolo/snapshot' SessionEventMap merge is in the program.
- */
-export interface SessionLike {
-  append(type: 'yolo/snapshot', data: YoloSnapshotEvent): unknown
-  meta?: { cwd?: string }
-}
-
-/**
- * Publish the dashboard projection into one session as a durable event.
- * Safe to call at turn end or on '/yolo' — the client re-renders from the log.
- */
-export function publishDashboard(yolo: Yolo, session: SessionLike, cwd: string): void {
-  const data = buildDashboardData(yolo, cwd)
-  try {
-    session.append('yolo/snapshot', {
-      createdAt: Date.now(),
-      scopeKey: data.scopeKey,
-      data,
-    })
-  } catch {
-    // never crash the host on a publish failure; the tab shows last snapshot
-  }
-}
-
-/**
- * Register a JSON endpoint serving the live dashboard projection. The global
- * sidebar button (client half) fetches this — it is session-independent.
- */
+/** Serve GET /yolo/dashboard — the sidebar dashboard's live data source. */
 export function registerDashboardEndpoint(ctx: { webServer?: WebServerLike }, yolo: Yolo, cwd: () => string): void {
   ctx.webServer?.register({
     kind: 'prefix',

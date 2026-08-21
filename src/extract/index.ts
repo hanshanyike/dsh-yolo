@@ -1,25 +1,37 @@
-// YOLO extract plugin — the hybrid extractor.
-//   fast path: per-message rule capture via `session/event`
-//   slow path: turn-end LLM structured pull via `agent/turn-stopping`
+// YOLO extract plugin (M7) — LLM semantic extraction, the only strategy.
+// At every finished turn (agent/turn-stopping) the whole turn is sent to the
+// extraction model, which returns durable memories as strict JSON. The old
+// per-message regex fast path was removed: regexes could not judge semantics,
+// produced noise, and the industry (Mem0 / Claude Code auto-memory) extracts
+// with an LLM after a useful interaction, not per message.
+//
 // All handlers are failure-isolated: they never throw into the agent loop.
 
 import type { Context } from '@deepseek-ai/cordis'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { LlmRuntime, Message } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type Yolo from '../storage/index.ts'
 import type { Priority } from '../storage/types.ts'
 import { DEFAULTS } from '../shared/constants.ts'
-import { CandidateBuffer } from './buffer.ts'
 import { contentBlocksToText, llmExtract, type ExtractionResult } from './llm-extract.ts'
-import { mergeCandidates } from './merge.ts'
-import { extractCandidates } from './rules.ts'
+import { buildKnownContext } from './prompt.ts'
 
 export const name = 'yolo-extract'
-export const inject = ['yolo', 'llm', 'sessions'] as const
+export const inject = ['yolo', 'llm', 'sessions', 'settings'] as const
+
+export const YOLO_NS = settingsNamespace('yolo')
 
 interface YoloCtx extends Context {
   yolo: Yolo
   llm: LlmRuntime
+}
+
+/** Minimal structural view of the dsh settings service (config read per turn). */
+interface SettingsLike {
+  get(ns: unknown): {
+    extraction?: { enableLLM?: boolean; model?: string; minIntervalSec?: number }
+  } | undefined
 }
 
 const PRIORITIES: readonly Priority[] = ['low', 'medium', 'high', 'urgent']
@@ -35,7 +47,11 @@ function cwdOf(session: Session): string {
   return meta?.cwd ?? process.cwd()
 }
 
-/** Fold an ordered message list into one bounded text blob for the extractor. */
+/**
+ * Fold an ordered message list into one bounded text blob for the extractor.
+ * Keeps the TAIL when over budget: the newest messages carry what the turn
+ * just decided and are the most valuable extraction input.
+ */
 function messagesToText(messages: readonly Message[], maxChars = 8000): string {
   const parts: string[] = []
   for (const m of messages) {
@@ -43,50 +59,56 @@ function messagesToText(messages: readonly Message[], maxChars = 8000): string {
     if (text) parts.push(`${m.role}: ${text}`)
   }
   const joined = parts.join('\n')
-  return joined.length > maxChars ? joined.slice(0, maxChars) : joined
+  return joined.length > maxChars ? joined.slice(-maxChars) : joined
 }
 
-/** Merge an LLM ExtractionResult into storage (mirrors mergeCandidates for rule output). */
+/** Merge an LLM ExtractionResult into storage. Upserts dedup by title/key;
+ * events are deduped against recent timeline summaries (they have no key). */
 function mergeExtraction(yolo: Yolo, cwd: string, r: ExtractionResult): void {
   for (const m of r.milestones) yolo.addMilestone(cwd, { title: m.title, target_date: m.target_date, description: m.description, source: 'llm' })
   for (const t of r.todos) yolo.addTodo(cwd, { title: t.title, due_at: t.due_at, priority: toPriority(t.priority), source: 'llm' })
   for (const g of r.goals) yolo.addGoal(cwd, { title: g.title, description: g.description })
   for (const p of r.preferences) yolo.addPreference(cwd, { key: p.key, value: p.value })
-  for (const e of r.events) yolo.addEvent(cwd, { kind: e.kind, summary: e.summary, occurred_at: e.occurred_at ? Date.parse(e.occurred_at) : undefined })
+  const recentSummaries = new Set(yolo.listEvents(cwd, 30).map((e) => e.summary))
+  for (const e of r.events) {
+    if (recentSummaries.has(e.summary)) continue
+    recentSummaries.add(e.summary)
+    yolo.addEvent(cwd, { kind: e.kind, summary: e.summary, occurred_at: e.occurred_at ? Date.parse(e.occurred_at) || undefined : undefined })
+  }
+}
+
+/** Compact digest of what is already stored, so the model skips unchanged facts. */
+function knownDigest(yolo: Yolo, cwd: string): string | null {
+  try {
+    return buildKnownContext({
+      todos: yolo.listTodos(cwd).map((t) => t.title),
+      goals: yolo.listGoals(cwd).map((g) => g.title),
+      milestones: yolo.listMilestones(cwd).map((m) => m.title),
+      preferences: yolo.listPreferences(cwd).map((p) => ({ key: p.key, value: p.value })),
+      events: yolo.listEvents(cwd, 15).map((e) => e.summary),
+    })
+  } catch {
+    return null
+  }
 }
 
 export function apply(ctx: Context): void {
   const yctx = ctx as YoloCtx
-  const buffers = new Map<string, CandidateBuffer>()
-  const minIntervalMs = DEFAULTS.extractionMinIntervalSec * 1000
+  const settings = (ctx as { settings?: SettingsLike }).settings
 
-  // fast path — rules on every user/assistant message
-  ctx.on('session/event', (session: Session, event: { type: string; data: unknown }) => {
-    if (event.type !== 'user/message' && event.type !== 'assistant/message') return
-    const text = contentBlocksToText((event.data as { content?: readonly unknown[] }).content)
-    if (!text) return
-    let buf = buffers.get(session.id)
-    if (!buf) {
-      buf = new CandidateBuffer()
-      buffers.set(session.id, buf)
-    }
-    for (const c of extractCandidates(text)) buf.add(c)
-  })
-
-  // slow path — turn end: flush rules + LLM structured pull
+  // turn end: LLM semantic extraction (throttled per session)
   ctx.on('agent/turn-stopping', async (payload: { agent: { session: Session }; turn: number; signal?: AbortSignal }) => {
     try {
       const { agent, turn, signal } = payload
       const session = agent.session
       const cwd = cwdOf(session)
 
-      // 1) flush rule candidates
-      const buf = buffers.get(session.id)
-      if (buf && buf.size > 0) {
-        mergeCandidates(yctx.yolo, cwd, buf.drain())
-      }
+      const config = settings?.get(YOLO_NS)?.extraction
+      if (config?.enableLLM === false) return
 
-      // 2) throttled LLM extraction
+      const model = config?.model || 'deepseek-chat'
+      const minIntervalMs = (config?.minIntervalSec ?? DEFAULTS.extractionMinIntervalSec) * 1000
+
       const last = yctx.yolo.lastExtractionAt(cwd, session.id, 'llm')
       if (last && Date.now() - last < minIntervalMs) return
 
@@ -96,10 +118,10 @@ export function apply(ctx: Context): void {
       const started = Date.now()
       const result = await llmExtract({
         llm: yctx.llm,
-        // host default; overridable at M4 via plugin config
         provider: 'deepseek',
-        model: 'deepseek-chat',
+        model,
         turnText,
+        knownContext: knownDigest(yctx.yolo, cwd),
         signal,
       })
 
@@ -118,4 +140,6 @@ export function apply(ctx: Context): void {
       ctx.logger?.warn?.('[yolo-extract] turn failed: %s', e instanceof Error ? e.message : String(e))
     }
   })
+
+  ctx.logger?.info?.('[yolo] extract plugin loaded')
 }

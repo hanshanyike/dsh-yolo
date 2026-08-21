@@ -1,4 +1,4 @@
-// YOLO shared constants — slot keys, namespaces, default paths.
+// YOLO shared constants — namespaces and default paths.
 // Centralized so dsh API drift is a one-place change (risk: dsh is v0.1.0-rc).
 
 export const NAMESPACE = 'yolo' as const
@@ -8,9 +8,7 @@ export const SERVICE_NAME = 'yolo' as const
 
 /** dsh client UI slot keys (verified/assumed at M4). */
 export const SLOT = {
-  conversationView: 'conversation.view',
-  conversationNode: 'conversation.chat.node',
-  sessionHeaderActions: 'conversation.session.header.actions',
+  sidebarFooterAction: 'sidebar.footer.action',
   settingsPluginItem: 'settings.plugin.item',
 } as const
 
@@ -19,11 +17,6 @@ export const PROMPT_ORDER = {
   instructions: 110,
   preferencesPreamble: 120,
   recallContext: 220,
-} as const
-
-/** Custom durable session event types declared via SessionEventMap merge. */
-export const EVENT = {
-  snapshot: 'yolo/snapshot',
 } as const
 
 /** Default storage config. */
