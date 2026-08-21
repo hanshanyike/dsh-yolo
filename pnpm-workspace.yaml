@@ -1,11 +1,8 @@
-allowBuilds:
-  better-sqlite3: set this to true or false
-  esbuild: set this to true or false
 # pnpm settings (pnpm 11+ reads settings here, NOT the package.json "pnpm" field).
-# Allow native build scripts for these packages:
-onlyBuiltDependencies:
-  - better-sqlite3
-  - esbuild
+# Allow native build scripts so better-sqlite3's C++ binding and esbuild compile.
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
 # hoisted linker: pnpm's .pnpm virtual store creates EMPTY dependency dirs on
 # this machine (tsdown deps, react, etc.) — hoisted layout avoids the store.
 nodeLinker: hoisted

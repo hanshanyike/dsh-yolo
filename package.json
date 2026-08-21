@@ -7,15 +7,24 @@
   "main": "./dist/src/index.mjs",
   "exports": {
     ".": "./dist/src/index.mjs",
-    "./client": "./dist/client/index.mjs"
+    "./client": "./dist/client/index.mjs",
+    "./package.json": "./package.json",
+    "./dist/src/storage": "./dist/src/storage/index.mjs",
+    "./dist/src/memory": "./dist/src/memory/index.mjs",
+    "./dist/src/extract": "./dist/src/extract/index.mjs",
+    "./dist/src/reminder": "./dist/src/reminder/index.mjs",
+    "./dist/src/ui": "./dist/src/ui/index.mjs"
   },
   "dsh": {
     "bundle": "./cordis.bundle.yml",
-    "client": "./client"
+    "client": { "platform": "web" }
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && tsdown -c tsdown.client.config.ts && node scripts/wrap-client.mjs",
     "dev": "tsdown --watch",
+    "dev:web": "node scripts/dev.mjs",
+    "dev:web:setup": "node scripts/dev.mjs --setup",
+    "dev:web:update": "node scripts/dev.mjs --update",
     "check": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run"

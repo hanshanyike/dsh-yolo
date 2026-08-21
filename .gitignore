@@ -52,5 +52,8 @@ pnpm-lock.yaml
 .dsh-sdk-client-relcwd*/
 vitest.config.ts.timestamp-*
 
+# runtime-generated dev patch (contains absolute paths; created by scripts/dev.mjs)
+cordis.dev.local.yml
+
 # WorkBuddy workspace data (internal, not part of the plugin repo)
 .workbuddy/

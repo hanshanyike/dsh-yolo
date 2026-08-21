@@ -1,24 +1,23 @@
 import { defineConfig } from 'tsdown'
 
-// YOLO build config — one entry per plugin (each is an independent dsh plugin)
-// plus the browser client bundle.
-//   host plugins:  src/{storage,memory,extract,reminder,ui}/index.ts -> dist/src/*/index.mjs
-//   client bundle: client/index.ts -> dist/client/index.mjs (browser, ESM, self-contained)
-// Runtime dev loads these from source via cordis.dev.yml (file:// URLs); dist is
-// for release when the package is installed into a dsh profile (cordis.bundle.yml).
+// YOLO host-side build config (client bundle has its own config below).
+//   entry: one per host plugin + the bare-package entry (src/index.ts) that
+//   `dsh-plugin-yolo` (package main) resolves to for the ClientModuleRegistry.
+//   external: host provides @deepseek-ai/* at runtime — bundling them creates
+//   shared chunks whose `createRequire('../package.json')` breaks at runtime.
 export default defineConfig({
   entry: [
+    'src/index.ts',
     'src/storage/index.ts',
     'src/memory/index.ts',
     'src/extract/index.ts',
     'src/reminder/index.ts',
     'src/ui/index.ts',
-    'client/index.ts',
   ],
   format: 'esm',
   platform: 'node',
+  outDir: 'dist/src',
   clean: true,
-  // Client bundle must be self-contained (dsh bundle-purity gate forbids cross-plugin value imports).
-  // React is a devDependency and bundled in, not declared as peer.
+  external: [/^@deepseek-ai\//],
   outExtensions: () => ({ dts: '.d.ts' }),
 })

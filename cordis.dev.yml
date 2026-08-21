@@ -1,5 +1,15 @@
-# YOLO development patch (load plugins from source, no build needed).
-# Use with: node --import tsx/esm <host>/apps/cli/src/bin.ts web --patch D:/Code/WorkBuddy/dsh-yolo/cordis.dev.yml --no-open
+# YOLO development patch — TEMPLATE only.
+#
+# This file loads plugins directly from TS source via file:// URLs (the fast
+# dev loop). For a runnable setup with the browser client bundle, use
+# `node scripts/dev.mjs` (or `pnpm dev:web`) — it generates `cordis.dev.local.yml`
+# (gitignored) whose entries are PACKAGE NAMES (`dsh-plugin-yolo/...`), which is
+# what the ClientModuleRegistry needs to discover the client bundle:
+#   require.resolve('<name>/package.json') → package.json `dsh.client`
+#     → exports['./client'] → dist/client/index.mjs (CJS + __ModuleLoader__).
+# With file:// entries above, the host cannot resolve back to package.json, so
+# the dashboard tab would NOT be served.
+#
 # IMPORTANT (Windows): `name` must be a `file://` URL, NOT a bare `D:/...` path.
 # Node's ESM loader treats a bare `D:/...` as protocol "d:" and rejects it
 # (ERR_UNSUPPORTED_ESM_URL_SCHEME). Use the file:///<drive>/abs/path form.
