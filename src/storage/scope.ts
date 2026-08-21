@@ -30,10 +30,8 @@ export function currentGitBranch(cwd: string): string | null {
   }
 }
 
-/** Resolve the directory holding the DB + snapshots for a scope mode + scope key. */
-export function resolveDataDir(mode: ScopeMode, cwd: string, scopeKey: string): string {
-  // sanitize scopeKey for filesystem (replace / with _)
-  const safe = scopeKey.replace(/[\\/]/g, '_')
+/** Resolve the directory holding the DB + snapshots for a scope mode + cwd. */
+export function resolveDataDir(mode: ScopeMode, cwd: string): string {
   switch (mode) {
     case 'workspace':
       // <cwd>/.dsh/yolo/ — keeps each project's memory self-contained
@@ -43,11 +41,6 @@ export function resolveDataDir(mode: ScopeMode, cwd: string, scopeKey: string): 
       return join(homedir(), '.dsh', 'yolo')
     case 'global':
       return join(homedir(), '.dsh', 'yolo', 'global')
-    default: {
-      // exhaustive fallback
-      const _exhaustive: never = mode
-      return join(homedir(), '.dsh', 'yolo', safe ?? String(_exhaustive))
-    }
   }
 }
 

@@ -1,11 +1,13 @@
-// YOLO plugin entry (M0 milestone — minimal proof of load).
+// YOLO package entry — the npm-export identity of dsh-plugin-yolo.
 //
-// M0 goal: be loadable by a deepseek-harness host via `--patch ./cordis.dev.yml`
-// and print a marker line, proving the plugin pipeline works end-to-end.
+// The YOLO bundle itself is NOT a single plugin: it is five cooperating Cordis
+// plugins (storage service + four consumers) plus a browser client, each with
+// its own entry wired in cordis.bundle.yml:
+//   ./dist/src/storage  ./dist/src/memory  ./dist/src/extract
+//   ./dist/src/reminder ./dist/src/ui      ./client (browser bundle)
 //
-// Full functionality (storage service, extraction, memory tools, reminders, UI)
-// is added in M1–M5 as separate cooperating plugins within this bundle.
-// See ../../plans and docs/architecture.md for the bundle layout.
+// This module exists so `import 'dsh-plugin-yolo'` has a stable identity and a
+// load marker for boot verification. See docs/architecture.md for the layout.
 
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -19,6 +21,6 @@ export function apply(ctx: Context): void {
     // logger may be unavailable in some host contexts; fall through to console
   }
   // Unconditional marker so the host terminal always shows the load event
-  // regardless of logger wiring. This is the M0 verification signal.
+  // regardless of logger wiring.
   console.log('[yolo] plugin loaded')
 }

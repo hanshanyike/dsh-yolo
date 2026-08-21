@@ -2,9 +2,9 @@
 // Registered on ctx.tools via dsh's defineTool DSL (M1; host-verified at M2/M3).
 
 import type { Context } from '@deepseek-ai/cordis'
-import { defineTool } from '@deepseek-ai/dsh-tools'
+import { defineTool, type JsonValue } from '@deepseek-ai/dsh-tools'
 import type Yolo from '../storage/index.ts'
-import type { EventKind, GoalStatus, MilestoneStatus, Priority, RowType, TodoStatus } from '../storage/types.ts'
+import type { Priority, RowType, TodoStatus, GoalStatus, MilestoneStatus } from '../storage/types.ts'
 
 /** Context augmented with the yolo service (register via inject ['yolo']). */
 export interface YoloContext extends Context {
@@ -19,8 +19,13 @@ export interface YoloContext extends Context {
  */
 const cwdOf = () => process.cwd()
 
-/** JSON-roundtrip a value so it satisfies the output.schema JsonValue constraint. */
-const json = (v: unknown): never => JSON.parse(JSON.stringify(v)) as never
+/**
+ * JSON-roundtrip a value so it satisfies the output.schema constraint.
+ * NOTE: every tool's output.schema is `{ type: 'object' }` — the host validates
+ * execute results against it and throws ToolOutputError on mismatch, so list
+ * results must always be wrapped (e.g. `{ rows: [...] }`), never returned bare.
+ */
+const json = (v: unknown): Record<string, JsonValue> => JSON.parse(JSON.stringify(v)) as Record<string, JsonValue>
 
 export function registerYoloTools(ctx: YoloContext): void {
   const y = ctx.yolo
@@ -40,7 +45,7 @@ export function registerYoloTools(ctx: YoloContext): void {
         render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
       },
       async execute(args) {
-        return json(y.search(cwd(), args.query ?? '', args.topK ?? 5, (args.kinds as RowType[] | undefined) ?? undefined))
+        return json({ hits: y.search(cwd(), args.query ?? '', args.topK ?? 5, (args.kinds as RowType[] | undefined) ?? undefined) })
       },
     }),
   )
@@ -134,15 +139,15 @@ export function registerYoloTools(ctx: YoloContext): void {
       async execute(args) {
         switch (args.view) {
           case 'timeline':
-            return json(y.listEvents(cwd(), args.limit ?? 50))
+            return json({ rows: y.listEvents(cwd(), args.limit ?? 50) })
           case 'todos':
-            return json(y.listTodos(cwd(), (args.status ?? undefined) as TodoStatus | undefined))
+            return json({ rows: y.listTodos(cwd(), (args.status ?? undefined) as TodoStatus | undefined) })
           case 'goals':
-            return json(y.listGoals(cwd(), (args.status ?? undefined) as GoalStatus | undefined))
+            return json({ rows: y.listGoals(cwd(), (args.status ?? undefined) as GoalStatus | undefined) })
           case 'milestones':
-            return json(y.listMilestones(cwd(), (args.status ?? undefined) as MilestoneStatus | undefined))
+            return json({ rows: y.listMilestones(cwd(), (args.status ?? undefined) as MilestoneStatus | undefined) })
           case 'preferences':
-            return json(y.listPreferences(cwd()))
+            return json({ rows: y.listPreferences(cwd()) })
           default:
             throw new Error(`unknown view: ${String(args.view)}`)
         }
@@ -150,6 +155,3 @@ export function registerYoloTools(ctx: YoloContext): void {
     }),
   )
 }
-
-// keep EventKind import used (addEvent kinds are 'note' literal; re-exported for future kinds)
-export type { EventKind }

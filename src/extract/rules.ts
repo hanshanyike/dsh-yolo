@@ -4,6 +4,9 @@
 // runs at turn end for the full structured pass.
 
 import type { Priority } from '../storage/types.ts'
+import { normalizeTitle as normalizeText } from '../shared/text.ts'
+
+export { normalizeText }
 
 export type CandidateKind = 'todo' | 'milestone' | 'goal' | 'preference' | 'decision'
 
@@ -18,14 +21,6 @@ export interface Candidate {
   targetDate?: string | null
   prefKey?: string | null
   prefValue?: string | null
-}
-
-/** Normalize for cross-message dedup: lowercase + collapse non-alphanumerics. */
-export function normalizeText(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()
 }
 
 /** Parse a relative/absolute date phrase to ISO date (YYYY-MM-DD), or null. */

@@ -7,9 +7,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import '../shared/events.ts'
+import type Yolo from '../storage/index.ts'
+import { contentBlocksToText } from '../shared/text.ts'
 import { Config, type Config as ConfigSchema } from './config.ts'
-import { publishDashboard, registerDashboardEndpoint, type SessionLike } from './dashboard.ts'
-import { contentBlocksToText } from '../extract/llm-extract.ts'
+import { publishDashboard, registerDashboardEndpoint, type SessionLike, type WebServerLike } from './dashboard.ts'
 
 /** The namespace is the join key shared with the client half (settings.plugin.item). */
 export const YOLO_NS = settingsNamespace('yolo')
@@ -18,13 +19,21 @@ export const name = 'yolo-ui'
 export const inject = ['yolo', 'webServer'] as const
 
 interface UiCtx extends Context {
-  yolo: import('../storage/index.ts').default
-  webServer: import('./dashboard.ts').WebServerLike
+  yolo: Yolo
+  webServer: WebServerLike
 }
 
 /** Extract plain text from a user message's content blocks. */
 function userText(content?: unknown): string {
-  return contentBlocksToText(content as never[] | undefined)
+  return contentBlocksToText(Array.isArray(content) ? content : undefined)
+}
+
+/** Narrow an unknown session payload to the structural shape publish needs. */
+function toSessionLike(v: unknown): SessionLike | undefined {
+  if (typeof v === 'object' && v !== null && typeof (v as SessionLike).append === 'function') {
+    return v as SessionLike
+  }
+  return undefined
 }
 
 export function apply(ctx: UiCtx, config: ConfigSchema): void {
@@ -50,12 +59,12 @@ export function apply(ctx: UiCtx, config: ConfigSchema): void {
   registerDashboardEndpoint(ctx, ctx.yolo, () => process.cwd())
 
   // publish after every finished turn so the tab always reflects latest state
-  ctx.on('agent/turn-stopping', (payload) => {
+  ctx.on('agent/turn-stopping', (payload: { agent?: { session?: unknown } }) => {
     if (!config.enabled) return
-    const agent = payload.agent as { session?: SessionLike }
-    if (!agent.session) return
+    const s = toSessionLike(payload.agent?.session)
+    if (!s) return
     try {
-      publish(agent.session)
+      publish(s)
     } catch (e) {
       ctx.logger?.warn?.('[yolo-ui] turn publish failed: %s', e instanceof Error ? e.message : String(e))
     }
@@ -64,10 +73,11 @@ export function apply(ctx: UiCtx, config: ConfigSchema): void {
   // '/yolo' text command — force a publish (and thus a tab refresh) on demand
   ctx.on('session/event', (session, event) => {
     if (event.type !== 'user/message') return
-    const text = userText(event.data.content)
+    const text = userText((event.data as { content?: readonly unknown[] }).content)
     if (/^\/yolo\b/.test(text.trim())) {
       try {
-        publish(session as unknown as SessionLike)
+        const s = toSessionLike(session)
+        if (s) publish(s)
       } catch (e) {
         ctx.logger?.warn?.('[yolo-ui] /yolo publish failed: %s', e instanceof Error ? e.message : String(e))
       }

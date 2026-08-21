@@ -4,6 +4,7 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { localDateStr } from '../shared/text.ts'
 import type { DB } from './db.ts'
 import { listEvents, listGoals, listMilestones, listPreferences, listTodos } from './repository.ts'
 import type { Goal } from './types.ts'
@@ -14,7 +15,7 @@ const iso = (ms: number | null | undefined): string =>
 /** Render the current scope's memory as a Markdown string. */
 export function renderSnapshot(db: DB, scopeKey: string, cwdHint?: string): string {
   const now = new Date()
-  const date = now.toISOString().slice(0, 10)
+  const date = localDateStr(now)
   const goals = listGoals(db, scopeKey)
   const milestones = listMilestones(db, scopeKey)
   const todos = listTodos(db, scopeKey)
@@ -67,7 +68,7 @@ export function renderSnapshot(db: DB, scopeKey: string, cwdHint?: string): stri
 export function writeSnapshot(db: DB, scopeKey: string, dataDir: string, cwdHint?: string, dateStr?: string): string {
   const dir = join(dataDir, 'snapshots')
   mkdirSync(dir, { recursive: true })
-  const date = dateStr ?? new Date().toISOString().slice(0, 10)
+  const date = dateStr ?? localDateStr()
   const path = join(dir, `${date}.md`)
   writeFileSync(path, renderSnapshot(db, scopeKey, cwdHint), 'utf8')
   return path

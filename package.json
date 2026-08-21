@@ -17,7 +17,9 @@
   },
   "dsh": {
     "bundle": "./cordis.bundle.yml",
-    "client": { "platform": "web" }
+    "client": {
+      "platform": "web"
+    }
   },
   "scripts": {
     "build": "tsdown && tsdown -c tsdown.client.config.ts && node scripts/wrap-client.mjs && node scripts/copy-assets.mjs",
@@ -48,5 +50,6 @@
     "tsdown": "^0.22.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
-  }
+  },
+  "packageManager": "pnpm@11.22.0+sha512.1ff870c4c6133dfd88fb2afc46dd13d47f09c9794b438c6fdb47ca98caf3bc16381ee0be93a091b8e3824cf01f889f46d7d9e20910fb0be1ab0fb5baa80dd621"
 }

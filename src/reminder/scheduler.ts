@@ -7,6 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type Yolo from '../storage/index.ts'
 import { DEFAULTS } from '../shared/constants.ts'
+import { localDateStr } from '../shared/text.ts'
 
 /** Minimal structural view of a dsh Agent (avoids linking the agent package). */
 export interface AgentLike {
@@ -31,9 +32,15 @@ export function reminderText(title: string, dueAt?: string | null): string {
   return `⏰ 提醒: ${title}${dueAt ? ` (到期 ${dueAt})` : ''}`
 }
 
+/** Format a Date as local-time "YYYY-MM-DDTHH:mm:ss" (no timezone suffix). */
+function localIso(d: Date): string {
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
 /** Write today's Markdown snapshot once per calendar day. Returns the path or null. */
 export function maybeWriteDailySnapshot(yolo: Yolo, cwd: () => string): string | null {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr()
   if (yolo.lastSnapshotDate(cwd()) === today) return null
   const path = yolo.writeSnapshot(cwd(), today)
   yolo.setSnapshotDate(cwd(), today)
@@ -59,7 +66,10 @@ export function runReminderTick(deps: {
   getLatestAgent: () => AgentLike | undefined
 }): TickResult {
   const cwd = deps.cwd()
-  const aheadIso = new Date(Date.now() + deps.aheadMs).toISOString()
+  // due_at is stored either as a local date (YYYY-MM-DD, from rule capture) or a
+  // full ISO datetime. Compare in LOCAL time so a date-only due date fires from
+  // local midnight — toISOString() would lag by the UTC offset (up to 8h in UTC+8).
+  const aheadIso = localIso(new Date(Date.now() + deps.aheadMs))
   const due = deps.yolo.listDueTodos(cwd, aheadIso)
 
   let reminded = 0

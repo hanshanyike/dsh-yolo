@@ -14,16 +14,22 @@ interface ReminderCtx extends Context {
   yolo: Yolo
 }
 
+/** Minimal structural view of the dsh settings service (config read per turn). */
+interface SettingsLike {
+  get(ns: unknown): { storage?: { snapshotInterval?: string } } | undefined
+}
+
 /** Storage snapshot cadence the user can pick in Settings. */
 export const YOLO_NS = settingsNamespace('yolo')
 
 export function apply(ctx: Context): void {
-  const yctx = ctx as unknown as ReminderCtx
+  const yctx = ctx as ReminderCtx
+  const settings = (ctx as { settings?: SettingsLike }).settings
   let latestAgent: AgentLike | undefined
 
   // remember the most recent active agent + replay any pending reminders
-  ctx.on('agent/session-start', (payload) => {
-    const agent = payload.agent as unknown as AgentLike
+  ctx.on('agent/session-start', (payload: { agent: unknown }) => {
+    const agent = payload.agent as AgentLike
     latestAgent = agent
     const cwd = process.cwd()
     const pending = yctx.yolo.listPendingReminders(cwd)
@@ -44,8 +50,7 @@ export function apply(ctx: Context): void {
   ctx.on('agent/turn-stopping', () => {
     turnCount++
     try {
-      const config = (ctx as unknown as { settings?: { get(ns: unknown): { storage?: { snapshotInterval?: string } } | undefined } })
-        .settings?.get(YOLO_NS)
+      const config = settings?.get(YOLO_NS)
       if (config?.storage?.snapshotInterval === 'every_10_turns') {
         const cwd = process.cwd()
         const path = maybeWriteTurnSnapshot(yctx.yolo, () => cwd, turnCount)

@@ -27,6 +27,7 @@ beforeEach(() => {
   const ctx = {
     logger: { info: () => {}, warn: () => {} },
     reflect: { provide: () => {} },
+    effect: () => () => {},
   } as never
   yolo = new Yolo(ctx)
   tools = []
@@ -75,11 +76,11 @@ describe('memory_write + yolo_query', () => {
     expect(written.due_at).toBe('2026-08-30')
     expect(written.priority).toBe('high')
 
-    const todos = await tool('yolo_query').execute({ view: 'todos' }) as Array<{ id: string; title: string }>
+    const todos = (await tool('yolo_query').execute({ view: 'todos' }) as { rows: Array<{ id: string; title: string }> }).rows
     expect(todos.some((t) => t.id === written.id && t.title === '完成发布检查')).toBe(true)
     // status filter excludes it
-    const done = await tool('yolo_query').execute({ view: 'todos', status: 'done' }) as unknown[]
-    expect((done as Array<{ id: string }>).some((t) => t.id === written.id)).toBe(false)
+    const done = await tool('yolo_query').execute({ view: 'todos', status: 'done' }) as { rows: Array<{ id: string }> }
+    expect(done.rows.some((t) => t.id === written.id)).toBe(false)
   })
 
   it('writes milestones, goals, preferences and events; reads each view', async () => {
@@ -88,15 +89,15 @@ describe('memory_write + yolo_query', () => {
     await tool('memory_write').execute({ kind: 'preference', title: '语言偏好', key: '语言', value: '简体中文' })
     await tool('memory_write').execute({ kind: 'event', title: '确定了发布计划' })
 
-    const milestones = await tool('yolo_query').execute({ view: 'milestones' }) as Array<{ title: string }>
+    const milestones = (await tool('yolo_query').execute({ view: 'milestones' }) as { rows: Array<{ title: string }> }).rows
     expect(milestones.some((m) => m.title === 'M5 完成')).toBe(true)
-    const goals = await tool('yolo_query').execute({ view: 'goals' }) as Array<{ title: string; progress: number }>
+    const goals = (await tool('yolo_query').execute({ view: 'goals' }) as { rows: Array<{ title: string; progress: number }> }).rows
     const g = goals.find((x) => x.title === '发布 v0.1')
     expect(g).toBeTruthy()
     expect(g!.progress).toBe(0)
-    const prefs = await tool('yolo_query').execute({ view: 'preferences' }) as Array<{ key: string; value: string }>
+    const prefs = (await tool('yolo_query').execute({ view: 'preferences' }) as { rows: Array<{ key: string; value: string }> }).rows
     expect(prefs.some((p) => p.key === '语言' && p.value === '简体中文')).toBe(true)
-    const timeline = await tool('yolo_query').execute({ view: 'timeline' }) as Array<{ summary: string }>
+    const timeline = (await tool('yolo_query').execute({ view: 'timeline' }) as { rows: Array<{ summary: string }> }).rows
     expect(timeline.some((e) => e.summary === '确定了发布计划')).toBe(true)
   })
 
@@ -109,14 +110,14 @@ describe('memory_write + yolo_query', () => {
 describe('memory_search + memory_forget', () => {
   it('searches written items and soft-deletes a todo', async () => {
     await tool('memory_write').execute({ kind: 'todo', title: '准备路演材料' })
-    const hits = await tool('memory_search').execute({ query: '路演材料', topK: 5 }) as unknown[]
+    const hits = (await tool('memory_search').execute({ query: '路演材料', topK: 5 }) as { hits: unknown[] }).hits
     expect(hits.length).toBeGreaterThanOrEqual(1)
 
-    const todos = await tool('yolo_query').execute({ view: 'todos' }) as Array<{ id: string; status: string; title: string }>
+    const todos = (await tool('yolo_query').execute({ view: 'todos' }) as { rows: Array<{ id: string; status: string; title: string }> }).rows
     const t = todos.find((x) => x.title === '准备路演材料') ?? todos[0]
     const res = await tool('memory_forget').execute({ kind: 'todo', id: t.id }) as { ok: boolean }
     expect(res.ok).toBe(true)
-    const after = await tool('yolo_query').execute({ view: 'todos' }) as Array<{ id: string; status: string }>
+    const after = (await tool('yolo_query').execute({ view: 'todos' }) as { rows: Array<{ id: string; status: string }> }).rows
     expect(after.find((x) => x.id === t.id)?.status).toBe('cancelled')
   })
 

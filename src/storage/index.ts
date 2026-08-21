@@ -51,8 +51,8 @@ export default class Yolo extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'yolo')
-    // close cached DB handles on host shutdown / plugin unload (Windows-safe)
-    ;(ctx as { on?: (event: string, cb: () => void) => unknown }).on?.('dispose', () => this.close())
+    // close cached DB handles when the owning fiber unloads (Windows-safe)
+    ctx.effect(() => () => this.close())
   }
 
   /** Close every cached DB handle (idempotent). Called on dispose and in tests. */
@@ -70,7 +70,7 @@ export default class Yolo extends Service {
   /** Resolve (and lazily open+cache) the DB handle for a scope. */
   resolve(cwd: string, mode: ScopeMode = 'workspace'): ScopeHandle {
     const scopeKey = computeScopeKey(cwd)
-    const dataDir = resolveDataDir(mode, cwd, scopeKey)
+    const dataDir = resolveDataDir(mode, cwd)
     const dbPath = join(dataDir, dbFileName(scopeKey))
     let h = this.scopes.get(dbPath)
     if (!h) {

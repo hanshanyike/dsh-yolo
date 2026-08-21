@@ -3,6 +3,7 @@
 // UPDATE/DELETE to FTS handled here explicitly so edits/deletes stay searchable).
 
 import { randomUUID } from 'node:crypto'
+import { normalizeTitle as normalize } from '../shared/text.ts'
 import type { DB } from './db.ts'
 import type {
   ExtractionLog,
@@ -28,13 +29,7 @@ function genId(): string {
   return randomUUID()
 }
 
-/** normalize a title for cross-message dedup (lowercase + strip punct + trim). */
-export function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()
-}
+export { normalize }
 
 // ---------- milestones ----------
 
@@ -75,6 +70,10 @@ export function upsertMilestone(
 
 export function setMilestoneStatus(db: DB, id: string, status: MilestoneStatus): void {
   db.prepare('UPDATE milestones SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id)
+  if (status === 'done' || status === 'abandoned') {
+    // soft-delete from FTS so it stops matching searches
+    db.prepare("DELETE FROM yolo_fts WHERE row_type = 'milestone' AND row_id = ?").run(id)
+  }
 }
 
 export function listMilestones(db: DB, scopeKey: string, status?: MilestoneStatus): Milestone[] {
@@ -282,16 +281,8 @@ export function addEvent(
   data: { kind: EventKind; summary: string; detail?: string | null; session_id?: string | null; occurred_at?: number; scope_key: string },
 ): TimelineEvent | null {
   const ts = data.occurred_at ?? now()
-  // INSERT OR IGNORE — events never duplicate (random UUID id; dedup is by content hash below)
-  const result = db
-    .prepare(
-      `INSERT OR IGNORE INTO events(id, kind, summary, detail, session_id, occurred_at, scope_key)
-       VALUES(?,?,?,?,?,?,?)`,
-    )
-    .run(genId(), data.kind, data.summary, data.detail ?? null, data.session_id ?? null, ts, data.scope_key)
-  if (result.changes === 0) return null
-  return {
-    id: String(result.lastInsertRowid),
+  const row: TimelineEvent = {
+    id: genId(),
     kind: data.kind,
     summary: data.summary,
     detail: data.detail ?? null,
@@ -299,6 +290,11 @@ export function addEvent(
     occurred_at: ts,
     scope_key: data.scope_key,
   }
+  db.prepare(
+    `INSERT INTO events(id, kind, summary, detail, session_id, occurred_at, scope_key)
+     VALUES(?,?,?,?,?,?,?)`,
+  ).run(row.id, row.kind, row.summary, row.detail, row.session_id, row.occurred_at, row.scope_key)
+  return row
 }
 
 export function listEvents(db: DB, scopeKey: string, limit = 50): TimelineEvent[] {

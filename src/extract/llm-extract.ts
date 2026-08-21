@@ -2,8 +2,11 @@
 // Folds ctx.llm.stream output via BlockAssembler, then parses strict JSON with
 // defensive fallbacks. Never throws into the caller: all failures return empty.
 
-import { BlockAssembler, type ContentBlock, type LlmRuntime, type Message } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, type LlmRuntime, type Message } from '@deepseek-ai/dsh-llm'
+import { contentBlocksToText } from '../shared/text.ts'
 import { EXTRACTION_PROMPT } from './prompt.ts'
+
+export { contentBlocksToText }
 
 export interface ExtractedTodo {
   title: string
@@ -44,15 +47,6 @@ export const EMPTY_EXTRACTION: ExtractionResult = {
   goals: [],
   preferences: [],
   events: [],
-}
-
-/** Concatenate text content blocks of a message. */
-export function contentBlocksToText(blocks: readonly ContentBlock[] | undefined | null): string {
-  if (!blocks) return ''
-  return blocks
-    .filter((b): b is { type: 'text'; text: string } => b.type === 'text' && typeof b.text === 'string')
-    .map((b) => b.text)
-    .join('\n')
 }
 
 /** Defensive parse of the model's JSON output. Returns empty result on any failure. */

@@ -26,9 +26,6 @@ export const EVENT = {
   snapshot: 'yolo/snapshot',
 } as const
 
-/** LLM stream purpose tag — segregates yolo extraction traffic from main agent. */
-export const LLM_PURPOSE = 'yolo-extract' as const
-
 /** Default storage config. */
 export const DEFAULTS = {
   scope: 'workspace' as const,

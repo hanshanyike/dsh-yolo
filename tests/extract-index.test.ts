@@ -52,7 +52,7 @@ let yolo: Yolo
 beforeEach(() => {
   cwd = mkdtempSync(join(tmpdir(), 'yolo-extract-'))
   vi.spyOn(process, 'cwd').mockReturnValue(cwd)
-  yolo = new Yolo({ logger: { info: () => {}, warn: () => {} }, reflect: { provide: () => {} } } as never)
+  yolo = new Yolo({ logger: { info: () => {}, warn: () => {} }, reflect: { provide: () => {} }, effect: () => () => {} } as never)
 })
 
 afterEach(() => {
