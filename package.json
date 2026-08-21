@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-yolo",
   "version": "0.2.0-alpha.1",
-  "description": "YOLO (You Only Live/Look Once) — personal ultimate intelligent assistant plugin for deepseek-harness. Extracts milestones/todos/goals/preferences from every session, stores them, proactively reminds, and renders a native dashboard.",
+  "description": "YOLO — personal ultimate intelligent assistant plugin for deepseek-harness. Extracts milestones/todos/goals/preferences from every session, stores them, proactively reminds, and renders a native dashboard.",
   "type": "module",
   "license": "MIT",
   "main": "./dist/src/index.mjs",

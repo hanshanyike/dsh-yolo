@@ -2,13 +2,18 @@
 // Reads/writes through the settings scope bound to the 'yolo' namespace (M4b:
 // live config editing wired when the settings scope hook types are pinned).
 
+import { YoloLogo } from '../YoloLogo.tsx'
+
 export function SettingsCard(): JSX.Element {
   return (
     <div className="yolo-settings-card" style={{ padding: '12px 0' }}>
-      <h3 style={{ margin: '0 0 8px', fontWeight: 600 }}>🎯 YOLO — 个人记忆助手</h3>
+      <h3 style={{ margin: '0 0 8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <YoloLogo size={20} />
+        YOLO — 管理工作与生活的助手
+      </h3>
       <p style={{ margin: '4px 0', color: 'var(--foreground-secondary, #666)' }}>
-        每轮对话结束后用大模型语义提取待办 / 目标 / 里程碑 / 偏好 / 决策，结构化存储并自动去重，跨会话记忆，主动提醒。
-        看板位于左侧边栏底部（全局，与具体会话无关）。
+        把每轮对话里的待办 / 目标 / 里程碑 / 偏好 / 决策接进你的计划，跨会话整理、到点主动提醒，
+        不用每次重新交代。看板位于左侧边栏底部（全局，与具体会话无关）。
       </p>
       <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
         <li>抽取：回合末 LLM 语义提取（可配置模型与节流间隔）</li>

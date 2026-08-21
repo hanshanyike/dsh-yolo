@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { YoloDashboardData } from '../../src/shared/dashboard.ts'
+import { YoloLogo } from '../YoloLogo.tsx'
 
 interface YoloSidebarDashboardProps {
   /** True when the sidebar is expanded (wide) — show the label; collapsed shows icon only. */
@@ -133,7 +134,7 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
         ref={buttonRef}
         type="button"
         onClick={() => { setOpen((v) => !v) }}
-        title="YOLO 记忆看板"
+        title="YOLO 助手看板"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -151,7 +152,7 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
           position: 'relative',
         }}
       >
-        <span style={{ fontSize: 14 }}>🎯</span>
+        <YoloLogo size={16} />
         {wide && <span>YOLO</span>}
         {badgeCount > 0 && (
           <span
@@ -205,7 +206,8 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
               flex: 'none',
             }}
           >
-            <strong style={{ fontSize: 15 }}>🎯 YOLO 记忆看板</strong>
+            <YoloLogo size={20} />
+            <strong style={{ fontSize: 15 }}>YOLO 助手看板</strong>
             {state.data && (
               <span style={{ fontSize: 11, opacity: 0.55, whiteSpace: 'nowrap' }}>
                 更新于 {fmtTime(state.data.at)}
@@ -259,7 +261,7 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
 
             {!state.error && state.data !== null && !hasAny && (
               <div style={{ opacity: 0.7, lineHeight: 1.8 }}>
-                <p style={{ margin: '0 0 6px' }}>暂无记忆。完成一轮对话后，YOLO 会自动从中提取：</p>
+                <p style={{ margin: '0 0 6px' }}>暂无安排。完成一轮对话后，YOLO 会自动从中接进你的计划：</p>
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
                   <li>📋 待办任务（含截止时间与优先级）</li>
                   <li>🎯 长期目标 · 🚩 里程碑</li>
