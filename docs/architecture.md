@@ -5,10 +5,10 @@ plus a browser client**, riding deepseek-harness's *"everything is a plugin"*
 microkernel. This document explains the layout, the data flows, and the design
 decisions behind them.
 
-> **Docs map** — this is the *why* (design decisions & data flows). For the *what*
-> (per-module files, types, public APIs) see [modules.md](modules.md); for *how to
-> use* see [usage.md](usage.md); for *how to test* see [testing.md](testing.md);
-> for runtime-verified extension-point behavior see [extension-points.md](extension-points.md).
+> **Docs map** — this is the *why* (design decisions, data flows, verified
+> platform behavior). For the *what* (per-module files, types, public APIs) see
+> [modules.md](modules.md); for *how to use* see [usage.md](usage.md); for *how
+> to test* see [testing.md](testing.md).
 
 ## Design goals
 
@@ -41,7 +41,7 @@ dsh-plugin-yolo
 `@deepseek-ai/*` kept external — the host provides them at runtime) and
 `tsdown.client.config.ts` builds the browser bundle (CJS, wrapped by
 `scripts/wrap-client.mjs` into `__ModuleLoader__.load`). See
-[dev-notes.md](dev-notes.md) for the full build contract.
+[modules.md](modules.md#九client--浏览器端-bundle) for the client build contract.
 
 ## The five plugins
 
@@ -181,9 +181,75 @@ Key design decisions and their rationale:
 | `ctx.webServer` (prefix route) | ui | `GET /yolo/dashboard` JSON API |
 | `sidebar.footer.action`, `settings.plugin.item` slots | client | global dashboard button + settings card |
 
-Runtime-verified details and platform gotchas live in
-[extension-points.md](extension-points.md); the build contract and
-troubleshooting live in [dev-notes.md](dev-notes.md).
+## Verified platform behavior (dsh v0.1.0-rc.8)
+
+Everything below was **verified at runtime** against the deepseek-harness host,
+not taken from docs. When the official docs were silent, the fallback actually
+used is recorded. These override assumptions whenever they conflict.
+
+### Loader & boot
+
+| fact | consequence |
+|---|---|
+| A plugin module must **default-export** its plugin (function, or object/class with `apply`) | a bare named export (`export class Yolo`) makes the loader pass the whole module namespace → `invalid plugin, expect function or object with an "apply" method` |
+| On Windows the entry `name` must be a `file:///` URL | a bare `D:/...` throws `ERR_UNSUPPORTED_ESM_URL_SCHEME` (Node treats `d:` as a scheme) |
+| `export const inject: string[] = [...]` on the plugin module is honored | patch rows only need `id` + `name` |
+| `ctx.logger.info` does **not** reach the host terminal | dsh routes logger output elsewhere; use `console.log` for terminal-visible markers |
+| `pnpm dsh web` requires `pnpm run build` first | `dsh-web-app` resolves a prebuilt frontend `dist` and throws `frontend dist not built` otherwise |
+| pnpm's `safe-delete` trash fails under Git Bash | run pnpm via **PowerShell** (install and any boot touching temp dirs) |
+| `EADDRINUSE` on the web port | a killed-but-leftover dsh process holds it; clear with `Get-NetTCPConnection -LocalPort <port> ... \| Stop-Process` |
+
+### LLM
+
+| fact | consequence |
+|---|---|
+| `GenerateOptions.purpose` is a **closed union** `'compaction' \| 'session-title'` | no custom tag exists; YOLO borrows `'session-title'` to segregate auxiliary traffic |
+| `ctx.llm.stream()` returns `AsyncIterable<StreamChunk>` | fold with `BlockAssembler` (`push(chunk)` then `blocks()`); variants: `block-start/text-delta/block-end/usage/finish` |
+
+### Session & agent events
+
+| fact | consequence |
+|---|---|
+| `agent/turn-stopping` payload is `{ agent, turn, signal }` (serial) | `agent.session` is the live `Session`; `session.deriveMessages()` gives model-visible history; scope cwd: prefer `session.meta?.cwd`, fall back to `process.cwd()` |
+| `session/event` emits `(session, event)` | `event.type: 'user/message' \| 'assistant/message'` carry `event.data.content: ContentBlock[]` |
+| `AssembleContext` is **only** `{ scope?, signal? }` — no `userMessage` | the memory plugin caches the latest user text via `session/event`; the recall context reads that cache |
+| `agent/session-start` payload is `{ agent, source }` | used to track the latest active agent and replay queued reminders |
+| `Agent.inject/followup/steer` take a `UserMessage` | `createUserMessage` **requires** `source` (`{ kind: 'user' }`) or typecheck fails |
+| `AgentRegistry` has no "list active agents" API | the reminder plugin keeps its own `latestAgent` from `agent/session-start` |
+| `ctx.systemPrompt.section({name, order, text, complete?})` / `.context({name, order, text})` | duplicate `name` throws; YOLO orders: 120 prefs / 220 recall |
+| `ctx.effect(() => start())` returns the cleanup function | cordis effect cleanup contract confirmed |
+
+### Settings & client bundle
+
+| fact | consequence |
+|---|---|
+| Settings host half: `installSettingsSection(ctx, ns, Config, config, { setSource?, onChange?, validate? })` from `@deepseek-ai/dsh-settings` | `settingsNamespace('yolo')` is the join key with the client half; no `inject: ['settings']` needed |
+| schemastery `z<Config>` pattern | `z.literal` / `z.union` / `z.infer` are **unavailable** in this build — use `z.string()` + min/max/default |
+| Client bundle discovery: `ClientModuleRegistry` scans loader entries and `require.resolve('<entry>/package.json')` | three conditions must hold — (1) entry names resolve to the package (`dsh-plugin-yolo/dist/src/...` subpaths + a bare `dsh-plugin-yolo` entry, with a `~/.dsh/profiles/node_modules/dsh-plugin-yolo` junction), (2) `dsh.client` is an **object** `{ platform: 'web' }` (a string is rejected by `parseDshClient`), (3) the bundle is CJS wrapped in `window.__ModuleLoader__.load({id, factory})` + a `process` shim (React CJS entry) |
+| Client bundle is served as a classic `<script>` | must be CJS (`module.exports`); ESM `export {}` leaves an empty factory → `loaded without registering`; no bare Node globals (`process is not defined`) |
+
+### Storage & native deps
+
+| fact | consequence |
+|---|---|
+| FTS5 trigram (better-sqlite3 11.10.0, Win/x64 + Node 22) | good CJK recall for queries ≥ 3 chars; 2-char queries fall back to substring scan (may miss) |
+| pnpm ignores native build scripts by default | `pnpm-workspace.yaml` needs `allowBuilds: { better-sqlite3: true, esbuild: true }` + `nodeLinker: hoisted` (hoisted also avoids the empty-dir virtual-store bug that broke tsdown) |
+| SQLite has no `ADD COLUMN IF NOT EXISTS` | `openDb()` checks `PRAGMA table_info(...)` and `ALTER TABLE` for pre-M3 DBs |
+
+### Windows environment
+
+| symptom | cause & fix |
+|---|---|
+| `SetNamedSecurityInfoW failed (Win32 5): grantWrite(<workspace>)` | the dsh sandbox needs `WRITE_DAC` on the workspace to add a standing ACE; if the directory is owned by `BUILTIN\Administrators` the grant fails. Fix: run dsh as Administrator once, or take ownership, or move the workspace under `%USERPROFILE%`. `scripts/dev.mjs` runs an ACL preflight and offers `--fix-acl` (elevated `takeown` + `icacls /grant`). If it appears with `Rc55: syntax error near '<'`, the latter is a downstream shell-parse failure |
+| pnpm `[safe-delete] trash operation ... aborted` | Git Bash trash API failure — run pnpm via PowerShell |
+
+### Design decision: why not dynamic Cordis plugins
+
+YOLO deliberately does **not** use the dynamic plugin mechanism
+(`cordis_define` + `cordis_run`): a dynamic plugin's `code.host` is a pure JS
+function body — no module resolution, no `fs`, no `better-sqlite3` native
+binding. That cannot host a TypeScript + SQLite project. `scripts/dev.mjs` is
+the correct local run path.
 
 ## Where to look when changing X
 

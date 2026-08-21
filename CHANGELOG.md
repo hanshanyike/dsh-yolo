@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Docs consolidated — the two "working log" docs are gone.** `docs/extension-points.md`
+  and `docs/dev-notes.md` were milestone/session scrapbooks full of stale entries
+  (hybrid extraction, the per-session dashboard, the retired `link:` dependency
+  scheme). Their still-valid knowledge was folded into the maintained docs:
+  verified platform behavior now lives in `docs/architecture.md` ("Verified
+  platform behavior" section), the client-bundle build contract and a
+  troubleshooting table now live in `docs/modules.md`, and Windows environment
+  fixes moved into `docs/usage.md` FAQ. All cross-references (README, docs index,
+  CONTRIBUTING, release, `scripts/dev.mjs`) were updated to point at the new homes.
 - **M7 — LLM-only semantic extraction.** The per-message regex fast path (rules / candidate buffer / merge) was removed entirely: regexes cannot judge semantics, produced noise, and missed anything phrased unusually. Extraction is now a single LLM structured pull at every `agent/turn-stopping`, following the industry pattern (Mem0, Claude Code auto-memory). The extraction prompt was rewritten around durable-knowledge selection, and the model now receives a compact **known-memories digest** so it never re-extracts unchanged facts. Live-session testing exposed a taxonomy gap in the first prompt cut — scheduled commitments (trips, appointments) fell between "task" and "decision" and were silently dropped — the todo/event definitions now explicitly cover them (verified against the real API both ways: extracts the trip, still respects "don't record this").
 - **M7 — global sidebar dashboard.** The per-session dashboard tab (conversation view builder, chat node, header button, `/yolo` command, `yolo/snapshot` durable events) was removed — memory is cross-session by nature, so the dashboard now lives in the sidebar footer: a full-height drawer with open-todo badge, five sections, manual refresh and a 30s poll while open. Data comes from a new host endpoint `GET /yolo/dashboard` whose scope follows the most recent session's workspace.
 

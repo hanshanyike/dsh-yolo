@@ -4,9 +4,9 @@
 
 # YOLO
 
-**The persistent memory layer for your AI coding agent.**
+**Say it once. Keep it on track.**
 
-*Model thinks, Harness acts, YOLO remembers.*
+*A personal assistant for deepseek-harness that watches your conversations, manages your work & life, and reminds you what's due — across every session.*
 
 [![CI](https://github.com/hanshanyike/dsh-yolo/actions/workflows/ci.yml/badge.svg)](https://github.com/hanshanyike/dsh-yolo/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -21,23 +21,24 @@
 
 ---
 
-AI agents are brilliant — and forgetful. Close a session and the goals, deadlines,
-decisions and preferences you just discussed evaporate. **YOLO** fixes that for
+Every session you have, you also *lose* — the goals, deadlines, decisions and
+preferences you just discussed evaporate when the window closes. **YOLO** is the
+assistant that keeps your work and life on track, for
 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) users:
 
-- It **watches every conversation** and structurally extracts what matters —
+- It **watches every conversation** and figures out what matters — your
   **todos**, **milestones**, **goals**, **preferences** and timeline **events**.
-- It **remembers across sessions** in a workspace-scoped, searchable store that
-  the agent itself can query via tools.
-- It **reminds you proactively** when deadlines arrive, even if the host was
-  offline when they came due.
-- It **shows your world at a glance** in a global dashboard right in the dsh sidebar
+- It **manages them across sessions** in a workspace-scoped, searchable store that
+  stays with you no matter how many windows you open.
+- It **reminds you when things are due** — proactively, even if the host was
+  offline when the deadline passed.
+- It **shows your day at a glance** in a global dashboard right in the dsh sidebar
   — timeline, task board, goal progress, milestones & preferences.
 
-Unlike keyword-note plugins, YOLO *understands* conversations: at every turn end,
-an LLM semantic pass (the same pattern as [Mem0](https://github.com/mem0ai/mem0)
-or Claude Code's auto-memory) reads the whole exchange, extracts only durable
-knowledge, and deduplicates it against what is already stored — so memory stays
+YOLO doesn't just *remember* — it *understands*. At every turn end, an LLM
+semantic pass (the same pattern as [Mem0](https://github.com/mem0ai/mem0) or
+Claude Code's auto-memory) reads the whole exchange, extracts only the durable
+asks, and deduplicates them against what's already stored — so your plan stays
 accurate without spamming your tokens.
 
 ## ✨ Features
@@ -133,19 +134,30 @@ time.
 
 ## 🧭 Roadmap
 
-| Milestone | Status | Deliverable |
+The roadmap isn't a list of chores — it's a path toward [docs/VISION.md](docs/VISION.md): from *remember* to
+*manage → anticipate → accompany*, growing into a Jarvis-style work & life assistant — always **managing, never
+doing your work**, and always staying zero-external-service.
+
+| Phase | Goal | Status |
 |---|---|---|
-| **M0** | ✅ done | scaffold + git repo + dev host + minimal plugin loads |
-| **M1** | ✅ done | `ctx.yolo` storage Service + SQLite/FTS5/snapshots + memory tools |
-| **M2** | ✅ done | extraction: rules + turn-end LLM (later superseded by M7) |
-| **M3** | ✅ done | injection: systemPrompt preamble/recall + reminders + session-start replay |
-| **M4** | ✅ done | settings section + client UI shell + live data channel (session dashboard tab — superseded by M7) |
-| **M5** | ✅ done | snapshot scheduling (daily + every 10 turns) + scheduler hardening + coverage push |
-| **M6** | 🔨 in progress | **release engineering** — ✅ GitHub Actions CI (typecheck + tests + build on Linux & Windows, coverage artifact) · ✅ npm-ready manifest (registry deps, `files`, `publishConfig`) · ✅ community files (issue/PR templates) · ✅ name claimed via [`0.2.0-alpha.1`](https://www.npmjs.com/package/dsh-plugin-yolo) (`alpha` dist-tag) · ⏳ stable `v0.2.0` |
-| **M7** | ✅ done | **semantic extraction & UX rework** — regex fast path removed, LLM-only turn-end extraction with known-memory dedup context; per-session dashboard tab removed, global sidebar dashboard drawer (`GET /yolo/dashboard` + 30s poll); config-undefined & workspace-scope crashes fixed; Windows ACL preflight in `dev.mjs` |
-| **M8** | 🗓 planned | **memory portability** — snapshot import/export CLI, DB rebuild-from-snapshot tooling, workspace merge |
-| **M9** | 🗓 planned | **recall quality** — hybrid ranking (FTS + semantic embeddings), recall feedback loop measuring whether injected memories actually helped |
-| **M10** | 🗓 planned | **multi-workspace aggregation** — cross-project global timeline, auto-generated weekly review digest |
+| **0 · Keeper** (anchor) | remembers well, stable `0.2.0` | 🔨 in progress (M6 release engineering) |
+| **1 · Organizer** | tasks get state, goals get progress, preferences take effect; YOLO as its own reply-able conversation (postpone / complete / reshape) | 🗓 planned (absorbs M8) |
+| **2 · Manager** | a YOLO conversation that reminds you — right-time, right-tone, reply-to-act; cross-workspace aggregation | 🗓 planned (absorbs M9, M10) |
+| **3 · Companion** | pairs with your coding agent, plans your day, deeply personal | 🌱 future (the Jarvis endgame) |
+
+> **North star:** YOLO delivers through *its own conversation* — it speaks to you when the time is
+> right, and you can reply to act (postpone / mark done / reschedule). It does **not** shovel memory
+> into every session; per-session injection is optional and off by default — agents ask via
+> `memory_search` / `yolo_query` when they need context. Full rationale in [docs/VISION.md](docs/VISION.md).
+
+**Already shipped** — the Keeper foundation (mapped to phases, full detail in VISION.md):
+
+| Milestone | Phase | Status |
+|---|---|---|
+| **M0–M3** | 0 | skeleton · storage service · LLM extraction · prompt/recall injection + reminders |
+| **M4–M5** | 0 | settings + dashboard shell · snapshot scheduling + scheduler hardening |
+| **M7** | 0 | semantic-first extraction (no regex) · global sidebar dashboard · crash & scope fixes |
+| **M6** | 0 | **release engineering** — CI · npm manifest · name claimed ([`0.2.0-alpha.1`](https://www.npmjs.com/package/dsh-plugin-yolo)) · ⏳ stable `v0.2.0` |
 
 Current quality bar: **114 tests passing**, `tsc --noEmit` clean.
 
@@ -153,12 +165,11 @@ Current quality bar: **114 tests passing**, `tsc --noEmit` clean.
 
 Start at the [docs index](docs/README.md) — it maps every document to its audience:
 
+- [`docs/VISION.md`](docs/VISION.md) — the project's vision & the vision-driven roadmap (start here)
 - [`docs/architecture.md`](docs/architecture.md) — data flow, plugin seams, design decisions
 - [`docs/modules.md`](docs/modules.md) — per-module reference: files, key types, public APIs, gotchas (改代码前先查这里)
 - [`docs/usage.md`](docs/usage.md) — user guide: install, config, features, data storage
 - [`docs/testing.md`](docs/testing.md) — test suite: how to run, what's covered, how to add tests
-- [`docs/extension-points.md`](docs/extension-points.md) — verified dsh extension points & platform gotchas (Windows boot recipe, loader rules, FTS5 notes)
-- [`docs/dev-notes.md`](docs/dev-notes.md) — build contract & troubleshooting
 - [`docs/release.md`](docs/release.md) — how to cut a release & publish to npm
 - [`CHANGELOG.md`](CHANGELOG.md) — release history
 - [`src/storage/schema.sql`](src/storage/schema.sql) — the full SQLite schema
@@ -180,4 +191,4 @@ pnpm test    # vitest (tests/ only — the config excludes the dev host)
 
 ---
 
-<p align="center"><sub>Made with 🧠 for deepseek-harness — <i>"Model thinks, Harness acts, YOLO remembers."</i></sub></p>
+<p align="center"><sub>Made with 🧠 for deepseek-harness — <i>"Say it once. Keep it on track."</i></sub></p>

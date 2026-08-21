@@ -150,3 +150,5 @@ YOLO 向模型暴露 4 个工具，agent 可以自己读写记忆：
 | 记忆串到别的项目了 | 记忆按工作区隔离；确认你在正确的目录/分支下工作 |
 | 想清空记忆 | 删除对应工作区的 `.dsh/yolo/` 目录（会同时删掉快照） |
 | 中文搜索不到 2 字词 | FTS5 trigram 对 ≥3 字符的 CJK 召回最好；2 字查询可能漏，请用更长关键词 |
+| 启动报 `SetNamedSecurityInfoW failed (Win32 5)` | Windows 下工作区目录 owner 是 `BUILTIN\Administrators` 时 dsh 沙箱授权失败。以管理员身份运行一次 dsh，或 `node scripts/dev.mjs --fix-acl` 提权修复 |
+| pnpm 报 `[safe-delete] trash operation` | Git Bash 下的坑；请用 **PowerShell** 运行 pnpm |

@@ -12,8 +12,9 @@ Thanks for considering contributing! YOLO is a small, opinionated plugin bundle 
   pnpm check    # tsc --noEmit
   pnpm test     # vitest — only tests/ runs; the config excludes the dev host
   ```
-- **Document platform gotchas** in [`docs/extension-points.md`](docs/extension-points.md)
-  and build-contract/troubleshooting notes in [`docs/dev-notes.md`](docs/dev-notes.md)
+- **Document platform gotchas** in [`docs/architecture.md`](docs/architecture.md)
+  (the "Verified platform behavior" section) and build/troubleshooting notes in
+  [`docs/modules.md`](docs/modules.md) (the "故障排查" section)
   (dsh is v0.1.0-rc — anything you verify at runtime belongs there).
 - **Keep the docs in sync with code.** If you change a module's structure, public API,
   config option, or test layout, update the matching section in

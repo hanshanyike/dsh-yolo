@@ -1,8 +1,8 @@
 # 模块设计文档（Module Reference）
 
 > 面向开发者的**逐模块代码地图**：每个模块的职责、文件清单、关键类型、公开 API、依赖与实现细节。
-> 改代码前先查这里，避免挨个翻源码。架构与数据流见 [architecture.md](architecture.md)；
-> 运行时踩坑与构建契约见 [dev-notes.md](dev-notes.md)；测试体系见 [testing.md](testing.md)。
+> 改代码前先查这里，避免挨个翻源码。架构、数据流与已验证的平台行为见 [architecture.md](architecture.md)；
+> 测试体系见 [testing.md](testing.md)。
 
 ---
 
@@ -18,8 +18,9 @@
 8. [src/ui/ — 设置与看板 API](#八srcui--设置与看板-api)
 9. [client/ — 浏览器端 bundle](#九client--浏览器端-bundle)
 10. [scripts/ — 构建与运行脚本](#十scripts--构建与运行脚本)
-11. [配置项速查](#十一配置项速查)
-12. [改动时该看哪](#十二改动时该看哪)
+11. [故障排查](#十一故障排查)
+12. [配置项速查](#十二配置项速查)
+13. [改动时该看哪](#十三改动时该看哪)
 
 ---
 
@@ -318,7 +319,7 @@ host 端 UI 半边：注册 Settings 配置 + 提供看板数据端点。
 
 ## 九、client/ — 浏览器端 bundle
 
-浏览器端 UI：侧边栏全局看板 + 设置卡片。CJS 构建 + `__ModuleLoader__` 包裹（见 dev-notes 第四节）。
+浏览器端 UI：侧边栏全局看板 + 设置卡片。CJS 构建 + `__ModuleLoader__` 包裹 + `process` shim。
 
 ### 文件清单
 
@@ -334,7 +335,25 @@ host 端 UI 半边：注册 Settings 配置 + 提供看板数据端点。
   不依赖任何 session。
 - **数据通道**：`fetch('/yolo/dashboard')`，打开时加载 + 手动刷新 + 打开期间 30s 轮询。
 - **交互**：待办角标、五板块（待办/目标/里程碑/偏好/时间线）、外点/Esc 关闭、锚定侧边栏右缘自适应宽度。
-- **构建契约**：CJS + `window.__ModuleLoader__.load({id, factory})` + `process` shim（React 需要）。
+
+### 构建契约（host 如何发现并加载 bundle）
+
+dsh 的 `ClientModuleRegistry` 启动时扫描 loader entries，对每个 entry 调
+`require.resolve('<entry>/package.json')`；解析成功且 manifest 声明
+`dsh.client: { platform: 'web' }`（**必须是 object**，字符串会被 `parseDshClient` 拒绝），
+就通过 `exports['./client']` 服务该 bundle。三个条件必须同时满足：
+
+| 条件 | 如何实现 |
+|---|---|
+| entry name 能解析回 package.json | patch 用包名子路径 `dsh-plugin-yolo/dist/src/storage` + 一个裸包名 entry；`~/.dsh/profiles/node_modules/` 建 junction |
+| `dsh.client` 是 object | `package.json` 写 `"dsh": { "client": { "platform": "web" } }` |
+| bundle 是 CJS + `__ModuleLoader__` 包裹 | `tsdown.client.config.ts` 用 `format: 'cjs'`；`scripts/wrap-client.mjs` post-build 包裹 |
+
+bundle 作为 classic `<script>` 加载，必须：调用 `window.__ModuleLoader__.load({ id, factory })`
+（factory 返回 `module.exports`）；是 CJS 而非 ESM（`export {}` 在 classic script 里不执行 →
+`loaded without registering`）；不引用 Node 全局（React 需要 `process` shim，否则
+`process is not defined`）。验证方式：用 `new Function()` 在无 Node 全局的沙箱里模拟浏览器
+执行，确认 factory 返回 `{ apply, inject, name: 'yolo-client' }`。
 
 ---
 
@@ -356,9 +375,32 @@ host 端 UI 半边：注册 Settings 配置 + 提供看板数据端点。
 | `node scripts/dev.mjs --port 4081` | 自定义端口 |
 | `node scripts/dev.mjs --fix-acl` | UAC 提权修复工作区 ACL（Windows） |
 
+> **Windows 注意**：pnpm 的 `safe-delete` trash 在 Git Bash 下会失败（`[safe-delete] trash operation ... aborted`），
+> 请用 **PowerShell** 运行 pnpm。`dev.mjs` 启动前会做 ACL 预检（`icacls`），
+> 若工作区目录 owner 是 `BUILTIN\Administrators` 导致 `SetNamedSecurityInfoW failed (Win32 5)`，
+> 用 `--fix-acl` 提权执行 `takeown` + `icacls /grant` 一次性修复。
+
 ---
 
-## 十一、配置项速查
+## 十一、故障排查
+
+| 症状 | 原因与解决 |
+|---|---|
+| `EADDRINUSE 4080` | 残留 dsh 进程占端口；PowerShell：`Get-NetTCPConnection -LocalPort 4080 \| Stop-Process` |
+| `frontend dist not built` | host 未 build；跑 `node scripts/dev.mjs --setup` |
+| `Cannot find package 'better-sqlite3'` | YOLO 未 `pnpm install`；或 `pnpm-workspace.yaml` 的 `allowBuilds` 没设 `true` |
+| `Could not locate the bindings file` | better-sqlite3 native binding 未编译；确认 `allowBuilds: { better-sqlite3: true }` 后重跑 `pnpm install` |
+| `Cannot find package 'dsh-plugin-yolo'` | profile junction 缺失；重跑 `node scripts/dev.mjs`（会重建 junction） |
+| `loaded without registering "dsh-plugin-yolo"` | client bundle 缺 `__ModuleLoader__` 包裹；确认 `pnpm build` 跑了 `wrap-client.mjs` |
+| `process is not defined` | client bundle 缺 process shim；确认 `wrap-client.mjs` 是最新版 |
+| `Cannot find module '../package.json'` | tsdown 把 `@deepseek-ai/*` 打包进共享 chunk；确认 `tsdown.config.ts` 有 `external: [/^@deepseek-ai\//]` |
+| 看板不出现 | 见 client 章节"三个必须同时满足的条件" |
+| `SetNamedSecurityInfoW failed (Win32 5)` | 工作区 ACL 问题；见 scripts 章节 + `--fix-acl` |
+| pnpm 报 `[safe-delete] trash operation` | Git Bash 下的坑；用 PowerShell 跑 |
+
+---
+
+## 十二、配置项速查
 
 Settings 页面（`yolo` 命名空间）可配置项，全部有 schemastery 默认值：
 
@@ -378,7 +420,7 @@ Settings 页面（`yolo` 命名空间）可配置项，全部有 schemastery 默
 
 ---
 
-## 十二、改动时该看哪
+## 十三、改动时该看哪
 
 | 想改什么 | 看这里 |
 |---|---|
@@ -393,5 +435,5 @@ Settings 页面（`yolo` 命名空间）可配置项，全部有 schemastery 默
 | 看板 JSON 形状 | `src/shared/dashboard.ts` + `src/ui/dashboard.ts` |
 | 侧边栏看板 UI | `client/sidebar/YoloSidebarDashboard.tsx` |
 | 构建 / 运行 / ACL | `scripts/dev.mjs`、`wrap-client.mjs`、`copy-assets.mjs` |
-| 运行时踩坑 / 构建契约 | [dev-notes.md](dev-notes.md) |
+| 平台行为 / 运行时踩坑 | [architecture.md](architecture.md) 的"已验证平台行为"章节 |
 | 测试怎么加 | [testing.md](testing.md) |

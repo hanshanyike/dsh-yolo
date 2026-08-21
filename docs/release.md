@@ -61,7 +61,9 @@ npm install --prefix ~/.dsh/profiles/web dsh-plugin-yolo
 ```
 
 Then reference the same `cordis.dev.local.yml`-style entries (see
-[dev-notes.md](dev-notes.md#七与动态-cordis-插件的关系) for the runtime patch
+[architecture.md](architecture.md#design-decision-why-not-dynamic-cordis-plugins)
+for why YOLO uses the patch-overlay path, and
+[modules.md](modules.md#构建契约host-如何发现并加载-bundle) for the runtime patch
 format).
 
 ## Versioning policy
