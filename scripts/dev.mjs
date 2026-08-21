@@ -96,7 +96,10 @@ if (!existsSync(join(ROOT, 'node_modules'))) {
 
 // 5. YOLO build (host plugins + wrapped client bundle)
 step(5, 'YOLO build (client bundle)')
-if (!existsSync(join(ROOT, 'dist', 'client', 'index.mjs'))) {
+const hostEntries = ['src', 'storage', 'memory', 'extract', 'reminder', 'ui'].map((m) =>
+  join(ROOT, 'dist', 'src', m, 'index.mjs'),
+)
+if (!existsSync(join(ROOT, 'dist', 'client', 'index.mjs')) || hostEntries.some((p) => !existsSync(p))) {
   run('pnpm', ['build'], ROOT)
 } else {
   console.log('[dev] YOLO dist present')
