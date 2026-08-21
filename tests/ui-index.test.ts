@@ -82,7 +82,7 @@ describe('ui apply: global dashboard endpoint', () => {
     apply(ctx as never, undefined)
 
     // a turn finished in another workspace — the endpoint must follow it
-    handlers.get('agent/turn-stopping')!({ agent: { session: { meta: { cwd: '/ws/alpha' } } } })
+    handlers.get('agent/turn-stopping')!({ agent: { session: { header: { id: 's1', cwd: '/ws/alpha' } } } })
 
     const register = (ctx.webServer.register as ReturnType<typeof vi.fn>).mock.calls
       .find(([opts]) => opts.path === '/yolo/dashboard')![0] as { handler: (req: unknown, res: unknown) => Promise<void> }

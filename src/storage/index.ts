@@ -112,24 +112,24 @@ export default class Yolo extends Service {
     cwd: string,
     ref: { id?: string; title?: string },
     action: TodoAction,
-    args?: { due_at?: string | null },
+    args?: { due_at?: string | null; session_id?: string | null },
   ): Todo | null {
     const h = this.resolve(cwd)
     const id = ref.id ?? (ref.title ? repo.findTodoByTitle(h.db, h.scopeKey, ref.title)?.id : undefined)
     if (!id) return null
     return repo.applyTodoAction(h.db, id, action, args)
   }
-  applyGoalProgress(cwd: string, ref: { id?: string; title?: string }, progress: number, note?: string | null): Goal | null {
+  applyGoalProgress(cwd: string, ref: { id?: string; title?: string }, progress: number, note?: string | null, sessionId?: string | null): Goal | null {
     const h = this.resolve(cwd)
     const id = ref.id ?? (ref.title ? repo.findGoalByTitle(h.db, h.scopeKey, ref.title)?.id : undefined)
     if (!id) return null
-    return repo.applyGoalProgress(h.db, id, progress, note)
+    return repo.applyGoalProgress(h.db, id, progress, note, sessionId)
   }
-  applyMilestoneStatus(cwd: string, ref: { id?: string; title?: string }, status: MilestoneStatus): Milestone | null {
+  applyMilestoneStatus(cwd: string, ref: { id?: string; title?: string }, status: MilestoneStatus, sessionId?: string | null): Milestone | null {
     const h = this.resolve(cwd)
     const id = ref.id ?? (ref.title ? repo.findMilestoneByTitle(h.db, h.scopeKey, ref.title)?.id : undefined)
     if (!id) return null
-    return repo.applyMilestoneStatus(h.db, id, status)
+    return repo.applyMilestoneStatus(h.db, id, status, sessionId)
   }
   /** Fuzzy title -> milestone id (M8 extraction linking); null when unmatched. */
   findMilestoneId(cwd: string, title: string): string | null {

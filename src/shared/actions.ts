@@ -16,6 +16,8 @@ export interface YoloActionRequest {
   progress?: number
   status?: string
   note?: string
+  /** Originating dsh session, stamped on the audit event (chat actions only). */
+  session_id?: string
 }
 
 /**
@@ -39,11 +41,13 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
   }
   if (!ref.id && !ref.title) return { ok: false, error: 'pass id or title', httpStatus: 400 }
 
+  const sessionId = typeof r.session_id === 'string' && r.session_id ? r.session_id : undefined
+
   if (action === 'set_progress') {
     if (kind !== 'goal' || typeof r.progress !== 'number' || !Number.isFinite(r.progress)) {
       return { ok: false, error: 'set_progress requires kind=goal and progress', httpStatus: 400 }
     }
-    const g = yolo.applyGoalProgress(cwd, ref, r.progress, typeof r.note === 'string' ? r.note : undefined)
+    const g = yolo.applyGoalProgress(cwd, ref, r.progress, typeof r.note === 'string' ? r.note : undefined, sessionId)
     return g
       ? { ok: true, item: g as unknown as Record<string, unknown> }
       : { ok: false, error: 'goal not found', httpStatus: 404 }
@@ -54,7 +58,7 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
     if (kind !== 'milestone' || !MILESTONE_STATUSES.includes(status as MilestoneStatus)) {
       return { ok: false, error: 'set_status requires kind=milestone and status in planned|active|done|abandoned', httpStatus: 400 }
     }
-    const m = yolo.applyMilestoneStatus(cwd, ref, status as MilestoneStatus)
+    const m = yolo.applyMilestoneStatus(cwd, ref, status as MilestoneStatus, sessionId)
     return m
       ? { ok: true, item: m as unknown as Record<string, unknown> }
       : { ok: false, error: 'milestone not found', httpStatus: 404 }
@@ -70,7 +74,7 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
     cwd,
     ref,
     action as TodoAction,
-    action === 'postpone' ? { due_at: r.due_at as string } : undefined,
+    action === 'postpone' ? { due_at: r.due_at as string, session_id: sessionId ?? null } : { session_id: sessionId ?? null },
   )
   return t
     ? { ok: true, item: t as unknown as Record<string, unknown> }

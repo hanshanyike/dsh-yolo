@@ -40,7 +40,7 @@ function makeCtx(yolo: Yolo, llmText: string) {
 function sessionLike(id: string, cwd: string) {
   return {
     id,
-    meta: { cwd },
+    header: { id, cwd },
     deriveMessages: () => [{ role: 'user', content: [{ type: 'text', text: '对话内容' }] }],
   }
 }

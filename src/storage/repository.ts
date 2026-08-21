@@ -366,25 +366,26 @@ export function applyTodoAction(
   db: DB,
   id: string,
   action: TodoAction,
-  args?: { due_at?: string | null },
+  args?: { due_at?: string | null; session_id?: string | null },
 ): Todo | null {
   const t = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
   if (!t) return null
   if (t.status === 'done' || t.status === 'cancelled') return t
   const ts = now()
+  const session_id = args?.session_id ?? null
   switch (action) {
     case 'start':
       if (t.status === 'in_progress') return t
       db.prepare('UPDATE todos SET status = ?, updated_at = ? WHERE id = ?').run('in_progress', ts, id)
-      addEvent(db, { kind: 'todo_started', summary: `开始：${t.title}`, scope_key: t.scope_key, occurred_at: ts })
+      addEvent(db, { kind: 'todo_started', summary: `开始：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id })
       break
     case 'complete':
       setTodoStatus(db, id, 'done')
-      addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts })
+      addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id })
       break
     case 'cancel':
       setTodoStatus(db, id, 'cancelled')
-      addEvent(db, { kind: 'todo_cancelled', summary: `取消：${t.title}`, scope_key: t.scope_key, occurred_at: ts })
+      addEvent(db, { kind: 'todo_cancelled', summary: `取消：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id })
       break
     case 'postpone': {
       if (!args?.due_at) return t
@@ -398,19 +399,20 @@ export function applyTodoAction(
         summary: `推迟：「${t.title}」→ ${args.due_at}`,
         scope_key: t.scope_key,
         occurred_at: ts,
+        session_id,
       })
       break
     }
     case 'remind_again':
       db.prepare('UPDATE todos SET last_reminded_at = NULL, updated_at = ? WHERE id = ?').run(ts, id)
-      addEvent(db, { kind: 'todo_remind_again', summary: `再次提醒：「${t.title}」`, scope_key: t.scope_key, occurred_at: ts })
+      addEvent(db, { kind: 'todo_remind_again', summary: `再次提醒：「${t.title}」`, scope_key: t.scope_key, occurred_at: ts, session_id })
       break
   }
   return db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo
 }
 
 /** Set goal progress with a timeline event; >= 100 flips status to achieved. */
-export function applyGoalProgress(db: DB, id: string, progress: number, note?: string | null): Goal | null {
+export function applyGoalProgress(db: DB, id: string, progress: number, note?: string | null, sessionId?: string | null): Goal | null {
   const g = db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal | undefined
   if (!g) return null
   const clamped = Math.max(0, Math.min(100, Math.round(progress)))
@@ -420,12 +422,13 @@ export function applyGoalProgress(db: DB, id: string, progress: number, note?: s
     summary: `目标「${g.title}」进度 ${clamped}%`,
     detail: note ?? null,
     scope_key: g.scope_key,
+    session_id: sessionId ?? null,
   })
   return db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal
 }
 
 /** Transition a milestone status with a timeline event. */
-export function applyMilestoneStatus(db: DB, id: string, status: MilestoneStatus): Milestone | null {
+export function applyMilestoneStatus(db: DB, id: string, status: MilestoneStatus, sessionId?: string | null): Milestone | null {
   const m = db.prepare('SELECT * FROM milestones WHERE id = ?').get(id) as Milestone | undefined
   if (!m) return null
   if (m.status === status) return m
@@ -434,6 +437,7 @@ export function applyMilestoneStatus(db: DB, id: string, status: MilestoneStatus
     kind: 'milestone_status',
     summary: `里程碑「${m.title}」${MILESTONE_STATUS_LABEL[status]}`,
     scope_key: m.scope_key,
+    session_id: sessionId ?? null,
   })
   return db.prepare('SELECT * FROM milestones WHERE id = ?').get(id) as Milestone
 }

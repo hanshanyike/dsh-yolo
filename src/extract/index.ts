@@ -14,6 +14,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type Yolo from '../storage/index.ts'
 import type { MilestoneStatus, Priority } from '../storage/types.ts'
 import { DEFAULTS } from '../shared/constants.ts'
+import { sessionCwd } from '../shared/session.ts'
 import { contentBlocksToText, llmExtract, type ExtractionResult, type ExtractedUpdate } from './llm-extract.ts'
 import { buildKnownContext } from './prompt.ts'
 
@@ -43,8 +44,7 @@ function toPriority(v: string | null | undefined): Priority | null {
 
 /** cwd for scope partitioning. Prefer the session's creation cwd when present. */
 function cwdOf(session: Session): string {
-  const meta = (session as { meta?: { cwd?: string } }).meta
-  return meta?.cwd ?? process.cwd()
+  return sessionCwd(session) ?? process.cwd()
 }
 
 /**

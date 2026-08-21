@@ -6,6 +6,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type Yolo from '../storage/index.ts'
 import { startReminderScheduler, maybeWriteTurnSnapshot, type AgentLike } from './scheduler.ts'
+import { sessionCwd } from '../shared/session.ts'
 
 export const name = 'yolo-reminder'
 export const inject = ['yolo', 'agents', 'settings'] as const
@@ -24,8 +25,7 @@ export const YOLO_NS = settingsNamespace('yolo')
 
 /** Workspace cwd of an agent's session, when the payload carries one. */
 function agentCwd(agent: unknown): string | undefined {
-  const session = (agent as { session?: { meta?: { cwd?: string } } })?.session
-  return session?.meta?.cwd
+  return sessionCwd((agent as { session?: unknown })?.session)
 }
 
 export function apply(ctx: Context): void {

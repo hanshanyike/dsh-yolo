@@ -14,7 +14,7 @@ beforeEach(() => {
   db = openDb(':memory:')
 })
 
-function lastEvent(): { kind: string; summary: string } | undefined {
+function lastEvent(): { kind: string; summary: string; session_id?: string | null } | undefined {
   const events = repo.listEvents(db, SCOPE)
   return events[0]
 }
@@ -44,6 +44,16 @@ describe('applyTodoAction', () => {
     const cancelled = repo.applyTodoAction(db, t.id, 'cancel')
     expect(cancelled?.status).toBe('cancelled')
     expect(lastEvent()?.kind).toBe('todo_cancelled')
+  })
+
+  it('stamps the originating session on the audit event', () => {
+    const t = repo.upsertTodo(db, { title: '会话内完成的任务', scope_key: SCOPE })
+    repo.applyTodoAction(db, t.id, 'complete', { session_id: 'session-abc' })
+    expect(lastEvent()?.session_id).toBe('session-abc')
+    // without a session (dashboard click), the event stays unattributed
+    const t2 = repo.upsertTodo(db, { title: '看板点击完成的任务', scope_key: SCOPE })
+    repo.applyTodoAction(db, t2.id, 'complete')
+    expect(lastEvent()?.session_id).toBeNull()
   })
 
   it('postpone moves due_at, clears the reminder stamp, writes an event', () => {

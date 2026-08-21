@@ -6,19 +6,23 @@ import { defineTool, type JsonValue } from '@deepseek-ai/dsh-tools'
 import type Yolo from '../storage/index.ts'
 import type { MilestoneStatus, Priority, RowType, TodoStatus, GoalStatus } from '../storage/types.ts'
 import { applyYoloAction } from '../shared/actions.ts'
+import { sessionCwd, sessionId } from '../shared/session.ts'
 
 /** Context augmented with the yolo service (register via inject ['yolo']). */
 export interface YoloContext extends Context {
   yolo: Yolo
 }
 
+/** The calling agent's session, when the host attached one to this execution. */
+function execSession(exec: unknown): unknown {
+  return (exec as { agent?: { session?: unknown } } | undefined)?.agent?.session
+}
+
 /**
- * Resolve the cwd used for scope partitioning.
- * Tool `execute` callbacks run without a live Session in scope, so we fall back
- * to the host process cwd. The extract/reminder plugins prefer `session.meta?.cwd`;
- * under the web profile the two resolve to the same workspace.
+ * Resolve the cwd used for scope partitioning: the calling agent's session
+ * workspace when the host attached one, else the host process cwd.
  */
-const cwdOf = () => process.cwd()
+const cwdOfExec = (exec: unknown): string => sessionCwd(execSession(exec)) ?? process.cwd()
 
 /**
  * JSON-roundtrip a value so it satisfies the output.schema constraint.
@@ -30,7 +34,6 @@ const json = (v: unknown): Record<string, JsonValue> => JSON.parse(JSON.stringif
 
 export function registerYoloTools(ctx: YoloContext): void {
   const y = ctx.yolo
-  const cwd = cwdOf
 
   ctx.tools.register(
     defineTool({
@@ -45,8 +48,8 @@ export function registerYoloTools(ctx: YoloContext): void {
         schema: { type: 'object', additionalProperties: true },
         render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
       },
-      async execute(args) {
-        return json({ hits: y.search(cwd(), args.query ?? '', args.topK ?? 5, (args.kinds as RowType[] | undefined) ?? undefined) })
+      async execute(args, exec) {
+        return json({ hits: y.search(cwdOfExec(exec), args.query ?? '', args.topK ?? 5, (args.kinds as RowType[] | undefined) ?? undefined) })
       },
     }),
   )
@@ -69,10 +72,11 @@ export function registerYoloTools(ctx: YoloContext): void {
         schema: { type: 'object', additionalProperties: true },
         render: (_a, v) => [{ type: 'text', text: JSON.stringify(v) }],
       },
-      async execute(args) {
+      async execute(args, exec) {
+        const cwd = cwdOfExec(exec)
         switch (args.kind) {
           case 'todo':
-            return json(y.addTodo(cwd(), {
+            return json(y.addTodo(cwd, {
               title: args.title,
               detail: args.detail,
               due_at: args.due_at,
@@ -80,13 +84,13 @@ export function registerYoloTools(ctx: YoloContext): void {
               source: 'tool',
             }))
           case 'milestone':
-            return json(y.addMilestone(cwd(), { title: args.title, target_date: args.target_date, description: args.detail, source: 'tool' }))
+            return json(y.addMilestone(cwd, { title: args.title, target_date: args.target_date, description: args.detail, source: 'tool' }))
           case 'goal':
-            return json(y.addGoal(cwd(), { title: args.title, description: args.detail }))
+            return json(y.addGoal(cwd, { title: args.title, description: args.detail }))
           case 'preference':
-            return json(y.addPreference(cwd(), { key: args.key ?? args.title, value: args.value ?? args.detail ?? '' }))
+            return json(y.addPreference(cwd, { key: args.key ?? args.title, value: args.value ?? args.detail ?? '' }))
           case 'event':
-            return json(y.addEvent(cwd(), { kind: 'note', summary: args.title, detail: args.detail }))
+            return json(y.addEvent(cwd, { kind: 'note', summary: args.title, detail: args.detail }))
           default:
             throw new Error(`unknown memory kind: ${String(args.kind)}`)
         }
@@ -106,17 +110,18 @@ export function registerYoloTools(ctx: YoloContext): void {
         schema: { type: 'object', additionalProperties: true },
         render: (_a, v) => [{ type: 'text', text: JSON.stringify(v) }],
       },
-      async execute(args) {
+      async execute(args, exec) {
+        const cwd = cwdOfExec(exec)
         if (args.kind === 'todo') {
-          y.setTodoStatus(cwd(), args.id, 'cancelled')
+          y.setTodoStatus(cwd, args.id, 'cancelled')
           return json({ ok: true })
         }
         if (args.kind === 'milestone') {
-          y.setMilestoneStatus(cwd(), args.id, 'abandoned')
+          y.setMilestoneStatus(cwd, args.id, 'abandoned')
           return json({ ok: true })
         }
         if (args.kind === 'goal') {
-          y.setGoalProgress(cwd(), args.id, 0)
+          y.setGoalProgress(cwd, args.id, 0)
           return json({ ok: true })
         }
         return json({ ok: false, error: 'unsupported kind' })
@@ -145,9 +150,10 @@ export function registerYoloTools(ctx: YoloContext): void {
         schema: { type: 'object', additionalProperties: true },
         render: (_a, v) => [{ type: 'text', text: JSON.stringify(v) }],
       },
-      async execute(args) {
-        // shared validation + dispatch (same path as POST /yolo_actions)
-        return json(applyYoloAction(y, cwd(), {
+      async execute(args, exec) {
+        // shared validation + dispatch (same path as POST /yolo_actions);
+        // the calling session is stamped on the audit event for traceability
+        return json(applyYoloAction(y, cwdOfExec(exec), {
           action: args.action,
           kind: args.kind,
           id: args.id,
@@ -156,6 +162,7 @@ export function registerYoloTools(ctx: YoloContext): void {
           progress: args.progress,
           status: args.status,
           note: args.note,
+          session_id: sessionId(execSession(exec)),
         }))
       },
     }),
@@ -174,18 +181,19 @@ export function registerYoloTools(ctx: YoloContext): void {
         schema: { type: 'object', additionalProperties: true },
         render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
       },
-      async execute(args) {
+      async execute(args, exec) {
+        const cwd = cwdOfExec(exec)
         switch (args.view) {
           case 'timeline':
-            return json({ rows: y.listEvents(cwd(), args.limit ?? 50) })
+            return json({ rows: y.listEvents(cwd, args.limit ?? 50) })
           case 'todos':
-            return json({ rows: y.listTodos(cwd(), (args.status ?? undefined) as TodoStatus | undefined) })
+            return json({ rows: y.listTodos(cwd, (args.status ?? undefined) as TodoStatus | undefined) })
           case 'goals':
-            return json({ rows: y.listGoals(cwd(), (args.status ?? undefined) as GoalStatus | undefined) })
+            return json({ rows: y.listGoals(cwd, (args.status ?? undefined) as GoalStatus | undefined) })
           case 'milestones':
-            return json({ rows: y.listMilestones(cwd(), (args.status ?? undefined) as MilestoneStatus | undefined) })
+            return json({ rows: y.listMilestones(cwd, (args.status ?? undefined) as MilestoneStatus | undefined) })
           case 'preferences':
-            return json({ rows: y.listPreferences(cwd()) })
+            return json({ rows: y.listPreferences(cwd) })
           default:
             throw new Error(`unknown view: ${String(args.view)}`)
         }

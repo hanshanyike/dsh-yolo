@@ -14,6 +14,7 @@ import type Yolo from '../storage/index.ts'
 import { registerActionsEndpoint } from './actions.ts'
 import { Config, type Config as ConfigSchema } from './config.ts'
 import { registerDashboardEndpoint, type WebServerLike } from './dashboard.ts'
+import { sessionCwd } from '../shared/session.ts'
 
 /** The namespace is the join key shared with the client half (settings.plugin.item). */
 export const YOLO_NS = settingsNamespace('yolo')
@@ -24,17 +25,6 @@ export const inject = ['yolo', 'webServer'] as const
 interface UiCtx extends Context {
   yolo: Yolo
   webServer: WebServerLike
-}
-
-/** Structural view of a session payload carrying a workspace cwd. */
-interface SessionLike {
-  meta?: { cwd?: string }
-}
-
-/** Narrow an unknown session payload to the structural shape we read. */
-function toSessionLike(v: unknown): SessionLike | undefined {
-  if (typeof v === 'object' && v !== null) return v as SessionLike
-  return undefined
 }
 
 export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
@@ -57,8 +47,8 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   // actually working on. Falls back to the host process cwd.
   let latestSessionCwd: string | undefined
   ctx.on('agent/turn-stopping', (payload: { agent?: { session?: unknown } }) => {
-    const s = toSessionLike(payload.agent?.session)
-    if (s?.meta?.cwd) latestSessionCwd = s.meta.cwd
+    const cwd = sessionCwd(payload.agent?.session)
+    if (cwd) latestSessionCwd = cwd
   })
 
   registerDashboardEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())

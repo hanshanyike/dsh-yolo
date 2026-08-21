@@ -56,24 +56,31 @@ describe('POST /yolo/actions', () => {
     expect(r.status).toBe(200)
     expect(r.body.ok).toBe(true)
     expect((r.body.item as { title: string }).title).toBe('写季度报告')
-    expect(yolo.applyTodoAction).toHaveBeenCalledWith('/tmp/proj', { id: 't1' }, 'complete', undefined)
+    expect(yolo.applyTodoAction).toHaveBeenCalledWith('/tmp/proj', { id: 't1' }, 'complete', { session_id: null })
   })
 
   it('postpones with due_at → passes the args through', async () => {
     const { server, yolo } = setup()
     const r = await call(server, 'POST', JSON.stringify({ action: 'postpone', kind: 'todo', id: 't1', due_at: '2026-08-25' }))
     expect(r.status).toBe(200)
-    expect(yolo.applyTodoAction).toHaveBeenCalledWith('/tmp/proj', { id: 't1' }, 'postpone', { due_at: '2026-08-25' })
+    expect(yolo.applyTodoAction).toHaveBeenCalledWith('/tmp/proj', { id: 't1' }, 'postpone', { due_at: '2026-08-25', session_id: null })
   })
 
   it('goal set_progress and milestone set_status → 200', async () => {
     const { server, yolo } = setup()
     const g = await call(server, 'POST', JSON.stringify({ action: 'set_progress', kind: 'goal', title: '学会 Rust', progress: 60 }))
     expect(g.status).toBe(200)
-    expect(yolo.applyGoalProgress).toHaveBeenCalledWith('/tmp/proj', { title: '学会 Rust' }, 60, undefined)
+    expect(yolo.applyGoalProgress).toHaveBeenCalledWith('/tmp/proj', { title: '学会 Rust' }, 60, undefined, undefined)
     const m = await call(server, 'POST', JSON.stringify({ action: 'set_status', kind: 'milestone', id: 'm1', status: 'done' }))
     expect(m.status).toBe(200)
-    expect(yolo.applyMilestoneStatus).toHaveBeenCalledWith('/tmp/proj', { id: 'm1' }, 'done')
+    expect(yolo.applyMilestoneStatus).toHaveBeenCalledWith('/tmp/proj', { id: 'm1' }, 'done', undefined)
+  })
+
+  it('passes a session_id through to the audit trail when the body carries one', async () => {
+    const { server, yolo } = setup()
+    const r = await call(server, 'POST', JSON.stringify({ action: 'complete', kind: 'todo', id: 't1', session_id: 'session-chat-1' }))
+    expect(r.status).toBe(200)
+    expect(yolo.applyTodoAction).toHaveBeenCalledWith('/tmp/proj', { id: 't1' }, 'complete', { session_id: 'session-chat-1' })
   })
 
   it('bad JSON → 400 with JSON error', async () => {

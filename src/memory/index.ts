@@ -5,6 +5,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { contentBlocksToText } from '../shared/text.ts'
+import { sessionCwd } from '../shared/session.ts'
 import { registerYoloPrompt } from './recall.ts'
 import { registerYoloTools, type YoloContext } from './tools.ts'
 
@@ -20,10 +21,8 @@ export function apply(ctx: Context): void {
   let lastUserText = ''
   let lastSessionCwd: string | undefined
   ctx.on('session/event', (session: Session, event: SessionEvent) => {
-    if (session && typeof session === 'object') {
-      const meta = (session as { meta?: { cwd?: string } }).meta
-      if (meta?.cwd) lastSessionCwd = meta.cwd
-    }
+    const sessionWd = sessionCwd(session)
+    if (sessionWd) lastSessionCwd = sessionWd
     if (event.type !== 'user/message') return
     const text = contentBlocksToText((event.data as { content?: readonly unknown[] }).content)
     if (text) lastUserText = text

@@ -47,7 +47,7 @@ function sessionLike(id: string, cwd: string) {
   const messages: Array<{ role: string; content: Array<{ type: string; text: string }> }> = []
   return {
     id,
-    meta: { cwd },
+    header: { id, cwd },
     deriveMessages: () => messages,
     push(role: string, text: string) {
       messages.push({ role, content: [{ type: 'text', text }] })

@@ -38,11 +38,24 @@ function fmtDate(iso: string | null | undefined): string {
   return iso.length > 10 ? iso.slice(0, 10) : iso
 }
 
-/** Local-time "YYYY-MM-DD" of tomorrow — the +1d postpone target. */
-function tomorrowStr(): string {
-  const d = new Date(Date.now() + 86_400_000)
+/** Local-time "YYYY-MM-DD" — date-only helper for postpone targets. */
+function localDayStr(d: Date): string {
   const p = (n: number): string => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/**
+ * +1d postpone target: one day after the LATER of today and the current due
+ * date — a todo due next Friday must move to Saturday, not jump back to
+ * tomorrow (the original bug: the button always meant "tomorrow").
+ */
+function nextDayStr(dueAt: string | null | undefined): string {
+  const today = localDayStr(new Date())
+  const dueDay = dueAt ? dueAt.slice(0, 10) : ''
+  const base = dueDay > today ? dueDay : today
+  const d = new Date(`${base}T00:00:00`)
+  d.setDate(d.getDate() + 1)
+  return localDayStr(d)
 }
 
 /** Timeline labels for the M8 state-flow event kinds. */
@@ -485,7 +498,7 @@ function TodoRow({ t, busy, onAct }: { t: YoloTodoRow; busy: boolean; onAct: (id
       </span>
       <span style={{ display: 'flex', gap: 3, flex: 'none' }}>
         <button type="button" disabled={busy} title="标记完成" style={{ ...actionButtonStyle, opacity: busy ? 0.5 : 1 }} onClick={() => { onAct(t.id, 'complete') }}>✓</button>
-        <button type="button" disabled={busy} title={`推迟到 ${tomorrowStr()}`} style={{ ...actionButtonStyle, opacity: busy ? 0.5 : 1 }} onClick={() => { onAct(t.id, 'postpone', { due_at: tomorrowStr() }) }}>+1d</button>
+        <button type="button" disabled={busy} title={`推迟到 ${nextDayStr(t.due_at)}`} style={{ ...actionButtonStyle, opacity: busy ? 0.5 : 1 }} onClick={() => { onAct(t.id, 'postpone', { due_at: nextDayStr(t.due_at) }) }}>+1d</button>
         <button type="button" disabled={busy} title="取消该待办" style={{ ...actionButtonStyle, opacity: busy ? 0.5 : 1 }} onClick={() => { onAct(t.id, 'cancel') }}>✕</button>
       </span>
     </li>
