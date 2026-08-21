@@ -12,6 +12,7 @@ export interface YoloPromptDeps {
   yolo: Yolo
   cwd: () => string
   getLastUserText: () => string
+  logger?: { warn(msg: string): void }
 }
 
 /** Register the persistent preferences section + dynamic recall context. */
@@ -37,14 +38,22 @@ export function registerYoloPrompt(ctx: Context, deps: YoloPromptDeps): void {
     },
   })
 
-  // dynamic recall — FTS hits for the latest user message, token-budgeted
+  // dynamic recall — FTS hits for the latest user message, token-budgeted.
+  // System-prompt assembly must never fail because of a storage hiccup, so
+  // recall degrades to empty on error instead of taking the turn down.
   ctx.systemPrompt.context({
     name: 'yolo-recall',
     order: PROMPT_ORDER.recallContext,
     text: () => {
       const q = deps.getLastUserText().trim()
       if (!q) return ''
-      const hits = deps.yolo.search(deps.cwd(), q, DEFAULTS.recallTopK)
+      let hits
+      try {
+        hits = deps.yolo.search(deps.cwd(), q, DEFAULTS.recallTopK)
+      } catch (e) {
+        deps.logger?.warn(`[yolo] recall search failed: ${e instanceof Error ? e.message : String(e)}`)
+        return ''
+      }
       if (hits.length === 0) return ''
 
       const budgetChars = DEFAULTS.recallMaxTokens * 4 // rough chars ≈ tokens*4

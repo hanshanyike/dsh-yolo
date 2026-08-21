@@ -27,6 +27,7 @@ export function apply(ctx: Context): void {
     yolo: yctx.yolo,
     cwd: () => process.cwd(),
     getLastUserText: () => lastUserText,
+    logger: ctx.logger,
   })
 
   ctx.logger?.info?.('[yolo] memory plugin loaded')

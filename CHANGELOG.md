@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- User messages containing FTS5 syntax characters (`<`, quotes, parens, operators) crashed
+  the whole turn with `fts5: syntax error near "<"` — search queries are now wrapped as
+  quoted FTS5 phrases (every character literal) and capped at 64 chars; recall additionally
+  degrades to empty instead of failing system-prompt assembly on storage errors.
+
 ## [0.2.0-alpha.1] — 2026-08-21
 
 Name-claiming pre-release of the M6 line — same content as 0.1.0 plus release

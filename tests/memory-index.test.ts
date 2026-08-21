@@ -85,4 +85,24 @@ describe('memory apply()', () => {
     onEvent(undefined, { type: 'tool/result', data: {} })
     expect(contexts[0].text()).toBe('')
   })
+
+  // real-world regression: user messages containing FTS5 syntax characters
+  // (angle brackets, quotes, operators) crashed the MATCH query and took the
+  // whole turn down with "fts5: syntax error near ..."
+  it.each([
+    '帮我看看 <div>渲染为什么失败',
+    '比较 a<b 和 a>b',
+    '他说"好的"然后 AND OR NOT 全是保留字',
+    '路径 C:\\Users\\x*y (特殊字符)',
+    '箭头 -> 方向 ← 左',
+  ])('recall survives FTS5 syntax characters in the user message: %s', (message) => {
+    const { ctx, handlers, contexts } = makeCtx()
+    apply(ctx as never)
+    const onEvent = handlers.get('session/event')!
+
+    yolo.addTodo(cwd, { title: '准备季度汇报材料', source: 'manual' })
+    onEvent(undefined, { type: 'user/message', data: { content: [{ type: 'text', text: message }] } })
+
+    expect(() => contexts[0].text()).not.toThrow()
+  })
 })

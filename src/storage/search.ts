@@ -7,6 +7,18 @@
 import type { DB } from './db.ts'
 import type { RowType, SearchHit } from './types.ts'
 
+/** Recall queries come from raw user messages; cap them so a pasted blob
+ *  doesn't become a pointless multi-trigram phrase scan. */
+const MAX_QUERY_CHARS = 64
+
+/** Wrap a raw string as an FTS5 quoted phrase. Inside quotes every character
+ *  (angle brackets, operators, parens, CJK, …) is a literal — only `"` needs
+ *  doubling. Without this, MATCH parses the user's text as FTS5 query syntax
+ *  and throws `fts5: syntax error near "<"`. */
+export function toFtsPhrase(q: string): string {
+  return `"${q.replace(/"/g, '""')}"`
+}
+
 /** FTS5 BM25 search (trigram tokenizer). Returns ranked hits across all row types (or a subset). */
 export function ftsSearch(
   db: DB,
@@ -14,13 +26,13 @@ export function ftsSearch(
   topK = 5,
   kinds?: readonly RowType[],
 ): SearchHit[] {
-  const q = query.trim()
+  const q = query.trim().slice(0, MAX_QUERY_CHARS)
   if (!q) return []
 
   const placeholders = kinds && kinds.length > 0 ? kinds.map(() => '?').join(',') : null
   const where = placeholders ? `AND row_type IN (${placeholders})` : ''
   const sql = `SELECT row_type, row_id, title, body, rank FROM yolo_fts WHERE yolo_fts MATCH ? ${where} ORDER BY rank LIMIT ?`
-  const params: (string | number)[] = [q, ...(kinds ?? []), topK]
+  const params: (string | number)[] = [toFtsPhrase(q), ...(kinds ?? []), topK]
 
   return db.prepare(sql).all(...params) as SearchHit[]
 }

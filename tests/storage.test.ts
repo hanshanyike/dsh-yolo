@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { openDb, type DB } from '../src/storage/db.ts'
 import * as repo from '../src/storage/repository.ts'
-import { ftsSearch } from '../src/storage/search.ts'
+import { ftsSearch, toFtsPhrase } from '../src/storage/search.ts'
 import { renderSnapshot } from '../src/storage/snapshot.ts'
 
 const SCOPE = 'testscope/main'
@@ -120,6 +120,35 @@ describe('search (trigram, CJK)', () => {
     repo.upsertMilestone(db, { title: 'review milestone', scope_key: SCOPE })
     const onlyTodos = ftsSearch(db, 'review', 5, ['todo'])
     expect(onlyTodos.every((h) => h.row_type === 'todo')).toBe(true)
+  })
+
+  // regression: raw user text is FTS5 query syntax — special characters used
+  // to throw "fts5: syntax error near ..." and kill the whole turn
+  it.each([
+    '<div>',
+    'a<b 和 a>b',
+    'he said "done" AND THEN (not OR)',
+    'C:\\Users\\x*y',
+    'NOT NEAR ^col:token',
+  ])('treats FTS5 syntax characters as literals: %s', (q) => {
+    repo.upsertTodo(db, { title: 'stable row', scope_key: SCOPE })
+    expect(() => ftsSearch(db, q)).not.toThrow()
+  })
+
+  it('caps query length instead of scanning a pasted blob', () => {
+    repo.upsertTodo(db, { title: 'stable row', scope_key: SCOPE })
+    expect(() => ftsSearch(db, '头'.repeat(10_000))).not.toThrow()
+  })
+
+  it('toFtsPhrase doubles embedded quotes and wraps in phrase quotes', () => {
+    expect(toFtsPhrase('he said "hi"')).toBe('"he said ""hi"""')
+    expect(toFtsPhrase('plain')).toBe('"plain"')
+  })
+
+  it('a quoted phrase still hits rows containing that literal substring', () => {
+    repo.upsertTodo(db, { title: '修复 <div> 渲染问题', scope_key: SCOPE })
+    const hits = ftsSearch(db, '<div> 渲染')
+    expect(hits.length).toBeGreaterThanOrEqual(1)
   })
 })
 

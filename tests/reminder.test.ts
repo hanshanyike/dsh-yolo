@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type Yolo from '../src/storage/index.ts'
 import { reminderText, runReminderTick, maybeWriteDailySnapshot, maybeWriteTurnSnapshot } from '../src/reminder/scheduler.ts'
 import type { Todo } from '../src/storage/types.ts'
+import { localDateStr } from '../src/shared/text.ts'
 
 function todo(id: string, title: string, dueAt?: string): Todo {
   return {
@@ -77,7 +78,7 @@ describe('maybeWriteDailySnapshot', () => {
 
   it('skips when already snapshotted today', () => {
     const yolo = mockYolo([])
-    ;(yolo.lastSnapshotDate as ReturnType<typeof vi.fn>).mockReturnValue(new Date().toISOString().slice(0, 10))
+    ;(yolo.lastSnapshotDate as ReturnType<typeof vi.fn>).mockReturnValue(localDateStr())
     const p = maybeWriteDailySnapshot(yolo, () => '/tmp')
     expect(p).toBeNull()
     expect(yolo.writeSnapshot).not.toHaveBeenCalled()
