@@ -137,6 +137,23 @@ node --import tsx/esm apps/cli/src/bin.ts web --patch D:/Code/WorkBuddy/dsh-yolo
 
 - `pnpm test`: 40/40. Host boots 5 plugins clean.
 
+## Windows ACL / sandbox permission note (2026-08-21)
+
+On Windows, dsh's local sandbox (`@deepseek-ai/dsh-sandbox-local`) uses a restricted-token runner. Before a tool with `workspace-write` policy runs, the host calls `SetNamedSecurityInfoW` to add a workspace-root ACE so the confined process can write there. If the dsh process lacks `WRITE_DAC` permission on the workspace directory, this grant fails with:
+
+```
+Error: SetNamedSecurityInfoW failed (Win32 5): grantWrite(<workspace>)
+```
+
+This is an **environment/permission issue**, not a YOLO plugin bug. YOLO writes its workspace-scoped SQLite DB + snapshots under `<cwd>/.dsh/yolo`, which triggers the same workspace-write grant that any shell/tool would need.
+
+**Workarounds:**
+1. Run dsh / the terminal as Administrator once so the host can set the standing workspace ACE (subsequent runs under the same user do not need elevation because the ACE persists).
+2. Or ensure the current user owns the workspace directory and has "Full control" / "Change permissions" on it.
+3. Or move the workspace to a directory the user fully controls (e.g., under `%USERPROFILE%`).
+
+If you see this alongside `Rc55: syntax error near '<'`, the latter is a downstream shell-parse failure caused by the sandboxed Pwsh launch being aborted.
+
 ## Known follow-ups (next session)
 - M4b deep: live data binding for the dashboard tab (host projection or yolo_query), registry-based `conversation.view` via `ConversationViewRegistry.register(ConversationViewDefinition)`, header button (`conversation.session.header.actions`) + `/yolo` command, in-host browser verification of the client bundle.
 - M5b: coverage >= 80% once `@vitest/coverage-v8` installs (needs safe-delete workaround), every_10_turns snapshot, reminder hardening (overdue escalation).

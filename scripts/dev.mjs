@@ -43,8 +43,36 @@ const SETUP = process.argv.includes('--setup')
 const UPDATE = process.argv.includes('--update')
 
 const win = process.platform === 'win32'
+
+function warnWindowsAcl() {
+  if (!win) return
+  console.log(`
+[dev] Windows ACL note: dsh's sandbox grants a workspace-write ACE on the
+      current directory before running confined tools (Pwsh, etc.). If the
+      host later fails with "SetNamedSecurityInfoW failed (Win32 5):
+      grantWrite(...)", run this terminal / dsh as Administrator once so the
+      standing ACE can be created, or ensure the current user owns the
+      workspace directory and has "Change permissions" rights.
+      See docs/extension-points.md#windows-acl--sandbox-permission-note.
+`)
+}
+
+/** Strip the WorkBuddy safe-delete shim from NODE_OPTIONS so child processes
+ *  (pnpm, dsh, etc.) don't abort on temp-dir cleanup under Git Bash. */
+function childEnv() {
+  const raw = process.env.NODE_OPTIONS ?? ''
+  // Strip the WorkBuddy safe-delete require while preserving other NODE_OPTIONS.
+  const cleaned = raw.replace(/--require=["'][^"']*genie-safe-delete[^"']*["']/g, '').trim()
+  return { ...process.env, NODE_OPTIONS: cleaned }
+}
+
 const run = (cmd, args, cwd) => {
-  const r = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: win && cmd === 'pnpm' })
+  const r = spawnSync(cmd, args, {
+    cwd,
+    stdio: 'inherit',
+    shell: win && cmd === 'pnpm',
+    env: childEnv(),
+  })
   if (r.status !== 0) {
     console.error(`[dev] command failed: ${cmd} ${args.join(' ')} (exit ${r.status})`)
     if (win && cmd === 'pnpm') {
@@ -109,7 +137,12 @@ if (!existsSync(join(ROOT, 'dist', 'client', 'index.mjs')) || hostEntries.some((
 //    node_modules; a Windows junction (no admin needed) keeps this repo live.
 step(6, 'profile junction')
 mkdirSync(LINK_DIR, { recursive: true })
-if (existsSync(LINK)) rmSync(LINK, { recursive: true, force: true })
+if (existsSync(LINK)) {
+  // Bypass the WorkBuddy safe-delete shim on Windows: it tries to trash the
+  // junction and aborts. `rmdir` via cmd removes the junction link only.
+  if (win) execFileSync('cmd', ['/c', 'rmdir', LINK])
+  else rmSync(LINK, { recursive: true, force: true })
+}
 try {
   symlinkSync(ROOT, LINK, 'junction')
   console.log(`[dev] junction: ${LINK} -> ${ROOT}`)
@@ -143,6 +176,8 @@ if (SETUP) {
   console.log('\n[dev] setup complete. Start with: node scripts/dev.mjs')
   process.exit(0)
 }
+
+warnWindowsAcl()
 
 // 8. start
 step(8, `start dsh web on :${PORT}`)

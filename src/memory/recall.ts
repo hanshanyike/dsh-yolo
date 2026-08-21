@@ -16,6 +16,15 @@ export interface YoloPromptDeps {
 
 /** Register the persistent preferences section + dynamic recall context. */
 export function registerYoloPrompt(ctx: Context, deps: YoloPromptDeps): void {
+  // capability guidance — prevents the agent from spawning shell/tools for
+  // reminders/deadlines that YOLO already extracts and stores automatically.
+  ctx.systemPrompt.section({
+    name: 'yolo-instructions',
+    order: PROMPT_ORDER.instructions,
+    text: () =>
+      'YOLO (the personal memory plugin) is active. It automatically extracts deadlines, todos, goals, milestones, and preferences from the conversation. You do NOT need to create files, run shell commands, or call tools to set reminders for deadlines the user mentions — YOLO handles that.',
+  })
+
   // persistent preamble — user profile + preferences, always in context
   ctx.systemPrompt.section({
     name: 'yolo-prefs',

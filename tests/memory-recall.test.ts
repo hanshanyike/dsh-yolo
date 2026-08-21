@@ -29,24 +29,30 @@ function mockYolo(over: Partial<Yolo> = {}): Yolo {
 }
 
 describe('registerYoloPrompt', () => {
-  it('registers the prefs section and recall context', () => {
+  it('registers the instructions section, prefs section and recall context', () => {
     const { ctx, sections, contexts } = makeCtx()
     registerYoloPrompt(ctx as never, { yolo: mockYolo(), cwd: () => '/w', getLastUserText: () => '' })
-    expect(sections.map((s) => s.name)).toEqual(['yolo-prefs'])
+    expect(sections.map((s) => s.name)).toEqual(['yolo-instructions', 'yolo-prefs'])
     expect(contexts.map((c) => c.name)).toEqual(['yolo-recall'])
+  })
+
+  it('instructions section renders capability guidance', () => {
+    const { ctx, sections } = makeCtx()
+    registerYoloPrompt(ctx as never, { yolo: mockYolo(), cwd: () => '/w', getLastUserText: () => '' })
+    expect(sections[0].text()).toContain('YOLO (the personal memory plugin) is active')
   })
 
   it('prefs section renders preferences or empty', () => {
     const { ctx, sections } = makeCtx()
     registerYoloPrompt(ctx as never, { yolo: mockYolo(), cwd: () => '/w', getLastUserText: () => '' })
-    expect(sections[0].text()).toBe('')
+    expect(sections[1].text()).toBe('')
 
     const yolo = mockYolo({
       listPreferences: vi.fn(() => [{ id: '1', key: '语言', value: '中文', confidence: 1, scope_key: 's', updated_at: 0 }]),
     })
     const c2 = makeCtx()
     registerYoloPrompt(c2.ctx as never, { yolo, cwd: () => '/w', getLastUserText: () => '' })
-    expect(c2.sections[0].text()).toContain('语言: 中文')
+    expect(c2.sections[1].text()).toContain('语言: 中文')
   })
 
   it('recall context returns nothing without a user message', () => {

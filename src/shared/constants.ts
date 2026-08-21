@@ -16,6 +16,7 @@ export const SLOT = {
 
 /** system prompt section orders (dsh convention: -100 harness, 0 persona, 100–199 tool guidance, 200+ runtime). */
 export const PROMPT_ORDER = {
+  instructions: 110,
   preferencesPreamble: 120,
   recallContext: 220,
 } as const
