@@ -1,7 +1,8 @@
-# YOLO 项目变更记录（2026 年本次会话）
+# YOLO 开发笔记（session log）
 
-> 本文档是本次会话所有修改的**唯一完整记录**。涵盖代码审查、源码修复、运行脚本、client bundle 构建契约、故障排查。
-> 旧文档（`CODE_REVIEW.md`、`FIXES.md`、`RUN.md`）已被本文件取代，可删除。
+> 面向贡献者的踩坑与契约记录：代码审查修复、运行脚本、client bundle 构建契约、依赖与故障排查。
+> 面向用户的安装与使用见 [README](../README.md)；架构与设计决策见 [architecture.md](architecture.md)；
+> 版本历史见 [CHANGELOG](../CHANGELOG.md)。
 
 ---
 
@@ -268,37 +269,9 @@ dsh 的 client bundle 作为 classic `<script>` 标签加载，必须：
 
 ---
 
-## 五、快速开始
+## 五、运行与命令
 
-### 前置条件
-
-- Node ≥ 22.19
-- pnpm ≥ 11（若系统未装，`npm install -g pnpm`）
-- git（用于 clone host 仓库）
-- 联网（首次 clone host + 装 better-sqlite3 native binding 需要）
-
-### 一键启动
-
-```bash
-node scripts/dev.mjs
-```
-
-或用 npm 脚本：
-
-```bash
-pnpm dev:web
-```
-
-首次运行会自动 clone + install + build host + 装 YOLO 依赖 + 构建 YOLO 产物（约 5–10 分钟）。之后秒级启动。启动成功后终端打印：
-
-```
-[yolo] plugin loaded
-dsh web: http://127.0.0.1:4080
-```
-
-打开 **http://127.0.0.1:4080**，选 workspace，开始对话。提到截止日、设目标、说"记得这个"，然后打开对话顶部的 **YOLO 标签页**看时间线 / 任务 / 目标 / 里程碑 / 偏好。发送 `/yolo` 命令可立即刷新看板。
-
-> **端口说明**：默认 4080（不是 3080）。3080 是正在运行的 dsh GUI 本身占用的端口，两个不能冲突。
+安装与首次启动见 [README Quick Start](../README.md#-quick-start)（`pnpm install` → `pnpm dev:web:setup` → `pnpm dev:web`，默认端口 4080——3080 是 dsh GUI 本身占用的端口，不能冲突）。
 
 ### 命令选项
 
@@ -388,7 +361,7 @@ New-Item -ItemType Junction -Path node_modules/@deepseek-ai/dsh-llm `
 | `scripts/dev.mjs` | 跨平台运行脚本：clone host → install → build → 生成 patch → 启动 dsh web |
 | `scripts/wrap-client.mjs` | post-build：把 client bundle 包进 `__ModuleLoader__.load` + process shim |
 | `tsdown.client.config.ts` | client bundle 单独 CJS 构建配置 |
-| `CHANGES.md` | 本文件 |
+| `CHANGES.md`（本文件前身） | 开发笔记，后迁移为 `docs/dev-notes.md` |
 
 ### 修改
 

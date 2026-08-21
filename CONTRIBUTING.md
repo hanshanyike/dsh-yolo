@@ -13,22 +13,29 @@ Thanks for considering contributing! YOLO is a small, opinionated plugin bundle 
   pnpm test     # vitest — only tests/ runs; the config excludes the dev host
   ```
 - **Document platform gotchas** in [`docs/extension-points.md`](docs/extension-points.md)
+  and build-contract/troubleshooting notes in [`docs/dev-notes.md`](docs/dev-notes.md)
   (dsh is v0.1.0-rc — anything you verify at runtime belongs there).
 - **No secrets.** Never commit API keys, `.env`, or personal data.
 
 ## Milestones worth picking up
 
+M0–M5 are done (see the [roadmap](README.md#-roadmap) and
+[CHANGELOG](CHANGELOG.md)). The next self-contained deliverables:
+
 | # | area | what's needed |
 |---|---|---|
-| M2 | extraction | rule capture (`session/event`) + turn-end LLM pull (`agent/turn-stopping`, `ctx.llm.stream`) with dedup/throttle |
-| M3 | injection | `systemPrompt.section/context` preamble + reminders (`agent.inject` + `session-start` replay) |
-| M4 | UI | `conversation.view` YOLO tab + conversation node + header button + settings card (client bundle) |
-| M5 | hardening | scheduler persistence, snapshot scheduling, ≥80% test coverage |
+| M6 | release engineering | npm-publishable plugin (install without a host checkout), GitHub Actions CI, coverage badge, `v0.2.0` |
+| M7 | memory portability | snapshot import/export CLI, DB rebuild-from-snapshot, workspace merge |
+| M8 | recall quality | hybrid ranking (FTS + embeddings), recall feedback loop |
+| M9 | aggregation | cross-workspace timeline, weekly review digest |
 
 ## Development setup
 
-See the **Quick Start** in the [README](README.md#-quick-start) — you'll need a local
-deepseek-harness checkout as the dev host (clone it into `host/`, which is gitignored).
+See the **Quick Start** in the [README](README.md#-quick-start) —
+`pnpm dev:web:setup` clones the host checkout into `host/` (gitignored) and
+builds everything; `pnpm dev:web` boots it with the YOLO patch applied.
+
+Architecture context: [`docs/architecture.md`](docs/architecture.md).
 
 ## Questions?
 
