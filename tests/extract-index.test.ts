@@ -95,7 +95,7 @@ describe('extract apply: rule fast path', () => {
 describe('extract apply: LLM slow path', () => {
   it('merges LLM extraction into storage and logs it', async () => {
     const llmJson = JSON.stringify({
-      todos: [{ title: 'LLM 提取的任务', due_at: '2026-09-10' }],
+      todos: [{ title: 'LLM 提取的任务', due_at: '2026-09-10' }, { title: '非法优先级任务', priority: 'super-duper' }],
       goals: [{ title: 'LLM 目标' }],
       milestones: [],
       preferences: [{ key: '主题', value: '极简' }],
@@ -110,6 +110,9 @@ describe('extract apply: LLM slow path', () => {
     await onTurn({ agent: { session }, turn: 2 })
 
     expect(yolo.listTodos(cwd).some((t) => t.title === 'LLM 提取的任务')).toBe(true)
+    // invalid LLM priority strings are dropped, not stored
+    const bad = yolo.listTodos(cwd).find((t) => t.title === '非法优先级任务')
+    expect(bad?.priority ?? null).toBeNull()
     expect(yolo.listGoals(cwd).some((g) => g.title === 'LLM 目标')).toBe(true)
     expect(yolo.listPreferences(cwd).some((p) => p.key === '主题' && p.value === '极简')).toBe(true)
     expect(yolo.listEvents(cwd).some((e) => e.summary === 'LLM 决策')).toBe(true)

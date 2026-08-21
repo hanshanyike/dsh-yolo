@@ -69,6 +69,13 @@ describe('milestones & goals', () => {
     repo.setGoalProgress(db, g.id, 150)
     expect(repo.listGoals(db, SCOPE, 'achieved')[0].progress).toBe(100)
   })
+
+  it('setMilestoneStatus(done) stops matching search (FTS soft-delete)', () => {
+    const m = repo.upsertMilestone(db, { title: 'finish milestone tests', scope_key: SCOPE })
+    expect(ftsSearch(db, 'milestone tests')).toHaveLength(1)
+    repo.setMilestoneStatus(db, m.id, 'done')
+    expect(ftsSearch(db, 'milestone tests')).toHaveLength(0)
+  })
 })
 
 describe('preferences', () => {
@@ -83,13 +90,13 @@ describe('preferences', () => {
 })
 
 describe('events', () => {
-  it('addEvent is idempotent by content (INSERT OR IGNORE via random id is permissive here)', () => {
-    const e1 = repo.addEvent(db, { kind: 'decision', summary: 'chose trigram', scope_key: SCOPE })
-    const e2 = repo.addEvent(db, { kind: 'decision', summary: 'chose trigram', scope_key: SCOPE })
-    // random uuid id => both insert; this test documents current behavior
-    expect(e1).not.toBeNull()
-    expect(e2).not.toBeNull()
-    expect(repo.listEvents(db, SCOPE).length).toBeGreaterThanOrEqual(1)
+  it('addEvent returns the generated UUID row (not a rowid) and persists it', () => {
+    const e = repo.addEvent(db, { kind: 'decision', summary: 'chose trigram', scope_key: SCOPE })
+    expect(e).not.toBeNull()
+    // UUID shape, not a numeric rowid string
+    expect(e!.id).toMatch(/^[0-9a-f-]{36}$/)
+    const stored = repo.listEvents(db, SCOPE)
+    expect(stored.some((x) => x.id === e!.id)).toBe(true)
   })
 })
 
