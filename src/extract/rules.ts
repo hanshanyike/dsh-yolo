@@ -36,7 +36,15 @@ export function parseDate(text: string, now = new Date()): string | null {
   if (m) {
     const month = Number(m[1])
     const day = Number(m[2])
-    const year = month < now.getMonth() + 1 ? now.getFullYear() + 1 : now.getFullYear()
+    // Roll to next year only when the date is strictly in the past:
+    // month strictly earlier, or same month with a day already gone.
+    // (Naive `month < now.getMonth() + 1` misfires on the current month:
+    //  on 8/20, "8/20前" and "8/25前" would both wrongly become next year.)
+    const curMonth = now.getMonth() + 1
+    const curDay = now.getDate()
+    const pastMonth = month < curMonth
+    const sameMonthPastDay = month === curMonth && day < curDay
+    const year = pastMonth || sameMonthPastDay ? now.getFullYear() + 1 : now.getFullYear()
     return `${year}-${pad(month)}-${pad(day)}`
   }
   // 明天 / tomorrow
@@ -85,7 +93,7 @@ function isoAdd(now: Date, days: number): string {
 }
 
 /** Extract candidates from one message's text. Pure + side-effect free. */
-export function extractCandidates(text: string): Candidate[] {
+export function extractCandidates(text: string, now = new Date()): Candidate[] {
   const out: Candidate[] = []
   const lines = text.split(/\n+/)
 
@@ -102,7 +110,7 @@ export function extractCandidates(text: string): Candidate[] {
         kind: 'todo',
         dedupKey: `todo:${normalizeText(title)}`,
         title,
-        dueAt: parseDate(title),
+        dueAt: parseDate(title, now),
       })
       continue
     }
@@ -110,7 +118,7 @@ export function extractCandidates(text: string): Candidate[] {
     // deadline in a sentence: "在 8/20 前完成报告"
     const due = t.match(/(\d{1,2}\s*[\/月]\s*\d{1,2}\s*日?\s*前|明天|后天|下周[一二三四五六日天]?|本周末|本月底|tomorrow|next week)/i)
     if (due && /(完成|提交|搞定|做完|交付|写|做)/.test(t)) {
-      const dueAt = parseDate(due[1])
+      const dueAt = parseDate(due[1], now)
       if (dueAt) {
         const title = t
           .replace(/(?:在|于)?\s*\d{1,2}\s*[\/月]\s*\d{1,2}\s*日?\s*前|明天|后天|下周[一二三四五六日天]?|本周末|本月底|tomorrow|next week/gi, '')
@@ -125,7 +133,7 @@ export function extractCandidates(text: string): Candidate[] {
     const ms = t.match(/^(?:里程碑|阶段|milestone)\s*[:：]?\s*(.+)$/i)
     if (ms) {
       const title = ms[1].trim()
-      out.push({ kind: 'milestone', dedupKey: `ms:${normalizeText(title)}`, title, targetDate: parseDate(title) })
+      out.push({ kind: 'milestone', dedupKey: `ms:${normalizeText(title)}`, title, targetDate: parseDate(title, now) })
       continue
     }
 

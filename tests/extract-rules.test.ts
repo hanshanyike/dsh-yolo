@@ -18,7 +18,8 @@ describe('rule extraction', () => {
   })
 
   it('captures deadline-in-sentence todo', () => {
-    const cs = extractCandidates('在 8/20 前完成报告')
+    const now = new Date('2026-08-20T12:00:00+08:00')
+    const cs = extractCandidates('在 8/20 前完成报告', now)
     expect(cs.length).toBeGreaterThanOrEqual(1)
     const todo = cs.find((c) => c.kind === 'todo')
     expect(todo?.dueAt).toBe('2026-08-20')

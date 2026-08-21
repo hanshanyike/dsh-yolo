@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { homedir } from 'node:os'
-import { resolve, posix, join } from 'node:path'
+import { resolve, posix, join, sep } from 'node:path'
 import type { ScopeMode } from './types.ts'
 
 /** Compute a stable scope_key for the given directory. */
@@ -61,7 +61,5 @@ export function toPosix(p: string): string {
   return p.split(sep).join('/')
 }
 
-// node:path 'sep' on Windows is '\\'; import lazily to avoid platform branching noise
-import { sep } from 'node:path'
 // re-export posix join for callers that build URLs/paths
 export const posixJoin = posix.join

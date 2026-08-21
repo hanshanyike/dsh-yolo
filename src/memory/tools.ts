@@ -13,7 +13,9 @@ export interface YoloContext extends Context {
 
 /**
  * Resolve the cwd used for scope partitioning.
- * M1 uses the host process cwd; M2/M3 will bind to the dsh workspace/session cwd.
+ * Tool `execute` callbacks run without a live Session in scope, so we fall back
+ * to the host process cwd. The extract/reminder plugins prefer `session.meta?.cwd`;
+ * under the web profile the two resolve to the same workspace.
  */
 const cwdOf = () => process.cwd()
 
