@@ -8,7 +8,6 @@ import {
   currentGitBranch,
   dbFileName,
   resolveDataDir,
-  toPosix,
 } from '../src/storage/scope.ts'
 
 describe('computeScopeKey', () => {
@@ -59,12 +58,5 @@ describe('dbFileName', () => {
   it('sanitizes path separators out of the scope key', () => {
     expect(dbFileName('abc123/main')).toBe('yolo-abc123_main.db')
     expect(dbFileName('abc123\\feat')).toBe('yolo-abc123_feat.db')
-  })
-})
-
-describe('toPosix', () => {
-  it('normalizes windows separators to forward slashes', () => {
-    expect(toPosix('D:\\proj\\a')).toBe('D:/proj/a')
-    expect(toPosix('/already/posix')).toBe('/already/posix')
   })
 })
