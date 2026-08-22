@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   notification card + deliver into the workspace's YOLO resident thread; the
   old session-start replay into whatever work session started next is gone
   (`pending_reminders` stays in the schema for compatibility, nothing feeds it).
+  The delivered text is human-readable only — reply-handling rules moved into
+  the `yolo-instructions` system section so no agent instructions leak into
+  the visible chat history.
 - **Dashboard API extended** (`GET /yolo/dashboard`): `ledger`, `ledgerDay`,
   `ledgerSessions`, `notifications`, `unhandled`; todo rows carry
   `session_label`. Actions API gained `update` / `rename` / `abandon` /

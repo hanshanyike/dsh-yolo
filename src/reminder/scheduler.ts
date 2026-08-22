@@ -25,19 +25,14 @@ function localIso(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-/** Reminder text delivered into the YOLO thread (M8 reply-able semantics kept). */
-export function reminderText(title: string, dueAt?: string | null, id?: string): string {
-  const head = `⏰ YOLO 提醒：${title}${dueAt ? `（到期 ${dueAt}）` : ''}`
-  if (!id) return head
-  return [
-    head,
-    `（待办 id: ${id}）`,
-    '用户可能就此回复「已完成 / 推迟到X / 再提醒我一次」，请用 yolo_action 工具就地处理：',
-    `- 已完成 → yolo_action(action="complete", kind="todo", id="${id}")`,
-    `- 推迟到X → yolo_action(action="postpone", kind="todo", id="${id}", due_at="解析出的绝对日期")`,
-    `- 再提醒 → yolo_action(action="remind_again", kind="todo", id="${id}")`,
-    '操作成功后向用户简短确认即可，不必展开解释。若用户未回应，不要追问，仅保留本条提醒。',
-  ].join('\n')
+/**
+ * Reminder text delivered into the YOLO thread. Human-readable ONLY — this
+ * message is visible in the resident thread's history (对话 Tab / 侧栏对话),
+ * so agent-facing handling rules live in the yolo-instructions system section
+ * (memory/recall.ts) instead of being pasted into the chat.
+ */
+export function reminderText(title: string, dueAt?: string | null): string {
+  return `⏰ YOLO 提醒：${title}${dueAt ? `（到期 ${dueAt}）` : ''}`
 }
 
 /** Write today's Markdown snapshot once per calendar day. Returns the path or null. */
@@ -81,7 +76,7 @@ export function runReminderTick(deps: {
 
   let notified = 0
   for (const t of due) {
-    const text = reminderText(t.title, t.due_at, t.id)
+    const text = reminderText(t.title, t.due_at)
     deps.yolo.addNotification(cwd, {
       kind: 'reminder',
       title: `⏰ ${t.title}`,

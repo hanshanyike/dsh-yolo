@@ -37,13 +37,12 @@ describe('reminderText', () => {
     expect(reminderText('开会')).not.toContain('到期')
   })
 
-  it('with an id it is reply-able: carries the id and yolo_action routing (M8)', () => {
-    const text = reminderText('交报告', '2026-08-21', 'todo-123')
-    expect(text).toContain('待办 id: todo-123')
-    expect(text).toContain('yolo_action')
-    expect(text).toContain('complete')
-    expect(text).toContain('postpone')
-    expect(text).toContain('remind_again')
+  it('is human-readable only — no agent instructions leak into chat history', () => {
+    const text = reminderText('交报告', '2026-08-21')
+    expect(text).not.toContain('yolo_action')
+    expect(text).not.toContain('待办 id')
+    expect(text).not.toContain('请用')
+    expect(text.split('\n')).toHaveLength(1)
   })
 })
 

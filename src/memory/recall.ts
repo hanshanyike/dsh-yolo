@@ -19,11 +19,15 @@ export interface YoloPromptDeps {
 export function registerYoloPrompt(ctx: Context, deps: YoloPromptDeps): void {
   // capability guidance — prevents the agent from spawning shell/tools for
   // reminders/deadlines that YOLO already extracts and stores automatically.
+  // Also carries the reminder-reply rules for the YOLO resident thread, so the
+  // delivered reminder text can stay human-readable (no agent instructions
+  // pasted into chat history).
   ctx.systemPrompt.section({
     name: 'yolo-instructions',
     order: PROMPT_ORDER.instructions,
     text: () =>
-      'YOLO (the personal memory plugin) is active. It automatically extracts deadlines, todos, goals, milestones, and preferences from the conversation. You do NOT need to create files, run shell commands, or call tools to set reminders for deadlines the user mentions — YOLO handles that.',
+      'YOLO (the personal memory plugin) is active. It automatically extracts deadlines, todos, goals, milestones, and preferences from the conversation. You do NOT need to create files, run shell commands, or call tools to set reminders for deadlines the user mentions — YOLO handles that.\n' +
+      'When the user replies to a YOLO reminder (messages starting with "⏰ YOLO 提醒"), handle the reply with the yolo_action tool, referencing the todo by its title: 已完成 → yolo_action(action="complete", kind="todo", title=...); 推迟到某日 → action="postpone" with due_at="resolved absolute date"; 再提醒 → action="remind_again". Confirm briefly after acting; if the user does not respond to a reminder, never follow up on your own.',
   })
 
   // persistent preamble — user profile + preferences, always in context
