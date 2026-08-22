@@ -58,7 +58,9 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
     if (cwd) latestSessionCwd = cwd
   })
 
-  registerDashboardEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
+  registerDashboardEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd(), {
+    allowAggregate: () => entry.ui.aggregateAcrossWorkspaces,
+  })
   // M8: in-place dashboard operations (complete/postpone/cancel + goal/milestone)
   // v0.3.0 E: + update/rename/abandon/quick_add/handled + snapshot sync
   registerActionsEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
@@ -73,3 +75,4 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
 
   ctx.logger?.info?.('[yolo] ui plugin loaded')
 }
+

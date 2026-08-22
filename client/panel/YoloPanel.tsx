@@ -13,7 +13,7 @@ import { IcChat, IcClose, IcExpand, IcRefresh, IcShrink } from '../design/icons.
 import { YoloLogo } from '../YoloLogo.tsx'
 import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
 import { KanbanView } from './KanbanView.tsx'
-import { readPanelState, writePanelState } from './state.ts'
+import { readPanelState, writePanelState, type WorkspaceScope } from './state.ts'
 
 export interface YoloPanelProps {
   /** Panel left edge (the sidebar's right edge) — spans to the viewport right. */
@@ -52,6 +52,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
   const [sideChatOpen, setSideChatOpen] = useState(initial.sideChatOpen)
   const [chatFullscreen, setChatFullscreen] = useState(false)
   const [anchor, setAnchor] = useState<ChatAnchor | null>(null)
+  const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope>(initial.workspaceScope)
   const [sweepTick, setSweepTick] = useState(0)
   const lastSig = useRef<string | null>(null)
 
@@ -67,7 +68,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
   const load = useCallback(async (): Promise<void> => {
     setState((s) => ({ ...s, loading: true, error: null }))
     try {
-      const r = await fetch('/yolo/dashboard', { headers: { accept: 'application/json' }, cache: 'no-store' })
+      const r = await fetch(`/yolo/dashboard?scope=${workspaceScope}`, { headers: { accept: 'application/json' }, cache: 'no-store' })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = (await r.json()) as YoloDashboardData
       const sig = dataSig(data)
@@ -77,7 +78,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
     } catch (e) {
       setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
     }
-  }, [])
+  }, [workspaceScope])
 
   useEffect(() => { void load() }, [load])
   useEffect(() => {
@@ -87,6 +88,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
 
   // Persist view state so reopening keeps the side chat (TA-6).
   useEffect(() => { writePanelState({ sideChatOpen }) }, [sideChatOpen])
+  useEffect(() => { writePanelState({ workspaceScope }) }, [workspaceScope])
 
   // Esc unwinds the chat surface: fullscreen → side chat → closed panel.
   const closeSideChat = useCallback(() => {
@@ -136,6 +138,10 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
           <span className="p-date mono">{dateLabel}</span>
         </div>
         <div className="p-head-acts">
+          <div className="wsswitch" role="group" aria-label="工作区范围">
+            <button type="button" className={`wsbtn${workspaceScope === 'current' ? ' on' : ''}`} onClick={() => setWorkspaceScope('current')} title="只看当前工作区">当前</button>
+            <button type="button" className={`wsbtn${workspaceScope === 'all' ? ' on' : ''}`} onClick={() => setWorkspaceScope('all')} title="汇总所有工作区（需在设置开启）">全部</button>
+          </div>
           {!chatShowingFull && (
             <button type="button" className={`ctoggle${sideChatOpen ? ' on' : ''}`} onClick={toggleSideChat} title={sideChatOpen ? '收起侧栏对话 (Esc)' : '展开侧栏对话'}>
               <span className="tico"><IcChat size={13} /></span>对话
@@ -206,8 +212,13 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
 
       {/* ⑦ footer 28px */}
       <footer className="p-foot mono">
-        看板每 30 秒自动刷新{state.data?.scopeKey ? ` · 作用域 ${state.data.scopeKey}` : ''}
+        看板每 30 秒自动刷新{state.data?.scope === 'all' ? ` · ${state.data.workspaceCount ?? 0} 个工作区` : state.data?.scopeKey ? ` · 作用域 ${state.data.scopeKey}` : ''}{state.data?.health ? ` · 记忆健康 召回${state.data.health.recallRunsToday}/${state.data.health.recallErrorsToday}错 重复${state.data.health.duplicateTodos.length}个` : ''}
       </footer>
     </div>
   )
 }
+
+
+
+
+

@@ -7,10 +7,20 @@
 // stuck" signals (overdue / stale).
 // v0.3.0: adds the day ledger (events joined with session-summaries as source
 // badges), notification cards, and the unhandled badge count.
+// v0.3.0 cross-workspace: `?scope=all` unions every known workspace (opt-in,
+// read-only) and tags each row with its owning workspace.
 
+import { basename } from 'node:path'
 import type Yolo from '../storage/index.ts'
 import type { TimelineEvent } from '../storage/types.ts'
-import type { YoloDashboardData, YoloLedgerEntry, YoloNotificationRow } from '../shared/dashboard.ts'
+import type {
+  YoloDashboardData,
+  YoloLedgerEntry,
+  YoloNotificationRow,
+  YoloWorkspaceInfo,
+  YoloMemoryHealth,
+  WorkspaceTag,
+} from '../shared/dashboard.ts'
 import { isTodoOverdue, isTodoStale } from '../shared/dashboard.ts'
 import { localDateStr, dayBounds } from '../shared/text.ts'
 
@@ -25,9 +35,7 @@ export interface WebServerLike {
   }): void
 }
 
-/** Resolve the source-badge label of one event (TC-3/TC-5, open question #4).
- * Summaries are LLM-optional, so a missing row usually means "never
- * summarized", not "deleted" — say 来源会话 and let the badge still jump. */
+/** Resolve the source-badge label of one event (TC-3/TC-5, open question #4). */
 function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
   if (e.session_id) return sessions.get(e.session_id) ?? '来源会话'
   if (e.source === 'manual') return e.kind === 'todo_created' ? '快速记一条' : '看板操作'
@@ -36,8 +44,30 @@ function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
   return '早期记录'
 }
 
+/** Build a human workspace label from a cwd (basename; fall back to the scope slug). */
+export function workspaceLabel(cwd: string, scopeKey: string): string {
+  const name = basename(cwd.replace(/[\\/]+$/, ''))
+  return name || scopeKey
+}
+
+/** Surface memory-health metrics for the current scope (recall/extraction quality + duplicate candidates). */
+export function buildMemoryHealth(yolo: Yolo, cwd: string): YoloMemoryHealth {
+  const todayStart = new Date().setHours(0, 0, 0, 0)
+  const recallRunsToday = yolo.countRecallSince?.(cwd, todayStart) ?? 0
+  const recallOk = yolo.countRecallStatusSince?.(cwd, 'ok', todayStart) ?? 0
+  const recallErrorsToday = yolo.countRecallStatusSince?.(cwd, 'error', todayStart) ?? 0
+  const recallHitRate = recallRunsToday === 0 ? 0 : Math.round((recallOk / recallRunsToday) * 100) / 100
+  return {
+    recallRunsToday,
+    recallHitRate,
+    recallErrorsToday,
+    extractionErrorsToday: yolo.countExtractionErrorsSince?.(cwd, todayStart) ?? 0,
+    deniedToday: yolo.countEventKindSince?.(cwd, 'action_denied', todayStart) ?? 0,
+    duplicateTodos: yolo.listDuplicateTodos?.(cwd) ?? [],
+  }
+}
 /** Build the full dashboard projection for a workspace scope. */
-export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()): YoloDashboardData {
+export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr(), ws?: WorkspaceTag): YoloDashboardData {
   const now = Date.now()
   const milestones = yolo.listMilestones(cwd)
   const msTitle = new Map(milestones.map((m) => [m.id, m.title]))
@@ -59,6 +89,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
       : t.source === 'manual'
         ? '快速记一条'
         : null,
+    ws,
   }))
 
   const { from, to } = dayBounds(day)
@@ -71,6 +102,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     occurred_at: e.occurred_at,
     label: eventLabel(e, sessions),
     session_id: e.session_id ?? null,
+    ws,
   }))
   const ledgerSessions = new Set(dayEvents.map((e) => e.session_id).filter((s): s is string => !!s)).size
 
@@ -82,10 +114,12 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     todo_id: n.todo_id ?? null,
     created_at: n.created_at,
     handled: n.handled_at != null,
+    ws,
   }))
 
+  const scopeKey = yolo.resolve(cwd).scopeKey
   return {
-    scopeKey: yolo.resolve(cwd).scopeKey,
+    scopeKey,
     cwd,
     at: now,
     todos,
@@ -95,29 +129,86 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
       status: g.status,
       progress: g.progress,
       milestone_title: g.milestone_id ? msTitle.get(g.milestone_id) ?? null : null,
+      ws,
     })),
     milestones: milestones.map((m) => ({
       id: m.id,
       title: m.title,
       status: m.status,
       target_date: m.target_date,
+      ws,
     })),
     events: yolo.listEvents(cwd, 30).map((e) => ({
       id: e.id,
       kind: e.kind,
       summary: e.summary,
       occurred_at: e.occurred_at,
+      ws,
     })),
     preferences: yolo.listPreferences(cwd).map((p) => ({
       id: p.id,
       key: p.key,
       value: p.value,
+      ws,
     })),
     ledger,
     ledgerDay: day,
     ledgerSessions,
     notifications,
     unhandled: notifications.filter((n) => !n.handled).length,
+    health: buildMemoryHealth(yolo, cwd),
+  }
+}
+
+/** Dedup a row list across workspaces by (owner slug, row id). */
+function mergeRows<T extends { id: string; ws?: WorkspaceTag }>(rows: readonly T[]): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const r of rows) {
+    const key = `${r.ws?.slug ?? ''}|${r.id}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(r)
+  }
+  return out
+}
+
+/** Union several workspace dashboards into one cross-workspace (scope:all) view. */
+export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDashboardData {
+  const base = list[0]
+  if (!base) throw new Error('aggregateDashboards: empty dashboard list')
+  const allTodos = mergeRows(list.flatMap((d) => d.todos))
+  const allGoals = mergeRows(list.flatMap((d) => d.goals))
+  const allMilestones = mergeRows(list.flatMap((d) => d.milestones))
+  const allEvents = mergeRows(list.flatMap((d) => d.events))
+  const allPrefs = mergeRows(list.flatMap((d) => d.preferences))
+  const allLedger = mergeRows(list.flatMap((d) => d.ledger))
+  const allNotifications = mergeRows(list.flatMap((d) => d.notifications))
+
+  const wsMap = new Map<string, YoloWorkspaceInfo>()
+  for (const d of list) {
+    const slug = d.scopeKey
+    const label = d.todos[0]?.ws?.label ?? workspaceLabel(d.cwd, slug)
+    const existing = wsMap.get(slug)
+    const count = d.todos.filter((t) => t.status !== 'done' && t.status !== 'cancelled').length
+    if (existing) existing.count += count
+    else wsMap.set(slug, { slug, label, count })
+  }
+
+  return {
+    ...base,
+    scope: 'all',
+    workspaces: [...wsMap.values()],
+    workspaceCount: wsMap.size,
+    todos: allTodos,
+    goals: allGoals,
+    milestones: allMilestones,
+    events: allEvents,
+    preferences: allPrefs,
+    ledger: allLedger,
+    ledgerSessions: list.reduce((n, d) => n + d.ledgerSessions, 0),
+    notifications: allNotifications,
+    unhandled: allNotifications.filter((n) => !n.handled).length,
   }
 }
 
@@ -128,18 +219,40 @@ function ledgerDayOf(req: unknown): string {
   return m ? m[1] : localDateStr()
 }
 
+/** Parse ?scope=current|all; default current. */
+function scopeOf(req: unknown): 'current' | 'all' {
+  const url = (req as { url?: string } | undefined)?.url ?? ''
+  return /[?&]scope=all/.test(url) ? 'all' : 'current'
+}
+
 /** Serve GET /yolo/dashboard — the panel's live data source. */
-export function registerDashboardEndpoint(ctx: { webServer?: WebServerLike }, yolo: Yolo, cwd: () => string): void {
+export function registerDashboardEndpoint(
+  ctx: { webServer?: WebServerLike },
+  yolo: Yolo,
+  cwd: () => string,
+  opts?: { allowAggregate?: () => boolean },
+): void {
   ctx.webServer?.register({
     kind: 'prefix',
     path: '/yolo/dashboard',
     handler: async (req, res) => {
       try {
+        const scope = scopeOf(req)
+        const aggregate = scope === 'all' && (opts?.allowAggregate?.() ?? false)
+        if (aggregate) {
+          const metas = yolo.listWorkspaceMeta()
+          const day = ledgerDayOf(req)
+          const list = metas.map(({ cwd: wcwd, scopeKey }) => {
+            const ws: WorkspaceTag = { slug: scopeKey, label: workspaceLabel(wcwd, scopeKey) }
+            return { data: buildDashboardData(yolo, wcwd, day, ws), ws }
+          })
+          const data = aggregateDashboards(list.map((l) => l.data))
+          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
+          res.end(JSON.stringify(data))
+          return
+        }
         const data = buildDashboardData(yolo, cwd(), ledgerDayOf(req))
-        res.writeHead(200, {
-          'content-type': 'application/json; charset=utf-8',
-          'cache-control': 'no-cache',
-        })
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
         res.end(JSON.stringify(data))
       } catch (e) {
         res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
@@ -148,3 +261,5 @@ export function registerDashboardEndpoint(ctx: { webServer?: WebServerLike }, yo
     },
   })
 }
+
+

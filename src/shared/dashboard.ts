@@ -4,6 +4,14 @@
 
 import { localDateStr } from './text.ts'
 
+/** A workspace tag attached to aggregated rows (cross-workspace view, v0.3.0). */
+export interface WorkspaceTag {
+  /** Scope key (`sha1(cwd)/branch`) — stable, dedup anchor. */
+  slug: string
+  /** Human-friendly workspace name (e.g. the workspace folder's basename). */
+  label: string
+}
+
 /** Compact row shapes (a projection of the storage rows, safe for serialization). */
 export interface YoloTodoRow {
   id: string
@@ -23,6 +31,8 @@ export interface YoloTodoRow {
   stale?: boolean
   /** Source badge label — the creating session's one-line summary (v0.3.0). */
   session_label?: string | null
+  /** Owning workspace when aggregated across scopes (v0.3.0). */
+  ws?: WorkspaceTag
 }
 export interface YoloGoalRow {
   id: string
@@ -31,23 +41,31 @@ export interface YoloGoalRow {
   progress: number
   /** Owning milestone title (M8 plan view); null when unlinked. */
   milestone_title?: string | null
+  /** Owning workspace when aggregated across scopes (v0.3.0). */
+  ws?: WorkspaceTag
 }
 export interface YoloMilestoneRow {
   id: string
   title: string
   status: string
   target_date?: string | null
+  /** Owning workspace when aggregated across scopes (v0.3.0). */
+  ws?: WorkspaceTag
 }
 export interface YoloEventRow {
   id: string
   kind: string
   summary: string
   occurred_at: number
+  /** Owning workspace when aggregated across scopes (v0.3.0). */
+  ws?: WorkspaceTag
 }
 export interface YoloPreferenceRow {
   id: string
   key: string
   value: string
+  /** Owning workspace when aggregated across scopes (v0.3.0). */
+  ws?: WorkspaceTag
 }
 
 /** One ledger line of a day (v0.3.0): event + resolved source badge. */
@@ -61,6 +79,8 @@ export interface YoloLedgerEntry {
   label: string
   /** Originating dsh session — the badge jumps to it when set (client only). */
   session_id?: string | null
+  /** Owning workspace when aggregated across scopes (v0.3.0). */
+  ws?: WorkspaceTag
 }
 
 /** Notification card / badge row (reminders & briefs, v0.3.0). */
@@ -72,6 +92,30 @@ export interface YoloNotificationRow {
   todo_id?: string | null
   created_at: number
   handled: boolean
+  /** Owning workspace when aggregated across scopes (v0.3.0). */
+  ws?: WorkspaceTag
+}
+
+/** Memory-health snapshot (v0.3.0): recall/extraction quality + duplicate candidates. */
+export interface YoloMemoryHealth {
+  /** Semantic-recall LLM runs today (recall_log). */
+  recallRunsToday: number
+  /** Share of runs that produced expansions (0..1). */
+  recallHitRate: number
+  /** Semantic-recall LLM runs today that errored. */
+  recallErrorsToday: number
+  /** LLM extraction runs today that errored. */
+  extractionErrorsToday: number
+  /** Rejected actions today (action_denied). */
+  deniedToday: number
+  /** Open-todo near-duplicate candidate pairs (normalized title collision within scope). */
+  duplicateTodos: Array<{ a: string; b: string }>
+}/** Cross-workspace aggregate summary (v0.3.0). */
+export interface YoloWorkspaceInfo {
+  slug: string
+  label: string
+  /** Number of open todos contributed by this workspace. */
+  count: number
 }
 
 /** Complete dashboard projection served by the host. */
@@ -79,6 +123,12 @@ export interface YoloDashboardData {
   scopeKey: string
   cwd: string
   at: number
+  /** 'current' (default) or 'all' (cross-workspace aggregation, v0.3.0). */
+  scope?: 'current' | 'all'
+  /** Aggregate workspace list when scope === 'all'. */
+  workspaces?: YoloWorkspaceInfo[]
+  /** Number of workspaces in the aggregate view. */
+  workspaceCount?: number
   todos: YoloTodoRow[]
   goals: YoloGoalRow[]
   milestones: YoloMilestoneRow[]
@@ -94,6 +144,8 @@ export interface YoloDashboardData {
   notifications: YoloNotificationRow[]
   /** Unhandled notification count — the sidebar badge number (TB-3). */
   unhandled: number
+  /** Memory-health snapshot (v0.3.0). */
+  health?: YoloMemoryHealth
 }
 
 const DAY_MS = 86_400_000
@@ -123,3 +175,4 @@ export function todoSummary(row: YoloTodoRow): string {
   if (row.priority && row.priority !== 'normal') parts.push(`[${row.priority}]`)
   return parts.join(' ')
 }
+

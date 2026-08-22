@@ -8,21 +8,27 @@
 import type { KanbanFilter } from '../../src/shared/filters.ts'
 import { DEFAULT_FILTER } from '../../src/shared/filters.ts'
 
+export type WorkspaceScope = 'current' | 'all'
+
 export interface PanelUiState {
   filter: KanbanFilter
   sideChatOpen: boolean
+  workspaceScope: WorkspaceScope
 }
 
 const state: PanelUiState = {
   filter: { ...DEFAULT_FILTER },
   sideChatOpen: false,
+  workspaceScope: 'current',
 }
 
 export function readPanelState(): PanelUiState {
-  return { filter: { ...state.filter }, sideChatOpen: state.sideChatOpen }
+  return { filter: { ...state.filter }, sideChatOpen: state.sideChatOpen, workspaceScope: state.workspaceScope }
 }
 
 export function writePanelState(patch: Partial<PanelUiState>): void {
   if (patch.filter !== undefined) state.filter = { ...patch.filter }
   if (patch.sideChatOpen !== undefined) state.sideChatOpen = patch.sideChatOpen
+  if (patch.workspaceScope !== undefined) state.workspaceScope = patch.workspaceScope
 }
+
