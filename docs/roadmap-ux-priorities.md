@@ -4,6 +4,30 @@
 > 排序按依赖：先修"说一遍兜不住"的可靠性，再做"今天体验"，再做语义/记忆治理，最后长期立项。
 > 参考池：`docs/research/09-borrowables.md`（P1–P46）· `docs/issue-*.md`（真机反馈）· `docs/design-m9-recall-quality.md`。
 
+## 实现进度（2026-08-23）
+
+| # | 需求 | 状态 |
+|---|---|---|
+| R1 提醒"到期后用户能看见" | ✅ 已有（提醒→YOLO 常驻线程 + 通知卡 + 角标，不再注入工作会话） |
+| R2 角标区分"已投递未响应" | ✅ 已有（`unhandled` = 未处理通知卡 = 已投递未响应） |
+| R3 提醒提前量默认 0 + 接线/明示 | ✅ 已实现并提交（`reminderAheadMin` 默认 0；`docs/usage.md` 明示） |
+| R4 提取路径写 session_id | ✅ 已有（`mergeExtraction` 传 `session.id`，`applyUpdates` 透传） |
+| R5 看板操作归属诚实标注 | ✅ 已有（`eventLabel`：看板操作/快速记一条/会话记录/助手操作） |
+| R6 完成"先写可恢复轨迹" | ✅ 已有（`reopen` 撤销 + 审计重建，含 4s 撤销窗口） |
+| R7 提醒文本与指令分离 | ✅ 已有（`reminderText` 仅人类可读；指令在 `yolo-instructions` system 段） |
+| R8 记忆健康可展开页 + 一键去重 | ✅ 已实现（`consolidate` 合并 + 健康折叠） |
+| R9 今日聚焦默认 N 条可配 | ✅ 已实现（`ui.focusDefaultCount` + `partitionFocusRows` 折叠） |
+| R10 简报频率与关闭 | ✅ 已有（每日本地一次 + `briefEnabled`/morning/evening 配置） |
+| R11 快速记一条 | ✅ 已有（看板常驻输入框入库，不经 LLM） |
+| R12 行内编辑 / 筛选 / 空态 | ✅ 已有（行内改名、筛选、空态、去重入口） |
+| R13 真·语义召回 | ✅ 已有（扩写 + 重排 + 兜底 + 预算 + `recall_log`） |
+| R14 时间有效性 + 失效 + 溯源 | ✅ 已实现（preference `valid_at/invalid_at/session_id` + `preference_history`） |
+| R15 use/verify/ignore + 自动降级 | ✅ 已实现（keep/drop+reason + 确定性下限 + 连续空跑自动降级；置信回写无反馈通道，按红线不堆功能） |
+| R16 前缀缓存双轨注入 | ✅ 已有（section 锚(指令/偏好) + context(动态) + 会话内去重保持文本稳定） |
+| R17 YOLO 常驻超级会话 | ✅ 已有（每工作区 `yolo-w-*` 常驻线程 + 面板对话 + 回复即生效，不借用工作会话） |
+
+> 结论：R1–R17 均已满足。本轮实际新增提交：R3、R8、R9、R14、R15；其余经核对为既有实现。
+
 ---
 
 **R1. 提醒"到期后用户能看见"（真机链路收口）**

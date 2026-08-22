@@ -38,6 +38,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ui.aggregateAcrossWorkspaces` config.** Default `false` (isolation by
   default); aggregation is a view-only union, never a write path.
 
+### Added — roadmap UX/robustness follow-ups (docs/roadmap-ux-priorities.md)
+
+- **R3 — reminder lead semantics.** `reminder.aheadMin` default is now `0`
+  (fire at/after the due time, honoring "到点就触发"); a positive value opts
+  into an early lead. Prevents "5 分钟后提醒我" from firing on the next tick.
+  `validate` accepts `0`; the settings wording and `docs/usage.md` were clarified
+  (扫描间隔 is read at startup; 提前量 is live).
+- **R8 — memory-health fold.** The panel's memory-health surface is now an
+  expandable fold: recall hit-rate / errors / rejected actions, plus near-duplicate
+  todo candidates with a one-click `consolidate` (merge) action. `listDuplicateTodos`
+  now returns richer `{a,b,aTitle,bTitle}` pairs so the UI can render both sides.
+- **R9 — configurable focus cap.** `ui.focusDefaultCount` (default `0` = show all)
+  gates the default board view: top-N most-important open rows are surfaced and
+  the rest fold into an expandable "其余 N 条" section, so a busy board opens quiet.
+- **R14 — preference time-validity + supersede provenance.** `preferences` gain
+  `valid_at`/`invalid_at`/`session_id`; a changed value supersedes the old one in
+  place and records the superseded fact in a new append-only `preference_history`
+  table (evidence trail). Injection and FTS recall only see current values
+  (auto-expire); extraction threads the originating `session_id` for provenance.
+- **R15 — semantic auto-degrade guard.** `semanticRecall.degradeAfterEmpty`
+  (default `5`) hardens the read path: after that many consecutive empty LLM
+  expansion runs, semantic widening is silenced for the day (deterministic FTS
+  only), auto-recovering on a successful run or via `resetDegrade`.
+- **Verified already present (no changes needed):** R1 (reminder→resident thread +
+  notification card), R2 (unhandled badge), R4 (extraction `session_id`), R5
+  (honest ledger labels), R6 (undo/reopen trail), R7 (human-readable reminder
+  text), R10 (once-per-day brief + toggle), R11 (quick capture), R12 (inline
+  edit/filters), R13 (semantic recall), R16 (section/context dual-track + session
+  dedup), R17 (per-workspace resident thread with panel chat + reply-to-act).
+
 ### Added — M9 recall quality & mechanism hardening (v0.4.0 line, per `docs/design-m9-recall-quality.md`)
 
 - **Hybrid multi-query recall (`ftsRecallSearch`).** The old single-phrase FTS
