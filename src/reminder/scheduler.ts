@@ -166,8 +166,17 @@ export interface ReminderRuntime {
   enabled: boolean
 }
 
-/** Normalize the settings `reminder` section; missing or invalid fields fall
- * back to DEFAULTS so a hand-edited settings file cannot stall the scheduler. */
+/**
+ * Normalize the settings `reminder` section; missing or invalid fields fall
+ * back to DEFAULTS so a hand-edited settings file cannot stall the scheduler.
+ *
+ * `aheadMin` semantics: how many minutes BEFORE the due time a todo is
+ * considered "due for a reminder" (a lead window). `0` (the default) means
+ * "fire at/after the due time" — the promise is *到点就触发*. Any positive value
+ * opts into an early lead reminder (e.g. 60 = remind as soon as we are within
+ * an hour of the due time). It never short-circuits an imminent relative
+ * reminder such as "5 分钟后提醒我" unless the user explicitly raised it.
+ */
 export function resolveReminderRuntime(
   rem?: { checkIntervalSec?: number; aheadMin?: number; enabled?: boolean },
 ): ReminderRuntime {
@@ -185,7 +194,8 @@ export interface SchedulerDeps {
   cwd: () => string
   deliver?: YoloDeliver
   intervalMs?: number
-  /** Read fresh each tick so Settings edits land without a plugin reload. */
+  /** Read fresh each tick so Settings edits land without a plugin reload.
+   * Lead window in ms; the default 0 fires at/after the due time (到点就触发). */
   aheadMs?: () => number
   /** Reminder kill-switch (default true) — false idles only the due scan. */
   reminderEnabled?: () => boolean

@@ -61,7 +61,7 @@ export const Config: z<Config> = z.object({
   reminder: z.object({
     enabled: z.boolean().default(true),
     checkIntervalSec: z.number().default(300).min(60),
-    aheadMin: z.number().default(60).min(5),
+    aheadMin: z.number().default(0).min(0),
   }),
   brief: z.object({
     enabled: z.boolean().default(true),

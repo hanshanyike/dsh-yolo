@@ -96,6 +96,16 @@ describe('maybeWriteDailySnapshot', () => {
 })
 
 describe('resolveReminderRuntime', () => {
+  it('defaults aheadMin to 0 so "到点才提醒" is the default (R3)', () => {
+    expect(resolveReminderRuntime().aheadMs).toBe(0)
+    expect(DEFAULTS.reminderAheadMin).toBe(0)
+  })
+
+  it('accepts an explicit 0 lead and honors a positive lead (R3)', () => {
+    expect(resolveReminderRuntime({ aheadMin: 0 }).aheadMs).toBe(0)
+    expect(resolveReminderRuntime({ aheadMin: 30 }).aheadMs).toBe(1_800_000)
+  })
+
   it('passes valid settings through', () => {
     expect(resolveReminderRuntime({ checkIntervalSec: 120, aheadMin: 30, enabled: true })).toEqual({
       intervalMs: 120_000,

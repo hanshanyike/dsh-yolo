@@ -23,7 +23,7 @@ export const PROMPT_ORDER = {
 export const DEFAULTS = {
   scope: 'workspace' as const,
   reminderCheckIntervalSec: 300,
-  reminderAheadMin: 60,
+  reminderAheadMin: 0,
   extractionMinIntervalSec: 30,
   extractionTokenBudgetPerTurn: 2048,
   extractionTokenBudgetPerDay: 100_000,
