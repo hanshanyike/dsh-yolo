@@ -72,9 +72,51 @@ describe('buildDashboardData', () => {
     // v0.3.0 C/B: ledger badge + notification card + unhandled count
     expect(data.todos[0].session_label).toBe('修登录bug')
     expect(data.ledger[0]).toMatchObject({ kind: 'todo_completed', label: '修登录bug' })
+    // v0.3.1 C: ledger rows carry the source session for the jump link
+    expect(data.ledger[0].session_id).toBe('s1')
     expect(data.ledgerSessions).toBe(1)
     expect(data.notifications).toHaveLength(1)
     expect(data.unhandled).toBe(1)
+  })
+
+  it('ledger counts distinct source sessions; manual rows stay non-jumpable (v0.3.1 C)', () => {
+    const now = Date.now()
+    const ev = (id: string, over: Partial<TimelineEvent>): TimelineEvent => ({
+      id, kind: 'note', summary: id, occurred_at: now,
+      session_id: null, source: 'llm', scope_key: 'test/main', ...over,
+    })
+    const yolo = {
+      resolve: () => ({ scopeKey: 'test/main', db: {}, dataDir: '' }),
+      listTodos: () => [],
+      listGoals: () => [],
+      listMilestones: () => [],
+      listEvents: () => [],
+      listEventsBetween: () => [
+        ev('a', { session_id: 's1', kind: 'todo_created' }),
+        ev('b', { session_id: 's1', kind: 'todo_completed' }),
+        ev('c', { session_id: 's2', kind: 'note' }),
+        ev('d', { session_id: null, source: 'manual', kind: 'todo_created' }),
+        ev('e', { session_id: null, source: 'tool', kind: 'goal_progress' }),
+        ev('f', { session_id: 's9', kind: 'note' }),
+      ],
+      listPreferences: () => [],
+      listSessionSummaries: () => [
+        { session_id: 's1', summary: '会话一', scope_key: 'test/main', updated_at: now },
+        { session_id: 's2', summary: '会话二', scope_key: 'test/main', updated_at: now },
+      ],
+      listNotifications: () => [],
+    } as unknown as Yolo
+    const data = buildDashboardData(yolo, '/tmp/proj')
+    // distinct session count ignores manual/tool rows; s9 still counts
+    expect(data.ledgerSessions).toBe(3)
+    const byId = new Map(data.ledger.map((e) => [e.id, e]))
+    expect(byId.get('a')).toMatchObject({ session_id: 's1', label: '会话一' })
+    expect(byId.get('b')).toMatchObject({ session_id: 's1', label: '会话一' })
+    expect(byId.get('c')).toMatchObject({ session_id: 's2', label: '会话二' })
+    expect(byId.get('d')).toMatchObject({ session_id: null, label: '快速记一条' })
+    expect(byId.get('e')).toMatchObject({ session_id: null, label: '助手操作' })
+    // unsummarized (not deleted) session: neutral badge, jump still possible
+    expect(byId.get('f')).toMatchObject({ session_id: 's9', label: '来源会话' })
   })
 
   it('joins milestone titles and computes overdue/stale (M8)', () => {

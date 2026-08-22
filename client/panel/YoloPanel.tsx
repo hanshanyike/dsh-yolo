@@ -1,20 +1,26 @@
-// YOLO full-width panel shell (v0.3.0 A, TA-1) — opens beside the sidebar at
-// session width. Two tabs over the same data: 看板 (default, KanbanView +
-// collapsible side chat) and 对话 (the resident thread's full view). Tab,
-// filter and side-chat visibility live in panel/state.ts so a close/reopen
-// keeps them (TA-6).
+// YOLO panel shell — Mono design system v2.1 (frontend-redesign.md ch.4).
+// The panel is always the kanban; the chat is one surface in two sizes: a
+// 340px side pane that expands full-screen and back (⤢/⤡). Esc unwinds
+// fullscreen → side chat → closed. Narrow panels (<480px) open the chat
+// full-screen directly instead of side-by-side. Filter + side-chat visibility
+// persist across close/reopen via panel/state.ts.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData } from '../../src/shared/dashboard.ts'
+import { ensureYoloStyle, detectYoloTheme } from '../design/style.ts'
+import { yoloTokens } from '../design/tokens.ts'
+import { IcChat, IcClose, IcExpand, IcRefresh, IcShrink } from '../design/icons.tsx'
 import { YoloLogo } from '../YoloLogo.tsx'
 import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
 import { KanbanView } from './KanbanView.tsx'
-import { readPanelState, writePanelState, type PanelTab } from './state.ts'
+import { readPanelState, writePanelState } from './state.ts'
 
 export interface YoloPanelProps {
   /** Panel left edge (the sidebar's right edge) — spans to the viewport right. */
   left: number
   onClose: () => void
+  /** Jump to a dsh session (ledger source badges); no-op when unavailable. */
+  openSession?: (sessionId: string) => void
 }
 
 interface LoadState {
@@ -25,17 +31,38 @@ interface LoadState {
 
 const POLL_MS = 30_000
 
-const TABS: { key: PanelTab; label: string }[] = [
-  { key: 'kanban', label: '看板' },
-  { key: 'chat', label: '对话' },
-]
+/** Data signature — the sweep line runs only when this actually changes (6.2). */
+function dataSig(d: YoloDashboardData): string {
+  return [
+    d.at,
+    d.todos.length,
+    d.ledger.length,
+    d.notifications.filter((n) => !n.handled).length,
+    d.goals.map((g) => `${g.id}:${g.progress}:${g.status}`).join(','),
+    d.milestones.map((m) => `${m.id}:${m.status}`).join(','),
+  ].join('|')
+}
 
-export function YoloPanel({ left, onClose }: YoloPanelProps): JSX.Element {
-  const [state, setState] = useState<LoadState>({ loading: false, error: null, data: null })
+export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.Element {
+  ensureYoloStyle()
+  const theme = useMemo(() => detectYoloTheme(), [])
+
+  const [state, setState] = useState<LoadState>({ loading: true, error: null, data: null })
   const initial = readPanelState()
-  const [tab, setTab] = useState<PanelTab>(initial.tab)
   const [sideChatOpen, setSideChatOpen] = useState(initial.sideChatOpen)
+  const [chatFullscreen, setChatFullscreen] = useState(false)
   const [anchor, setAnchor] = useState<ChatAnchor | null>(null)
+  const [sweepTick, setSweepTick] = useState(0)
+  const lastSig = useRef<string | null>(null)
+
+  // Panel width → Compact gear (<480px: chat opens full-screen, toolbar wraps).
+  const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 1000 : Math.max(0, window.innerWidth - left)))
+  useEffect(() => {
+    const on = (): void => { setWidth(Math.max(0, window.innerWidth - left)) }
+    window.addEventListener('resize', on)
+    return () => { window.removeEventListener('resize', on) }
+  }, [left])
+  const compact = width < yoloTokens.compactBreakpoint
 
   const load = useCallback(async (): Promise<void> => {
     setState((s) => ({ ...s, loading: true, error: null }))
@@ -43,6 +70,9 @@ export function YoloPanel({ left, onClose }: YoloPanelProps): JSX.Element {
       const r = await fetch('/yolo/dashboard', { headers: { accept: 'application/json' }, cache: 'no-store' })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = (await r.json()) as YoloDashboardData
+      const sig = dataSig(data)
+      if (lastSig.current !== null && sig !== lastSig.current) setSweepTick((t) => t + 1)
+      lastSig.current = sig
       setState({ loading: false, error: null, data })
     } catch (e) {
       setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
@@ -55,239 +85,129 @@ export function YoloPanel({ left, onClose }: YoloPanelProps): JSX.Element {
     return () => { window.clearInterval(timer) }
   }, [load])
 
-  // Persist view state so reopening keeps tab / side chat (TA-6).
-  useEffect(() => { writePanelState({ tab }) }, [tab])
+  // Persist view state so reopening keeps the side chat (TA-6).
   useEffect(() => { writePanelState({ sideChatOpen }) }, [sideChatOpen])
 
-  // Esc closes the side chat first (TA-3), then the panel itself.
+  // Esc unwinds the chat surface: fullscreen → side chat → closed panel.
+  const closeSideChat = useCallback(() => {
+    setSideChatOpen(false)
+    setChatFullscreen(false)
+    setAnchor(null)
+  }, [])
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      if (sideChatOpen && tab === 'kanban') closeSideChat()
+      if (chatFullscreen) setChatFullscreen(false)
+      else if (sideChatOpen) closeSideChat()
       else onClose()
     }
     document.addEventListener('keydown', listener)
     return () => { document.removeEventListener('keydown', listener) }
-  })
+  }, [chatFullscreen, sideChatOpen, closeSideChat, onClose])
 
   const openAnchoredChat = useCallback((a: ChatAnchor) => {
     setAnchor(a)
     setSideChatOpen(true)
   }, [])
 
-  // TA-4: the plain 对话 toggle opens the side chat with board-wide context.
   const toggleSideChat = useCallback(() => {
     setAnchor(null)
     setSideChatOpen((v) => !v)
   }, [])
 
-  const closeSideChat = useCallback(() => {
-    setSideChatOpen(false)
-    setAnchor(null)
-  }, [])
+  // One chat surface, two sizes; on compact panels the side pane IS fullscreen.
+  const chatShowingFull = chatFullscreen || (sideChatOpen && compact)
+  const showSideDock = sideChatOpen && !chatFullscreen && !compact
+
+  const d = new Date()
+  const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日 · 周${'日一二三四五六'[d.getDay()]}`
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        left,
-        right: 0,
-        top: 0,
-        bottom: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--background, #fff)',
-        color: 'var(--foreground, #111)',
-        borderLeft: '1px solid var(--border, #ddd)',
-        boxShadow: '8px 0 32px rgba(0,0,0,0.12)',
-        fontSize: 13,
-        zIndex: 10000,
-      }}
+      className={`yolo-scope panel${compact ? ' compact' : ''}`}
+      data-y-theme={theme}
+      style={{ position: 'fixed', left, right: 0, top: 0, bottom: 0, zIndex: 10000 }}
     >
-      {/* header: tabs + actions */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: '10px 20px',
-          borderBottom: '1px solid var(--border, #eee)',
-          flex: 'none',
-        }}
-      >
-        <YoloLogo size={20} />
-        <strong style={{ fontSize: 15 }}>YOLO 助手看板</strong>
-        {state.data && (
-          <span style={{ fontSize: 11, opacity: 0.55, whiteSpace: 'nowrap' }}>
-            更新于 {fmtTime(state.data.at)}
-          </span>
-        )}
-
-        <span style={{ display: 'flex', gap: 4, marginLeft: 12 }}>
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => { setTab(t.key) }}
-              style={{
-                padding: '4px 14px',
-                borderRadius: 8,
-                border: 'none',
-                background: tab === t.key ? 'rgba(47,111,237,0.12)' : 'transparent',
-                color: tab === t.key ? 'var(--accent, #2f6fed)' : 'var(--foreground-secondary, #666)',
-                fontWeight: tab === t.key ? 600 : 400,
-                fontSize: 13,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {t.label}
+      {/* ① header 48px */}
+      <header className="p-head">
+        <div className="brand">
+          <YoloLogo size={18} />
+          <span className="brand-name">YOLO</span>
+          <span className="p-date mono">{dateLabel}</span>
+        </div>
+        <div className="p-head-acts">
+          {!chatShowingFull && (
+            <button type="button" className={`ctoggle${sideChatOpen ? ' on' : ''}`} onClick={toggleSideChat} title={sideChatOpen ? '收起侧栏对话 (Esc)' : '展开侧栏对话'}>
+              <span className="tico"><IcChat size={13} /></span>对话
             </button>
-          ))}
-        </span>
-
-        {/* the persistent chat toggle (design 4.2 #8) — kanban tab only */}
-        {tab === 'kanban' && (
-          <button
-            type="button"
-            onClick={toggleSideChat}
-            title={sideChatOpen ? '收起侧栏对话 (Esc)' : '展开侧栏对话'}
-            style={{
-              padding: '4px 12px',
-              borderRadius: 8,
-              border: '1px solid var(--border, #ddd)',
-              background: sideChatOpen ? 'rgba(47,111,237,0.08)' : 'transparent',
-              color: sideChatOpen ? 'var(--accent, #2f6fed)' : 'inherit',
-              fontSize: 12,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            💬 对话
-          </button>
-        )}
-
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-          <button
-            type="button"
-            onClick={() => { void load() }}
-            title="立即刷新"
-            style={{
-              padding: '3px 10px',
-              borderRadius: 6,
-              border: '1px solid var(--border, #ddd)',
-              background: 'transparent',
-              color: 'inherit',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
-          >
-            {state.loading ? '刷新中…' : '↻ 刷新'}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            title="关闭 (Esc)"
-            style={{
-              padding: '3px 10px',
-              borderRadius: 6,
-              border: '1px solid var(--border, #ddd)',
-              background: 'transparent',
-              color: 'inherit',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
-          >
-            ✕
-          </button>
-        </span>
-      </div>
-
-      {/* body: main area + side chat */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          {state.error && (
-            <p style={{ color: '#c0392b', margin: 0, padding: '14px 20px 0' }}>加载失败：{state.error}（插件未加载或服务未启动？）</p>
           )}
-          {!state.error && state.data === null && !state.loading && (
-            <p style={{ opacity: 0.6, padding: '14px 20px' }}>尚未加载数据。</p>
+          {chatShowingFull && (
+            <button type="button" className="ctoggle" onClick={() => { setChatFullscreen(false) }} title="收起为侧栏 (Esc)">
+              <span className="tico"><IcShrink size={13} /></span>侧栏
+            </button>
           )}
-          {state.data !== null && (
-            tab === 'kanban'
-              ? <KanbanView data={state.data} refresh={load} onOpenChat={openAnchoredChat} />
-              : <ChatPane variant="full" />
+          <button type="button" className={`hbtn${state.loading ? ' spin' : ''}`} onClick={() => { void load() }} title="立即刷新" aria-label="立即刷新">
+            <IcRefresh size={15} />
+          </button>
+          <button type="button" className="hbtn" onClick={onClose} title="关闭 (Esc)" aria-label="关闭面板">
+            <IcClose size={15} />
+          </button>
+        </div>
+      </header>
+
+      {/* body: full-screen chat takes over the panel; the board stays mounted
+          (display:none) so its filter state survives the round-trip (4.2⑨). */}
+      {chatShowingFull ? (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <ChatPane variant="full" anchor={anchor} />
+        </div>
+      ) : (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {state.error && state.data === null && (
+              <div className="err-line">
+                <span>看板加载失败：{state.error}</span>
+                <button type="button" className="nact" onClick={() => { void load() }}>重试</button>
+              </div>
+            )}
+            {state.data !== null && (
+              <div style={state.error ? { opacity: 0.6 } : undefined}>
+                <KanbanView data={state.data} refresh={load} onOpenChat={openAnchoredChat} openSession={openSession} sweepTick={sweepTick} />
+              </div>
+            )}
+            {state.data === null && !state.error && (
+              <div className="p-main" aria-hidden="true">
+                <div className="skel-notif" />
+                <div className="skel-head" />
+                <div className="skel-row" /><div className="skel-row" /><div className="skel-row" />
+                <div className="skel-head" />
+                <div className="skel-row" /><div className="skel-row" />
+              </div>
+            )}
+          </div>
+
+          {showSideDock && (
+            <aside className="dock">
+              <div className="dock-head">
+                <span className="dock-tag">锚定</span>
+                <span className="dock-ctx" title={anchor?.title ?? '看板全局'}>{anchor?.title ?? '看板全局'}</span>
+                <button type="button" className="dact" onClick={() => { setChatFullscreen(true) }} title="展开为全屏">
+                  <span className="tico"><IcExpand size={11} /></span>全屏
+                </button>
+                <button type="button" className="hbtn" onClick={closeSideChat} title="收起 (Esc)" aria-label="收起侧栏对话">
+                  <IcClose size={14} />
+                </button>
+              </div>
+              <ChatPane variant="side" anchor={anchor} />
+            </aside>
           )}
         </div>
+      )}
 
-        {tab === 'kanban' && sideChatOpen && (
-          <aside
-            style={{
-              flex: 'none',
-              width: 'min(400px, 40%)',
-              borderLeft: '1px solid var(--border, #eee)',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            <div
-              style={{
-                flex: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 12px',
-                borderBottom: '1px solid var(--border, #eee)',
-                fontSize: 12,
-                opacity: 0.8,
-              }}
-            >
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                侧栏对话{anchor ? ` · ${anchor.title}` : ' · 看板全局'}
-              </span>
-              <button
-                type="button"
-                onClick={closeSideChat}
-                title="收起 (Esc)"
-                style={{
-                  padding: '2px 8px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border, #ddd)',
-                  background: 'transparent',
-                  color: 'inherit',
-                  fontSize: 11,
-                  cursor: 'pointer',
-                }}
-              >
-                ✕
-              </button>
-            </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <ChatPane variant="side" anchor={anchor} />
-            </div>
-          </aside>
-        )}
-      </div>
-
-      {/* footer */}
-      <div
-        style={{
-          flex: 'none',
-          padding: '8px 20px',
-          borderTop: '1px solid var(--border, #eee)',
-          fontSize: 11,
-          opacity: 0.6,
-        }}
-      >
-        YOLO 在每轮对话结束后用大模型语义提取记忆并自动去重；看板每 30 秒自动刷新。
-        {state.data?.scopeKey ? ` 作用域 ${state.data.scopeKey}` : ''}
-      </div>
+      {/* ⑦ footer 28px */}
+      <footer className="p-foot mono">
+        看板每 30 秒自动刷新{state.data?.scopeKey ? ` · 作用域 ${state.data.scopeKey}` : ''}
+      </footer>
     </div>
   )
-}
-
-function fmtTime(ms: number): string {
-  if (!ms) return ''
-  const d = new Date(ms)
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`
 }

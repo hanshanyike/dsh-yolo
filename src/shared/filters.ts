@@ -26,6 +26,11 @@ export interface KanbanFilter {
   staleOnly: boolean
   milestoneTitle: string | null
   keyword: string | null
+  /** Due-date window [rangeFrom, rangeTo] (local YYYY-MM-DD, inclusive).
+   * Either side may be null (open-ended); both null = no window. Todos
+   * without a due date drop out while a window is active. */
+  rangeFrom: string | null
+  rangeTo: string | null
 }
 
 export const DEFAULT_FILTER: KanbanFilter = {
@@ -36,6 +41,50 @@ export const DEFAULT_FILTER: KanbanFilter = {
   staleOnly: false,
   milestoneTitle: null,
   keyword: null,
+  rangeFrom: null,
+  rangeTo: null,
+}
+
+/** Quick due-date windows offered by the filter menu. */
+export type RangePresetKind = 'today' | 'thisWeek' | 'thisMonth'
+
+function addDays(day: string, n: number): string {
+  const d = new Date(`${day}T00:00:00`)
+  d.setDate(d.getDate() + n)
+  return localDateStr(d)
+}
+
+/** Resolve a quick window to concrete [from, to] (local YYYY-MM-DD, inclusive). */
+export function rangeOfPreset(kind: RangePresetKind, today = localDateStr()): { rangeFrom: string; rangeTo: string } {
+  if (kind === 'today') return { rangeFrom: today, rangeTo: today }
+  if (kind === 'thisWeek') {
+    // Monday..Sunday of the current week (local)
+    const offset = (new Date(`${today}T00:00:00`).getDay() + 6) % 7
+    const monday = addDays(today, -offset)
+    return { rangeFrom: monday, rangeTo: addDays(monday, 6) }
+  }
+  const ym = today.slice(0, 7)
+  return { rangeFrom: `${ym}-01`, rangeTo: localDateStr(new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)) }
+}
+
+/** Inverse of rangeOfPreset for the select control; 'custom' when a window is
+ * set but matches no preset, null when no window is active. */
+export function matchRangePreset(from: string | null, to: string | null, today = localDateStr()): RangePresetKind | 'custom' | null {
+  if (from === null && to === null) return null
+  for (const k of ['today', 'thisWeek', 'thisMonth'] as const) {
+    const p = rangeOfPreset(k, today)
+    if (p.rangeFrom === from && p.rangeTo === to) return k
+  }
+  return 'custom'
+}
+
+/** Compact chip label for the active window, e.g. "8/18~8/24". */
+export function rangeLabel(from: string | null, to: string | null): string {
+  const short = (d: string): string => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
+  if (from !== null && to !== null) return `${short(from)}~${short(to)}`
+  if (from !== null) return `${short(from)} 起`
+  if (to !== null) return `至 ${short(to)}`
+  return ''
 }
 
 /** Any non-default detail filter or focus active? (drives the 筛选 chip) */
@@ -46,7 +95,9 @@ export function hasDetailFilter(f: KanbanFilter): boolean {
     f.overdueOnly ||
     f.staleOnly ||
     f.milestoneTitle !== null ||
-    (f.keyword !== null && f.keyword !== '')
+    (f.keyword !== null && f.keyword !== '') ||
+    f.rangeFrom !== null ||
+    f.rangeTo !== null
   )
 }
 
@@ -105,6 +156,12 @@ export function applyKanbanFilter(
     if (f.staleOnly && !t.stale) return false
     if (f.milestoneTitle !== null && (t.milestone_title ?? '') !== f.milestoneTitle) return false
     if (kw && !t.title.toLowerCase().includes(kw)) return false
+    if (f.rangeFrom !== null || f.rangeTo !== null) {
+      const due = dayOf(t.due_at)
+      if (!due) return false
+      if (f.rangeFrom !== null && due < f.rangeFrom) return false
+      if (f.rangeTo !== null && due > f.rangeTo) return false
+    }
     return true
   })
 }

@@ -11,6 +11,9 @@ import {
   dueBucket,
   focusCounts,
   hasDetailFilter,
+  matchRangePreset,
+  rangeLabel,
+  rangeOfPreset,
   sortForKanban,
   type KanbanFilter,
 } from '../src/shared/filters.ts'
@@ -121,6 +124,67 @@ describe('detail filters AND-combine (TE-3)', () => {
     expect(hasDetailFilter(filter({ inProgressOnly: true }))).toBe(true)
     expect(hasDetailFilter(filter({ keyword: '' }))).toBe(false)
     expect(hasDetailFilter(filter({ keyword: 'x' }))).toBe(true)
+  })
+})
+
+describe('due-date windows (v0.3.1 D)', () => {
+  it('rangeOfPreset resolves today / this week (Mon..Sun) / this month', () => {
+    expect(rangeOfPreset('today', TODAY)).toEqual({ rangeFrom: TODAY, rangeTo: TODAY })
+    // 2026-08-22 is a Saturday → week = 8/17..8/23
+    expect(rangeOfPreset('thisWeek', TODAY)).toEqual({ rangeFrom: '2026-08-17', rangeTo: '2026-08-23' })
+    expect(rangeOfPreset('thisMonth', TODAY)).toEqual({ rangeFrom: '2026-08-01', rangeTo: '2026-08-31' })
+  })
+
+  it('matchRangePreset maps a window back to its preset, custom, or null', () => {
+    expect(matchRangePreset(null, null, TODAY)).toBeNull()
+    const w = rangeOfPreset('thisWeek', TODAY)
+    expect(matchRangePreset(w.rangeFrom, w.rangeTo, TODAY)).toBe('thisWeek')
+    expect(matchRangePreset('2026-08-20', '2026-08-25', TODAY)).toBe('custom')
+    expect(matchRangePreset('2026-08-20', null, TODAY)).toBe('custom')
+  })
+
+  it('rangeLabel renders a compact chip for closed / open-ended windows', () => {
+    expect(rangeLabel('2026-08-17', '2026-08-23')).toBe('8/17~8/23')
+    expect(rangeLabel('2026-08-17', null)).toBe('8/17 起')
+    expect(rangeLabel(null, '2026-08-23')).toBe('至 8/23')
+    expect(rangeLabel(null, null)).toBe('')
+  })
+
+  it('window filters due dates inclusively on both ends', () => {
+    const todos = [
+      row('before', { due_at: '2026-08-19' }),
+      row('from', { due_at: '2026-08-20' }),
+      row('inside', { due_at: '2026-08-22' }),
+      row('to', { due_at: '2026-08-24' }),
+      row('after', { due_at: '2026-08-25' }),
+    ]
+    const ids = applyKanbanFilter(todos, filter({ rangeFrom: '2026-08-20', rangeTo: '2026-08-24' }), TODAY).map((t) => t.id)
+    expect(ids).toEqual(['from', 'inside', 'to'])
+  })
+
+  it('open-ended windows keep one side unbounded; undated todos drop out while a window is active', () => {
+    const todos = [
+      row('early', { due_at: '2026-08-01' }),
+      row('late', { due_at: '2026-09-15' }),
+      row('undated'),
+    ]
+    expect(applyKanbanFilter(todos, filter({ rangeFrom: '2026-08-20' }), TODAY).map((t) => t.id)).toEqual(['late'])
+    expect(applyKanbanFilter(todos, filter({ rangeTo: '2026-08-20' }), TODAY).map((t) => t.id)).toEqual(['early'])
+    // no window → undated stays (preset 全部)
+    expect(applyKanbanFilter(todos, DEFAULT_FILTER, TODAY).map((t) => t.id)).toEqual(['early', 'late', 'undated'])
+  })
+
+  it('window AND-combines with other detail filters and flags the 筛选 chip', () => {
+    const todos = [
+      row('hit', { status: 'in_progress', title: '联调', due_at: '2026-08-23' }),
+      row('wrong-status', { status: 'pending', title: '联调', due_at: '2026-08-23' }),
+      row('wrong-week', { status: 'in_progress', title: '联调', due_at: '2026-09-23' }),
+    ]
+    expect(
+      applyKanbanFilter(todos, filter({ inProgressOnly: true, keyword: '联调', rangeFrom: '2026-08-17', rangeTo: '2026-08-23' }), TODAY).map((t) => t.id),
+    ).toEqual(['hit'])
+    expect(hasDetailFilter(filter({ rangeFrom: '2026-08-01' }))).toBe(true)
+    expect(hasDetailFilter(filter({ rangeTo: '2026-08-31' }))).toBe(true)
   })
 })
 

@@ -25,9 +25,11 @@ export interface WebServerLike {
   }): void
 }
 
-/** Resolve the source-badge label of one event (TC-3/TC-5, open question #4). */
+/** Resolve the source-badge label of one event (TC-3/TC-5, open question #4).
+ * Summaries are LLM-optional, so a missing row usually means "never
+ * summarized", not "deleted" — say 来源会话 and let the badge still jump. */
 function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
-  if (e.session_id) return sessions.get(e.session_id) ?? '已删除会话'
+  if (e.session_id) return sessions.get(e.session_id) ?? '来源会话'
   if (e.source === 'manual') return e.kind === 'todo_created' ? '快速记一条' : '看板操作'
   if (e.source === 'llm') return '会话记录'
   if (e.source === 'tool') return '助手操作'
@@ -52,7 +54,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     overdue: isTodoOverdue(t.due_at, t.status, new Date(now)),
     stale: isTodoStale(t.status, t.updated_at, now),
     session_label: t.session_id
-      ? sessions.get(t.session_id) ?? '已删除会话'
+      ? sessions.get(t.session_id) ?? '来源会话'
       : t.source === 'manual'
         ? '快速记一条'
         : null,
@@ -67,6 +69,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     detail: e.detail ?? null,
     occurred_at: e.occurred_at,
     label: eventLabel(e, sessions),
+    session_id: e.session_id ?? null,
   }))
   const ledgerSessions = new Set(dayEvents.map((e) => e.session_id).filter((s): s is string => !!s)).size
 

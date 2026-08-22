@@ -1,8 +1,8 @@
 // YOLO global sidebar entry (browser) — root-level footer action. The button
-// shows the unhandled-notification badge (TB-3) and opens the FULL-WIDTH YOLO
-// panel (v0.3.0 A): session-width, 看板 Tab default + 侧栏对话 + 对话 Tab.
-// The button keeps its own light 30s poll so the badge follows reminders even
-// while the panel is closed.
+// carries the unhandled-notification signal as a mono dot badge (TB-3, no
+// breathing) and opens the full-width YOLO panel: the kanban body plus the
+// chat surface in its two sizes. The button keeps its own light 30s poll so
+// the badge follows reminders even while the panel is closed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { YoloDashboardData } from '../../src/shared/dashboard.ts'
@@ -12,6 +12,8 @@ import { YoloPanel } from '../panel/YoloPanel.tsx'
 interface YoloSidebarDashboardProps {
   /** True when the sidebar is expanded (wide) — show the label; collapsed shows icon only. */
   wide?: boolean
+  /** Slot-injected: jump to a dsh session (ledger source badges). */
+  openSession?: (sessionId: string) => void
 }
 
 const POLL_MS = 30_000
@@ -37,7 +39,7 @@ function useDismissOnOutsidePointer(
   }, [open, onClose, buttonRef, panelRef])
 }
 
-export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps): JSX.Element {
+export function YoloSidebarDashboard({ wide = true, openSession }: YoloSidebarDashboardProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [unhandled, setUnhandled] = useState(0)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -95,7 +97,7 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
         ref={buttonRef}
         type="button"
         onClick={() => { setOpen((v) => !v) }}
-        title="YOLO 助手看板"
+        title={unhandled > 0 ? `YOLO 助手看板 · ${unhandled} 条未处理提醒` : 'YOLO 助手看板'}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -103,43 +105,42 @@ export function YoloSidebarDashboard({ wide = true }: YoloSidebarDashboardProps)
           gap: 8,
           width: '100%',
           padding: '6px 10px',
-          borderRadius: 8,
-          border: '1px solid var(--border, #ddd)',
-          background: open ? 'var(--background-hover, rgba(0,0,0,0.04))' : 'transparent',
+          borderRadius: 6,
+          border: '1px solid transparent',
+          background: open ? 'var(--background-hover, rgba(0,0,0,0.05))' : 'transparent',
           color: 'var(--foreground-secondary, #666)',
           cursor: 'pointer',
           fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: '.02em',
           whiteSpace: 'nowrap',
-          position: 'relative',
         }}
       >
-        <YoloLogo size={16} />
+        <span style={{ position: 'relative', display: 'flex', flex: 'none' }}>
+          <YoloLogo size={16} />
+          {unhandled > 0 && (
+            <span
+              aria-label={`${unhandled} 条未处理提醒`}
+              style={{
+                position: 'absolute',
+                top: -2,
+                right: -2,
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                background: 'var(--accent, #5B5BD6)',
+                boxShadow: '0 0 0 1.5px var(--background, #FAFAFA)',
+              }}
+            />
+          )}
+        </span>
         {wide && <span>YOLO</span>}
-        {unhandled > 0 && (
-          <span
-            style={{
-              marginLeft: wide ? 'auto' : 0,
-              minWidth: 16,
-              height: 16,
-              padding: '0 5px',
-              borderRadius: 999,
-              background: 'var(--accent, #2f6fed)',
-              color: '#fff',
-              fontSize: 10,
-              fontWeight: 600,
-              lineHeight: '16px',
-              textAlign: 'center',
-            }}
-          >
-            {unhandled > 99 ? '99+' : unhandled}
-          </span>
-        )}
       </button>
 
       {open && anchorLeft !== undefined && (
         <div ref={panelRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 10000 }}>
           <div style={{ pointerEvents: 'auto', position: 'absolute', inset: 0 }}>
-            <YoloPanel left={anchorLeft} onClose={close} />
+            <YoloPanel left={anchorLeft} onClose={close} openSession={openSession} />
           </div>
         </div>
       )}

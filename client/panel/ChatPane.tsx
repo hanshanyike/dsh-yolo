@@ -1,7 +1,8 @@
-// YOLO chat surface (v0.3.0 A) — ONE component for both views of the resident
-// thread: the full-width 对话 Tab and the kanban's 侧栏对话 (TA-2: same thread,
-// two views). Anchored openings (聊一聊) prefix the first sent message with the
-// card context so the thread knows what "它" refers to without extra plumbing.
+// YOLO chat surface — Mono design system (frontend-redesign.md 4.2⑧⑨). ONE
+// component, two sizes of the same surface: the kanban's side dock (compact
+// column, dock-input) and the full-screen expansion (720px column + capture-
+// bar-spec input). Anchored openings (聊一聊) prefix the first sent message
+// with the card context so the thread knows what "它" refers to.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -18,7 +19,7 @@ export interface ChatAnchor {
 
 export interface ChatPaneProps {
   anchor?: ChatAnchor | null
-  /** 'side' = the kanban side pane (compact); 'full' = the 对话 Tab. */
+  /** 'side' = the kanban side dock (compact); 'full' = the expanded surface. */
   variant?: 'side' | 'full'
 }
 
@@ -65,7 +66,7 @@ export function ChatPane({ anchor = null, variant = 'full' }: ChatPaneProps): JS
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [state.messages.length])
+  }, [state.messages.length, state.sending])
 
   const send = useCallback(async (): Promise<void> => {
     const text = draft.trim()
@@ -94,105 +95,87 @@ export function ChatPane({ anchor = null, variant = 'full' }: ChatPaneProps): JS
     }
   }, [draft, load, state.sending])
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
-      {anchor && (
-        <div
-          style={{
-            flex: 'none',
-            padding: '6px 12px',
-            fontSize: 11,
-            color: 'var(--accent, #2f6fed)',
-            background: 'rgba(47,111,237,0.08)',
-            borderBottom: '1px solid var(--border, #eee)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          🔗 正在聊：{anchor.title}
+  const input = (
+    <input
+      className={variant === 'full' ? 'cap-input' : undefined}
+      value={draft}
+      placeholder={anchor ? `就「${anchor.title}」追问…` : '和 YOLO 说…（Enter 发送）'}
+      autoFocus
+      aria-label="对 YOLO 说"
+      onChange={(e) => { setDraft(e.target.value) }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) void send()
+      }}
+    />
+  )
+  const hint = <span className={`enter-hint mono${draft.trim() ? ' lit' : ''}`}>↵</span>
+
+  // shared message stream: assistant = plain prose, user = surface-2 bubble
+  const stream = (
+    <>
+      {state.error && (
+        <div className="err-line" role="alert">
+          <span>连接失败：{state.error}</span>
+          <button type="button" className="nact" onClick={() => { void load() }}>重试</button>
         </div>
       )}
-
-      <div
-        ref={listRef}
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          padding: variant === 'side' ? '10px 10px' : '16px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-        }}
-      >
-        {state.error && <p style={{ color: '#c0392b', margin: 0 }}>连接失败：{state.error}</p>}
-        {!state.error && !state.loading && state.messages.length === 0 && (
-          <p style={{ opacity: 0.55, margin: 0, lineHeight: 1.8 }}>
-            这是 YOLO 的常驻会话——可以问「我这周干了什么」、随手记事、改计划、解读简报。
-            工作会话不受影响。
-          </p>
-        )}
-        {state.messages.map((m, i) => (
-          <div
-            key={i}
-            style={{
-              alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '86%',
-              padding: '7px 11px',
-              borderRadius: 10,
-              fontSize: 13,
-              lineHeight: 1.6,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              background: m.role === 'user' ? 'var(--accent, #2f6fed)' : 'var(--background-secondary, rgba(128,128,128,0.12))',
-              color: m.role === 'user' ? '#fff' : 'inherit',
-            }}
-          >
+      {!state.error && !state.loading && state.messages.length === 0 && (
+        <div className="msg ai">
+          <div className="who">YOLO</div>
+          这是 YOLO 的常驻会话——可以问「我这周干了什么」、随手记事、改计划、解读简报。工作会话不受影响。
+        </div>
+      )}
+      {state.messages.map((m, i) =>
+        m.role === 'ai' ? (
+          <div key={i} className="msg ai">
+            <div className="who">YOLO</div>
             {m.text}
           </div>
-        ))}
-        {state.sending && <div style={{ fontSize: 11, opacity: 0.5, alignSelf: 'flex-start' }}>YOLO 正在处理…</div>}
-      </div>
+        ) : (
+          <div key={i} className="msg me">{m.text}</div>
+        ),
+      )}
+      {state.sending && (
+        <div className="msg ai">
+          <div className="who">YOLO</div>
+          正在处理…
+        </div>
+      )}
+    </>
+  )
 
-      <div style={{ flex: 'none', display: 'flex', gap: 6, padding: '10px 12px', borderTop: '1px solid var(--border, #eee)' }}>
-        <input
-          value={draft}
-          placeholder={anchor ? `就「${anchor.title}」追问…` : '对 YOLO 说点什么…'}
-          onChange={(e) => { setDraft(e.target.value) }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) void send()
-          }}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: '7px 10px',
-            borderRadius: 8,
-            border: '1px solid var(--border, #ddd)',
-            background: 'var(--background, #fff)',
-            color: 'inherit',
-            fontSize: 13,
-            outline: 'none',
-          }}
-        />
-        <button
-          type="button"
-          disabled={!draft.trim() || state.sending}
-          onClick={() => { void send() }}
-          style={{
-            padding: '7px 14px',
-            borderRadius: 8,
-            border: 'none',
-            background: 'var(--accent, #2f6fed)',
-            color: '#fff',
-            fontSize: 13,
-            cursor: !draft.trim() || state.sending ? 'default' : 'pointer',
-            opacity: !draft.trim() || state.sending ? 0.5 : 1,
-          }}
-        >
-          发送
-        </button>
+  if (variant === 'side') {
+    return (
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div className="msgs dock-msgs" ref={listRef} role="log" aria-live="polite" aria-label="对话记录">
+          {stream}
+        </div>
+        <div className="dock-input">
+          {input}
+          {hint}
+        </div>
       </div>
+    )
+  }
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className="p-body">
+        <div className="p-main p-main--chat">
+          {anchor && (
+            <div className="fs-anchor" title={anchor.detail ? `${anchor.title} · ${anchor.detail}` : anchor.title}>
+              锚定 · {anchor.title}
+            </div>
+          )}
+          <div className="msgs" ref={listRef} role="log" aria-live="polite" aria-label="对话记录">
+            {stream}
+          </div>
+        </div>
+      </div>
+      <footer className="capture">
+        {input}
+        {hint}
+      </footer>
     </div>
   )
 }

@@ -57,6 +57,8 @@ export interface YoloLedgerEntry {
   occurred_at: number
   /** Resolved badge text: session summary / 快速记一条 / 早期记录. */
   label: string
+  /** Originating dsh session — the badge jumps to it when set (client only). */
+  session_id?: string | null
 }
 
 /** Notification card / badge row (reminders & briefs, v0.3.0). */

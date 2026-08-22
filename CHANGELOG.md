@@ -43,6 +43,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Detail polish (v0.3.1, per user review).** Four pass-quality fixes:
+  (1) copy no longer leaks implementation details — the quick-add placeholder
+  reads `+ 快速记一条，回车保存（默认今日到期）` and the panel footer just says
+  看板每 30 秒自动刷新 (no "不经大模型" / no LLM-extraction mention);
+  (2) one chat surface — the 看板/对话 tab bar is gone; the single 侧栏对话
+  toggles from the header and expands to fullscreen and back, with Esc
+  unwinding fullscreen → side chat → closed panel;
+  (3) ledger stats made legible — `今日台账 · N 条记录` + `来自 M 个会话`
+  (unique sessions among the day's events, tooltip explains both), ledger
+  badges are now jump buttons (slot-injected `sessions.open`), and the
+  missing-summary fallback label reads 来源会话 instead of the misleading
+  已删除会话;
+  (4) due-date range filter — 时段 presets (今天/本周/本月) plus custom
+  from/to date inputs; the active range shows as a removable chip
+  (`rangeOfPreset` / `matchRangePreset` / `rangeLabel` in
+  `src/shared/filters.ts`, all test-pinned).
+- **Mono design system (v0.3.2, per `docs/frontend-redesign.md`).** Full
+  visual redesign of the panel's expression layer, zero functional change:
+  a scoped design-token stylesheet (`client/design/tokens.ts`, injected once
+  per document, every selector under `.yolo-scope`) with light/dark parity —
+  the theme resolves from the host's `--background` luminance; a hand-drawn
+  16px SVG icon set (`client/design/icons.tsx`) retiring all Emoji glyphs
+  (💬 ✕ ✓ 🚩); de-carded hairline task rows and typography-driven hierarchy
+  (neutral palette + one indigo accent); motion capped at 200ms with full
+  prefers-reduced-motion degradation; a refresh sweep that runs only when
+  polled data actually changed; and the sidebar entry badge restyled as a
+  mono dot (the count moved into the tooltip/aria-label). The interactive
+  prototype ships as `docs/frontend-redesign-prototype.html`; the rejected
+  v1 (Track Hall, too decorative) is archived alongside.
 - **Reminder delivery rerouted to the YOLO side.** Due todos now write a
   notification card + deliver into the workspace's YOLO resident thread; the
   old session-start replay into whatever work session started next is gone
