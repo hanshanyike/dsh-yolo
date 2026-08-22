@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Checkpoint commits required.** CONTRIBUTING now pins the rule: commit at
+  logical checkpoints (fix + tests + docs together), never batch unrelated
+  changes into one mega-commit — history, bisect and reverts depend on it.
 - **Complete-flow undo (v0.3.3, design spec 5.4).** Completing a task now ends
   in a toast carrying a 撤销 button (4s window); undo POSTs the new `reopen`
   action through `POST /yolo/actions` — the row returns to pending,

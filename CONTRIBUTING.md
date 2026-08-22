@@ -16,6 +16,12 @@ Thanks for considering contributing! YOLO is a small, opinionated plugin bundle 
   then work through the W1–W8 checklist in
   [`docs/testing.md §七`](docs/testing.md#七真机端到端验证) — unit tests can't
   catch layout, theme or host-integration regressions.
+- **Commit at logical checkpoints — never batch everything into one commit.** A
+  finished fix/feature with its tests and docs is a commit; unrelated changes
+  do not ride along. Batched mega-commits hide history, break `git bisect` and
+  make reverts painful. If two streams genuinely interleave at the file level,
+  land one first, rebase the other on top — the exception (v0.3.1+v0.3.2) is
+  documented in the CHANGELOG, not a pattern to repeat.
 - **Document platform gotchas** in [`docs/architecture.md`](docs/architecture.md)
   (the "Verified platform behavior" section) and build/troubleshooting notes in
   [`docs/modules.md`](docs/modules.md) (the "故障排查" section)
