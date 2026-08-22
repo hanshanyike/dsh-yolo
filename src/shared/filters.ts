@@ -182,3 +182,30 @@ export function sortForKanban(todos: readonly YoloTodoRow[]): YoloTodoRow[] {
     return 0
   })
 }
+
+/**
+ * R9 focus cap: when `defaultCount` > 0 and no explicit focus filter is active,
+ * surface only the top-N most important open rows (overdue first, then today,
+ * then urgent/high priority) and fold the remainder. `defaultCount === 0`
+ * shows all rows (no folding). Pure + config-gated so the board's default view
+ * is quiet by default and becomes a focused "today only" surface when tuned.
+ */
+export function partitionFocusRows(
+  todos: readonly YoloTodoRow[],
+  defaultCount: number,
+  today = localDateStr(),
+): { focus: YoloTodoRow[]; folded: YoloTodoRow[] } {
+  if (defaultCount <= 0 || todos.length <= defaultCount) return { focus: [...todos], folded: [] }
+  const open = todos.filter((t) => isOpen(t))
+  const priorityRank = (t: YoloTodoRow): number => (t.priority === 'urgent' ? 0 : t.priority === 'high' ? 1 : 2)
+  const sorted = [...open].sort((a, b) => {
+    const ba = dueBucket(a, today)
+    const bb = dueBucket(b, today)
+    const rankOf = (bkt: 'overdue' | 'today' | 'week' | 'none'): number => (bkt === 'overdue' ? 0 : bkt === 'today' ? 1 : bkt === 'week' ? 2 : 3)
+    const ra = rankOf(ba)
+    const rb = rankOf(bb)
+    if (ra !== rb) return ra - rb
+    return priorityRank(a) - priorityRank(b)
+  })
+  return { focus: sorted.slice(0, defaultCount), folded: sorted.slice(defaultCount) }
+}

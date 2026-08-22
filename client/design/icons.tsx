@@ -45,3 +45,4 @@ export const IcPin = shell('<path d="M8 13.5S3.5 9.8 3.5 6.5a4.5 4.5 0 0 1 9 0c0
 export const IcTarget = shell('<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none"/>')
 export const IcExpand = shell('<path d="M3 6V3h3"/><path d="M3 3l4.5 4.5"/><path d="M13 10v3h-3"/><path d="M13 13l-4.5-4.5"/>')
 export const IcShrink = shell('<path d="M9 3h4v4"/><path d="M13 3l-4.5 4.5"/><path d="M7 13H3V9"/><path d="M3 13l4.5-4.5"/>')
+export const IcMerge = shell('<path d="M4 4v2.5a3.5 3.5 0 0 0 3.5 3.5h6"/><path d="M4 12V9.5"/><path d="M11.5 7.5L13.5 9.5l-2 2"/>')

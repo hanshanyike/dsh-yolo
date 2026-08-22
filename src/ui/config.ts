@@ -46,6 +46,7 @@ export interface Config {
   }
   ui: {
     aggregateAcrossWorkspaces: boolean
+    focusDefaultCount: number
   }
 }
 
@@ -88,5 +89,6 @@ export const Config: z<Config> = z.object({
   }),
   ui: z.object({
     aggregateAcrossWorkspaces: z.boolean().default(false),
+    focusDefaultCount: z.number().default(0).min(0).max(50),
   }),
 })

@@ -328,6 +328,16 @@ export const YOLO_CSS = `
 /* full-screen chat anchor strip (4.2⑨) */
 .yolo-scope .fs-anchor { margin: 14px 0 0; padding: 6px 10px; border-left: 2px solid var(--y-accent-fill); font-size: 11px; color: var(--y-text-2); }
 
+/* memory-health fold (v0.3.0) — compact metric line + duplicate merge rows */
+.yolo-scope .health-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 4px 2px 8px; font-size: 11px; color: var(--y-text-2); }
+.yolo-scope .health-stat b { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--y-text-1); }
+.yolo-scope .health-dups { display: flex; flex-direction: column; }
+.yolo-scope .health-dup { display: flex; align-items: center; gap: 8px; padding: 5px 2px; border-bottom: 1px solid var(--y-line); font-size: 12px; }
+.yolo-scope .health-dup:last-child { border-bottom: none; }
+.yolo-scope .health-dup-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--y-text-1); }
+.yolo-scope .health-dup-sep { flex: none; color: var(--y-text-3); font-size: 10px; }
+.yolo-scope .health-ok { color: var(--y-ok-text); font-size: 11px; }
+
 /* toast (5.1) */
 .yolo-scope .toast { position: fixed; bottom: 64px; left: 50%; transform: translate(-50%, 4px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--y-surface); border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); box-shadow: var(--y-e1); font-size: 12px; color: var(--y-text-1); z-index: 60; transition: transform var(--y-dur-2) var(--y-ease-out), opacity var(--y-dur-2) var(--y-ease-out); }
 .yolo-scope .toast.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }

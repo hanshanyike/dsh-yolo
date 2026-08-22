@@ -17,6 +17,7 @@ import {
   rangeLabel,
   rangeOfPreset,
   sortForKanban,
+  partitionFocusRows,
   type FocusBucket,
   type KanbanFilter,
   type PresetTab,
@@ -26,6 +27,7 @@ import { DEFAULT_FILTER } from '../../src/shared/filters.ts'
 import { localDateStr } from '../../src/shared/text.ts'
 import {
   IcBell, IcChat, IcCheck, IcChevron, IcClose, IcDots, IcFlag, IcFilter, IcPin, IcPlusDay,
+  IcMerge,
 } from '../design/icons.tsx'
 import type { ChatAnchor } from './ChatPane.tsx'
 import { readPanelState, writePanelState } from './state.ts'
@@ -168,6 +170,8 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
   const [quickBusy, setQuickBusy] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [ledgerOpen, setLedgerOpen] = useState(false)
+  const [healthOpen, setHealthOpen] = useState(false)
+  const [foldedOpen, setFoldedOpen] = useState(false)
   const [renameDraft, setRenameDraft] = useState<{ kind: 'goal' | 'milestone'; id: string; title: string } | null>(null)
   const [msPop, setMsPop] = useState<{ id: string; x: number } | null>(null)
   const fltBtnRef = useRef<HTMLButtonElement>(null)
@@ -223,6 +227,14 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
 
   const counts = useMemo(() => focusCounts(data.todos), [data.todos])
   const visible = useMemo(() => sortForKanban(applyKanbanFilter(data.todos, filter)), [data.todos, filter])
+  // R9: cap the default view to the top-N focus rows; the rest fold away so a
+  // busy board opens quiet. Only applies to the unfiltered default view —
+  // engaging any detail filter (or the 'done' preset) shows everything.
+  const defaultFilterOnly = !hasDetailFilter(filter) && filter.preset !== 'done'
+  const { focus, folded } = useMemo(
+    () => (defaultFilterOnly ? partitionFocusRows(visible, data.focusDefaultCount ?? 0) : { focus: visible, folded: [] }),
+    [visible, defaultFilterOnly, data.focusDefaultCount],
+  )
   const milestoneTitles = useMemo(() => data.milestones.map((m) => m.title), [data.milestones])
   const openNotifications = data.notifications.filter((n) => !n.handled)
   const activeGoals = data.goals.filter((g) => g.status === 'active')
@@ -238,7 +250,7 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
     const today: YoloTodoRow[] = []
     const week: YoloTodoRow[] = []
     const stale: YoloTodoRow[] = []
-    for (const t of visible) {
+    for (const t of focus) {
       if (t.stale) { stale.push(t); continue }
       const b = dueBucket(t)
       if (b === 'overdue') overdue.push(t)
@@ -251,7 +263,7 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
       { key: 'week', label: '未来 7 天', danger: false, rows: week },
       { key: 'stale', label: '滞留', danger: false, rows: stale },
     ].filter((s) => s.rows.length > 0)
-  }, [visible, filter.preset])
+  }, [focus, filter.preset])
 
   const patchFilter = (patch: Partial<KanbanFilter>): void => {
     setFilter((f) => ({ ...f, ...patch }))
@@ -490,6 +502,35 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
             </section>
           ))}
 
+          {/* R9 folded remainder — surfaces when the default view is capped */}
+          {folded.length > 0 && (
+            <div className={`fold${foldedOpen ? ' open' : ''}`}>
+              <button type="button" className="fold-head" onClick={() => { setFoldedOpen((v) => !v) }} aria-expanded={foldedOpen}>
+                <IcChevron size={12} />
+                <span>其余 {folded.length} 条</span>
+                <span className="fold-stat">展开查看</span>
+              </button>
+              <div className="fold-body">
+                <div className="fold-inner">
+                  <div className="fold-pad">
+                    {folded.map((t) => (
+                      <TodoRowView
+                        key={t.id}
+                        t={t}
+                        busy={busyKey === t.id}
+                        completing={completing.has(t.id)}
+                        onComplete={() => { void completeTodo(t) }}
+                        onAct={(action, extra) => { void act(t.id, { action, kind: 'todo', id: t.id, ...extra }) }}
+                        onEdit={() => { setEditor({ id: t.id, title: t.title, due: dayOf(t.due_at), priority: t.priority ?? '', milestoneTitle: t.milestone_title ?? '' }) }}
+                        onChat={() => { onOpenChat({ title: t.title, detail: t.due_at ? `到期 ${t.due_at}` : null }) }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {visible.length === 0 && (
             <div className="empty">
               <h4>当前筛选下没有任务</h4>
@@ -591,6 +632,56 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
               </div>
             </div>
           </div>
+
+          {/* ⑤b memory-health fold (R8): low-bother expandable quality surface +
+              one-click consolidate for near-duplicate todos (P35). */}
+          {data.health && (
+            <div className={`fold${healthOpen ? ' open' : ''}`}>
+              <button type="button" className="fold-head" onClick={() => { setHealthOpen((v) => !v) }} aria-expanded={healthOpen}>
+                <IcChevron size={12} />
+                <span>记忆健康</span>
+                <span
+                  className="fold-stat"
+                  title="召回命中率、抽取质量与去重候选；展开可见详情与一键去重"
+                >
+                  召回 {Math.round(data.health.recallHitRate * 100)}% · 重复 {data.health.duplicateTodos.length} 对
+                </span>
+              </button>
+              <div className="fold-body">
+                <div className="fold-inner">
+                  <div className="fold-pad">
+                    <div className="health-stats">
+                      <span>今日召回 <b>{data.health.recallRunsToday}</b> 次</span>
+                      {data.health.recallErrorsToday > 0 && <span>召回错误 <b>{data.health.recallErrorsToday}</b></span>}
+                      {data.health.extractionErrorsToday > 0 && <span>抽取错误 <b>{data.health.extractionErrorsToday}</b></span>}
+                      {data.health.deniedToday > 0 && <span>被拒操作 <b>{data.health.deniedToday}</b></span>}
+                    </div>
+                    {data.health.duplicateTodos.length > 0 ? (
+                      <div className="health-dups">
+                        {data.health.duplicateTodos.map((p) => (
+                          <div key={`${p.a}:${p.b}`} className="health-dup">
+                            <span className="health-dup-title" title={p.aTitle}>{p.aTitle}</span>
+                            <span className="health-dup-sep">⇢</span>
+                            <span className="health-dup-title" title={p.bTitle}>{p.bTitle}</span>
+                            <button
+                              type="button"
+                              className="nact"
+                              disabled={busyKey === `health-${p.b}`}
+                              onClick={() => { void act(`health-${p.b}`, { action: 'consolidate', kind: 'todo', id: p.b, into_id: p.a }) }}
+                            >
+                              <IcMerge size={12} />合并
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 12, color: 'var(--y-text-3)' }} className="health-ok">暂无重复待办；系统性指标正常。</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 

@@ -15,6 +15,7 @@ import { computeScopeKey, resolveDataDir, dbFileName } from './scope.ts'
 import * as repo from './repository.ts'
 import { ftsRecallSearch } from './search.ts'
 import { renderSnapshot, writeSnapshot } from './snapshot.ts'
+import type { DuplicateTodoPair } from './types.ts'
 import type {
   Goal,
   GoalStatus,
@@ -345,7 +346,7 @@ export default class Yolo extends Service {
     return repo.countEventKindSince(this.resolve(cwd).db, kind, sinceMs)
   }
   /** Open-todo duplicate candidate pairs within a scope (needs user confirmation to merge). */
-  listDuplicateTodos(cwd: string): Array<{ a: string; b: string }> {
+  listDuplicateTodos(cwd: string): DuplicateTodoPair[] {
     const h = this.resolve(cwd)
     return repo.listDuplicateTodos(h.db, h.scopeKey)
   }

@@ -46,6 +46,7 @@ export const DEFAULTS = {
   },
   ui: {
     aggregateAcrossWorkspaces: false,
+    focusDefaultCount: 0,
   },
   briefEnabled: true,
   briefMorningTime: '09:00',

@@ -3,6 +3,7 @@
 // render the sidebar dashboard. Shared so both halves stay in sync.
 
 import { localDateStr } from './text.ts'
+import type { DuplicateTodoPair } from '../storage/types.ts'
 
 /** A workspace tag attached to aggregated rows (cross-workspace view, v0.3.0). */
 export interface WorkspaceTag {
@@ -109,7 +110,7 @@ export interface YoloMemoryHealth {
   /** Rejected actions today (action_denied). */
   deniedToday: number
   /** Open-todo near-duplicate candidate pairs (normalized title collision within scope). */
-  duplicateTodos: Array<{ a: string; b: string }>
+  duplicateTodos: DuplicateTodoPair[]
 }/** Cross-workspace aggregate summary (v0.3.0). */
 export interface YoloWorkspaceInfo {
   slug: string
@@ -146,6 +147,8 @@ export interface YoloDashboardData {
   unhandled: number
   /** Memory-health snapshot (v0.3.0). */
   health?: YoloMemoryHealth
+  /** Default number of focus rows to surface before folding (R9; 0 = show all). */
+  focusDefaultCount?: number
 }
 
 const DAY_MS = 86_400_000

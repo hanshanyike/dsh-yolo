@@ -23,13 +23,13 @@ function healthYolo(overrides: Partial<Record<keyof YoloMemoryHealth, unknown>>)
     },
     countExtractionErrorsSince: () => (overrides.extractionErrorsToday as number) ?? 0,
     countEventKindSince: () => (overrides.deniedToday as number) ?? 0,
-    listDuplicateTodos: () => (overrides.duplicateTodos as Array<{ a: string; b: string }>) ?? [],
+    listDuplicateTodos: () => (overrides.duplicateTodos as import('../src/storage/types.ts').DuplicateTodoPair[]) ?? [],
   } as unknown as Yolo
 }
 
 describe('buildMemoryHealth', () => {
   it('computes recall hit rate and aggregates error/denied counts', () => {
-    const yolo = healthYolo({ recallRunsToday: 10, recallHitRate: 1, recallErrorsToday: 2, extractionErrorsToday: 1, deniedToday: 3, duplicateTodos: [{ a: 't1', b: 't2' }] })
+    const yolo = healthYolo({ recallRunsToday: 10, recallHitRate: 1, recallErrorsToday: 2, extractionErrorsToday: 1, deniedToday: 3, duplicateTodos: [{ a: 't1', b: 't2', aTitle: '写周报', bTitle: '写 周报' }] })
     const h = buildMemoryHealth(yolo, 'C:\\work\\proj')
     expect(h.recallRunsToday).toBe(10)
     expect(h.recallHitRate).toBe(0.3) // 3 ok / 10
@@ -61,6 +61,8 @@ describe('listDuplicateTodos (repo)', () => {
     expect(pairs).toHaveLength(1)
     expect(pairs[0].a).toBe('a')
     expect(pairs[0].b).toBe('b')
+    expect(pairs[0].aTitle).toBe('提醒我-周三交周报')
+    expect(pairs[0].bTitle).toBe('提醒我 周三交周报')
   })
 
   it('ignores terminal todos and different-titled todos', () => {

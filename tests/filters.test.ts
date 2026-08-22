@@ -12,6 +12,7 @@ import {
   focusCounts,
   hasDetailFilter,
   matchRangePreset,
+  partitionFocusRows,
   rangeLabel,
   rangeOfPreset,
   sortForKanban,
@@ -198,5 +199,36 @@ describe('default kanban ordering', () => {
       row('overdue', { due_at: '2026-08-20' }),
     ])
     expect(ordered.map((t) => t.id)).toEqual(['overdue', 'soon', 'far', 'undated', 'done'])
+  })
+})
+
+describe('partitionFocusRows (R9 focus cap)', () => {
+  const todos = [
+    row('overdue', { due_at: '2026-08-20' }),
+    row('today-normal', { due_at: '2026-08-22' }),
+    row('today-urgent', { due_at: '2026-08-22', priority: 'urgent' }),
+    row('week', { due_at: '2026-08-25' }),
+    row('undated'),
+    row('done', { status: 'done', due_at: '2026-08-22' }),
+  ]
+
+  it('returns all rows when defaultCount is 0 (cap disabled)', () => {
+    const { focus, folded } = partitionFocusRows(todos, 0, TODAY)
+    expect(focus).toHaveLength(todos.length)
+    expect(folded).toEqual([])
+  })
+
+  it('surfaces top-N most important rows and folds the rest', () => {
+    const { focus, folded } = partitionFocusRows(todos, 3, TODAY)
+    // overdue first, then today (urgent before normal), then the next today/week
+    expect(focus.map((t) => t.id)).toEqual(['overdue', 'today-urgent', 'today-normal'])
+    expect(folded.length).toBeGreaterThan(0)
+    expect(folded.some((t) => t.id === 'undated')).toBe(true)
+  })
+
+  it('folds nothing when the list is at or under the cap', () => {
+    const { focus, folded } = partitionFocusRows(todos, 10, TODAY)
+    expect(focus).toHaveLength(todos.length)
+    expect(folded).toEqual([])
   })
 })

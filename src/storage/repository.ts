@@ -26,6 +26,7 @@ import type {
   TodoAction,
   TodoStatus,
   EventKind,
+  DuplicateTodoPair,
 } from './types.ts'
 
 const now = () => Date.now()
@@ -827,22 +828,26 @@ export function countEventKindSince(db: DB, kind: string, sinceMs: number): numb
 }
 
 /** Open-todo near-duplicate candidate pairs within a scope, by normalized title. */
-export function listDuplicateTodos(db: DB, scopeKey: string): Array<{ a: string; b: string }> {
+export function listDuplicateTodos(db: DB, scopeKey: string): DuplicateTodoPair[] {
   const rows = db
     .prepare("SELECT id, title FROM todos WHERE scope_key = ? AND status IN ('pending','in_progress') ORDER BY created_at ASC")
     .all(scopeKey) as Array<{ id: string; title: string }>
-  const byNorm = new Map<string, string[]>()
+  const byNorm = new Map<string, Array<{ id: string; title: string }>>()
   for (const r of rows) {
     const n = normalize(r.title)
     if (!n) continue
     const arr = byNorm.get(n) ?? []
-    arr.push(r.id)
+    arr.push(r)
     byNorm.set(n, arr)
   }
-  const pairs: Array<{ a: string; b: string }> = []
-  for (const ids of byNorm.values()) {
-    if (ids.length < 2) continue
-    for (let i = 1; i < ids.length; i++) pairs.push({ a: ids[0], b: ids[i] })
+  const pairs: DuplicateTodoPair[] = []
+  for (const group of byNorm.values()) {
+    if (group.length < 2) continue
+    const keeper = group[0]
+    for (let i = 1; i < group.length; i++) {
+      const dup = group[i]
+      pairs.push({ a: keeper.id, b: dup.id, aTitle: keeper.title, bTitle: dup.title })
+    }
   }
   return pairs
 }

@@ -157,6 +157,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     notifications,
     unhandled: notifications.filter((n) => !n.handled).length,
     health: buildMemoryHealth(yolo, cwd),
+    focusDefaultCount: 0,
   }
 }
 
@@ -230,7 +231,7 @@ export function registerDashboardEndpoint(
   ctx: { webServer?: WebServerLike },
   yolo: Yolo,
   cwd: () => string,
-  opts?: { allowAggregate?: () => boolean },
+  opts?: { allowAggregate?: () => boolean; focusDefaultCount?: () => number },
 ): void {
   ctx.webServer?.register({
     kind: 'prefix',
@@ -239,6 +240,7 @@ export function registerDashboardEndpoint(
       try {
         const scope = scopeOf(req)
         const aggregate = scope === 'all' && (opts?.allowAggregate?.() ?? false)
+        const focusDefault = opts?.focusDefaultCount?.() ?? 0
         if (aggregate) {
           const metas = yolo.listWorkspaceMeta()
           const day = ledgerDayOf(req)
@@ -247,11 +249,13 @@ export function registerDashboardEndpoint(
             return { data: buildDashboardData(yolo, wcwd, day, ws), ws }
           })
           const data = aggregateDashboards(list.map((l) => l.data))
+          data.focusDefaultCount = focusDefault
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
           res.end(JSON.stringify(data))
           return
         }
         const data = buildDashboardData(yolo, cwd(), ledgerDayOf(req))
+        data.focusDefaultCount = focusDefault
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
         res.end(JSON.stringify(data))
       } catch (e) {
