@@ -505,50 +505,52 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
               <span className="fold-stat">{activeGoals.length + openMilestones.length}</span>
             </button>
             <div className="fold-body">
-              <div className="fold-inner" style={{ paddingBottom: 10 }}>
-                {activeGoals.map((g) => (
-                  <GoalBlock
-                    key={g.id}
-                    goal={g}
-                    milestones={data.milestones.filter((m) => m.title === g.milestone_title)}
-                    renaming={renameDraft?.kind === 'goal' && renameDraft.id === g.id}
-                    renameValue={renameDraft?.kind === 'goal' && renameDraft.id === g.id ? renameDraft.title : ''}
-                    busy={busyKey === `goal-${g.id}`}
-                    onRenameStart={() => { setRenameDraft({ kind: 'goal', id: g.id, title: g.title }) }}
-                    onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
-                    onRenameSave={async () => {
-                      const d = renameDraft
-                      setRenameDraft(null)
-                      if (d && d.title.trim() && d.title !== g.title) await act(`goal-${g.id}`, { action: 'rename', kind: 'goal', id: g.id, title: d.title.trim() })
-                    }}
-                    onRenameCancel={() => { setRenameDraft(null) }}
-                    onAbandon={() => { void act(`goal-${g.id}`, { action: 'abandon', kind: 'goal', id: g.id }) }}
-                    onMsDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
-                    msPopId={msPop?.id ?? null}
-                  />
-                ))}
-                {openMilestones.length > 0 && (
-                  <MilestoneTrack
-                    milestones={openMilestones}
-                    renaming={renameDraft?.kind === 'milestone' ? renameDraft : null}
-                    busyKey={busyKey}
-                    pop={msPop}
-                    onDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
-                    onRenameStart={(m) => { setRenameDraft({ kind: 'milestone', id: m.id, title: m.title }) }}
-                    onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
-                    onRenameSave={async (m) => {
-                      const d = renameDraft
-                      setRenameDraft(null)
-                      if (d && d.title.trim() && d.title !== m.title) await act(`ms-${m.id}`, { action: 'rename', kind: 'milestone', id: m.id, title: d.title.trim() })
-                    }}
-                    onRenameCancel={() => { setRenameDraft(null) }}
-                    onStatus={(m, status) => { void act(`ms-${m.id}`, { action: 'set_status', kind: 'milestone', id: m.id, status }) }}
-                    onPopClose={() => { setMsPop(null) }}
-                  />
-                )}
-                {activeGoals.length === 0 && openMilestones.length === 0 && (
-                  <p style={{ margin: 0, fontSize: 12, color: 'var(--y-text-3)' }}>暂无进行中的目标与里程碑。</p>
-                )}
+              <div className="fold-inner">
+                <div className="fold-pad">
+                  {activeGoals.map((g) => (
+                    <GoalBlock
+                      key={g.id}
+                      goal={g}
+                      milestones={data.milestones.filter((m) => m.title === g.milestone_title)}
+                      renaming={renameDraft?.kind === 'goal' && renameDraft.id === g.id}
+                      renameValue={renameDraft?.kind === 'goal' && renameDraft.id === g.id ? renameDraft.title : ''}
+                      busy={busyKey === `goal-${g.id}`}
+                      onRenameStart={() => { setRenameDraft({ kind: 'goal', id: g.id, title: g.title }) }}
+                      onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
+                      onRenameSave={async () => {
+                        const d = renameDraft
+                        setRenameDraft(null)
+                        if (d && d.title.trim() && d.title !== g.title) await act(`goal-${g.id}`, { action: 'rename', kind: 'goal', id: g.id, title: d.title.trim() })
+                      }}
+                      onRenameCancel={() => { setRenameDraft(null) }}
+                      onAbandon={() => { void act(`goal-${g.id}`, { action: 'abandon', kind: 'goal', id: g.id }) }}
+                      onMsDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
+                      msPopId={msPop?.id ?? null}
+                    />
+                  ))}
+                  {openMilestones.length > 0 && (
+                    <MilestoneTrack
+                      milestones={openMilestones}
+                      renaming={renameDraft?.kind === 'milestone' ? renameDraft : null}
+                      busyKey={busyKey}
+                      pop={msPop}
+                      onDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
+                      onRenameStart={(m) => { setRenameDraft({ kind: 'milestone', id: m.id, title: m.title }) }}
+                      onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
+                      onRenameSave={async (m) => {
+                        const d = renameDraft
+                        setRenameDraft(null)
+                        if (d && d.title.trim() && d.title !== m.title) await act(`ms-${m.id}`, { action: 'rename', kind: 'milestone', id: m.id, title: d.title.trim() })
+                      }}
+                      onRenameCancel={() => { setRenameDraft(null) }}
+                      onStatus={(m, status) => { void act(`ms-${m.id}`, { action: 'set_status', kind: 'milestone', id: m.id, status }) }}
+                      onPopClose={() => { setMsPop(null) }}
+                    />
+                  )}
+                  {activeGoals.length === 0 && openMilestones.length === 0 && (
+                    <p style={{ margin: 0, fontSize: 12, color: 'var(--y-text-3)' }}>暂无进行中的目标与里程碑。</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -562,28 +564,30 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
               </span>
             </button>
             <div className="fold-body">
-              <div className="fold-inner" style={{ paddingBottom: 10 }}>
-                {data.ledger.length === 0 && <p style={{ margin: 0, fontSize: 12, color: 'var(--y-text-3)' }}>今天还没有记录。</p>}
-                {data.ledger.map((e) => (
-                  <div key={e.id} className={`lg-row${e.kind === 'todo_completed' ? ' is-done' : ''}`}>
-                    {e.kind === 'todo_completed' && <IcCheck className="ic-ok" size={12} />}
-                    <span className="lg-time">{fmtTime(e.occurred_at)}</span>
-                    <span className="lg-type">{LEDGER_KIND_LABEL[e.kind] ?? e.kind}</span>
-                    <span className="lg-sum" title={e.summary}>{e.summary}</span>
-                    {e.label && (e.session_id && openSession ? (
-                      <button
-                        type="button"
-                        className="lg-src-btn"
-                        title="跳到该会话"
-                        onClick={() => { openSession(e.session_id!) }}
-                      >
-                        <span>{e.label}</span>↗
-                      </button>
-                    ) : (
-                      <span className="lg-src" title={e.label}><IcPin size={10} /><span>{e.label}</span></span>
-                    ))}
-                  </div>
-                ))}
+              <div className="fold-inner">
+                <div className="fold-pad">
+                  {data.ledger.length === 0 && <p style={{ margin: 0, fontSize: 12, color: 'var(--y-text-3)' }}>今天还没有记录。</p>}
+                  {data.ledger.map((e) => (
+                    <div key={e.id} className={`lg-row${e.kind === 'todo_completed' ? ' is-done' : ''}`}>
+                      {e.kind === 'todo_completed' && <IcCheck className="ic-ok" size={12} />}
+                      <span className="lg-time">{fmtTime(e.occurred_at)}</span>
+                      <span className="lg-type">{LEDGER_KIND_LABEL[e.kind] ?? e.kind}</span>
+                      <span className="lg-sum" title={e.summary}>{e.summary}</span>
+                      {e.label && (e.session_id && openSession ? (
+                        <button
+                          type="button"
+                          className="lg-src-btn"
+                          title="跳到该会话"
+                          onClick={() => { openSession(e.session_id!) }}
+                        >
+                          <span>{e.label}</span>↗
+                        </button>
+                      ) : (
+                        <span className="lg-src" title={e.label}><IcPin size={10} /><span>{e.label}</span></span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

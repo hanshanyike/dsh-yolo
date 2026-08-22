@@ -32,7 +32,7 @@ export const YOLO_CSS = `
   --y-font-ui: "Segoe UI Variable Text", -apple-system, "SF Pro Text", "PingFang SC", "Microsoft YaHei UI", sans-serif;
   --y-font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
 
-  --y-bg: #FAFAFA; --y-surface: #FFFFFF; --y-surface-2: #F4F4F5; --y-surface-3: #EBEBEF;
+  --y-bg: #FFFFFF; --y-surface: #FFFFFF; --y-surface-2: #F4F4F5; --y-surface-3: #EBEBEF;
   --y-line: #E9E9EC; --y-line-strong: #D6D6DB;
   --y-text-1: #18181B; --y-text-2: #52525B; --y-text-3: #71717A;
   --y-accent-text: #4F46E5; --y-accent-fill: #5B5BD6; --y-accent-soft: rgba(91,91,214,.10);
@@ -75,7 +75,7 @@ export const YOLO_CSS = `
 /* header (48px) */
 .yolo-scope .p-head { flex: none; height: 48px; display: flex; align-items: center; gap: 14px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--y-line); }
 .yolo-scope .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.yolo-scope .brand-name { font-size: 13px; font-weight: 600; letter-spacing: .02em; }
+.yolo-scope .brand-name { font-size: 14px; font-weight: 700; letter-spacing: .02em; }
 .yolo-scope .p-date { font-size: 11px; color: var(--y-text-3); }
 .yolo-scope .p-head-acts { margin-left: auto; display: flex; gap: 2px; align-items: center; }
 .yolo-scope .hbtn { width: 30px; height: 30px; border-radius: var(--y-r-sm); border: none; background: none; color: var(--y-text-3); display: grid; place-items: center; cursor: pointer; transition: background var(--y-dur-1), color var(--y-dur-1); }
@@ -93,15 +93,15 @@ export const YOLO_CSS = `
 /* toolbar (40px) */
 .yolo-scope .p-toolbar { flex: none; position: relative; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 16px; border-bottom: 1px solid var(--y-line); }
 .yolo-scope .seg { display: flex; height: 100%; }
-.yolo-scope .seg-btn { position: relative; height: 100%; padding: 0 9px; font-size: 13px; color: var(--y-text-3); background: none; border: none; cursor: pointer; transition: color var(--y-dur-1); }
-.yolo-scope .seg-btn:hover { color: var(--y-text-2); }
-.yolo-scope .seg-btn.on { color: var(--y-text-1); font-weight: 600; }
+.yolo-scope .seg-btn { position: relative; height: 100%; padding: 0 9px; font-size: 13px; color: var(--y-text-2); background: none; border: none; cursor: pointer; transition: color var(--y-dur-1); }
+.yolo-scope .seg-btn:hover { color: var(--y-text-1); }
+.yolo-scope .seg-btn.on { color: var(--y-text-1); font-weight: 700; }
 .yolo-scope .seg-btn.on::after { content: ""; position: absolute; left: 9px; right: 9px; bottom: 0; height: 2px; background: var(--y-accent-fill); border-radius: 1px 1px 0 0; }
 .yolo-scope .tb-spacer { flex: 1; }
 .yolo-scope .caps { display: flex; gap: 6px; }
 .yolo-scope .cap { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: none; color: var(--y-text-2); font-size: 11px; cursor: pointer; transition: all var(--y-dur-1); white-space: nowrap; }
 .yolo-scope .cap:hover { color: var(--y-text-1); border-color: var(--y-text-3); }
-.yolo-scope .cap.on { background: var(--y-accent-soft); color: var(--y-accent-text); border-color: transparent; }
+.yolo-scope .cap.on { background: var(--y-accent-soft); color: var(--y-accent-text); border-color: color-mix(in srgb, var(--y-accent-text) 45%, transparent); }
 .yolo-scope .cap .num { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 11px; }
 .yolo-scope .flt-wrap { position: relative; }
 .yolo-scope .flt { display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: none; border-radius: var(--y-r-sm); background: none; color: var(--y-text-2); font-size: 11px; cursor: pointer; transition: background var(--y-dur-1), color var(--y-dur-1); white-space: nowrap; }
@@ -149,7 +149,7 @@ export const YOLO_CSS = `
 @keyframes yolo-chat-in { from { opacity: 0; } }
 
 /* notifications — the only surface above the canvas (5.3) */
-.yolo-scope .notif { position: relative; background: var(--y-surface); border: 1px solid var(--y-line); border-radius: var(--y-r-md); padding: 10px 12px 10px 15px; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
+.yolo-scope .notif { position: relative; background: var(--y-surface); border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); box-shadow: var(--y-e1); padding: 10px 12px 10px 15px; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
 .yolo-scope .notif::before { content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 2px; border-radius: 2px; background: var(--y-accent-fill); }
 .yolo-scope .notif.reminder::before { background: var(--y-danger-text); }
 .yolo-scope .notif-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; color: var(--y-text-2); }
@@ -175,14 +175,14 @@ export const YOLO_CSS = `
 .yolo-scope .nact svg { width: 12px; height: 12px; }
 
 /* sections & task rows — de-carded, hairline-separated (4.2④) */
-.yolo-scope .sec { margin-top: 14px; animation: yolo-crossfade var(--y-dur-2) var(--y-ease-out); }
+.yolo-scope .sec { margin-top: 20px; animation: yolo-crossfade var(--y-dur-2) var(--y-ease-out); }
 @keyframes yolo-crossfade { from { opacity: .4; } }
 .yolo-scope .sec-head { display: flex; align-items: center; gap: 8px; height: 32px; }
-.yolo-scope .sec-name { font-size: 11px; font-weight: 500; color: var(--y-text-3); letter-spacing: .02em; }
-.yolo-scope .sec-count { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 11px; color: var(--y-text-3); }
+.yolo-scope .sec-name { font-size: 13px; font-weight: 700; color: var(--y-text-1); letter-spacing: .02em; }
+.yolo-scope .sec-count { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 600; color: var(--y-text-2); }
 .yolo-scope .sec-count.danger { color: var(--y-danger-text); }
 .yolo-scope .sec-rule { flex: 1; height: 1px; background: var(--y-line); }
-.yolo-scope .row { position: relative; display: flex; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--y-line); min-height: 0; transition: background var(--y-dur-1), opacity var(--y-dur-2); }
+.yolo-scope .row { position: relative; display: flex; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--y-line); min-height: 0; transition: background var(--y-dur-1), opacity var(--y-dur-2); }
 .yolo-scope .row:hover, .yolo-scope .row:focus-within { background: var(--y-surface-2); }
 .yolo-scope .row.retire { opacity: .45; }
 .yolo-scope .row.done-row { opacity: .55; }
@@ -199,8 +199,8 @@ export const YOLO_CSS = `
 .yolo-scope .row-title svg.urgent { color: var(--y-danger-text); }
 .yolo-scope .row-title .tt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .yolo-scope .row-title .tt.done { text-decoration: line-through; }
-.yolo-scope .inprog-tag { flex: none; font-size: 10px; font-weight: 500; color: var(--y-accent-text); }
-.yolo-scope .row-meta { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 11px; line-height: 16px; color: var(--y-text-3); white-space: nowrap; overflow: hidden; }
+.yolo-scope .inprog-tag { flex: none; font-size: 10px; font-weight: 600; color: var(--y-accent-text); background: var(--y-accent-soft); padding: 1px 6px; border-radius: 4px; }
+.yolo-scope .row-meta { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 11px; line-height: 16px; color: var(--y-text-2); white-space: nowrap; overflow: hidden; }
 .yolo-scope .due { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; color: var(--y-text-2); }
 .yolo-scope .row.overdue .due { color: var(--y-danger-text); }
 .yolo-scope .sep { color: var(--y-line-strong); }
@@ -226,15 +226,16 @@ export const YOLO_CSS = `
 .yolo-scope .confirm-strip { flex-basis: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid color-mix(in srgb, var(--y-danger-text) 40%, transparent); border-radius: var(--y-r-sm); font-size: 11px; color: var(--y-danger-text); animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
 
 /* folds (36px/row) */
-.yolo-scope .fold { margin-top: 16px; border-top: 1px solid var(--y-line); }
-.yolo-scope .fold-head { display: flex; align-items: center; gap: 8px; height: 36px; cursor: pointer; color: var(--y-text-2); font-size: 13px; user-select: none; border: none; background: none; width: 100%; text-align: left; padding: 0; }
-.yolo-scope .fold-head:hover { color: var(--y-text-1); }
-.yolo-scope .fold-head svg { width: 12px; height: 12px; transition: transform var(--y-dur-2) var(--y-ease-out); color: var(--y-text-3); flex: none; }
+.yolo-scope .fold { margin-top: 18px; border-top: 1px solid var(--y-line-strong); }
+.yolo-scope .fold-head { display: flex; align-items: center; gap: 8px; height: 36px; cursor: pointer; color: var(--y-text-1); font-size: 13px; font-weight: 700; user-select: none; border: none; background: none; width: 100%; text-align: left; padding: 0 6px; margin: 0 -6px; border-radius: var(--y-r-sm); transition: background var(--y-dur-1), color var(--y-dur-1); }
+.yolo-scope .fold-head:hover { color: var(--y-text-1); background: var(--y-surface-2); }
+.yolo-scope .fold-head svg { width: 12px; height: 12px; transition: transform var(--y-dur-2) var(--y-ease-out); color: var(--y-text-2); flex: none; }
 .yolo-scope .fold.open .fold-head svg { transform: rotate(90deg); }
-.yolo-scope .fold-stat { margin-left: auto; font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 11px; color: var(--y-text-3); white-space: nowrap; }
+.yolo-scope .fold-stat { margin-left: auto; font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 11px; color: var(--y-text-2); white-space: nowrap; }
 .yolo-scope .fold-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--y-dur-2) var(--y-ease-out); }
 .yolo-scope .fold.open .fold-body { grid-template-rows: 1fr; }
 .yolo-scope .fold-inner { min-height: 0; overflow: hidden; }
+.yolo-scope .fold-pad { min-width: 0; padding-bottom: 10px; }
 
 /* goals — tick-mark progress bar (5.5) */
 .yolo-scope .goal { padding: 10px 0 6px; border-bottom: 1px solid var(--y-line); }
@@ -281,7 +282,7 @@ export const YOLO_CSS = `
 
 /* empty / skeleton (5.7) */
 .yolo-scope .empty { padding: 40px 16px; text-align: center; }
-.yolo-scope .empty h4 { margin: 0 0 6px; font-size: 15px; font-weight: 600; color: var(--y-text-2); }
+.yolo-scope .empty h4 { margin: 0 0 6px; font-size: 15px; font-weight: 600; color: var(--y-text-1); }
 .yolo-scope .empty p { margin: 0; font-size: 12px; color: var(--y-text-3); }
 .yolo-scope .err-line { display: flex; align-items: center; gap: 10px; padding: 12px 2px 0; color: var(--y-danger-text); font-size: 13px; }
 .yolo-scope .skel-notif, .yolo-scope .skel-row, .yolo-scope .skel-head { background: var(--y-surface-2); border-radius: var(--y-r-sm); background-image: linear-gradient(100deg, transparent 40%, var(--y-surface-3) 50%, transparent 60%); background-size: 200% 100%; animation: yolo-shimmer 1.5s infinite; }

@@ -1,8 +1,9 @@
-# 前端重设计文档 ·「Mono」设计系统（v2.1 提案）
+# 前端重设计文档 ·「Mono」设计系统（v2.2 提案）
 
 > 状态：**待评审**（2026-08-22）
 > 版本记录：v1「轨道站厅」方向（信号琥珀 + 铁路隐喻系统）已否决——评审意见：隐喻过重、装饰元素过多、色彩预算失控。v2 为全新方向：单色、精密、排版主导。v1 原文存档于 [frontend-redesign-v1-trackhall.md](frontend-redesign-v1-trackhall.md)。
 > **v2.1 修订**：对齐工作区未提交的 v0.3.1 前端改动（`git diff HEAD`：YoloPanel / KanbanView / state / filters / dashboard / index）——① 看板/对话双 Tab 已合并为「一个对话面、两种尺寸」（侧栏 ⇄ 全屏，Esc 逐级退出）；② 筛选新增「时段」维度（今天/本周/本月预设 + 自定义起止区间）；③ 台账来源徽标可跳转源会话（`openSession`）；④ 快速记一条与 footer 文案更新。本文所有视图结构与交互语法均以 v0.3.1 为基线。
+> **v2.2 修订**（真机走查反馈）：① 画布底色统一为纯白 `#FFFFFF`（原 `#FAFAFA`），与会话面一致，消除「看板灰、会话白」的割裂；② 提升层级辨识度——分区标 13px w700 text-1、折叠头 13px w700 text-1 + 上缘 line-strong、品牌名 14px w700、激活分段 w700、`进行中` 标签改 accent-soft chip；③ 通知块补 e1 投影 + line-strong 描边；④ 修复折叠区收起时露出部分文字（padding 移入 `.fold-pad`，grid 0fr 可完全塌缩）；⑤ 呼吸感与可读性——分区间距 14→20px、任务行高 40→44px、行 meta 由 text-3 提为 text-2。
 > 上游输入：[VISION.md](VISION.md) + [product-design.md](product-design.md)（功能与信息架构已定稿）。**本文零功能增删**，只重设计表达层；数据契约（`GET /yolo/dashboard`、`POST /yolo/actions`）与交互语法（卡片 → 聊一聊 → 侧栏对话 → 就地生效）不变。
 > 阅读地图：立场 → 第二章；视觉 token → 第三章；布局 → 第四章；组件 → 第五章；动效 → 第六章；质量 → 第八章。
 > 交互原型：[frontend-redesign-prototype.html](frontend-redesign-prototype.html)（单文件，可直接在浏览器打开，完整实现本文的 token、布局、动效与双主题，左下角「原型控制」可切换主题/宽度/动效降级）。
@@ -56,7 +57,7 @@ v1 被否决不是执行问题，是立场问题。三条教训：
 
 | Token | 亮色 | 暗色 | 用途 |
 |---|---|---|---|
-| `--y-bg` | `#FAFAFA` | `#0A0A0B` | 面板画布 |
+| `--y-bg` | `#FFFFFF` | `#0A0A0B` | 面板画布 |
 | `--y-surface` | `#FFFFFF` | `#111113` | 浮层、通知块、停靠面板 |
 | `--y-surface-2` | `#F4F4F5` | `#17171A` | 悬停底、输入底 |
 | `--y-surface-3` | `#EBEBEF` | `#1E1E22` | 按下态 |
@@ -188,15 +189,15 @@ v1 被否决不是执行问题，是立场问题。三条教训：
 
 ### 4.2 分区规格
 
-**① 头部（48px）**：左 = 16px Logo + `YOLO`（13px w600，`letter-spacing .02em`）+ 日期（mono 11px text-3）；右 = `💬 对话` toggle 按钮（28px 高，r-sm；关闭态 = ghost，开启态 = accent-soft 底 + accent-text）+ 刷新/关闭图标按钮（28×28，hover surface-2）。**全屏对话态下**，对话 toggle 换成 `⤡ 侧栏` 按钮（ghost）。底部 1px line。无 Tab——v0.3.1 已把看板/对话 Tab 合并，看板是面板本体，对话是可开合的面。
+**① 头部（48px）**：左 = 16px Logo + `YOLO`（14px w700，`letter-spacing .02em`）+ 日期（mono 11px text-3）；右 = `💬 对话` toggle 按钮（28px 高，r-sm；关闭态 = ghost，开启态 = accent-soft 底 + accent-text）+ 刷新/关闭图标按钮（28×28，hover surface-2）。**全屏对话态下**，对话 toggle 换成 `⤡ 侧栏` 按钮（ghost）。底部 1px line。无 Tab——v0.3.1 已把看板/对话 Tab 合并，看板是面板本体，对话是可开合的面。
 
-**② 工具条（40px，sticky）**：左 = 预设分段（今日/全部/已完成，激活 = text-1 w600 + 底部 2px accent 短线）；中 = **时段 chip（条件出现）**——`rangeFrom/rangeTo` 任一非空时显示紧凑区间标签（如 `8/18~8/24`，`8/18 起`，`至 8/24`，mono 11px，可点击 ✕ 清除）；右 = 焦点胶囊 ×4 + `筛选 ▾`。胶囊 = 标签 + mono 计数，1px line 描边、无底色、24px 高；激活 = accent-soft 底 + accent-text 文字 + 描边消失。计数变化 120ms crossfade。**工具条底部 1px 线之上运行「刷新指示线」**（见 6.2）。筛选下拉：surface + e1 + r-md，分组（状态 / **时段** / 里程碑 / 关键词），28px 行；时段组 = 预设单选（不限/今天/本周/本月）+ 两个 date input（起~止，任一填写即自定义区间；区间激活时无截止日的任务自动排除——产品规则）。有生效筛选时 `筛选` 按钮旁显示 4px accent 点。
+**② 工具条（40px，sticky）**：左 = 预设分段（今日/全部/已完成，激活 = text-1 w700 + 底部 2px accent 短线）；中 = **时段 chip（条件出现）**——`rangeFrom/rangeTo` 任一非空时显示紧凑区间标签（如 `8/18~8/24`，`8/18 起`，`至 8/24`，mono 11px，可点击 ✕ 清除）；右 = 焦点胶囊 ×4 + `筛选 ▾`。胶囊 = 标签 + mono 计数，1px line 描边、无底色、24px 高；激活 = accent-soft 底 + accent-text 文字 + 45% accent 描边。计数变化 120ms crossfade。**工具条底部 1px 线之上运行「刷新指示线」**（见 6.2）。筛选下拉：surface + e1 + r-md，分组（状态 / **时段** / 里程碑 / 关键词），28px 行；时段组 = 预设单选（不限/今天/本周/本月）+ 两个 date input（起~止，任一填写即自定义区间；区间激活时无截止日的任务自动排除——产品规则）。有生效筛选时 `筛选` 按钮旁显示 4px accent 点。
 
 **③ 通知块**：纵向堆叠 gap 8，规格见 5.3。无通知时整区不占位。
 
-**④ 任务列表（主体，flex:1）**：分区顺序 `逾期 → 今日 → 未来 7 天 → 滞留`；分区标 = 名称（11px w500 text-3）+ mono 计数（逾期计数用 danger-text，其余 text-3）+ 右侧延伸发丝线，高 32px；分区空则隐藏。行规格见 5.2。键盘 ↑↓ 行间漫游。
+**④ 任务列表（主体，flex:1）**：分区顺序 `逾期 → 今日 → 未来 7 天 → 滞留`；分区标 = 名称（13px w700 text-1）+ mono 计数（逾期计数用 danger-text，其余 text-2）+ 右侧延伸发丝线，高 32px；分区空则隐藏。行规格见 5.2。键盘 ↑↓ 行间漫游。
 
-**⑤ 折叠区**：每项一行 36px：`▸ 图标`（展开旋转 90°，150ms）+ 名称（13px）+ 统计（mono 11px text-3，右对齐）。上缘 1px line 与列表分隔。
+**⑤ 折叠区**：每项一行 36px：`▸ 图标`（展开旋转 90°，150ms）+ 名称（13px w700 text-1）+ 统计（mono 11px text-2，右对齐）。上缘 1px line-strong 与列表分隔；整行 hover = surface-2 底。
 
 **⑥ 捕获条（52px，sticky 底）**：surface 底 + 上缘 1px line。输入框 flex-1：surface-2 底、r-md、36px 高、13px；placeholder `+ 快速记一条，回车保存（默认今日到期）`（v0.3.1 文案）；右侧内嵌 `↵` 提示（text-3，有内容时转 accent-text）；聚焦 = 底色转 surface + 1px line-strong + 2px accent 焦点环。回车提交（`isComposing` 防中文输入法误触）；空值时回车无效。
 
@@ -220,7 +221,7 @@ v1 被否决不是执行问题，是立场问题。三条教训：
 |---|---|
 | `due_at` < now（开放） | 截止文字 danger-text；行首控件描边 danger；分区计数红 |
 | `due_at` = 今日 | 琥珀不再存在：日期 mono text-2（`今天 18:00`） |
-| `status` in_progress | 控件半弧 accent + `进行中` micro 标签（accent-text，无底） |
+| `status` in_progress | 控件半弧 accent + `进行中` micro 标签（accent-text，accent-soft 底 chip） |
 | 开放且 `updated_at` > 7 天 | meta 追加 `· 7 天未动`（text-3） |
 | `priority` urgent / high | 标题前 12px flag 图标（urgent = danger / high = text-3）；medium/low 不显示 |
 | `milestone_id` | meta 内 `里程碑名`（text-3 + chevron 图标），点击滚动到目标区并高亮 |
@@ -250,13 +251,13 @@ v1 被否决不是执行问题，是立场问题。三条教训：
 
 ### 5.2 TaskRow 状态矩阵（核心组件）
 
-几何：高 40px；第一行 = 标题（13px text-1，单行省略）+ 右侧操作组；第二行 = meta（11px：截止 mono · 优先级 flag · 里程碑 · 来源 pin）。**hover = surface-2 全出血**（延伸至面板左右缘，Linear 式）；操作组（✓ / +1d / ⋯ / 💬，24×24 图标按钮）默认 opacity 0，行 hover 或键盘聚焦时 100ms 淡入。行间 1px 发丝线。
+几何：高 44px；第一行 = 标题（13px text-1，单行省略）+ 右侧操作组；第二行 = meta（11px text-2：截止 mono · 优先级 flag · 里程碑 · 来源 pin）。**hover = surface-2 全出血**（延伸至面板左右缘，Linear 式）；操作组（✓ / +1d / ⋯ / 💬，24×24 图标按钮）默认 opacity 0，行 hover 或键盘聚焦时 100ms 淡入。行间 1px 发丝线。
 
 | 状态 | 控件 | 截止文字 | 附加 |
 |---|---|---|---|
 | 逾期 | ○ danger 描边 | `昨天` danger-text | 排序最高 |
 | 今日 | ○ 空心 | `今天 18:00` mono text-2 | — |
-| 进行中 | ◐ accent 半弧 | 同上 | `进行中` accent micro 标签 |
+| 进行中 | ◐ accent 半弧 | 同上 | `进行中` accent micro 标签（accent-soft chip） |
 | 未来 | ○ 空心 | `周四 8/27` mono text-3 | — |
 | 滞留 | ○ 空心 | 原截止 + `· 7 天未动` | — |
 | 完成（过渡） | ● ok 填充 | `完成 14:32` | 行 opacity .45，见 5.4 |
@@ -264,7 +265,7 @@ v1 被否决不是执行问题，是立场问题。三条教训：
 
 ### 5.3 NotificationBlock（通知块）
 
-- 容器：surface 底、r-md、1px line、padding 12/14、**无投影**；左侧 2px 语义条（brief = accent，reminder = danger）；
+- 容器：surface 底、r-md、1px line-strong、e1 投影、padding 12/14；左侧 2px 语义条（brief = accent，reminder = danger）；
 - 头行：bell 图标 + 类型（`早报` / `晚报` / `到期提醒`，12px w600）+ 时间（mono 11px text-3）；
 - 正文：13/19，6 行 clamp，`展开` ghost 续读；
 - 操作行：reminder = `[✓ 完成] [+1d] [聊一聊] [知道了]`；brief = `[聊一聊] [知道了]`。全部 ghost 型；**`聊一聊` 唯一例外用 accent 描边 ghost**——产品签名动作配全系统唯一强调按钮；
