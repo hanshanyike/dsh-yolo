@@ -93,6 +93,25 @@ export interface Preference {
   confidence: number
   scope_key: string
   updated_at: number
+  /** Epoch ms when this value became current (R14 time-validity). */
+  valid_at?: number | null
+  /** Epoch ms when a newer value superseded this one (null = current). */
+  invalid_at?: number | null
+  /** Originating dsh session (provenance, R14). */
+  session_id?: string | null
+}
+
+/** Append-only provenance trail for preference supersessions (R14). Each row
+ * records a value that was current for a window, so future readers can answer
+ * "what did we believe before, and which session said it". */
+export interface PreferenceHistory {
+  id: string
+  key: string
+  value: string
+  scope_key: string
+  session_id: string | null
+  valid_at: number
+  invalid_at: number | null
 }
 
 export interface TimelineEvent {

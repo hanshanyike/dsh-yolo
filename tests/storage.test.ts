@@ -21,7 +21,7 @@ describe('db + schema', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[]
     const tableNames = names.map((t) => t.name)
-    for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'goals', 'preferences', 'events', 'extraction_log', 'pending_reminders', 'yolo_fts']) {
+    for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'goals', 'preferences', 'preference_history', 'events', 'extraction_log', 'pending_reminders', 'yolo_fts']) {
       expect(tableNames).toContain(t)
     }
   })
@@ -86,6 +86,31 @@ describe('preferences', () => {
     expect(p).toHaveLength(1)
     expect(p[0].confidence).toBeGreaterThan(0.5)
     expect(p[0].value).toBe('zh')
+    expect(repo.listPreferenceHistory(db, SCOPE)).toHaveLength(0)
+  })
+
+  it('supersedes a changed value, keeping one current row and a history trail (R14)', () => {
+    repo.upsertPreference(db, { key: 'port', value: '8080', scope_key: SCOPE, session_id: 's1' })
+    repo.upsertPreference(db, { key: 'port', value: '9090', scope_key: SCOPE, session_id: 's2' })
+    const p = repo.listPreferences(db, SCOPE)
+    expect(p).toHaveLength(1)
+    expect(p[0].value).toBe('9090')
+    expect(p[0].session_id).toBe('s2')
+    expect(p[0].valid_at).not.toBeNull()
+    expect(p[0].invalid_at ?? null).toBeNull()
+    // the superseded fact is preserved (证据溯源), with the old source
+    const h = repo.listPreferenceHistory(db, SCOPE)
+    expect(h).toHaveLength(1)
+    expect(h[0].value).toBe('8080')
+    expect(h[0].session_id).toBe('s1')
+    expect(h[0].invalid_at).not.toBeNull()
+  })
+
+  it('does not recall a superseded preference from FTS (R14 auto-expire)', () => {
+    repo.upsertPreference(db, { key: 'port', value: '8080', scope_key: SCOPE })
+    repo.upsertPreference(db, { key: 'port', value: '9090', scope_key: SCOPE })
+    const hits = ftsSearch(db, '8080')
+    expect(hits.filter((h) => h.row_type === 'preference')).toHaveLength(0)
   })
 })
 

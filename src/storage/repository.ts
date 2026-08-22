@@ -17,6 +17,7 @@ import type {
   NotificationKind,
   PendingReminder,
   Preference,
+  PreferenceHistory,
   Priority,
   RecallLog,
   SessionSummary,
@@ -273,20 +274,29 @@ export function findGoalByTitle(db: DB, scopeKey: string, title: string): Goal |
 
 export function upsertPreference(
   db: DB,
-  data: { key: string; value: string; scope_key: string },
+  data: { key: string; value: string; scope_key: string; session_id?: string | null },
 ): Preference {
   const ts = now()
   const existing = db
-    .prepare('SELECT * FROM preferences WHERE key = ? AND scope_key = ?')
+    .prepare('SELECT * FROM preferences WHERE key = ? AND scope_key = ? AND invalid_at IS NULL')
     .get(data.key, data.scope_key) as Preference | undefined
   if (existing) {
+    if (existing.value === data.value) {
+      // idempotent repeat — only bump confidence; keep valid_at for stability
+      const confidence = Math.min(0.9, (existing.confidence ?? 0.5) + 0.1)
+      db.prepare('UPDATE preferences SET confidence = ?, updated_at = ? WHERE id = ?').run(confidence, ts, existing.id)
+      return { ...existing, confidence, updated_at: ts }
+    }
+    // Supersede (R14): a new value for the same key invalidates the old one.
+    // Keep single current row (UNIQUE(key, scope_key)); record the superseded
+    // value in the append-only history as the traceable evidence trail.
+    db.prepare(
+      'INSERT INTO preference_history(id, key, value, scope_key, session_id, valid_at, invalid_at) VALUES(?,?,?,?,?,?,?)',
+    ).run(genId(), existing.key, existing.value, existing.scope_key, existing.session_id ?? null, existing.valid_at ?? existing.updated_at, ts)
     const confidence = Math.min(0.9, (existing.confidence ?? 0.5) + 0.1)
-    db.prepare('UPDATE preferences SET value = ?, confidence = ?, updated_at = ? WHERE id = ?').run(
-      data.value,
-      confidence,
-      ts,
-      existing.id,
-    )
+    db.prepare(
+      'UPDATE preferences SET value = ?, confidence = ?, updated_at = ?, valid_at = ?, session_id = ? WHERE id = ?',
+    ).run(data.value, confidence, ts, ts, data.session_id ?? null, existing.id)
     // FTS update
     db.prepare("DELETE FROM yolo_fts WHERE row_type = 'preference' AND row_id = ?").run(existing.id)
     db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run(
@@ -295,19 +305,44 @@ export function upsertPreference(
       data.key,
       data.value,
     )
-    return { ...existing, value: data.value, confidence, updated_at: ts }
+    return {
+      ...existing,
+      value: data.value,
+      confidence,
+      updated_at: ts,
+      valid_at: ts,
+      invalid_at: null,
+      session_id: data.session_id ?? null,
+    }
   }
   const id = genId()
   db.prepare(
-    'INSERT INTO preferences(id, key, value, confidence, scope_key, updated_at) VALUES(?,?,?,?,?,?)',
-  ).run(id, data.key, data.value, 0.5, data.scope_key, ts)
-  return { id, key: data.key, value: data.value, confidence: 0.5, scope_key: data.scope_key, updated_at: ts }
+    'INSERT INTO preferences(id, key, value, confidence, scope_key, updated_at, valid_at, session_id) VALUES(?,?,?,?,?,?,?,?)',
+  ).run(id, data.key, data.value, 0.5, data.scope_key, ts, ts, data.session_id ?? null)
+  return {
+    id,
+    key: data.key,
+    value: data.value,
+    confidence: 0.5,
+    scope_key: data.scope_key,
+    updated_at: ts,
+    valid_at: ts,
+    invalid_at: null,
+    session_id: data.session_id ?? null,
+  }
 }
 
 export function listPreferences(db: DB, scopeKey: string): Preference[] {
   return db
-    .prepare('SELECT * FROM preferences WHERE scope_key = ? ORDER BY updated_at DESC')
+    .prepare('SELECT * FROM preferences WHERE scope_key = ? AND invalid_at IS NULL ORDER BY updated_at DESC')
     .all(scopeKey) as Preference[]
+}
+
+/** Append-only trail of superseded preference values (R14 evidence/provenance). */
+export function listPreferenceHistory(db: DB, scopeKey: string): PreferenceHistory[] {
+  return db
+    .prepare('SELECT * FROM preference_history WHERE scope_key = ? ORDER BY invalid_at DESC')
+    .all(scopeKey) as PreferenceHistory[]
 }
 
 // ---------- timeline events ----------

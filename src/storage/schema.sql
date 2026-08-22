@@ -85,10 +85,26 @@ CREATE TABLE IF NOT EXISTS preferences (
   confidence REAL DEFAULT 0.5,
   scope_key  TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
+  valid_at   INTEGER,                -- R14: becomes current at this epoch ms
+  invalid_at INTEGER,                -- R14: superseded at this epoch ms (null = current)
+  session_id TEXT,                   -- R14: originating dsh session (provenance)
   UNIQUE(key, scope_key)
 );
 CREATE INDEX IF NOT EXISTS idx_prefs_key   ON preferences(key);
 CREATE INDEX IF NOT EXISTS idx_prefs_scope ON preferences(scope_key);
+
+-- append-only provenance trail for superseded preferences (R14 evidence)
+CREATE TABLE IF NOT EXISTS preference_history (
+  id         TEXT PRIMARY KEY,       -- ULID
+  key        TEXT NOT NULL,
+  value      TEXT NOT NULL,
+  scope_key  TEXT NOT NULL,
+  session_id TEXT,
+  valid_at   INTEGER NOT NULL,
+  invalid_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_prefhist_scope ON preference_history(scope_key);
+CREATE INDEX IF NOT EXISTS idx_prefhist_key   ON preference_history(key);
 
 -- timeline events (append-only; references source session)
 CREATE TABLE IF NOT EXISTS events (

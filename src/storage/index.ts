@@ -25,6 +25,7 @@ import type {
   NotificationKind,
   PendingReminder,
   Preference,
+  PreferenceHistory,
   RowType,
   ScopeMode,
   SearchHit,
@@ -209,13 +210,18 @@ export default class Yolo extends Service {
   }
 
   // ---- preferences ----
-  addPreference(cwd: string, data: { key: string; value: string }): Preference {
+  addPreference(cwd: string, data: { key: string; value: string; session_id?: string | null }): Preference {
     const h = this.resolve(cwd)
     return repo.upsertPreference(h.db, { ...data, scope_key: h.scopeKey })
   }
   listPreferences(cwd: string): Preference[] {
     const h = this.resolve(cwd)
     return repo.listPreferences(h.db, h.scopeKey)
+  }
+  /** Superseded preference values (R14 evidence/provenance trail). */
+  listPreferenceHistory(cwd: string): PreferenceHistory[] {
+    const h = this.resolve(cwd)
+    return repo.listPreferenceHistory(h.db, h.scopeKey)
   }
 
   /** Workspace scopes opened so far (aggregation registry; cwd -> scopeKey). */

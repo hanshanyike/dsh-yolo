@@ -41,6 +41,16 @@ function migrate(db: DB): void {
   if (!todoCols.some((c) => c.name === 'last_reminded_at')) {
     db.exec('ALTER TABLE todos ADD COLUMN last_reminded_at INTEGER')
   }
+  const prefCols = db.prepare('PRAGMA table_info(preferences)').all() as { name: string }[]
+  if (!prefCols.some((c) => c.name === 'valid_at')) {
+    db.exec('ALTER TABLE preferences ADD COLUMN valid_at INTEGER')
+  }
+  if (!prefCols.some((c) => c.name === 'invalid_at')) {
+    db.exec('ALTER TABLE preferences ADD COLUMN invalid_at INTEGER')
+  }
+  if (!prefCols.some((c) => c.name === 'session_id')) {
+    db.exec('ALTER TABLE preferences ADD COLUMN session_id TEXT')
+  }
   const eventCols = db.prepare('PRAGMA table_info(events)').all() as { name: string }[]
   if (!eventCols.some((c) => c.name === 'source')) {
     db.exec('ALTER TABLE events ADD COLUMN source TEXT')

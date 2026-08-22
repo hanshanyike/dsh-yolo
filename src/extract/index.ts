@@ -95,7 +95,7 @@ function mergeExtraction(yolo: Yolo, cwd: string, r: ExtractionResult, sessionId
     }
   }
   for (const g of r.goals) yolo.addGoal(cwd, { title: g.title, description: g.description, milestone_id: link(g.milestone_title) })
-  for (const p of r.preferences) yolo.addPreference(cwd, { key: p.key, value: p.value })
+  for (const p of r.preferences) yolo.addPreference(cwd, { key: p.key, value: p.value, session_id: sessionId })
   const recentSummaries = new Set(yolo.listEvents(cwd, 30).map((e) => e.summary))
   for (const e of r.events) {
     if (recentSummaries.has(e.summary)) continue
