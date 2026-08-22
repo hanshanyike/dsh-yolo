@@ -9,7 +9,7 @@
 import { request, expect, type APIRequestContext, type Page } from '@playwright/test'
 
 export const E2E_PREFIX = '[E2E]'
-export const HOST = process.env.YOLO_E2E_HOST ?? 'http://127.0.0.1:4080'
+export const HOST = process.env.YOLO_E2E_HOST ?? 'http://127.0.0.1:3080'
 
 /** Unique-ish label so repeated local runs don't collide with stale leftovers. */
 export function uid(tag = 'task'): string {

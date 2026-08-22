@@ -19,7 +19,7 @@
 // Options:
 //   --setup   run steps 1-7 only (prepare, do not start)
 //   --update  git pull the host first, then reinstall + rebuild, then start
-//   --port N  custom port (default 4080 — 3080 is the running dsh GUI itself)
+//   --port N  custom port (default 3080 — dsh web\
 //   --fix-acl elevate once via UAC to repair the workspace ACL (Windows only)
 
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -38,7 +38,7 @@ const PORT = parsePort()
 
 function parsePort() {
   const i = process.argv.indexOf('--port')
-  return i !== -1 && process.argv[i + 1] ? Number(process.argv[i + 1]) : 4080
+  return i !== -1 && process.argv[i + 1] ? Number(process.argv[i + 1]) : 3080
 }
 const SETUP = process.argv.includes('--setup')
 const UPDATE = process.argv.includes('--update')
@@ -296,3 +296,5 @@ warnWindowsAcl()
 // 8. start
 step(8, `start dsh web on :${PORT}`)
 run('pnpm', ['dsh', 'web', '--patch', PATCH, '--no-open', '--port', String(PORT)], HOST)
+
+

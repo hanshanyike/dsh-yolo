@@ -13,6 +13,7 @@
 | 跑测试 / 加测试 / 真机走查 | [测试文档](testing.md)（中文） |
 | 看有状态计划（状态/进度/可回复提醒）怎么设计 | [有状态计划设计文档](design-m8-organizer.md)（中文） |
 | 看产品设计的全景蓝图与 v0.3.0 需求 | [产品设计文档](product-design.md)（中文）· [HTML 精装版 + 可交互原型](product-design.html) |
+| 看后续开发计划（v0.3.0 批：语义召回/跨工作区聚合） | [开发计划](development-plan.md)（中文） |
 | 查两个已定位待修的问题（时间线归属 / 提醒不可见） | [问题定位：时间线会话归属](issue-timeline-session-attribution.md) · [问题定位：提醒不可见](issue-reminder-visibility.md)（中文） |
 | 发版流程 | [发布流程](release.md)（英文） |
 | 版本历史 | [CHANGELOG](../CHANGELOG.md) |
@@ -48,3 +49,4 @@ dsh-yolo/
   的"故障排查"章节。
 - **语言**：面向使用者的新文档用中文；`architecture.md` / `release.md` 保持英文
   （与历史一致），改动时沿用原语言。
+

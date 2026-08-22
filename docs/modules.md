@@ -415,7 +415,7 @@ bundle 作为 classic `<script>` 加载，必须：调用 `window.__ModuleLoader
 
 | 命令 | 作用 |
 |---|---|
-| `node scripts/dev.mjs` | 完整流程 + 前台启动（默认端口 4080） |
+| `node scripts/dev.mjs` | 完整流程 + 前台启动（默认端口 3080） |
 | `node scripts/dev.mjs --setup` | 只准备不启动 |
 | `node scripts/dev.mjs --update` | 先 `git pull` host 再重装重构建再启动 |
 | `node scripts/dev.mjs --port 4081` | 自定义端口 |
@@ -432,7 +432,7 @@ bundle 作为 classic `<script>` 加载，必须：调用 `window.__ModuleLoader
 
 | 症状 | 原因与解决 |
 |---|---|
-| `EADDRINUSE 4080` | 残留 dsh 进程占端口；PowerShell：`Get-NetTCPConnection -LocalPort 4080 \| Stop-Process` |
+| `EADDRINUSE 3080` | 残留 dsh 进程占端口；PowerShell：`Get-NetTCPConnection -LocalPort 3080 \| Stop-Process` |
 | `frontend dist not built` | host 未 build；跑 `node scripts/dev.mjs --setup` |
 | `Cannot find package 'better-sqlite3'` | YOLO 未 `pnpm install`；或 `pnpm-workspace.yaml` 的 `allowBuilds` 没设 `true` |
 | `Could not locate the bindings file` | better-sqlite3 native binding 未编译；确认 `allowBuilds: { better-sqlite3: true }` 后重跑 `pnpm install` |
@@ -487,3 +487,6 @@ Settings 页面（`yolo` 命名空间）可配置项，全部有 schemastery 默
 | 构建 / 运行 / ACL | `scripts/dev.mjs`、`wrap-client.mjs`、`copy-assets.mjs` |
 | 平台行为 / 运行时踩坑 | [architecture.md](architecture.md) 的"已验证平台行为"章节 |
 | 测试怎么加 | [testing.md](testing.md) |
+
+
+

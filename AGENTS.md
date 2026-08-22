@@ -1,13 +1,16 @@
 # AGENTS.md — WorkBuddy (dsh-yolo)
 
-运行约定与工程约束，供 agent 与协作者在本仓库内工作时遵循。愿景与路线图见
-[`docs/VISION.md`](docs/VISION.md)；设计、架构、测试、发布细节见 `docs/`。
+运行约定与工程约束，供 agent 与协作者在本仓库内工作时遵循。
+
+> 一句话：**说一遍，它帮你把这件事沿着轨道稳稳推进。**（Say it once. Keep it on track.）
+>
+> 规划与排期的**单一事实源**是 [`docs/roadmap-ux-priorities.md`](docs/roadmap-ux-priorities.md)
+> 与 [`docs/development-plan.md`](docs/development-plan.md)（当前批）。本文件只讲"怎么干活"，不讲"做什么、为什么"。
 
 ## 这个项目是什么
 
 一个「Jarvis 式的个人 AI 助手」，核心主张是**管理而非代办**：它不帮你执行，
 而是记住你说过的话，并在合适的时刻提醒、把计划沿着轨道稳稳推进。
-一句 slogan：**“Say it once. Keep it on track.”（说一遍，它帮你把这件事沿着轨道稳稳推进）**。
 
 仓库里的 `YOLO` 是内部代号（模块名 / 包名 / `ctx.yolo` 等大量标识符依赖它，
 **不要重命名**）。产品文案统一用「管理工作与生活的助手」「助手看板」，**不用**
@@ -36,9 +39,9 @@ pnpm install            # 安装依赖
 pnpm check              # tsc --noEmit 类型检查（改代码后必跑）
 pnpm test:run           # vitest 单测（不依赖 host）
 pnpm build              # 产物到 dist/（host 从 dist 加载插件）
-node scripts/dev.mjs    # 本地拉起 dev host 到 :4080
+node scripts/dev.mjs    # 本地拉起 dev host 到 :3080（默认；--port 可改）
 node scripts/e2e.mjs    # E2E：保证 host 起来后跑 Playwright 全套
-node scripts/e2e.mjs --spec panel   # 只跑某个 spec
+node scripts/e2e.mjs --spec panel   # 只跑某个 spec（tests/e2e/<spec>.spec.ts）
 ```
 
 ## 记忆 / 提醒 / 看板的核心机制
@@ -48,8 +51,14 @@ node scripts/e2e.mjs --spec panel   # 只跑某个 spec
   `POST /yolo/actions` → `applyYoloAction`，与模型工具 `yolo_action` 同一条路径，
   保证状态迁移 + 审计事件一致。
 - **看板数据**：`GET /yolo/dashboard`，打开时每 30s 轮询；侧栏角标独立轻量轮询。
-- **提醒**：调度器按 `checkIntervalSec` 产生通知卡（未处理角标 + 看板卡），
-  **绝不打扰工作会话**；`完成` toast 带 4 秒「撤销」窗口（服务端 `reopen` 领域动作）。
+- **提醒**：调度器按 `checkIntervalSec` 产生**通知卡**（未处理角标 + 看板卡），并投递到
+  **YOLO 常驻线程**（`ctx.yolo` 的 resident thread），**绝不注入/打扰工作会话**（红线 D7/TB-1）。
+  `完成` toast 带 4 秒「撤销」窗口（服务端 `reopen` 领域动作）；提醒正文只给用户可读文本，
+  agent 处理规则放 system 段（`memory/recall.ts` 的 yolo-instructions）。
+- **跨工作区只读**：`scope=all` 聚合是多工作区只读视图；`POST /yolo/actions` 不接受 `scope`，
+  外来工作区行只看不操作（见 `docs/roadmap-ux-priorities.md` 第 4 节）。
+
+> 产品红线：**管理而非代办；绝不打扰工作会话；本地优先；类型安全 + 真机验证。**
 
 ## 测试（重要）
 
@@ -65,23 +74,40 @@ node scripts/e2e.mjs --spec panel   # 只跑某个 spec
 - UI 变更在提交与发布的准入条件里**必须通过 W1–W8**，且修改 `client/**`、设计系统、API payload
   都会触发该验证。
 
+## 规划与排期（防"里程碑堆乱"的关键纪律）
+
+1. **单一事实源**：排期只改 [`docs/roadmap-ux-priorities.md`](docs/roadmap-ux-priorities.md) 与
+   [`docs/development-plan.md`](docs/development-plan.md)；`README` Roadmap 只是对外摘要。
+2. **别为借鉴而堆功能**：任何"可借鉴的点"都必须先转成**一条用户可感知的改进 + 一条可验收标准**，
+   才能进排期；`docs/research/09-borrowables.md`（P1–P46）是参考数据库，不是排期。
+3. **版本由 `development-plan.md` + `docs/release.md` 决定**，一次发版改一处；发布时必须同步
+   README roadmap / `CHANGELOG` / `docs/README.md`，避免"代码超前、文档滞后"。
+4. **真机反馈走 `issue-*.md`**（用户遇到问题）→ 修复 + 补单测/E2E/W1–W8 → 并入 development-plan → 归档。
+5. **不新增与其平行的"路线图/里程碑/规划"文档**；M 编号（`design-m*.md`）归入历史，不再新增平行编号。
+
 ## 提交前检查清单
 
 1. `pnpm check` 通过。
 2. `pnpm test:run` 全部通过。
 3. 改动了 `src/**` 或 `client/**` 的：
-
    - 单测同步更新；
    - E2E / W1–W8 按触发范围执行。
-
 4. 夹具措辞符合「用语真实」约束。
 5. UI 变更按 `docs/testing.md` W1–W8 清单通过。
+6. 功能更动若有"用户可感知"变化 → 同步 `docs/development-plan.md`（或 roadmap），避免计划过期。
 
 ## 文档索引
 
-- `docs/VISION.md` — 愿景、根问题、原则、四阶段路线（Keeper → Organizer → Manager → Companion）。
-- `docs/architecture.md` — 架构、数据流、决策表、扩展点。
-- `docs/testing.md` — 测试体系，含真机端到端验证 W1–W8。
-- `docs/frontend-redesign.md` — Mono 设计系统规范。
-- `README.md` — 定位、slogan、愿景驱动的路线图。
-- `CHANGELOG.md` — 版本变更记录。
+- **规划 / 排期（单一事实源）**：`docs/roadmap-ux-priorities.md` · `docs/development-plan.md`
+- **愿景**：`docs/VISION.md`（四阶段：Keeper → Organizer → Manager → Companion）
+- **产品定义**：`docs/product-design.md`（面板 1.0）· `docs/product-design.html`（可点击原型）
+- **设计**：`docs/design-m8-organizer.md`（M8 · 已交付）· `docs/design-m9-recall-quality.md`（M9）·
+  `docs/frontend-redesign.md` / `docs/frontend-redesign-v1-trackhall.md`（Mono 设计系统）
+- **调研 / 参考**：`docs/research/`（00 总报告 · 01–13 逐项 · 09 可借鉴清单 P1–P46）
+- **架构**：`docs/architecture.md`（数据流、决策、扩展点）· `docs/modules.md`（逐模块代码地图，改代码前先查）
+- **测试**：`docs/testing.md`（含真机 W1–W8 清单）
+- **发布**：`docs/release.md` · `CHANGELOG.md`
+- **使用**：`docs/usage.md`
+- **真机反馈**：`docs/issue-*.md`（issue-reminder-visibility · issue-timeline-session-attribution）
+- **入口**：`README.md` · `docs/README.md`（文档地图）
+- **schema 事实源**：`src/storage/schema.sql`

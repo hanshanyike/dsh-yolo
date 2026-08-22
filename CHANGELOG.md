@@ -10,6 +10,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > The stateful-plan drop — maps to the `0.3.0` line per `docs/release.md`;
 > this section closes when that release is actually cut.
 
+### Added — v0.3.0 semantic recall + cross-workspace aggregation
+
+- **Host-LLM semantic recall (`semanticRecall`).** On each user message an async
+  prewarm runs a host-LLM query expansion (paraphrase + cross-language, e.g.
+  季度总结 → Q3 report) and an optional candidate rerank, cached per session/query
+  and budgeted (`dailyBudget` / `minQueryChars`). The read path widens the
+  deterministic `ftsRecallSearch` pool with cached expansions and applies the
+  cached rerank verdicts — with a hard deterministic floor so a rerank that
+  judges everything irrelevant can never empty the context. No embedding/vector
+  dependency; the host LLM is reused (`purpose: 'session-title'`), and any LLM
+  failure degrades silently to deterministic recall.
+- **`semanticRecall` config namespace** (`enabled` / `model` /
+  `expansionsPerQuery` / `rerankOn` / `maxRerankCandidates` / `dailyBudget` /
+  `minQueryChars`) surfaced in Settings.
+- **`recall_log` observability table** — every semantic attempt records
+  query/expansions/rerank verdicts/latency/status (`logRecall`,
+  `countRecallSince`, `listRecentRecall`, `pruneRecallLog`), feeding the memory
+  health metrics and budget tuning.
+- **Cross-workspace aggregation (read-only, opt-in).** `GET /yolo/dashboard`
+  gains `?scope=current|all`; the ui plugin tracks the workspace scopes it has
+  opened (`listWorkspaceMeta`) and, when `ui.aggregateAcrossWorkspaces` is on,
+  unions all known workspaces' dashboards — each row tagged with its owning
+  workspace (`ws`), plus `workspaces`/`workspaceCount`. Default `current`,
+  actions stay current-scope (isolation intact); the panel header gains a
+  当前/全部 scope toggle that persists across close/reopen.
+- **`ui.aggregateAcrossWorkspaces` config.** Default `false` (isolation by
+  default); aggregation is a view-only union, never a write path.
+
+### Added — M9 recall quality & mechanism hardening (v0.4.0 line, per `docs/design-m9-recall-quality.md`)
+
+- **Hybrid multi-query recall (`ftsRecallSearch`).** The old single-phrase FTS
+  match almost never hit real user messages; recall now merges the whole-phrase
+  match with an OR expression of extracted tokens (latin words ≥3 chars, CJK
+  sliding trigrams, capped at 8) plus a `title LIKE` fallback for 2-char CJK
+  terms. A rephrased question now finds 「把演示稿发给研发」.
+- **Recall policy + per-session injection dedup.** `applyRecallPolicy`
+  deterministically drops hits (`already-injected` / `kind-quota` /
+  `over-budget` reasons) — kind quotas prevent one row type flooding the
+  context, and the byte budget now skips overlong singles instead of
+  truncating everything after them. `RecallDedupTracker` injects each memory
+  once per conversation (committed on the next user message, so repeated
+  assemblies inside a turn stay byte-stable and prefix-cache friendly) and
+  resets on session switch.
+- **Prompt-template escaping + preference cap.** Every injected
+  preference/recall line is `{{`-escaped (the host interpolates prompt
+  templates strictly — raw memory text could throw and break assembly), and
+  the preamble carries the 12 newest preferences instead of all of them.
+- **`action_denied` audit (P34).** Every `applyYoloAction` validation failure
+  writes a timeline event before returning — denials are never silent (the
+  idempotent "already handled" no-op stays silent). `memory_forget` no longer
+  bypasses the domain path: todo→cancel, milestone→set_status abandoned,
+  goal→abandon, each with its audit event.
+- **`consolidate` explicit atomic action (P35).** Merging two todos is one
+  audited domain action: provenance lands in the target's detail, missing due
+  / higher priority inherit deterministically, the source is cancelled with
+  its notification cards resolved, and a single `todo_consolidated` event
+  records it. Available through `yolo_action` and `POST /yolo/actions`.
+- **Throttle gates actually wired (P44).** `reminder.checkIntervalSec` /
+  `aheadMin` / `enabled` are read from settings (they were dead config);
+  extraction gains a small-talk gate (`extraction.minTurnChars`, on the last
+  user message) and a daily run cap (`extraction.maxRunsPerDay`), and LLM
+  failures now write an `extraction_log` row with `status='error'` instead of
+  vanishing.
+
 ### Added
 
 - **Panel 1.0 (v0.3.0, per `docs/product-design.md` — 已评审定稿).** The sidebar
@@ -250,3 +314,4 @@ First working milestone set: the full memory loop (capture → store → recall 
 [Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.2.0-alpha.1...HEAD
 [0.2.0-alpha.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.1.0...v0.2.0-alpha.1
 [0.1.0]: https://github.com/hanshanyike/dsh-yolo/releases/tag/v0.1.0
+

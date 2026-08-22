@@ -6,7 +6,7 @@
 //   node scripts/e2e.mjs --no-host    # assume a host is already running
 //
 // The host pieces mirror scripts/dev.mjs (idempotent): ensure checkout, deps,
-// build, junction + runtime patch, then `pnpm dsh web` on YOLO_E2E_PORT/4080.
+// build, junction + runtime patch, then `pnpm dsh web` on YOLO_E2E_PORT/3080.
 // If a host already answers GET /yolo/dashboard we reuse it and skip bring-up
 // (the common local case — dev.mjs left it running). We only stop a host this
 // runner started, so a dev host the user owns is never killed.
@@ -24,7 +24,7 @@ const PROFILE_DIR = join(homedir(), '.dsh', 'profiles')
 const LINK_DIR = join(PROFILE_DIR, 'node_modules')
 const LINK = join(LINK_DIR, 'dsh-plugin-yolo')
 const PATCH = join(ROOT, 'cordis.dev.local.yml')
-const PORT = Number(process.env.YOLO_E2E_PORT ?? process.env.PORT ?? 4080)
+const PORT = Number(process.env.YOLO_E2E_PORT ?? process.env.PORT ?? 3080)
 const BASE = `http://127.0.0.1:${PORT}`
 
 const win = process.platform === 'win32'
@@ -167,3 +167,4 @@ function bringUpHost() {
   }
   process.exit(code ?? 0)
 })()
+

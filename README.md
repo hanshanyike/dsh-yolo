@@ -101,7 +101,7 @@ cd dsh-yolo
 pnpm install          # YOLO's own deps (better-sqlite3 native binding included)
 pnpm dev:web:setup    # one-time: clones & builds the host, links the profile,
                       #          generates the runtime patch overlay
-pnpm dev:web          # boots dsh web → http://127.0.0.1:4080
+pnpm dev:web          # boots dsh web → http://127.0.0.1:3080
 ```
 
 `dev.mjs` is idempotent — re-run `pnpm dev:web` any time; use
@@ -109,7 +109,7 @@ pnpm dev:web          # boots dsh web → http://127.0.0.1:4080
 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) into
 `host/deepseek-harness` on first setup, so nothing is installed globally.
 
-Open **http://127.0.0.1:4080**, pick your workspace, and start talking.
+Open **http://127.0.0.1:3080**, pick your workspace, and start talking.
 YOLO is already watching: mention a deadline, set a goal, or say *"remember this"* —
 then open the **YOLO panel** at the bottom of the left sidebar to see your
 timeline, task board, and goal progress.
@@ -162,10 +162,13 @@ time, and YOLO fires when it's due** — you reply to act, no ceremony.
 
 **🔜 Next**
 
-- Semantic recall — FTS keyword search upgraded to meaning-based matching (search
-  「季度总结」 and hit “Q3 report”)
-- Cross-workspace aggregation — one view over all workspaces' due items (isolated by
-  default, aggregation opt-in)
+- Semantic recall — host-LLM query expansion + rerank stacked on the hybrid FTS
+  recall (search 「季度总结」 → hit “Q3 report”); budgeted + deterministic-degrade,
+  no embedding dep
+- Cross-workspace aggregation — a read-only, opt-in union of every workspace's
+  due items (`?scope=all`), rows tagged with their owning workspace; actions stay
+  current-scope
+- Memory-health entry — duplicate/recall-health metrics surfaced from `recall_log`
 - Stable `v0.3.0` release
 
 **🌱 Future**
@@ -215,3 +218,6 @@ pnpm test    # vitest (tests/ only — the config excludes the dev host)
 ---
 
 <p align="center"><sub>Made with 🧠 for deepseek-harness — <i>"Say it once. Keep it on track."</i></sub></p>
+
+
+

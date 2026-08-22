@@ -1,6 +1,6 @@
 // YOLO end-to-end (browser) tests — real host, real browser.
 //
-// These drive a RUNNING dsh web host (dev.mjs, default http://127.0.0.1:4080)
+// These drive a RUNNING dsh web host (dev.mjs, default http://127.0.0.1:3080)
 // with system Edge/Chrome, so they exercise the actual client bundle, the
 // real /yolo/dashboard + /yolo/actions endpoints, and the real SQLite store.
 // They are a LOCAL complementary lane — CI runs the keyless unit suite only
@@ -15,7 +15,7 @@
 
 import { defineConfig } from '@playwright/test'
 
-const HOST = process.env.YOLO_E2E_HOST ?? 'http://127.0.0.1:4080'
+const HOST = process.env.YOLO_E2E_HOST ?? 'http://127.0.0.1:3080'
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -38,3 +38,4 @@ export default defineConfig({
   },
   projects: [{ name: 'yolo-e2e', use: { browserName: 'chromium' } }],
 })
+

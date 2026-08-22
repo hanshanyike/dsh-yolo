@@ -133,7 +133,7 @@ const ctx = { on: (ev, fn) => { handlers.set(ev, fn) }, ... }
 
 单测用 mock / 内存 SQLite 验证纯逻辑与接线，验证不了真实宿主 + 真实浏览器下的
 表达层与宿主集成。E2E 用 **Playwright 驱动一个真实运行的 dsh web 宿主**（`dev.mjs`
-的 `:4080`），走真实的 `GET /yolo/dashboard` + `POST /yolo/actions` 端点与真实的
+的 `:3080`），走真实的 `GET /yolo/dashboard` + `POST /yolo/actions` 端点与真实的
 SQLite 存储，覆盖核心面板交互、提醒/角标闭环、主题解析与窄屏态。
 
 - 它是一条**本地补充车道**：CI 只跑免 key 的单测套件（提醒/简报/调度器触发逻辑
@@ -145,11 +145,11 @@ SQLite 存储，覆盖核心面板交互、提醒/角标闭环、主题解析与
 ```bash
 node scripts/e2e.mjs              # 保证宿主起来后跑全套（幂等，幂等地启动/复用）
 node scripts/e2e.mjs --spec panel # 只跑某个 spec（tests/e2e/<spec>.spec.ts）
-node scripts/e2e.mjs --no-host    # 复用已在 :4080 运行的宿主，不拉起
+node scripts/e2e.mjs --no-host    # 复用已在 :3080 运行的宿主，不拉起
 ```
 
 `e2e.mjs` 按需 checkout host、装依赖、build、建 junction + 运行时 patch，然后
-`pnpm dsh web` 到 `:4080`；若宿主已在应答则直接复用，且只停自己拉起的宿主，
+`pnpm dsh web` 到 `:3080`；若宿主已在应答则直接复用，且只停自己拉起的宿主，
 绝不杀掉开发者自有的 dev host。配置见 `playwright.config.ts`。
 
 ### E2E 覆盖的清单
@@ -228,10 +228,10 @@ pnpm test:run -- --coverage
 
 ```bash
 pnpm build        # dist 是宿主实际加载的产物，改完必须重建
-pnpm dev:web      # 启动 dsh web 宿主 → http://127.0.0.1:4080
+pnpm dev:web      # 启动 dsh web 宿主 → http://127.0.0.1:3080
 ```
 
-打开 <http://127.0.0.1:4080>，选择工作区，点击**左侧边栏底部 YOLO 按钮**打开面板。
+打开 <http://127.0.0.1:3080>，选择工作区，点击**左侧边栏底部 YOLO 按钮**打开面板。
 `dev.mjs` 幂等——宿主已在跑也没关系；bundle 按文件名静态服务，重建后刷新页面即拿到新版本。
 
 ### 核心清单（面板改动通用，W1–W8）
@@ -258,3 +258,4 @@ pnpm dev:web      # 启动 dsh web 宿主 → http://127.0.0.1:4080
 - 走查结论记入**提交说明**；重大 UI 版本（如 v0.3.2）同步写入 CHANGELOG。
 - 无法在当前环境验证的场景（如 reduced-motion、特定 DPI）标注 **SKIP + 原因**，
   不得默认放行；连续两次 SKIP 的场景应在下个版本补真机验证。
+

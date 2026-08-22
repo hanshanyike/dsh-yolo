@@ -28,12 +28,12 @@ cd dsh-yolo
 
 pnpm install           # 安装 YOLO 自身依赖（含 better-sqlite3 原生绑定）
 pnpm dev:web:setup     # 一次性：克隆并构建 host、建立 profile 链接、生成运行时 patch
-pnpm dev:web           # 启动 dsh web → http://127.0.0.1:4080
+pnpm dev:web           # 启动 dsh web → http://127.0.0.1:3080
 ```
 
 `dev.mjs` 是幂等的——随时可重跑 `pnpm dev:web`；`pnpm dev:web:update` 会先拉取最新 host。
 
-启动后打开 **http://127.0.0.1:4080**，选择工作区开始对话即可。YOLO 会自动开始工作：
+启动后打开 **http://127.0.0.1:3080**，选择工作区开始对话即可。YOLO 会自动开始工作：
 提到截止时间、设定目标、或说"记住这个"，然后打开左侧边栏底部的 **YOLO 面板** 查看
 时间线、任务板与目标进度。
 
@@ -168,3 +168,4 @@ YOLO 向模型暴露 5 个工具，agent 可以自己读写并推进计划：
 | 中文搜索不到 2 字词 | FTS5 trigram 对 ≥3 字符的 CJK 召回最好；2 字查询可能漏，请用更长关键词 |
 | 启动报 `SetNamedSecurityInfoW failed (Win32 5)` | Windows 下工作区目录 owner 是 `BUILTIN\Administrators` 时 dsh 沙箱授权失败。以管理员身份运行一次 dsh，或 `node scripts/dev.mjs --fix-acl` 提权修复 |
 | pnpm 报 `[safe-delete] trash operation` | Git Bash 下的坑；请用 **PowerShell** 运行 pnpm |
+

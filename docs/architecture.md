@@ -47,7 +47,7 @@ dsh-plugin-yolo
 
 | plugin | provides | consumes |
 |---|---|---|
-| **storage** | `ctx.yolo` service: SQLite (WAL + FTS5 trigram) repository, Markdown snapshots, scope resolution; **domain actions** (`applyTodoAction` / `applyGoalProgress` / `applyMilestoneStatus`) with event audit + fuzzy title finders | nothing (leaf service) |
+| **storage** | `ctx.yolo` service: SQLite (WAL + FTS5 trigram) repository, Markdown snapshots, scope resolution; **domain actions** (`applyTodoAction` / `applyTodoConsolidate` / `applyGoalProgress` / `applyMilestoneStatus`) with event audit + fuzzy title finders | nothing (leaf service) |
 | **extract** | conversation → structured records (new items **+ state-change `updates[]`**) | `ctx.yolo`, `agent/turn-stopping`, `ctx.llm`, settings |
 | **memory** | `memory_search/write/forget` + `yolo_query` / `yolo_action` tools, systemPrompt sections/context | `ctx.yolo`, `ctx.tools`, `ctx.systemPrompt`, `session/event` |
 | **reminder** | time-triggered **reply-able** reminders (todo id + `yolo_action` routing in the message) | `ctx.yolo`, `agent/followup`, `agent/session-start` |
@@ -93,7 +93,8 @@ finished turn (agent/turn-stopping)
 extract: fold turn messages into one bounded text blob (tail-keeping, 8k chars)
    │
    ▼
-LLM semantic pull (throttled per session, temperature 0, JSON-only output)
+LLM semantic pull (gated: per-session cooldown + minTurnChars small-talk gate
+   │            + maxRunsPerDay daily cap, all read live from settings)
    │   ▲ known-memories digest (items already stored, WITH status/progress/due)
    ▼
 validate + coerce JSON
@@ -102,7 +103,7 @@ validate + coerce JSON
    ├─► applyYoloAction / apply*    (updates[]: state changes via domain actions)
    ▼
 SQLite + FTS5 index ──► each state change also writes a timeline event
-   │
+   │                     (failures write an extraction_log row with status='error')
    └──►  Markdown snapshot (daily / every 10 turns)
 ```
 
@@ -133,9 +134,21 @@ updates are dropped silently (hallucinated titles are the norm, not an error).
 └── push:     reminder scheduler → agent.followup(msg)   (due todos wake the agent)
 ```
 
-Dynamic recall FTS-searches the latest user message against the trigram index
-and renders up to `recallTopK` hits under a `Related memory` heading. Reminders
-queue while the host is offline and replay on `agent/session-start`.
+Dynamic recall runs the latest user message through **hybrid multi-query FTS**
+(`ftsRecallSearch`): the whole-phrase match (precise re-asks) is merged with an
+OR expression of extracted tokens (latin words ≥3 chars + CJK sliding trigrams,
+capped at 8) plus a `title LIKE` fallback for standalone 2-char CJK terms, then
+deduped by `(row_type, row_id)` and capped at `recallTopK`. The hits pass a
+deterministic **recall policy** (`applyRecallPolicy`): already-injected items
+are filtered, each row type is capped at `recallKindQuota`, and the remaining
+lines are greedily packed into a `recallMaxTokens`-scaled byte budget (overlong
+singles are skipped, not truncating the rest). Every injected line is
+`{{`-escaped (the host interpolates prompt templates strictly) and the
+preference preamble is capped at the `recallPrefsMax` newest entries. Within a
+session, `RecallDedupTracker` commits the previous turn's kept keys only when
+the next user message arrives — one memory is injected once per conversation,
+and repeated assemblies inside a turn stay byte-stable (prefix-cache friendly).
+Reminders queue while the host is offline and replay on `agent/session-start`.
 
 The push is *reply-able*: the reminder message carries the todo id and
 explicit routing instructions, so the agent can answer a natural-language reply
@@ -172,6 +185,15 @@ that POST `/yolo/actions`, which dispatches through the same `applyYoloAction`
 path as the `yolo_action` model tool — so a click and a chat reply produce
 identical state changes and audit events. 快速记一条 also bypasses the LLM
 entirely: it writes a today-due todo straight through the actions API.
+`applyYoloAction` is also the **denial gate** (M9 / P34): every validation
+failure writes an `action_denied` timeline event before returning
+`{ok:false}` — the only silent rejection is the idempotent "already handled"
+no-op. The one explicit merge path is `consolidate` (M9 / P35): the source
+todo's provenance lands in the target's detail, deterministic fields are
+inherited (missing due, higher priority), the source is cancelled with its
+notifications resolved, and a single `todo_consolidated` event records the
+merge. `memory_forget` routes through the same action path (cancel /
+set_status abandoned / abandon), so no mutation can bypass the audit trail.
 
 ### Reminder & brief path — proactive, YOLO-side only
 
@@ -304,7 +326,7 @@ used is recorded. These override assumptions whenever they conflict.
 
 | fact | consequence |
 |---|---|
-| FTS5 trigram (better-sqlite3 11.10.0, Win/x64 + Node 22) | good CJK recall for queries ≥ 3 chars; 2-char queries fall back to substring scan (may miss) |
+| FTS5 trigram (better-sqlite3 11.10.0, Win/x64 + Node 22) | good CJK recall for queries ≥ 3 chars; M9's `ftsRecallSearch` adds token-OR multi-query + a `title LIKE` fallback so 2-char CJK terms still hit |
 | pnpm ignores native build scripts by default | `pnpm-workspace.yaml` needs `allowBuilds: { better-sqlite3: true, esbuild: true }` + `nodeLinker: hoisted` (hoisted also avoids the empty-dir virtual-store bug that broke tsdown) |
 | SQLite has no `ADD COLUMN IF NOT EXISTS` | `openDb()` checks `PRAGMA table_info(...)` and `ALTER TABLE` for older DBs |
 
