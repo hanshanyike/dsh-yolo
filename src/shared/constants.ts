@@ -29,10 +29,28 @@ export const DEFAULTS = {
   extractionTokenBudgetPerDay: 100_000,
   recallMaxTokens: 512,
   recallTopK: 5,
+  recallKindQuota: 2,
+  recallPrefsMax: 12,
+  extractionMinTurnChars: 4,
+  extractionMaxRunsPerDay: 300,
   snapshotKeepDays: 90,
+  recallLogRetentionDays: 30,
+  semantic: {
+    enabled: true,
+    model: 'deepseek-chat',
+    expansionsPerQuery: 3,
+    rerankOn: true,
+    maxRerankCandidates: 8,
+    dailyBudget: 60,
+    minQueryChars: 6,
+  },
+  ui: {
+    aggregateAcrossWorkspaces: false,
+  },
   briefEnabled: true,
   briefMorningTime: '09:00',
   briefEveningTime: '21:00',
   briefModel: 'deepseek-chat',
   briefCheckIntervalSec: 30,
 } as const
+

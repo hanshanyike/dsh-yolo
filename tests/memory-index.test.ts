@@ -105,4 +105,55 @@ describe('memory apply()', () => {
 
     expect(() => contexts[0].text()).not.toThrow()
   })
+
+  // M9: 2-char CJK queries cannot match the trigram index — the LIKE fallback
+  // inside the hybrid recall path is what makes them hit.
+  it('recalls a todo from a 2-char CJK user message', () => {
+    const { ctx, handlers, contexts } = makeCtx()
+    apply(ctx as never)
+    const onEvent = handlers.get('session/event')!
+
+    yolo.addTodo(cwd, { title: '找研发同学评审', source: 'manual' })
+    onEvent(undefined, { type: 'user/message', data: { content: [{ type: 'text', text: '研发' }] } })
+
+    const recall = contexts[0].text()
+    expect(recall).toContain('Related memory')
+    expect(recall).toContain('找研发同学评审')
+  })
+
+  it('recalls a rephrased question the old single-phrase search missed', () => {
+    const { ctx, handlers, contexts } = makeCtx()
+    apply(ctx as never)
+    const onEvent = handlers.get('session/event')!
+
+    yolo.addTodo(cwd, { title: '把演示稿发给研发', source: 'manual' })
+    onEvent(undefined, { type: 'user/message', data: { content: [{ type: 'text', text: '演示稿进展如何' }] } })
+
+    const recall = contexts[0].text()
+    expect(recall).toContain('Related memory')
+    expect(recall).toContain('把演示稿发给研发')
+  })
+
+  it('suppresses re-injection within a session and re-injects after a session switch', () => {
+    const { ctx, handlers, contexts } = makeCtx()
+    apply(ctx as never)
+    const onEvent = handlers.get('session/event')!
+
+    yolo.addTodo(cwd, { title: '准备季度汇报材料', source: 'manual' })
+    const s1 = { header: { id: 'session-1', cwd } }
+    const s2 = { header: { id: 'session-2', cwd } }
+
+    onEvent(s1, { type: 'user/message', data: { content: [{ type: 'text', text: '季度汇报' }] } })
+    expect(contexts[0].text()).toContain('准备季度汇报材料')
+
+    // next message in the same session commits the previous round's keys —
+    // the row is now injected and must not be rendered again (search still hits)
+    onEvent(s1, { type: 'user/message', data: { content: [{ type: 'text', text: '再看看季度汇报的安排' }] } })
+    expect(yolo.search(cwd, '再看看季度汇报的安排')).not.toHaveLength(0)
+    expect(contexts[0].text()).toBe('')
+
+    // a different session clears the injected set — the row injects fresh
+    onEvent(s2, { type: 'user/message', data: { content: [{ type: 'text', text: '季度汇报' }] } })
+    expect(contexts[0].text()).toContain('准备季度汇报材料')
+  })
 })

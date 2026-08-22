@@ -2,8 +2,9 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import type Yolo from '../src/storage/index.ts'
-import { reminderText, runReminderTick, maybeWriteDailySnapshot, maybeWriteTurnSnapshot } from '../src/reminder/scheduler.ts'
+import { reminderText, runReminderTick, maybeWriteDailySnapshot, maybeWriteTurnSnapshot, resolveReminderRuntime } from '../src/reminder/scheduler.ts'
 import type { Todo } from '../src/storage/types.ts'
+import { DEFAULTS } from '../src/shared/constants.ts'
 import { localDateStr } from '../src/shared/text.ts'
 
 function todo(id: string, title: string, dueAt?: string): Todo {
@@ -91,6 +92,38 @@ describe('maybeWriteDailySnapshot', () => {
     const p = maybeWriteDailySnapshot(yolo, () => '/tmp')
     expect(p).toBeNull()
     expect(yolo.writeSnapshot).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolveReminderRuntime', () => {
+  it('passes valid settings through', () => {
+    expect(resolveReminderRuntime({ checkIntervalSec: 120, aheadMin: 30, enabled: true })).toEqual({
+      intervalMs: 120_000,
+      aheadMs: 1_800_000,
+      enabled: true,
+    })
+  })
+
+  it('falls back to DEFAULTS for a missing section or missing fields', () => {
+    expect(resolveReminderRuntime()).toEqual({
+      intervalMs: DEFAULTS.reminderCheckIntervalSec * 1000,
+      aheadMs: DEFAULTS.reminderAheadMin * 60_000,
+      enabled: true,
+    })
+    expect(resolveReminderRuntime({}).aheadMs).toBe(DEFAULTS.reminderAheadMin * 60_000)
+    expect(resolveReminderRuntime({ enabled: false }).intervalMs).toBe(DEFAULTS.reminderCheckIntervalSec * 1000)
+  })
+
+  it('falls back to DEFAULTS on invalid values', () => {
+    const r = resolveReminderRuntime({ checkIntervalSec: -10, aheadMin: Number.NaN })
+    expect(r.intervalMs).toBe(DEFAULTS.reminderCheckIntervalSec * 1000)
+    expect(r.aheadMs).toBe(DEFAULTS.reminderAheadMin * 60_000)
+  })
+
+  it('maps enabled=false so the reminder tick can go idle', () => {
+    expect(resolveReminderRuntime({ enabled: false }).enabled).toBe(false)
+    expect(resolveReminderRuntime({ enabled: true }).enabled).toBe(true)
+    expect(resolveReminderRuntime({}).enabled).toBe(true)
   })
 })
 

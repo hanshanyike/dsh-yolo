@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { getMeta, openDb, setMeta, type DB } from './db.ts'
 import { computeScopeKey, resolveDataDir, dbFileName } from './scope.ts'
 import * as repo from './repository.ts'
-import { ftsSearch } from './search.ts'
+import { ftsRecallSearch } from './search.ts'
 import { renderSnapshot, writeSnapshot } from './snapshot.ts'
 import type {
   Goal,
@@ -35,6 +35,7 @@ import type {
   TodoStatus,
   ExtractionLog,
   ExtractionStatus,
+  RecallLog,
   ExtractionStrategy,
   EventKind,
   Priority,
@@ -52,6 +53,8 @@ export interface ScopeHandle {
 // "invalid plugin, expect function or object with an apply method".
 export default class Yolo extends Service {
   private scopes = new Map<string, ScopeHandle>()
+  /** Workspace scopes the plugin has opened (cwd -> latest scopeKey) for cross-workspace aggregation. */
+  private readonly knownWorkspaces = new Map<string, string>()
 
   constructor(ctx: Context) {
     super(ctx, 'yolo')
@@ -81,6 +84,7 @@ export default class Yolo extends Service {
       mkdirSync(dataDir, { recursive: true })
       h = { db: openDb(dbPath), scopeKey, dataDir }
       this.scopes.set(dbPath, h)
+      if (mode === 'workspace') this.knownWorkspaces.set(cwd, scopeKey)
     }
     return h
   }
@@ -124,6 +128,16 @@ export default class Yolo extends Service {
     const id = ref.id ?? (ref.title ? repo.findTodoByTitle(h.db, h.scopeKey, ref.title)?.id : undefined)
     if (!id) return null
     return repo.applyTodoAction(h.db, id, action, args)
+  }
+  /** Merge a duplicate todo into its keeper (M9 P35); one todo_consolidated event. */
+  applyTodoConsolidate(
+    cwd: string,
+    sourceRef: { id?: string; title?: string },
+    intoRef: { id?: string; title?: string },
+    sessionId?: string | null,
+  ): repo.TodoConsolidateResult {
+    const h = this.resolve(cwd)
+    return repo.applyTodoConsolidate(h.db, sourceRef, intoRef, sessionId, h.scopeKey)
   }
   applyGoalProgress(cwd: string, ref: { id?: string; title?: string }, progress: number, note?: string | null, sessionId?: string | null): Goal | null {
     const h = this.resolve(cwd)
@@ -203,6 +217,10 @@ export default class Yolo extends Service {
     return repo.listPreferences(h.db, h.scopeKey)
   }
 
+  /** Workspace scopes opened so far (aggregation registry; cwd -> scopeKey). */
+  listWorkspaceMeta(): Array<{ cwd: string; scopeKey: string }> {
+    return [...this.knownWorkspaces.entries()].map(([cwd, scopeKey]) => ({ cwd, scopeKey }))
+  }
   // ---- events ----
   addEvent(
     cwd: string,
@@ -265,7 +283,7 @@ export default class Yolo extends Service {
   // ---- search ----
   search(cwd: string, query: string, topK = 5, kinds?: readonly RowType[]): SearchHit[] {
     const h = this.resolve(cwd)
-    return ftsSearch(h.db, query, topK, kinds)
+    return ftsRecallSearch(h.db, query, topK, kinds)
   }
 
   // ---- extraction log ----
@@ -277,6 +295,59 @@ export default class Yolo extends Service {
   }
   lastExtractionAt(cwd: string, sessionId: string, strategy: ExtractionStrategy): number | undefined {
     return repo.lastExtractionAt(this.resolve(cwd).db, sessionId, strategy)
+  }
+  /** LLM extraction runs since a timestamp — the daily-cap gate input (M9 P44). */
+  countExtractionsSince(cwd: string, sinceMs: number): number {
+    return repo.countExtractionsSince(this.resolve(cwd).db, sinceMs)
+  }
+  /** Semantic-recall rows since a timestamp — budget/health input (v0.3.0). */
+  countRecallSince(cwd: string, sinceMs: number): number {
+    return repo.countRecallSince(this.resolve(cwd).db, sinceMs)
+  }
+  /** Semantic-recall rows of a status since a timestamp (health hit-rate feed). */
+  countRecallStatusSince(cwd: string, status: string, sinceMs: number): number {
+    return repo.countRecallStatusSince(this.resolve(cwd).db, status, sinceMs)
+  }
+  /** Most recent semantic-recall observations (health/visibility feed). */
+  listRecentRecall(cwd: string, limit = 50): RecallLog[] {
+    const h = this.resolve(cwd)
+    return repo.listRecentRecall(h.db, h.scopeKey, limit)
+  }
+  /** Log a semantic-recall observation (expansions/rerank/injection). */
+  logRecall(
+    cwd: string,
+    data: {
+      session_id?: string | null
+      query: string
+      expansions?: string | null
+      kept_keys?: string | null
+      drop_reasons?: string | null
+      rerank_outcome?: string | null
+      latency_ms?: number | null
+      source: 'user' | 'system'
+      status: 'ok' | 'empty' | 'error'
+      error?: string | null
+    },
+  ): void {
+    const h = this.resolve(cwd)
+    repo.logRecall(h.db, { ...data, scope_key: h.scopeKey })
+  }
+  /** Drop expired recall_log rows (light cadence). */
+  pruneRecallLog(cwd: string, retentionDays: number): number {
+    return repo.pruneRecallLog(this.resolve(cwd).db, retentionDays)
+  }
+  /** LLM extraction runs that errored since a timestamp (health feed). */
+  countExtractionErrorsSince(cwd: string, sinceMs: number): number {
+    return repo.countExtractionErrorsSince(this.resolve(cwd).db, sinceMs)
+  }
+  /** Timeline events of a kind since a timestamp (e.g. action_denied). */
+  countEventKindSince(cwd: string, kind: string, sinceMs: number): number {
+    return repo.countEventKindSince(this.resolve(cwd).db, kind, sinceMs)
+  }
+  /** Open-todo duplicate candidate pairs within a scope (needs user confirmation to merge). */
+  listDuplicateTodos(cwd: string): Array<{ a: string; b: string }> {
+    const h = this.resolve(cwd)
+    return repo.listDuplicateTodos(h.db, h.scopeKey)
   }
 
   // ---- pending reminders ----
@@ -314,3 +385,7 @@ export default class Yolo extends Service {
 }
 
 export type { ExtractionLog }
+
+
+
+

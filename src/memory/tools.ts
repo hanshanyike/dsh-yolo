@@ -103,7 +103,8 @@ export function registerYoloTools(ctx: YoloContext): void {
   ctx.tools.register(
     defineTool({
       name: 'memory_forget',
-      description: 'Soft-delete a memory item by id (todo -> cancelled, milestone -> abandoned). Keeps audit history; removes from search.',
+      description:
+        'Soft-delete a memory item by id, routed through the audited YOLO action path: todo -> cancelled, milestone -> abandoned, goal -> abandoned (giving up the goal, not just clearing progress). Writes a timeline audit event; removes the item from search.',
       parameters: {
         kind: { type: 'string', required: true, description: 'todo|milestone|goal' },
         id: { type: 'string', required: true, description: 'Item id.' },
@@ -114,17 +115,17 @@ export function registerYoloTools(ctx: YoloContext): void {
       },
       async execute(args, exec) {
         const cwd = cwdOfExec(exec)
+        // M9 P34: forget must land on the same audited domain actions as every
+        // other entrance — bare setXxxStatus calls bypassed the event ledger.
+        const session_id = sessionId(execSession(exec))
         if (args.kind === 'todo') {
-          y.setTodoStatus(cwd, args.id, 'cancelled')
-          return json({ ok: true })
+          return json(applyYoloAction(y, cwd, { action: 'cancel', kind: 'todo', id: args.id, session_id }))
         }
         if (args.kind === 'milestone') {
-          y.setMilestoneStatus(cwd, args.id, 'abandoned')
-          return json({ ok: true })
+          return json(applyYoloAction(y, cwd, { action: 'set_status', kind: 'milestone', id: args.id, status: 'abandoned', session_id }))
         }
         if (args.kind === 'goal') {
-          y.setGoalProgress(cwd, args.id, 0)
-          return json({ ok: true })
+          return json(applyYoloAction(y, cwd, { action: 'abandon', kind: 'goal', id: args.id, session_id }))
         }
         return json({ ok: false, error: 'unsupported kind' })
       },
@@ -136,13 +137,15 @@ export function registerYoloTools(ctx: YoloContext): void {
       name: 'yolo_action',
       description:
         'Apply an action to a tracked YOLO plan item — this is how you honor the user\'s replies to YOLO reminders (已完成 / 推迟到明天 / 再提醒一次) and plan updates. ' +
-        'Actions: todo → complete|start|cancel|postpone(requires due_at)|remind_again; goal → set_progress(requires progress); milestone → set_status(requires status). ' +
+        'Actions: todo → complete|start|cancel|postpone(requires due_at)|remind_again|consolidate(requires into_id|into_title — merges a duplicate into the keeper todo); goal → set_progress(requires progress); milestone → set_status(requires status). ' +
         'Pass the item id when known (YOLO reminder messages include it); otherwise title works via fuzzy match.',
       parameters: {
-        action: { type: 'string', required: true, description: 'complete|start|cancel|postpone|remind_again|set_progress|set_status' },
+        action: { type: 'string', required: true, description: 'complete|start|cancel|postpone|remind_again|consolidate|set_progress|set_status' },
         kind: { type: 'string', required: true, description: 'todo|goal|milestone' },
         id: { type: 'string', description: 'Item id (preferred — YOLO reminders carry it).' },
         title: { type: 'string', description: 'Item title for fuzzy matching when id is unknown.' },
+        into_id: { type: 'string', description: 'Consolidate only: id of the surviving target todo that absorbs the source.' },
+        into_title: { type: 'string', description: 'Consolidate only: title of the surviving target todo (fuzzy match).' },
         due_at: { type: 'string', description: 'New absolute date YYYY-MM-DD (action=postpone).' },
         progress: { type: 'integer', description: 'Goal progress 0-100 (action=set_progress).' },
         status: { type: 'string', description: 'Milestone status planned|active|done|abandoned (action=set_status).' },
@@ -160,6 +163,8 @@ export function registerYoloTools(ctx: YoloContext): void {
           kind: args.kind,
           id: args.id,
           title: args.title,
+          into_id: args.into_id,
+          into_title: args.into_title,
           due_at: args.due_at,
           progress: args.progress,
           status: args.status,

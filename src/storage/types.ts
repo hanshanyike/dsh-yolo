@@ -23,6 +23,9 @@ export type EventKind =
   | 'goal_status'
   | 'milestone_status'
   | 'brief_generated'
+  // M9 P34/P35: rejected-action audit + explicit todo merge
+  | 'action_denied'
+  | 'todo_consolidated'
 /** Domain action applicable to a todo (M8 Organizer). reopen = undo of complete (5.4). */
 export type TodoAction = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again' | 'reopen'
 export type ExtractionStrategy = 'rule' | 'llm'
@@ -157,4 +160,25 @@ export interface SearchHit {
   title: string
   body: string
   rank: number
+}
+
+/** One semantic-recall observation (v0.3.0): what the model expanded / re-ranked and what was injected. */
+export interface RecallLog {
+  id?: number
+  scope_key: string
+  session_id?: string | null
+  query: string
+  /** JSON stringified string[] of LLM-generated equivalent queries. */
+  expansions?: string | null
+  /** JSON stringified string[] of injected keys (`row_type:row_id`). */
+  kept_keys?: string | null
+  /** JSON stringified Record<key, reason> for dropped candidates. */
+  drop_reasons?: string | null
+  /** JSON stringified array of { key, keep, reason } from the rerank pass. */
+  rerank_outcome?: string | null
+  latency_ms?: number | null
+  source: 'user' | 'system'
+  status: 'ok' | 'empty' | 'error'
+  error?: string | null
+  created_at: number
 }

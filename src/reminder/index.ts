@@ -7,7 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { createUserMessage, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type Yolo from '../storage/index.ts'
-import { startReminderScheduler, maybeWriteTurnSnapshot } from './scheduler.ts'
+import { startReminderScheduler, maybeWriteTurnSnapshot, resolveReminderRuntime } from './scheduler.ts'
 import { YoloSessions, type AgentLike, type AgentsLike } from '../ui/session.ts'
 import { sessionCwd } from '../shared/session.ts'
 import { DEFAULTS } from '../shared/constants.ts'
@@ -24,6 +24,7 @@ interface SettingsLike {
   get(ns: unknown): {
     brief?: { enabled?: boolean; morningTime?: string; eveningTime?: string; model?: string }
     storage?: { snapshotInterval?: string }
+    reminder?: { checkIntervalSec?: number; aheadMin?: number; enabled?: boolean }
   } | undefined
 }
 
@@ -81,11 +82,18 @@ export function apply(ctx: Context): void {
 
   // scheduler lives for the plugin lifetime; cleanup on unload
   const llm = (ctx as { llm?: LlmRuntime }).llm
+  const reminderCfg = (): { checkIntervalSec?: number; aheadMin?: number; enabled?: boolean } | undefined =>
+    settings?.get(YOLO_NS)?.reminder
   ctx.effect(() =>
     startReminderScheduler(ctx, {
       yolo: yctx.yolo,
       cwd: () => latestCwd ?? process.cwd(),
       deliver,
+      // interval cannot re-arm a live timer, so it is fixed at startup;
+      // ahead/enabled are read per tick so Settings edits apply without reload
+      intervalMs: resolveReminderRuntime(reminderCfg()).intervalMs,
+      aheadMs: () => resolveReminderRuntime(reminderCfg()).aheadMs,
+      reminderEnabled: () => resolveReminderRuntime(reminderCfg()).enabled,
       briefs: {
         config: () => {
           const b = settings?.get(YOLO_NS)?.brief

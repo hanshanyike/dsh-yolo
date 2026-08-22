@@ -157,6 +157,25 @@ CREATE TABLE IF NOT EXISTS pending_reminders (
 );
 CREATE INDEX IF NOT EXISTS idx_pending_fire ON pending_reminders(fire_at);
 
+-- semantic-recall observability (v0.3.0): expansions/rerank/injection per assembly.
+CREATE TABLE IF NOT EXISTS recall_log (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  scope_key     TEXT NOT NULL,
+  session_id    TEXT,
+  query         TEXT NOT NULL,
+  expansions    TEXT,              -- JSON string[] of LLM-generated equivalent queries
+  kept_keys     TEXT,              -- JSON string[] of injected row_type:row_id keys
+  drop_reasons  TEXT,              -- JSON Record<key, reason>
+  rerank_outcome TEXT,             -- JSON array of { key, keep, reason }
+  latency_ms    INTEGER,
+  source        TEXT NOT NULL,     -- user|system
+  status        TEXT NOT NULL,     -- ok|empty|error
+  error         TEXT,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recall_time ON recall_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_recall_scope ON recall_log(scope_key);
+CREATE INDEX IF NOT EXISTS idx_recall_session ON recall_log(session_id) WHERE session_id IS NOT NULL;
 -- FTS5 full-text index covering searchable text rows.
 -- M1 verified: better-sqlite3 11.10.0 on Win/x64 + Node 22 ships trigram (SQLite >= 3.34).
 -- trigram gives good CJK recall for queries >= 3 chars. For 2-char queries trigram
@@ -192,3 +211,4 @@ CREATE TRIGGER IF NOT EXISTS trg_events_ai AFTER INSERT ON events BEGIN
   INSERT INTO yolo_fts(row_type, row_id, title, body)
   VALUES ('event', new.id, new.summary, COALESCE(new.detail,''));
 END;
+

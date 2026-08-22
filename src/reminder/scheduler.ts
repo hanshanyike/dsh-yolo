@@ -159,12 +159,36 @@ export async function runBriefTick(deps: {
   return result
 }
 
+/** Scheduler-facing view of the settings `reminder` section, normalized. */
+export interface ReminderRuntime {
+  intervalMs: number
+  aheadMs: number
+  enabled: boolean
+}
+
+/** Normalize the settings `reminder` section; missing or invalid fields fall
+ * back to DEFAULTS so a hand-edited settings file cannot stall the scheduler. */
+export function resolveReminderRuntime(
+  rem?: { checkIntervalSec?: number; aheadMin?: number; enabled?: boolean },
+): ReminderRuntime {
+  const intervalSec =
+    typeof rem?.checkIntervalSec === 'number' && rem.checkIntervalSec > 0
+      ? rem.checkIntervalSec
+      : DEFAULTS.reminderCheckIntervalSec
+  const aheadMin =
+    typeof rem?.aheadMin === 'number' && rem.aheadMin >= 0 ? rem.aheadMin : DEFAULTS.reminderAheadMin
+  return { intervalMs: intervalSec * 1000, aheadMs: aheadMin * 60_000, enabled: rem?.enabled !== false }
+}
+
 export interface SchedulerDeps {
   yolo: Yolo
   cwd: () => string
   deliver?: YoloDeliver
   intervalMs?: number
-  aheadMs?: number
+  /** Read fresh each tick so Settings edits land without a plugin reload. */
+  aheadMs?: () => number
+  /** Reminder kill-switch (default true) — false idles only the due scan. */
+  reminderEnabled?: () => boolean
   briefs?: {
     config: () => BriefConfig
     llm?: LlmRuntime
@@ -175,11 +199,14 @@ export interface SchedulerDeps {
 /** Create the scheduler (reminder tick + brief tick); returns a cleanup function. */
 export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () => void {
   const intervalMs = deps.intervalMs ?? DEFAULTS.reminderCheckIntervalSec * 1000
-  const aheadMs = deps.aheadMs ?? DEFAULTS.reminderAheadMin * 60_000
+  const aheadMs = (): number => deps.aheadMs?.() ?? DEFAULTS.reminderAheadMin * 60_000
 
   const tick = (): void => {
     try {
-      runReminderTick({ yolo: deps.yolo, cwd: deps.cwd, aheadMs, deliver: deps.deliver })
+      // reminder.enabled=false idles ONLY the due scan; snapshots keep their cadence
+      if (deps.reminderEnabled?.() ?? true) {
+        runReminderTick({ yolo: deps.yolo, cwd: deps.cwd, aheadMs: aheadMs(), deliver: deps.deliver })
+      }
       maybeWriteDailySnapshot(deps.yolo, deps.cwd)
     } catch (e) {
       ctx.logger?.warn?.('[yolo-reminder] tick failed: %s', e instanceof Error ? e.message : String(e))

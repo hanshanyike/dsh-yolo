@@ -173,6 +173,27 @@ describe('memory_search + memory_forget', () => {
     expect(res.ok).toBe(true)
     const after = (await tool('yolo_query').execute({ view: 'todos' }) as { rows: Array<{ id: string; status: string }> }).rows
     expect(after.find((x) => x.id === t.id)?.status).toBe('cancelled')
+    // P34: forget now lands on the audited action path — the timeline shows it
+    expect(yolo.listEvents(cwd).some((e) => e.kind === 'todo_cancelled')).toBe(true)
+  })
+
+  it('forgets a goal by abandoning it (not just clearing progress) and audits the transition', async () => {
+    yolo.addGoal(cwd, { title: '跟运营对齐双周排期' })
+    const g = yolo.listGoals(cwd).find((x) => x.title === '跟运营对齐双周排期')!
+    const res = (await tool('memory_forget').execute({ kind: 'goal', id: g.id })) as { ok: boolean; item: { status: string } }
+    expect(res.ok).toBe(true)
+    expect(res.item.status).toBe('abandoned')
+    expect(yolo.listGoals(cwd).find((x) => x.id === g.id)?.status).toBe('abandoned')
+    expect(yolo.listEvents(cwd).some((e) => e.kind === 'goal_status')).toBe(true)
+  })
+
+  it('forgets a milestone through the audited set_status path', async () => {
+    yolo.addMilestone(cwd, { title: '把演示稿发给研发' })
+    const m = yolo.listMilestones(cwd)[0]
+    const res = (await tool('memory_forget').execute({ kind: 'milestone', id: m.id })) as { ok: boolean; item: { status: string } }
+    expect(res.ok).toBe(true)
+    expect(res.item.status).toBe('abandoned')
+    expect(yolo.listEvents(cwd).some((e) => e.kind === 'milestone_status')).toBe(true)
   })
 
   it('forget on unsupported kind returns ok:false', async () => {

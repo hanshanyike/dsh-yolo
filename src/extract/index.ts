@@ -32,7 +32,13 @@ interface YoloCtx extends Context {
 /** Minimal structural view of the dsh settings service (config read per turn). */
 interface SettingsLike {
   get(ns: unknown): {
-    extraction?: { enableLLM?: boolean; model?: string; minIntervalSec?: number }
+    extraction?: {
+      enableLLM?: boolean
+      model?: string
+      minIntervalSec?: number
+      minTurnChars?: number
+      maxRunsPerDay?: number
+    }
   } | undefined
 }
 
@@ -159,30 +165,70 @@ export function apply(ctx: Context): void {
       const last = yctx.yolo.lastExtractionAt(cwd, session.id, 'llm')
       if (last && Date.now() - last < minIntervalMs) return
 
-      const turnText = messagesToText(session.deriveMessages())
+      const messages = session.deriveMessages()
+      const turnText = messagesToText(messages)
       if (!turnText.trim()) return
 
-      const started = Date.now()
-      const result = await llmExtract({
-        llm: yctx.llm,
-        provider: 'deepseek',
-        model,
-        turnText,
-        knownContext: knownDigest(yctx.yolo, cwd),
-        signal,
-      })
+      // smalltalk gate: bare "好的"/"继续" replies carry nothing durable, so the
+      // model call is skipped — measured on the LAST user message, not the
+      // whole turn tail (which also contains older substantive exchanges)
+      const minTurnChars = config?.minTurnChars ?? DEFAULTS.extractionMinTurnChars
+      let lastUserText = ''
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+          lastUserText = contentBlocksToText(messages[i].content).trim()
+          break
+        }
+      }
+      if (lastUserText.length < minTurnChars) return
 
-      mergeExtraction(yctx.yolo, cwd, result, session.id)
-      const hasContent =
-        result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0 || result.updates.length > 0
-      yctx.yolo.logExtraction(cwd, {
-        session_id: session.id,
-        turn_seq: turn,
-        strategy: 'llm',
-        status: hasContent ? 'ok' : 'empty',
-        extracted_json: JSON.stringify(result),
-        duration_ms: Date.now() - started,
-      })
+      // daily run cap: extraction_log rows (strategy=llm) since local midnight
+      const maxRunsPerDay = config?.maxRunsPerDay ?? DEFAULTS.extractionMaxRunsPerDay
+      const todayStart = new Date().setHours(0, 0, 0, 0)
+      if (yctx.yolo.countExtractionsSince(cwd, todayStart) >= maxRunsPerDay) {
+        ctx.logger?.warn?.('[yolo-extract] daily run cap %d reached, skipping extraction', maxRunsPerDay)
+        return
+      }
+
+      const started = Date.now()
+      try {
+        const result = await llmExtract({
+          llm: yctx.llm,
+          provider: 'deepseek',
+          model,
+          turnText,
+          knownContext: knownDigest(yctx.yolo, cwd),
+          signal,
+        })
+
+        mergeExtraction(yctx.yolo, cwd, result, session.id)
+        const hasContent =
+          result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0 || result.updates.length > 0
+        yctx.yolo.logExtraction(cwd, {
+          session_id: session.id,
+          turn_seq: turn,
+          strategy: 'llm',
+          status: hasContent ? 'ok' : 'empty',
+          extracted_json: JSON.stringify(result),
+          duration_ms: Date.now() - started,
+        })
+      } catch (e) {
+        // failure audit: without this row the log only ever shows ok/empty and
+        // failed pulls are invisible; best-effort so auditing cannot mask the error
+        try {
+          yctx.yolo.logExtraction(cwd, {
+            session_id: session.id,
+            turn_seq: turn,
+            strategy: 'llm',
+            status: 'error',
+            extracted_json: JSON.stringify({ error: e instanceof Error ? e.message : String(e) }).slice(0, 400),
+            duration_ms: Date.now() - started,
+          })
+        } catch {
+          // audit write failed too — nothing more to do before rethrowing
+        }
+        throw e
+      }
     } catch (e) {
       // never block turn close
       ctx.logger?.warn?.('[yolo-extract] turn failed: %s', e instanceof Error ? e.message : String(e))

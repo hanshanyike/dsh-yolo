@@ -23,7 +23,15 @@ function chunkStream(text: string): AsyncIterable<StreamChunk> {
 }
 
 interface SettingsStub {
-  get(ns: unknown): { extraction?: { enableLLM?: boolean; model?: string; minIntervalSec?: number } } | undefined
+  get(ns: unknown): {
+    extraction?: {
+      enableLLM?: boolean
+      model?: string
+      minIntervalSec?: number
+      minTurnChars?: number
+      maxRunsPerDay?: number
+    }
+  } | undefined
 }
 
 function makeCtx(yolo: Yolo, llmText: string, settings?: SettingsStub) {
@@ -201,5 +209,100 @@ describe('extract apply: config gating', () => {
       spy.mockRestore()
     }
     expect(stream).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('extract apply: frequency gates (M9 P44)', () => {
+  it('skips the model call when the last user message is bare smalltalk', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+    apply(ctx as never)
+    const session = sessionLike('s-gate1', cwd)
+    session.push('user', '帮我把演示稿发给研发，明天截止')
+    session.push('assistant', '好的，我记下了，明天上午提醒你发出去。')
+    session.push('user', '嗯')
+    await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })
+    expect(stream).not.toHaveBeenCalled()
+  })
+
+  it('still extracts a short substantive reply like「周三交稿」', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+    apply(ctx as never)
+    const session = sessionLike('s-gate2', cwd)
+    session.push('user', '周三交稿')
+    await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })
+    expect(stream).toHaveBeenCalledTimes(1)
+  })
+
+  it('measures the threshold on the last user message, not the whole turn tail', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+    apply(ctx as never)
+    const session = sessionLike('s-gate3', cwd)
+    session.push('user', '帮我把演示稿发给研发，明天截止')
+    session.push('assistant', '收到。')
+    await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })
+    expect(stream).toHaveBeenCalledTimes(1)
+  })
+
+  it('honors a larger minTurnChars from settings', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON, {
+      get: () => ({ extraction: { minTurnChars: 10 } }),
+    })
+    apply(ctx as never)
+    const session = sessionLike('s-gate4', cwd)
+    session.push('user', '周三交稿')
+    await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })
+    expect(stream).not.toHaveBeenCalled()
+  })
+
+  it('skips the model call and warns once the daily run cap is reached', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON, {
+      get: () => ({ extraction: { maxRunsPerDay: 1 } }),
+    })
+    apply(ctx as never)
+    const first = sessionLike('s-cap1', cwd)
+    first.push('user', '帮我把演示稿发给研发，明天截止')
+    await handlers.get('agent/turn-stopping')!({ agent: { session: first }, turn: 1 })
+    expect(stream).toHaveBeenCalledTimes(1)
+    const todayStart = new Date().setHours(0, 0, 0, 0)
+    expect(yolo.countExtractionsSince(cwd, todayStart)).toBe(1)
+
+    const second = sessionLike('s-cap2', cwd)
+    second.push('user', '这周先把登录的 bug 修了')
+    await handlers.get('agent/turn-stopping')!({ agent: { session: second }, turn: 1 })
+    expect(stream).toHaveBeenCalledTimes(1) // capped — no second pull
+    expect((ctx.logger.warn as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('writes an error audit row when the model call throws', async () => {
+    const handlers = new Map<string, Handler>()
+    const badLlm = { stream: vi.fn(() => { throw new Error('模型服务超时') }) } as unknown as LlmRuntime
+    const ctx = {
+      yolo,
+      llm: badLlm,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      on: (event: string, cb: Handler) => {
+        handlers.set(event, cb)
+        return () => handlers.delete(event)
+      },
+    }
+    apply(ctx as never)
+    const logSpy = vi.spyOn(yolo, 'logExtraction')
+    const session = sessionLike('s-err', cwd)
+    session.push('user', '帮我把演示稿发给研发，明天截止')
+
+    await expect(handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })).resolves.toBeUndefined()
+
+    expect(logSpy).toHaveBeenCalledWith(
+      cwd,
+      expect.objectContaining({
+        session_id: 's-err',
+        turn_seq: 1,
+        strategy: 'llm',
+        status: 'error',
+      }),
+    )
+    const row = logSpy.mock.calls[0][1]
+    expect(JSON.parse(row.extracted_json ?? '{}')).toEqual({ error: '模型服务超时' })
+    logSpy.mockRestore()
   })
 })

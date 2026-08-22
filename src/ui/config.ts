@@ -13,6 +13,8 @@ export interface Config {
     enableLLM: boolean
     model: string
     minIntervalSec: number
+    minTurnChars: number
+    maxRunsPerDay: number
   }
   reminder: {
     enabled: boolean
@@ -33,6 +35,18 @@ export interface Config {
     maxTokens: number
     topK: number
   }
+  semantic: {
+    enabled: boolean
+    model: string
+    expansionsPerQuery: number
+    rerankOn: boolean
+    maxRerankCandidates: number
+    dailyBudget: number
+    minQueryChars: number
+  }
+  ui: {
+    aggregateAcrossWorkspaces: boolean
+  }
 }
 
 export const Config: z<Config> = z.object({
@@ -41,6 +55,8 @@ export const Config: z<Config> = z.object({
     enableLLM: z.boolean().default(true),
     model: z.string().default('deepseek-chat'),
     minIntervalSec: z.number().default(30).min(10),
+    minTurnChars: z.number().default(4).min(0),
+    maxRunsPerDay: z.number().default(300).min(1),
   }),
   reminder: z.object({
     enabled: z.boolean().default(true),
@@ -60,5 +76,17 @@ export const Config: z<Config> = z.object({
   recall: z.object({
     maxTokens: z.number().default(512).min(64),
     topK: z.number().default(5).min(1).max(20),
+  }),
+  semantic: z.object({
+    enabled: z.boolean().default(true),
+    model: z.string().default('deepseek-chat'),
+    expansionsPerQuery: z.number().default(3).min(1).max(6),
+    rerankOn: z.boolean().default(true),
+    maxRerankCandidates: z.number().default(8).min(2).max(20),
+    dailyBudget: z.number().default(60).min(0),
+    minQueryChars: z.number().default(6).min(0),
+  }),
+  ui: z.object({
+    aggregateAcrossWorkspaces: z.boolean().default(false),
   }),
 })

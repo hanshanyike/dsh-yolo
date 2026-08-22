@@ -18,6 +18,7 @@ import type {
   PendingReminder,
   Preference,
   Priority,
+  RecallLog,
   SessionSummary,
   Source,
   TimelineEvent,
@@ -501,6 +502,74 @@ export function applyTodoAction(
   return db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo
 }
 
+const PRIORITY_RANK: Record<Priority, number> = { low: 0, medium: 1, high: 2, urgent: 3 }
+
+/** Consolidate outcome: the surviving target row, or why the merge was refused. */
+export type TodoConsolidateResult =
+  | { ok: true; target: Todo }
+  | { ok: false; kind: 'not-found' | 'same-item' | 'terminal'; error: string }
+
+/**
+ * Merge a duplicate todo (source) into its keeper (target) — M9 P35, one
+ * audited atomic action instead of implicit dedup magic. Deterministic rules:
+ * target absorbs source's due_at (only when its own is empty) and the higher
+ * priority, its detail records the merge; source is soft-cancelled (FTS drop)
+ * and its unhandled reminder cards are settled. One todo_consolidated event
+ * covers the whole merge. `scopeKey` pins the fuzzy-title fallback; id refs
+ * resolve without it (and a resolved source pins the scope for the target).
+ */
+export function applyTodoConsolidate(
+  db: DB,
+  sourceRef: { id?: string; title?: string },
+  intoRef: { id?: string; title?: string },
+  sessionId?: string | null,
+  scopeKey?: string,
+): TodoConsolidateResult {
+  const byId = (id?: string): Todo | undefined =>
+    id ? (db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined) : undefined
+  const source = byId(sourceRef.id) ?? (sourceRef.title && scopeKey ? findTodoByTitle(db, scopeKey, sourceRef.title) : undefined)
+  if (!source) return { ok: false, kind: 'not-found', error: 'source todo not found' }
+  const target = byId(intoRef.id) ?? (intoRef.title ? findTodoByTitle(db, scopeKey ?? source.scope_key, intoRef.title) : undefined)
+  if (!target) return { ok: false, kind: 'not-found', error: 'target todo not found' }
+  if (source.id === target.id) return { ok: false, kind: 'same-item', error: 'source and target are the same todo' }
+  if (source.status === 'done' || source.status === 'cancelled' || target.status === 'done' || target.status === 'cancelled') {
+    return { ok: false, kind: 'terminal', error: 'consolidate requires both todos to be open (pending/in_progress)' }
+  }
+  const ts = now()
+  const mergeNote = `（已并入「${source.title}」${source.due_at ? `，原截止 ${source.due_at}` : ''}）`
+  const mergedDetail = target.detail ? target.detail + mergeNote : mergeNote
+  const due = target.due_at || source.due_at || null
+  const pri =
+    target.priority && source.priority
+      ? PRIORITY_RANK[target.priority] >= PRIORITY_RANK[source.priority]
+        ? target.priority
+        : source.priority
+      : (target.priority ?? source.priority ?? null)
+  db.prepare('UPDATE todos SET detail = ?, due_at = ?, priority = ?, updated_at = ? WHERE id = ?').run(
+    mergedDetail,
+    due,
+    pri,
+    ts,
+    target.id,
+  )
+  syncTodoFts(db, target.id, target.title, mergedDetail)
+  setTodoStatus(db, source.id, 'cancelled')
+  markTodoNotificationsHandled(db, source.id)
+  const inherited: string[] = []
+  if (due && due !== target.due_at) inherited.push(`继承截止 ${due}`)
+  if (pri !== target.priority) inherited.push(`优先级升为 ${pri}`)
+  addEvent(db, {
+    kind: 'todo_consolidated',
+    summary: `合并：「${source.title}」→「${target.title}」`,
+    detail: inherited.length ? inherited.join('；') : null,
+    scope_key: target.scope_key,
+    occurred_at: ts,
+    session_id: sessionId ?? null,
+    source: sessionId ? null : 'manual',
+  })
+  return { ok: true, target: db.prepare('SELECT * FROM todos WHERE id = ?').get(target.id) as Todo }
+}
+
 /** Inline-edit a todo's plan fields (v0.3.0 E). Only provided fields change;
  * title edits resync FTS; every change writes a todo_updated audit event.
  * Goal progress is deliberately NOT editable here (D14: no fake progress). */
@@ -653,6 +722,14 @@ export function lastExtractionAt(db: DB, sessionId: string, strategy: Extraction
   return row?.created_at
 }
 
+/** LLM extraction runs since a timestamp — the daily-cap gate input (M9 P44). */
+export function countExtractionsSince(db: DB, sinceMs: number): number {
+  const row = db
+    .prepare("SELECT COUNT(*) AS n FROM extraction_log WHERE strategy = 'llm' AND created_at >= ?")
+    .get(sinceMs) as { n: number } | undefined
+  return row?.n ?? 0
+}
+
 // ---------- pending reminders ----------
 
 export function queuePendingReminder(
@@ -675,4 +752,106 @@ export function deletePendingReminder(db: DB, id: string): void {
   db.prepare('DELETE FROM pending_reminders WHERE id = ?').run(id)
 }
 
+
+// ---------- recall log (v0.3.0 semantic-recall observability) ----------
+
+export function logRecall(
+  db: DB,
+  data: {
+    scope_key: string
+    session_id?: string | null
+    query: string
+    expansions?: string | null
+    kept_keys?: string | null
+    drop_reasons?: string | null
+    rerank_outcome?: string | null
+    latency_ms?: number | null
+    source: 'user' | 'system'
+    status: 'ok' | 'empty' | 'error'
+    error?: string | null
+  },
+): void {
+  db.prepare(
+    `INSERT INTO recall_log(scope_key, session_id, query, expansions, kept_keys, drop_reasons, rerank_outcome, latency_ms, source, status, error, created_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    data.scope_key,
+    data.session_id ?? null,
+    data.query,
+    data.expansions ?? null,
+    data.kept_keys ?? null,
+    data.drop_reasons ?? null,
+    data.rerank_outcome ?? null,
+    data.latency_ms ?? null,
+    data.source,
+    data.status,
+    data.error ?? null,
+    now(),
+  )
+}
+
+/** Semantic-recall rows since a timestamp — budget + health inputs (v0.3.0). */
+export function countRecallSince(db: DB, sinceMs: number): number {
+  const row = db.prepare('SELECT COUNT(*) AS n FROM recall_log WHERE created_at >= ?').get(sinceMs) as { n: number } | undefined
+  return row?.n ?? 0
+}
+
+/** Most recent semantic-recall observations — the health/visibility feed. */
+export function listRecentRecall(db: DB, scopeKey: string, limit = 50): RecallLog[] {
+  return db
+    .prepare('SELECT * FROM recall_log WHERE scope_key = ? ORDER BY created_at DESC, id DESC LIMIT ?')
+    .all(scopeKey, limit) as RecallLog[]
+}
+
+/** Drop recall_log rows older than retentionDays (called on a light cadence). */
+export function pruneRecallLog(db: DB, retentionDays: number): number {
+  const cutoff = now() - retentionDays * 24 * 60 * 60 * 1000
+  const info = db.prepare('DELETE FROM recall_log WHERE created_at < ?').run(cutoff)
+  return info.changes
+}
+
+// ---------- memory health (v0.3.0) ----------
+
+/** LLM extraction runs that errored since a timestamp — the health feed. */
+export function countExtractionErrorsSince(db: DB, sinceMs: number): number {
+  const row = db
+    .prepare("SELECT COUNT(*) AS n FROM extraction_log WHERE strategy = 'llm' AND status = 'error' AND created_at >= ?")
+    .get(sinceMs) as { n: number } | undefined
+  return row?.n ?? 0
+}
+
+/** Timeline events of a kind since a timestamp (e.g. action_denied). */
+export function countEventKindSince(db: DB, kind: string, sinceMs: number): number {
+  const row = db.prepare('SELECT COUNT(*) AS n FROM events WHERE kind = ? AND occurred_at >= ?').get(kind, sinceMs) as { n: number } | undefined
+  return row?.n ?? 0
+}
+
+/** Open-todo near-duplicate candidate pairs within a scope, by normalized title. */
+export function listDuplicateTodos(db: DB, scopeKey: string): Array<{ a: string; b: string }> {
+  const rows = db
+    .prepare("SELECT id, title FROM todos WHERE scope_key = ? AND status IN ('pending','in_progress') ORDER BY created_at ASC")
+    .all(scopeKey) as Array<{ id: string; title: string }>
+  const byNorm = new Map<string, string[]>()
+  for (const r of rows) {
+    const n = normalize(r.title)
+    if (!n) continue
+    const arr = byNorm.get(n) ?? []
+    arr.push(r.id)
+    byNorm.set(n, arr)
+  }
+  const pairs: Array<{ a: string; b: string }> = []
+  for (const ids of byNorm.values()) {
+    if (ids.length < 2) continue
+    for (let i = 1; i < ids.length; i++) pairs.push({ a: ids[0], b: ids[i] })
+  }
+  return pairs
+}
+/** Semantic-recall rows of a status since a timestamp (health hit-rate feed). */
+export function countRecallStatusSince(db: DB, status: string, sinceMs: number): number {
+  const row = db.prepare('SELECT COUNT(*) AS n FROM recall_log WHERE status = ? AND created_at >= ?').get(status, sinceMs) as { n: number } | undefined
+  return row?.n ?? 0
+}
 export type { ExtractionLog }
+
+
+
