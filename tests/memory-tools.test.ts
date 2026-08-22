@@ -109,7 +109,7 @@ describe('memory_write + yolo_query', () => {
 
 describe('yolo_action', () => {
   it('completes a todo by id (the reminder-reply flow)', async () => {
-    const t = yolo.addTodo(cwd, { title: '写季度报告', source: 'llm' })
+    const { todo: t } = yolo.addTodo(cwd, { title: '写季度报告', source: 'llm' })
     const res = (await tool('yolo_action').execute({ action: 'complete', kind: 'todo', id: t.id })) as { ok: boolean; item: { status: string } }
     expect(res.ok).toBe(true)
     expect(res.item.status).toBe('done')
@@ -125,7 +125,7 @@ describe('yolo_action', () => {
   })
 
   it('start / cancel / remind_again work and set_goal progress flips achieved', async () => {
-    const t = yolo.addTodo(cwd, { title: '修登录', source: 'llm' })
+    const { todo: t } = yolo.addTodo(cwd, { title: '修登录', source: 'llm' })
     await tool('yolo_action').execute({ action: 'start', kind: 'todo', id: t.id })
     expect(yolo.listTodos(cwd)[0].status).toBe('in_progress')
 
@@ -202,8 +202,8 @@ describe('storage service surface (via tools)', () => {
   })
 
   it('queues and lists pending reminders', () => {
-    const todo = yolo.addTodo(cwd, { title: '提醒载体', source: 'manual' })
-    yolo.queueReminder(cwd, { todo_id: todo.id, fire_at: Date.now() - 1000, payload: '⏰ 提醒' })
+    const { todo: carrier } = yolo.addTodo(cwd, { title: '提醒载体', source: 'manual' })
+    yolo.queueReminder(cwd, { todo_id: carrier.id, fire_at: Date.now() - 1000, payload: '⏰ 提醒' })
     const pending = yolo.listPendingReminders(cwd)
     expect(pending.length).toBe(1)
     expect(pending[0].payload).toContain('提醒')

@@ -21,7 +21,7 @@ function mockYolo(): Yolo {
   const now = Date.now()
   const todo: Todo = {
     id: 't1', title: '完成报告', status: 'pending', priority: 'high',
-    due_at: dateStr(-2), milestone_id: 'm1', scope_key: 'test/main',
+    due_at: dateStr(-2), milestone_id: 'm1', scope_key: 'test/main', session_id: 's1',
     created_at: now, updated_at: now - 8 * DAY_MS,
   }
   const goal: Goal = {
@@ -34,11 +34,15 @@ function mockYolo(): Yolo {
   }
   const event: TimelineEvent = {
     id: 'e1', kind: 'todo_completed', summary: '完成：写设计文档', occurred_at: now,
-    scope_key: 'test/main',
+    session_id: 's1', source: 'llm', scope_key: 'test/main',
   }
   const pref: Preference = {
     id: 'p1', key: '语言', value: '简体中文', confidence: 1, scope_key: 'test/main',
     updated_at: now,
+  }
+  const notification = {
+    id: 'n1', kind: 'reminder', title: '⏰ 完成报告', body: null, todo_id: 't1',
+    scope_cwd: '/tmp/proj', created_at: now, handled_at: null, scope_key: 'test/main',
   }
   return {
     resolve: () => ({ scopeKey: 'test/main', db: {}, dataDir: '' }),
@@ -46,7 +50,10 @@ function mockYolo(): Yolo {
     listGoals: () => [goal],
     listMilestones: () => [milestone],
     listEvents: () => [event],
+    listEventsBetween: () => [event],
     listPreferences: () => [pref],
+    listSessionSummaries: () => [{ session_id: 's1', summary: '修登录bug', scope_key: 'test/main', updated_at: now }],
+    listNotifications: () => [notification],
   } as unknown as Yolo
 }
 
@@ -62,6 +69,12 @@ describe('buildDashboardData', () => {
     expect(data.milestones[0]).toMatchObject({ target_date: '2026-08-30' })
     expect(data.events[0]).toMatchObject({ kind: 'todo_completed' })
     expect(data.preferences[0]).toMatchObject({ key: '语言', value: '简体中文' })
+    // v0.3.0 C/B: ledger badge + notification card + unhandled count
+    expect(data.todos[0].session_label).toBe('修登录bug')
+    expect(data.ledger[0]).toMatchObject({ kind: 'todo_completed', label: '修登录bug' })
+    expect(data.ledgerSessions).toBe(1)
+    expect(data.notifications).toHaveLength(1)
+    expect(data.unhandled).toBe(1)
   })
 
   it('joins milestone titles and computes overdue/stale (M8)', () => {
@@ -85,7 +98,10 @@ describe('buildDashboardData', () => {
       listGoals: () => [],
       listMilestones: () => [],
       listEvents: () => [],
+      listEventsBetween: () => [],
       listPreferences: () => [],
+      listSessionSummaries: () => [],
+      listNotifications: () => [],
     } as unknown as Yolo
     const data = buildDashboardData(yolo, '/tmp/proj')
     expect(data.todos[0].milestone_title).toBeNull()

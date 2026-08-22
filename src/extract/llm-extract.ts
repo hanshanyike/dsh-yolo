@@ -45,6 +45,8 @@ export interface ExtractedUpdate {
 }
 
 export interface ExtractionResult {
+  /** One-line label of what the session is about (ledger source badge, v0.3.0). */
+  session_summary?: string | null
   milestones: ExtractedMilestone[]
   todos: ExtractedTodo[]
   goals: ExtractedGoal[]
@@ -54,6 +56,7 @@ export interface ExtractionResult {
 }
 
 export const EMPTY_EXTRACTION: ExtractionResult = {
+  session_summary: null,
   milestones: [],
   todos: [],
   goals: [],
@@ -81,8 +84,11 @@ export function parseExtractionJson(text: string): ExtractionResult {
 
 /** Shape-check + coerce parsed JSON into a well-typed ExtractionResult. */
 export function validateExtraction(raw: Partial<ExtractionResult> | null | undefined): ExtractionResult {
-  const result: ExtractionResult = { milestones: [], todos: [], goals: [], preferences: [], events: [], updates: [] }
+  const result: ExtractionResult = { session_summary: null, milestones: [], todos: [], goals: [], preferences: [], events: [], updates: [] }
   if (!raw || typeof raw !== 'object') return result
+  if (typeof raw.session_summary === 'string' && raw.session_summary.trim()) {
+    result.session_summary = raw.session_summary.trim().slice(0, 32)
+  }
   for (const m of Array.isArray(raw.milestones) ? raw.milestones : []) {
     if (m && typeof m.title === 'string') {
       result.milestones.push({

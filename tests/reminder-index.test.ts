@@ -1,10 +1,11 @@
-// M3/M5 reminder plugin wiring tests — session-start replay and turn-snapshot
-// trigger, exercising the apply() registrations with a mocked context.
+// v0.3.0 reminder plugin wiring tests — workspace tracking (session-start)
+// and the turn-cadence snapshot trigger, exercising the apply() registrations
+// with a mocked context. The old session-start REPLAY into work sessions is
+// gone (D7/TB-1): reminders deliver only via the scheduler's YOLO-thread path.
 
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/reminder/index.ts'
 import type Yolo from '../src/storage/index.ts'
-import type { PendingReminder } from '../src/storage/types.ts'
 
 type Handler = (...args: any[]) => void
 
@@ -35,39 +36,37 @@ function mockYolo(over: Partial<Yolo> = {}): Yolo {
   } as unknown as Yolo
 }
 
-describe('reminder apply: session-start replay', () => {
-  it('replays queued reminders into the new agent and clears them', () => {
-    const pending: PendingReminder[] = [
-      { id: 'r1', todo_id: 't1', fire_at: Date.now() - 100, payload: '⏰ 提醒: 交报告', scope_key: 's', },
-      { id: 'r2', todo_id: 't2', fire_at: Date.now() - 50, payload: '⏰ 提醒: 开会', scope_key: 's', },
-    ]
-    const yolo = mockYolo({ listPendingReminders: vi.fn(() => pending) })
+describe('reminder apply: workspace tracking (v0.3.0)', () => {
+  it('tracks the workspace of work sessions for snapshot/reminder scoping', () => {
+    const yolo = mockYolo()
     const { ctx, handlers } = makeCtx(yolo)
+    ;(ctx.settings.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      storage: { snapshotInterval: 'every_10_turns' },
+    })
     apply(ctx as never)
 
-    const agent = { followup: vi.fn() }
     const onStart = handlers.get('agent/session-start')!
-    onStart({ agent })
+    onStart({ agent: { id: 'work-1', session: { header: { id: 's1', cwd: '/ws/alpha' } } } })
 
-    expect(agent.followup).toHaveBeenCalledTimes(2)
-    const first = (agent.followup as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      content: { text: string }[]
-    }
-    expect(first.content[0].text).toContain('交报告')
-    expect(yolo.deletePendingReminder).toHaveBeenCalledTimes(2)
+    const onTurn = handlers.get('agent/turn-stopping')!
+    for (let i = 0; i < 10; i++) onTurn()
+    expect(yolo.writeSnapshot).toHaveBeenCalledWith('/ws/alpha', expect.any(String))
   })
 
-  it('tolerates replay failures without crashing', () => {
-    const pending: PendingReminder[] = [
-      { id: 'r1', todo_id: 't1', fire_at: Date.now(), payload: '⏰ x', scope_key: 's', },
-    ]
-    const yolo = mockYolo({ listPendingReminders: vi.fn(() => pending) })
+  it('TB-5: YOLO resident threads never move the tracked workspace', () => {
+    const yolo = mockYolo()
     const { ctx, handlers } = makeCtx(yolo)
+    ;(ctx.settings.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      storage: { snapshotInterval: 'every_10_turns' },
+    })
     apply(ctx as never)
 
-    const agent = { followup: vi.fn(() => { throw new Error('boom') }) }
     const onStart = handlers.get('agent/session-start')!
-    expect(() => onStart({ agent })).not.toThrow()
+    onStart({ agent: { id: 'yolo-w-abc123', session: { header: { id: 'y1', cwd: '/ws/yolo' } } } })
+
+    const onTurn = handlers.get('agent/turn-stopping')!
+    for (let i = 0; i < 10; i++) onTurn()
+    expect(yolo.writeSnapshot).not.toHaveBeenCalledWith('/ws/yolo', expect.any(String))
   })
 })
 

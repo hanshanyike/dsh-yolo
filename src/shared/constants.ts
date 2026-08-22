@@ -30,4 +30,9 @@ export const DEFAULTS = {
   recallMaxTokens: 512,
   recallTopK: 5,
   snapshotKeepDays: 90,
+  briefEnabled: true,
+  briefMorningTime: '09:00',
+  briefEveningTime: '21:00',
+  briefModel: 'deepseek-chat',
+  briefCheckIntervalSec: 30,
 } as const

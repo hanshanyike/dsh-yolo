@@ -21,7 +21,8 @@ function todo(id: string, title: string, dueAt?: string): Todo {
 function mockYolo(todos: Todo[]) {
   return {
     listDueTodos: vi.fn(() => todos),
-    queueReminder: vi.fn(),
+    addNotification: vi.fn(),
+    addEvent: vi.fn(),
     setTodoReminded: vi.fn(),
     lastSnapshotDate: vi.fn(() => undefined),
     writeSnapshot: vi.fn(() => '/tmp/snap.md'),
@@ -47,32 +48,29 @@ describe('reminderText', () => {
 })
 
 describe('runReminderTick', () => {
-  it('followups the reminder as a user turn when an agent is active', () => {
+  it('writes a notification card + event and delivers into the YOLO thread (v0.3.0 B)', () => {
     const yolo = mockYolo([todo('t1', '交报告', '2026-08-21')])
-    const agent = { followup: vi.fn() }
-    const r = runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 60000, getLatestAgent: () => agent })
-    expect(r.reminded).toBe(1)
-    expect(r.queued).toBe(0)
-    expect(agent.followup).toHaveBeenCalledTimes(1)
-    const arg = (agent.followup as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      content: { type: string; text: string }[]
-    }
-    expect(arg.content[0].text).toContain('交报告')
+    const deliver = vi.fn().mockResolvedValue(undefined)
+    const r = runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 60000, deliver })
+    expect(r.notified).toBe(1)
+    expect(deliver).toHaveBeenCalledTimes(1)
+    expect(deliver.mock.calls[0][1]).toContain('交报告')
+    expect(yolo.addNotification).toHaveBeenCalledWith('/tmp', expect.objectContaining({ kind: 'reminder', todo_id: 't1' }))
+    expect(yolo.addEvent).toHaveBeenCalledWith('/tmp', expect.objectContaining({ kind: 'reminder_fired' }))
     expect(yolo.setTodoReminded).toHaveBeenCalledWith('/tmp', 't1')
   })
 
-  it('queues when no agent is active', () => {
+  it('TB-1: the card is the guaranteed surface — no deliver still notifies, nothing is queued for work sessions', () => {
     const yolo = mockYolo([todo('t1', '交报告'), todo('t2', '回复邮件')])
-    const r = runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 60000, getLatestAgent: () => undefined })
-    expect(r.queued).toBe(2)
-    expect(r.reminded).toBe(0)
-    expect(yolo.queueReminder).toHaveBeenCalledTimes(2)
+    const r = runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 60000 })
+    expect(r.notified).toBe(2)
+    expect(yolo.addNotification).toHaveBeenCalledTimes(2)
     expect(yolo.setTodoReminded).toHaveBeenCalledTimes(2)
   })
 
   it('calls listDueTodos with a future-bound ISO timestamp', () => {
     const yolo = mockYolo([])
-    runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 60000, getLatestAgent: () => undefined })
+    runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 60000 })
     const [cwd, iso] = (yolo.listDueTodos as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string]
     expect(cwd).toBe('/tmp')
     expect(new Date(iso).getTime()).toBeGreaterThan(Date.now() - 1000)

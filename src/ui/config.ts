@@ -19,6 +19,12 @@ export interface Config {
     checkIntervalSec: number
     aheadMin: number
   }
+  brief: {
+    enabled: boolean
+    morningTime: string
+    eveningTime: string
+    model: string
+  }
   storage: {
     scope: string
     snapshotInterval: string
@@ -40,6 +46,12 @@ export const Config: z<Config> = z.object({
     enabled: z.boolean().default(true),
     checkIntervalSec: z.number().default(300).min(60),
     aheadMin: z.number().default(60).min(5),
+  }),
+  brief: z.object({
+    enabled: z.boolean().default(true),
+    morningTime: z.string().default('09:00'),
+    eveningTime: z.string().default('21:00'),
+    model: z.string().default('deepseek-chat'),
   }),
   storage: z.object({
     scope: z.string().default('workspace'),

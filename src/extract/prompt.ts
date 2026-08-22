@@ -15,6 +15,7 @@ Current date: ${today} (use it to resolve relative dates like 明天/下周/next
 Return ONLY JSON, no commentary, no markdown fence. Schema:
 
 {
+  "session_summary": string | null,
   "milestones": [{"title": string, "target_date": "YYYY-MM-DD" | null, "description": string | null}],
   "todos":      [{"title": string, "due_at": "YYYY-MM-DD" | null, "priority": "low|medium|high|urgent" | null, "milestone_title": string | null}],
   "goals":      [{"title": string, "description": string | null, "milestone_title": string | null}],
@@ -28,6 +29,7 @@ Return ONLY JSON, no commentary, no markdown fence. Schema:
 }
 
 What to extract:
+- session_summary: ONE line (<= 24 chars, user's language) naming what this session is about — e.g. "修复登录bug"、"写季度报告"、"聊产品方向". It labels the session as the source badge of daily ledger entries. Update it when the session's focus shifts; null only when the turn carries no hint of a topic.
 - todos: NEW concrete tasks the user committed to, AND scheduled commitments with a date/time — meetings, trips, appointments, deliveries, deadlines someone must hit.
 - goals: NEW long-term aims spanning days/weeks (not single-turn asks).
 - milestones: NEW named project phases or checkpoints with target dates.

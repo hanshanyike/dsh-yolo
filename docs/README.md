@@ -12,8 +12,8 @@
 | 查某个模块的文件/类型/API | [模块设计](modules.md)（中文） |
 | 跑测试 / 加测试 | [测试文档](testing.md)（中文） |
 | 看有状态计划（状态/进度/可回复提醒）怎么设计 | [有状态计划设计文档](design-m8-organizer.md)（中文） |
+| 看产品设计的全景蓝图与 v0.3.0 需求 | [产品设计文档](product-design.md)（中文）· [HTML 精装版 + 可交互原型](product-design.html) |
 | 查两个已定位待修的问题（时间线归属 / 提醒不可见） | [问题定位：时间线会话归属](issue-timeline-session-attribution.md) · [问题定位：提醒不可见](issue-reminder-visibility.md)（中文） |
-| 看看板的产品规划（体验驱动，分期演进） | [看板产品规划](product-dashboard.md)（中文） |
 | 发版流程 | [发布流程](release.md)（英文） |
 | 版本历史 | [CHANGELOG](../CHANGELOG.md) |
 | 项目总览与快速开始 | [README](../README.md) |
@@ -32,7 +32,8 @@ dsh-yolo/
     ├── usage.md            使用文档：安装 · 配置 · 功能 · 数据存储 · FAQ（中文）
     ├── testing.md         测试文档：运行 · 文件清单 · 手法 · 新增测试（中文）
     ├── issue-*.md         问题定位文档：现象 · 证据链 · 根因 · 修复方案（中文）
-    ├── product-dashboard.md 看板产品规划：场景 · 痛点 · 分期路线（中文）
+    ├── product-design.md  产品设计：全景蓝图 · 信息架构 · v0.3.0 需求（中文）
+    ├── product-design.html 产品设计精装版：含可交互面板原型（单文件）
     └── release.md         发布流程（英文）
 ```
 

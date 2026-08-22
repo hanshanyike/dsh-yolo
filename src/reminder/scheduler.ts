@@ -1,42 +1,31 @@
-// YOLO reminder scheduler — time-triggered proactive reminders.
-// Scans due todos on an interval; injects a user-visible reminder into the most
-// recent active agent (with followup wake), or queues it as pending for replay
-// on the next agent/session-start. `last_reminded_at` prevents re-firing.
+// YOLO reminder scheduler — time-triggered proactive delivery (v0.3.0 B).
+// Due todos produce a NOTIFICATION CARD in storage (badge + kanban card) and,
+// when a YOLO resident agent is available, a followup into that thread.
+// WORK SESSIONS ARE NEVER TOUCHED (D7 / TB-1): the old latest-agent injection
+// and the session-start replay were removed; pending_reminders stays in the
+// schema for compatibility but nothing feeds it anymore.
+// v0.3.0 D adds the brief tick: morning/evening cards, once per local day.
 
 import type { Context } from '@deepseek-ai/cordis'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type Yolo from '../storage/index.ts'
 import { DEFAULTS } from '../shared/constants.ts'
-import { localDateStr } from '../shared/text.ts'
+import { localDateStr, localHm } from '../shared/text.ts'
+import { collectMorningFacts, collectEveningFacts, polishBrief, renderBriefMarkdown, type BriefKind } from './brief.ts'
 
 /**
- * Minimal structural view of a dsh Agent (avoids linking the agent package).
- * followup(message) queues the message as its own next turn AND wakes the
- * driver — inject() alone parks context without waking an idle agent, and
- * followup() without a message is invalid on the real API.
+ * Delivery into the YOLO resident thread (best effort — the card is the
+ * guaranteed surface, the followup only enriches the chat view).
  */
-export interface AgentLike {
-  followup(message: unknown): void
+export type YoloDeliver = (cwd: string, text: string) => Promise<void>
+
+/** Format a Date as local-time "YYYY-MM-DDTHH:mm:ss" (no timezone suffix). */
+function localIso(d: Date): string {
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-export interface SchedulerDeps {
-  yolo: Yolo
-  cwd: () => string
-  getLatestAgent: () => AgentLike | undefined
-  intervalMs?: number
-  aheadMs?: number
-}
-
-export interface TickResult {
-  reminded: number
-  queued: number
-}
-
-/**
- * Reminder text injected into the conversation (M8: reply-able).
- * Carries the todo id plus routing instructions so the agent can honor the
- * user's natural-language reply — 完成/推迟/再提醒 — with the yolo_action tool.
- */
+/** Reminder text delivered into the YOLO thread (M8 reply-able semantics kept). */
 export function reminderText(title: string, dueAt?: string | null, id?: string): string {
   const head = `⏰ YOLO 提醒：${title}${dueAt ? `（到期 ${dueAt}）` : ''}`
   if (!id) return head
@@ -47,14 +36,8 @@ export function reminderText(title: string, dueAt?: string | null, id?: string):
     `- 已完成 → yolo_action(action="complete", kind="todo", id="${id}")`,
     `- 推迟到X → yolo_action(action="postpone", kind="todo", id="${id}", due_at="解析出的绝对日期")`,
     `- 再提醒 → yolo_action(action="remind_again", kind="todo", id="${id}")`,
-    '操作成功后向用户简短确认即可，不必展开解释。',
+    '操作成功后向用户简短确认即可，不必展开解释。若用户未回应，不要追问，仅保留本条提醒。',
   ].join('\n')
-}
-
-/** Format a Date as local-time "YYYY-MM-DDTHH:mm:ss" (no timezone suffix). */
-function localIso(d: Date): string {
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
 /** Write today's Markdown snapshot once per calendar day. Returns the path or null. */
@@ -77,12 +60,17 @@ export function maybeWriteTurnSnapshot(yolo: Yolo, cwd: () => string, turnCount:
   return yolo.writeSnapshot(cwd(), `turn-${turnCount}-${stamp}`)
 }
 
-/** One scheduler pass — pure enough to unit test with a mocked yolo. */
+export interface TickResult {
+  /** Due todos that produced a notification card this pass. */
+  notified: number
+}
+
+/** One reminder pass — pure enough to unit test with a mocked yolo. */
 export function runReminderTick(deps: {
   yolo: Yolo
   cwd: () => string
   aheadMs: number
-  getLatestAgent: () => AgentLike | undefined
+  deliver?: YoloDeliver
 }): TickResult {
   const cwd = deps.cwd()
   // due_at is stored either as a local date (YYYY-MM-DD, from rule capture) or a
@@ -91,39 +79,136 @@ export function runReminderTick(deps: {
   const aheadIso = localIso(new Date(Date.now() + deps.aheadMs))
   const due = deps.yolo.listDueTodos(cwd, aheadIso)
 
-  let reminded = 0
-  let queued = 0
+  let notified = 0
   for (const t of due) {
     const text = reminderText(t.title, t.due_at, t.id)
-    const msg = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
-    const agent = deps.getLatestAgent()
-    if (agent) {
-      agent.followup(msg)
-      reminded++
-    } else {
-      // no active session — queue for replay on agent/session-start
-      deps.yolo.queueReminder(cwd, { todo_id: t.id, fire_at: Date.now(), payload: text })
-      queued++
+    deps.yolo.addNotification(cwd, {
+      kind: 'reminder',
+      title: `⏰ ${t.title}`,
+      body: t.due_at ? `到期 ${t.due_at}` : null,
+      todo_id: t.id,
+      scope_cwd: cwd,
+    })
+    deps.yolo.addEvent(cwd, {
+      kind: 'reminder_fired',
+      summary: `⏰ 提醒「${t.title}」`,
+      detail: t.due_at ? `到期 ${t.due_at}` : null,
+      source: 'tool',
+    })
+    if (deps.deliver) {
+      void deps
+        .deliver(cwd, text)
+        .catch(() => {}) // the card is the guaranteed surface; chat delivery is best effort
     }
     deps.yolo.setTodoReminded(cwd, t.id)
+    notified++
   }
-  return { reminded, queued }
+  return { notified }
 }
 
-/** Create a scheduler; returns a cleanup function for ctx.effect. */
+export interface BriefConfig {
+  enabled: boolean
+  morningTime: string
+  eveningTime: string
+  model: string
+}
+
+export interface BriefTickResult {
+  morning: boolean
+  evening: boolean
+}
+
+/** One brief pass: fire each due brief once per local day (v0.3.0 D).
+ * A brief whose time already passed fires on the next tick (catch-up). */
+export async function runBriefTick(deps: {
+  yolo: Yolo
+  cwd: () => string
+  config: BriefConfig
+  llm?: LlmRuntime
+  provider?: string
+  now?: () => Date
+}): Promise<BriefTickResult> {
+  const result: BriefTickResult = { morning: false, evening: false }
+  if (!deps.config.enabled) return result
+  const now = deps.now?.() ?? new Date()
+  const hm = localHm(now)
+  const today = localDateStr(now)
+  const plan: { kind: BriefKind; time: string }[] = [
+    { kind: 'morning', time: deps.config.morningTime },
+    { kind: 'evening', time: deps.config.eveningTime },
+  ]
+  for (const { kind, time } of plan) {
+    if (hm < time) continue
+    const cwd = deps.cwd()
+    if (deps.yolo.getBriefStamp(cwd, kind) === today) continue
+    const facts =
+      kind === 'morning' ? collectMorningFacts(deps.yolo, cwd, today) : collectEveningFacts(deps.yolo, cwd, today)
+    const fallback = renderBriefMarkdown(kind, facts, today)
+    const body = deps.llm
+      ? await polishBrief(deps.llm, deps.provider ?? 'deepseek', deps.config.model, kind, facts, fallback)
+      : fallback
+    deps.yolo.addNotification(cwd, {
+      kind: 'brief',
+      title: kind === 'morning' ? `☀ 早报 · ${today}` : `🌙 晚报 · ${today}`,
+      body,
+      scope_cwd: cwd,
+    })
+    deps.yolo.addEvent(cwd, {
+      kind: 'brief_generated',
+      summary: kind === 'morning' ? `☀ 生成早报（${today}）` : `🌙 生成晚报（${today}）`,
+      source: 'tool',
+    })
+    deps.yolo.setBriefStamp(cwd, kind, today)
+    result[kind] = true
+  }
+  return result
+}
+
+export interface SchedulerDeps {
+  yolo: Yolo
+  cwd: () => string
+  deliver?: YoloDeliver
+  intervalMs?: number
+  aheadMs?: number
+  briefs?: {
+    config: () => BriefConfig
+    llm?: LlmRuntime
+    provider?: string
+  }
+}
+
+/** Create the scheduler (reminder tick + brief tick); returns a cleanup function. */
 export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () => void {
   const intervalMs = deps.intervalMs ?? DEFAULTS.reminderCheckIntervalSec * 1000
   const aheadMs = deps.aheadMs ?? DEFAULTS.reminderAheadMin * 60_000
 
   const tick = (): void => {
     try {
-      runReminderTick({ yolo: deps.yolo, cwd: deps.cwd, aheadMs, getLatestAgent: deps.getLatestAgent })
+      runReminderTick({ yolo: deps.yolo, cwd: deps.cwd, aheadMs, deliver: deps.deliver })
       maybeWriteDailySnapshot(deps.yolo, deps.cwd)
     } catch (e) {
       ctx.logger?.warn?.('[yolo-reminder] tick failed: %s', e instanceof Error ? e.message : String(e))
     }
   }
 
+  // briefs run on a tighter loop so a configured minute lands on time (TD-1)
+  const briefTick = (): void => {
+    if (!deps.briefs) return
+    void runBriefTick({
+      yolo: deps.yolo,
+      cwd: deps.cwd,
+      config: deps.briefs.config(),
+      llm: deps.briefs.llm,
+      provider: deps.briefs.provider,
+    }).catch((e: unknown) => {
+      ctx.logger?.warn?.('[yolo-brief] tick failed: %s', e instanceof Error ? e.message : String(e))
+    })
+  }
+
   const timer = setInterval(tick, intervalMs)
-  return () => clearInterval(timer)
+  const briefTimer = deps.briefs ? setInterval(briefTick, DEFAULTS.briefCheckIntervalSec * 1000) : undefined
+  return () => {
+    clearInterval(timer)
+    if (briefTimer) clearInterval(briefTimer)
+  }
 }

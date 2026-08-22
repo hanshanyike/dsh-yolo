@@ -21,7 +21,7 @@ function lastEvent(): { kind: string; summary: string; session_id?: string | nul
 
 describe('applyTodoAction', () => {
   it('complete marks done, stamps completed_at, removes from FTS, writes event', () => {
-    const t = repo.upsertTodo(db, { title: '写季度报告初稿', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: '写季度报告初稿', scope_key: SCOPE })
     const done = repo.applyTodoAction(db, t.id, 'complete')
     expect(done?.status).toBe('done')
     expect(done?.completed_at).toBeTruthy()
@@ -33,31 +33,31 @@ describe('applyTodoAction', () => {
   })
 
   it('complete is idempotent — no duplicate event on a done todo', () => {
-    const t = repo.upsertTodo(db, { title: '任务A', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: '任务A', scope_key: SCOPE })
     repo.applyTodoAction(db, t.id, 'complete')
     repo.applyTodoAction(db, t.id, 'complete')
     expect(repo.listEvents(db, SCOPE).filter((e) => e.kind === 'todo_completed')).toHaveLength(1)
   })
 
   it('cancel writes a todo_cancelled event', () => {
-    const t = repo.upsertTodo(db, { title: '不再需要的任务', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: '不再需要的任务', scope_key: SCOPE })
     const cancelled = repo.applyTodoAction(db, t.id, 'cancel')
     expect(cancelled?.status).toBe('cancelled')
     expect(lastEvent()?.kind).toBe('todo_cancelled')
   })
 
   it('stamps the originating session on the audit event', () => {
-    const t = repo.upsertTodo(db, { title: '会话内完成的任务', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: '会话内完成的任务', scope_key: SCOPE })
     repo.applyTodoAction(db, t.id, 'complete', { session_id: 'session-abc' })
     expect(lastEvent()?.session_id).toBe('session-abc')
     // without a session (dashboard click), the event stays unattributed
-    const t2 = repo.upsertTodo(db, { title: '看板点击完成的任务', scope_key: SCOPE })
+    const { row: t2 } = repo.upsertTodo(db, { title: '看板点击完成的任务', scope_key: SCOPE })
     repo.applyTodoAction(db, t2.id, 'complete')
     expect(lastEvent()?.session_id).toBeNull()
   })
 
   it('postpone moves due_at, clears the reminder stamp, writes an event', () => {
-    const t = repo.upsertTodo(db, { title: '交材料', due_at: '2026-08-22', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: '交材料', due_at: '2026-08-22', scope_key: SCOPE })
     repo.setTodoReminded(db, t.id)
     const moved = repo.applyTodoAction(db, t.id, 'postpone', { due_at: '2026-08-25' })
     expect(moved?.due_at).toBe('2026-08-25')
@@ -69,14 +69,14 @@ describe('applyTodoAction', () => {
   })
 
   it('postpone without a due_at no-ops', () => {
-    const t = repo.upsertTodo(db, { title: '无日期任务', due_at: '2026-08-22', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: '无日期任务', due_at: '2026-08-22', scope_key: SCOPE })
     const moved = repo.applyTodoAction(db, t.id, 'postpone')
     expect(moved?.due_at).toBe('2026-08-22')
     expect(repo.listEvents(db, SCOPE)).toHaveLength(0)
   })
 
   it('remind_again clears the stamp so the scheduler re-fires', () => {
-    const t = repo.upsertTodo(db, { title: '循环任务', due_at: '2026-08-01', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: '循环任务', due_at: '2026-08-01', scope_key: SCOPE })
     repo.setTodoReminded(db, t.id, 1000)
     expect(repo.listDueTodos(db, SCOPE, '2026-08-22')).toHaveLength(0)
     repo.applyTodoAction(db, t.id, 'remind_again')
@@ -128,8 +128,8 @@ describe('applyMilestoneStatus', () => {
 
 describe('fuzzy title finders', () => {
   it('findTodoByTitle: exact, containment, skips terminal and foreign scope', () => {
-    const a = repo.upsertTodo(db, { title: '写季度报告初稿', scope_key: SCOPE })
-    const b = repo.upsertTodo(db, { title: '修 登录bug', scope_key: SCOPE })
+    const { row: a } = repo.upsertTodo(db, { title: '写季度报告初稿', scope_key: SCOPE })
+    const { row: b } = repo.upsertTodo(db, { title: '修 登录bug', scope_key: SCOPE })
     repo.upsertTodo(db, { title: '已完成的旧任务', scope_key: SCOPE })
     repo.setTodoStatus(db, repo.listTodos(db, SCOPE).find((t) => t.title === '已完成的旧任务')!.id, 'done')
     repo.upsertTodo(db, { title: '另一个工作区的事', scope_key: 'other/scope' })

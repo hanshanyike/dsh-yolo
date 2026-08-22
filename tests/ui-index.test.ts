@@ -43,7 +43,10 @@ function mockYolo(): Yolo {
     listGoals: vi.fn(() => []),
     listMilestones: vi.fn(() => []),
     listEvents: vi.fn(() => []),
+    listEventsBetween: vi.fn(() => []),
     listPreferences: vi.fn(() => []),
+    listSessionSummaries: vi.fn(() => []),
+    listNotifications: vi.fn(() => []),
   } as unknown as Yolo
 }
 

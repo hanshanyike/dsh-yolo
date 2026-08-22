@@ -19,6 +19,8 @@ export interface YoloTodoRow {
   overdue?: boolean
   /** Still open but untouched for more than 7 days. */
   stale?: boolean
+  /** Source badge label — the creating session's one-line summary (v0.3.0). */
+  session_label?: string | null
 }
 export interface YoloGoalRow {
   id: string
@@ -46,6 +48,28 @@ export interface YoloPreferenceRow {
   value: string
 }
 
+/** One ledger line of a day (v0.3.0): event + resolved source badge. */
+export interface YoloLedgerEntry {
+  id: string
+  kind: string
+  summary: string
+  detail?: string | null
+  occurred_at: number
+  /** Resolved badge text: session summary / 快速记一条 / 早期记录. */
+  label: string
+}
+
+/** Notification card / badge row (reminders & briefs, v0.3.0). */
+export interface YoloNotificationRow {
+  id: string
+  kind: string
+  title: string
+  body?: string | null
+  todo_id?: string | null
+  created_at: number
+  handled: boolean
+}
+
 /** Complete dashboard projection served by the host. */
 export interface YoloDashboardData {
   scopeKey: string
@@ -56,6 +80,16 @@ export interface YoloDashboardData {
   milestones: YoloMilestoneRow[]
   events: YoloEventRow[]
   preferences: YoloPreferenceRow[]
+  /** Today's ledger (local day) with source badges, newest first (v0.3.0). */
+  ledger: YoloLedgerEntry[]
+  /** Ledger day in local "YYYY-MM-DD" — also the filter key for TC-4. */
+  ledgerDay: string
+  /** Distinct source sessions appearing in the ledger ("N 会话"). */
+  ledgerSessions: number
+  /** Notification cards for the panel top (newest first, handled included). */
+  notifications: YoloNotificationRow[]
+  /** Unhandled notification count — the sidebar badge number (TB-3). */
+  unhandled: number
 }
 
 const DAY_MS = 86_400_000

@@ -31,6 +31,10 @@ data/*.db-sqlite
 .DS_Store
 Thumbs.db
 
+# TRAE local artifacts
+.trae/
+.trae-html-share-packages/
+
 # pnpm / corepack
 .pnpm-debug.log*
 

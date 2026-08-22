@@ -11,13 +11,17 @@ export type EventKind =
   | 'decision'
   | 'milestone_reached'
   | 'reminder_fired'
+  | 'todo_created'
   | 'todo_completed'
   | 'todo_cancelled'
   | 'todo_postponed'
   | 'todo_remind_again'
   | 'todo_started'
+  | 'todo_updated'
   | 'goal_progress'
+  | 'goal_status'
   | 'milestone_status'
+  | 'brief_generated'
 /** Domain action applicable to a todo (M8 Organizer). */
 export type TodoAction = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again'
 export type ExtractionStrategy = 'rule' | 'llm'
@@ -59,6 +63,7 @@ export interface Todo {
   scope_key: string
   dedup_key?: string | null
   source?: Source | null
+  session_id?: string | null
   created_at: number
   updated_at: number
   completed_at?: number | null
@@ -92,7 +97,31 @@ export interface TimelineEvent {
   summary: string
   detail?: string | null
   session_id?: string | null
+  source?: Source | null
   occurred_at: number
+  scope_key: string
+}
+
+/** One-line summary of an originating dsh session (ledger source badge). */
+export interface SessionSummary {
+  session_id: string
+  summary: string
+  scope_key: string
+  updated_at: number
+}
+
+export type NotificationKind = 'reminder' | 'brief'
+
+/** Kanban notification card / badge source row (v0.3.0). */
+export interface Notification {
+  id: string
+  kind: NotificationKind
+  title: string
+  body?: string | null
+  todo_id?: string | null
+  scope_cwd?: string | null
+  created_at: number
+  handled_at?: number | null
   scope_key: string
 }
 

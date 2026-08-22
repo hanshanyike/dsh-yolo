@@ -93,6 +93,15 @@ export function registerActionsEndpoint(ctx: { webServer?: WebServerLike }, yolo
           return
         }
         const outcome = applyYoloAction(yolo, cwd(), body as YoloActionRequest)
+        if (outcome.ok && (body as YoloActionRequest).action !== 'handled') {
+          // keep today's Markdown snapshot in lockstep with the DB (TE-8);
+          // notification dismissals are pure UI state and skip the rewrite
+          try {
+            yolo.writeSnapshot(cwd())
+          } catch {
+            /* snapshot failure must not fail the action */
+          }
+        }
         send(res, outcome.ok ? 200 : outcome.httpStatus, outcome)
       } catch (e) {
         send(res, 400, { ok: false, error: e instanceof Error ? e.message : String(e) })

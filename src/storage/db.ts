@@ -37,9 +37,16 @@ export function openDb(dbPath: string): DB {
  * SQLite has no "ADD COLUMN IF NOT EXISTS" — check PRAGMA table_info instead.
  */
 function migrate(db: DB): void {
-  const cols = db.prepare('PRAGMA table_info(todos)').all() as { name: string }[]
-  if (!cols.some((c) => c.name === 'last_reminded_at')) {
+  const todoCols = db.prepare('PRAGMA table_info(todos)').all() as { name: string }[]
+  if (!todoCols.some((c) => c.name === 'last_reminded_at')) {
     db.exec('ALTER TABLE todos ADD COLUMN last_reminded_at INTEGER')
+  }
+  const eventCols = db.prepare('PRAGMA table_info(events)').all() as { name: string }[]
+  if (!eventCols.some((c) => c.name === 'source')) {
+    db.exec('ALTER TABLE events ADD COLUMN source TEXT')
+  }
+  if (!todoCols.some((c) => c.name === 'session_id')) {
+    db.exec('ALTER TABLE todos ADD COLUMN session_id TEXT')
   }
 }
 

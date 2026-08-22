@@ -144,29 +144,56 @@ explicit routing instructions, so the agent can answer a natural-language reply
 ### UI path — memory reaches the human
 
 ```
-ctx.yolo ──► ui plugin serves GET /yolo/dashboard (JSON projection)
-          ──► ui plugin accepts POST /yolo/actions (domain actions)
-          ──► client bundle: global sidebar dashboard (fetch + 30s poll while open,
-                              in-place ✓ 完成 / +1d / ✕ buttons)
+ctx.yolo ──► ui plugin serves GET /yolo/dashboard (JSON projection: todos/goals/
+              milestones/events/preferences + ledger + notifications + unhandled)
+            ──► ui plugin accepts POST /yolo/actions (domain actions)
+            ──► ui plugin serves GET /yolo/session/messages + POST /yolo/session/send
+              (the YOLO resident thread — 对话 Tab and 侧栏对话 are two views of it)
+            ──► client bundle: sidebar button (badge = unhandled count) opens the
+                full-width panel — 看板 Tab (default) + 对话 Tab + collapsible
+                侧栏对话 (fetch + 30s poll while open)
 ```
 
-The dashboard is a **global surface, not a per-session one**: memory outlives any
-single conversation, so the panel lives in the sidebar footer (session-independent)
+The panel is a **global surface, not a per-session one**: memory outlives any
+single conversation, so the entry lives in the sidebar footer (session-independent)
 and its scope follows the workspace of the most recent session. The earlier
 per-session dashboard tab (and the `yolo/snapshot` durable events that fed it)
 was removed — publishing a full memory snapshot into every session log was
-pure bloat.
+pure bloat. v0.3.0 replaced the narrow 440px drawer with a session-width panel
+(`client/panel/`): `YoloPanel` (shell + tabs + Esc handling), `KanbanView`
+(filter bar, notification cards, focus pills, task rows, goals, day ledger,
+quick capture), `ChatPane` (one component for both chat views) and `state.ts`
+(module-scope UI state so close/reopen keeps tab, filter and side-chat).
+Filtering rules live in `src/shared/filters.ts` — pure functions pinned by
+tests, the UI owns none of the semantics.
 
-The dashboard is *actionable*: open todos carry ✓ 完成 / +1d / ✕ buttons
-that POST `/yolo/actions`, which dispatches through the same
-`applyYoloAction` path as the `yolo_action` model tool — so a click and a chat
-reply produce identical state changes and audit events.
+The kanban is *actionable*: rows carry ✓ / +1d / ⋯(inline edit) / 💬 buttons
+that POST `/yolo/actions`, which dispatches through the same `applyYoloAction`
+path as the `yolo_action` model tool — so a click and a chat reply produce
+identical state changes and audit events. 快速记一条 also bypasses the LLM
+entirely: it writes a today-due todo straight through the actions API.
+
+### Reminder & brief path — proactive, YOLO-side only
+
+```
+scheduler tick ──► due todos ──► notifications table (card + badge)
+                            └──► followup into the workspace's YOLO resident thread
+brief tick (1/min) ──► morning/evening once per local day ──► notification card
+                  └──► facts from storage queries; optional LLM polish; markdown fallback
+```
+
+Work sessions are **100% silent**: reminders and briefs reach the human only
+through the YOLO panel (cards + badge) and the YOLO resident thread
+(`yolo-w-<sha1(cwd)/12>`, created lazily, resumed across restarts). The old
+session-start replay into whatever work session started next was removed;
+`pending_reminders` stays in the schema for compatibility but nothing feeds it.
 
 ## Storage design
 
 ```
 data/
-├── yolo-<scope>.db     # SQLite: todos, milestones, goals, preferences, events
+├── yolo-<scope>.db     # SQLite: todos, milestones, goals, preferences, events,
+│                       #   session_summaries, notifications
 │                       #   + FTS5 virtual table (trigram tokenizer)
 └── snapshots/*.md      # Markdown: the durable, reviewable record
 ```
@@ -178,6 +205,11 @@ data/
 - **Snapshots are the source of truth**: the DB is a rebuildable cache. The
   snapshot cadence is daily plus every 10 turns (`DEFAULTS.snapshotKeepDays`
   bounds retention on disk).
+- **Session attribution (v0.3.0)** — `events.session_id` (originating dsh
+  session) + `events.source` (`llm|tool|manual`) feed the day ledger's source
+  badges; `session_summaries` holds each session's one-line summary, written
+  during extraction. `notifications` holds reminder/brief cards; the sidebar
+  badge is the count of unhandled rows.
 - **Domain actions with event audit** — state never changes by direct
   column writes anymore. Todos flow through `applyTodoAction` (`complete` /
   `cancel` / `postpone` / `remind_again` / `start`), goals through
@@ -203,6 +235,8 @@ Key design decisions and their rationale:
 | domain actions with event audit | one state-transition path shared by extraction, chat replies and the dashboard — behavior and audit stay identical, and the timeline becomes the auditable answer to "到哪了" |
 | reply-able reminders | the reminder message carries the todo id + routing instructions, so the agent can act on natural-language replies instead of just echoing them |
 | fuzzy title matching for updates | LLM output rarely reproduces stored titles exactly; normalized containment lookup locates items without ids, and unmatched updates drop silently — hallucinated titles are the norm, not an error |
+| YOLO resident thread, work sessions silent | proactive delivery into whatever session happened to start next startled users mid-coding (the M8 lesson); a dedicated `yolo-w-*` thread gives reminders a home, keeps panel chat stateful, and leaves work sessions untouched |
+| pure filter module shared with tests | 看板筛选语义 (今日=逾期+今日到期 etc.) is product behavior — pinning it in `shared/filters.ts` keeps the UI dumb and the rules verifiable |
 
 ## Extension points used
 

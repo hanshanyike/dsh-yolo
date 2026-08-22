@@ -1,16 +1,18 @@
 // Host-side dashboard projection (M7) — the single data source for the
-// browser-side sidebar dashboard. Serves the projection as JSON over HTTP
+// browser-side YOLO panel. Serves the projection as JSON over HTTP
 // (GET /yolo/dashboard). No per-session durable events: the dashboard is a
-// global, session-independent surface, so publishing 'yolo/snapshot' into
-// every session log was pure bloat.
+// global, session-independent surface.
 //
-// M8: rows now carry the plan context (milestone_title) and the "where is it
-// stuck" signals (overdue / stale), so the dashboard can render a stateful
-// plan instead of a flat read-only list.
+// M8: rows carry the plan context (milestone_title) and the "where is it
+// stuck" signals (overdue / stale).
+// v0.3.0: adds the day ledger (events joined with session-summaries as source
+// badges), notification cards, and the unhandled badge count.
 
 import type Yolo from '../storage/index.ts'
-import type { YoloDashboardData } from '../shared/dashboard.ts'
+import type { TimelineEvent } from '../storage/types.ts'
+import type { YoloDashboardData, YoloLedgerEntry, YoloNotificationRow } from '../shared/dashboard.ts'
 import { isTodoOverdue, isTodoStale } from '../shared/dashboard.ts'
+import { localDateStr, dayBounds } from '../shared/text.ts'
 
 export interface WebServerLike {
   register(opts: {
@@ -23,26 +25,66 @@ export interface WebServerLike {
   }): void
 }
 
+/** Resolve the source-badge label of one event (TC-3/TC-5, open question #4). */
+function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
+  if (e.session_id) return sessions.get(e.session_id) ?? '已删除会话'
+  if (e.source === 'manual') return e.kind === 'todo_created' ? '快速记一条' : '看板操作'
+  if (e.source === 'llm') return '会话记录'
+  if (e.source === 'tool') return '助手操作'
+  return '早期记录'
+}
+
 /** Build the full dashboard projection for a workspace scope. */
-export function buildDashboardData(yolo: Yolo, cwd: string): YoloDashboardData {
+export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()): YoloDashboardData {
   const now = Date.now()
   const milestones = yolo.listMilestones(cwd)
   const msTitle = new Map(milestones.map((m) => [m.id, m.title]))
+  const sessions = new Map(yolo.listSessionSummaries(cwd).map((s) => [s.session_id, s.summary]))
+
+  const todos = yolo.listTodos(cwd).map((t) => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    priority: t.priority,
+    due_at: t.due_at,
+    milestone_title: t.milestone_id ? msTitle.get(t.milestone_id) ?? null : null,
+    updated_at: t.updated_at,
+    overdue: isTodoOverdue(t.due_at, t.status, new Date(now)),
+    stale: isTodoStale(t.status, t.updated_at, now),
+    session_label: t.session_id
+      ? sessions.get(t.session_id) ?? '已删除会话'
+      : t.source === 'manual'
+        ? '快速记一条'
+        : null,
+  }))
+
+  const { from, to } = dayBounds(day)
+  const dayEvents = yolo.listEventsBetween(cwd, from, to)
+  const ledger: YoloLedgerEntry[] = dayEvents.map((e) => ({
+    id: e.id,
+    kind: e.kind,
+    summary: e.summary,
+    detail: e.detail ?? null,
+    occurred_at: e.occurred_at,
+    label: eventLabel(e, sessions),
+  }))
+  const ledgerSessions = new Set(dayEvents.map((e) => e.session_id).filter((s): s is string => !!s)).size
+
+  const notifications: YoloNotificationRow[] = yolo.listNotifications(cwd, 12).map((n) => ({
+    id: n.id,
+    kind: n.kind,
+    title: n.title,
+    body: n.body ?? null,
+    todo_id: n.todo_id ?? null,
+    created_at: n.created_at,
+    handled: n.handled_at != null,
+  }))
+
   return {
     scopeKey: yolo.resolve(cwd).scopeKey,
     cwd,
     at: now,
-    todos: yolo.listTodos(cwd).map((t) => ({
-      id: t.id,
-      title: t.title,
-      status: t.status,
-      priority: t.priority,
-      due_at: t.due_at,
-      milestone_title: t.milestone_id ? msTitle.get(t.milestone_id) ?? null : null,
-      updated_at: t.updated_at,
-      overdue: isTodoOverdue(t.due_at, t.status, new Date(now)),
-      stale: isTodoStale(t.status, t.updated_at, now),
-    })),
+    todos,
     goals: yolo.listGoals(cwd).map((g) => ({
       id: g.id,
       title: g.title,
@@ -67,17 +109,29 @@ export function buildDashboardData(yolo: Yolo, cwd: string): YoloDashboardData {
       key: p.key,
       value: p.value,
     })),
+    ledger,
+    ledgerDay: day,
+    ledgerSessions,
+    notifications,
+    unhandled: notifications.filter((n) => !n.handled).length,
   }
 }
 
-/** Serve GET /yolo/dashboard — the sidebar dashboard's live data source. */
+/** Parse ?day=YYYY-MM-DD from the request URL; falls back to today. */
+function ledgerDayOf(req: unknown): string {
+  const url = (req as { url?: string } | undefined)?.url ?? ''
+  const m = /[?&]day=(\d{4}-\d{2}-\d{2})/.exec(url)
+  return m ? m[1] : localDateStr()
+}
+
+/** Serve GET /yolo/dashboard — the panel's live data source. */
 export function registerDashboardEndpoint(ctx: { webServer?: WebServerLike }, yolo: Yolo, cwd: () => string): void {
   ctx.webServer?.register({
     kind: 'prefix',
     path: '/yolo/dashboard',
-    handler: async (_req, res) => {
+    handler: async (req, res) => {
       try {
-        const data = buildDashboardData(yolo, cwd())
+        const data = buildDashboardData(yolo, cwd(), ledgerDayOf(req))
         res.writeHead(200, {
           'content-type': 'application/json; charset=utf-8',
           'cache-control': 'no-cache',

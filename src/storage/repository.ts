@@ -13,9 +13,12 @@ import type {
   GoalStatus,
   Milestone,
   MilestoneStatus,
+  Notification,
+  NotificationKind,
   PendingReminder,
   Preference,
   Priority,
+  SessionSummary,
   Source,
   TimelineEvent,
   Todo,
@@ -105,8 +108,9 @@ export function upsertTodo(
     milestone_id?: string | null
     scope_key: string
     source?: Source
+    session_id?: string | null
   },
-): Todo {
+): { row: Todo; created: boolean } {
   const dedupKey = `todo:${normalize(data.title)}`
   const existing = db
     .prepare('SELECT * FROM todos WHERE dedup_key = ? AND scope_key = ?')
@@ -122,7 +126,7 @@ export function upsertTodo(
       'UPDATE todos SET due_at = ?, priority = ?, detail = ?, milestone_id = ?, updated_at = ? WHERE id = ?',
     ).run(due, pri, detail, ms, ts, existing.id)
     syncTodoFts(db, existing.id, data.title, detail)
-    return { ...existing, due_at: due, priority: pri, detail, milestone_id: ms, updated_at: ts }
+    return { row: { ...existing, due_at: due, priority: pri, detail, milestone_id: ms, updated_at: ts }, created: false }
   }
   const row: Todo = {
     id: genId(),
@@ -135,13 +139,14 @@ export function upsertTodo(
     scope_key: data.scope_key,
     dedup_key: dedupKey,
     source: data.source ?? null,
+    session_id: data.session_id ?? null,
     created_at: ts,
     updated_at: ts,
     completed_at: null,
   }
   db.prepare(
-    `INSERT INTO todos(id, title, detail, status, priority, due_at, milestone_id, scope_key, dedup_key, source, created_at, updated_at, completed_at)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+    `INSERT INTO todos(id, title, detail, status, priority, due_at, milestone_id, scope_key, dedup_key, source, session_id, created_at, updated_at, completed_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
   ).run(
     row.id,
     row.title,
@@ -153,10 +158,11 @@ export function upsertTodo(
     row.scope_key,
     row.dedup_key,
     row.source,
+    row.session_id,
     row.created_at,
     row.updated_at,
   )
-  return row
+  return { row, created: true }
 }
 
 export function setTodoStatus(db: DB, id: string, status: TodoStatus): void {
@@ -306,7 +312,7 @@ export function listPreferences(db: DB, scopeKey: string): Preference[] {
 
 export function addEvent(
   db: DB,
-  data: { kind: EventKind; summary: string; detail?: string | null; session_id?: string | null; occurred_at?: number; scope_key: string },
+  data: { kind: EventKind; summary: string; detail?: string | null; session_id?: string | null; source?: Source | null; occurred_at?: number; scope_key: string },
 ): TimelineEvent | null {
   const ts = data.occurred_at ?? now()
   const row: TimelineEvent = {
@@ -315,13 +321,14 @@ export function addEvent(
     summary: data.summary,
     detail: data.detail ?? null,
     session_id: data.session_id ?? null,
+    source: data.source ?? null,
     occurred_at: ts,
     scope_key: data.scope_key,
   }
   db.prepare(
-    `INSERT INTO events(id, kind, summary, detail, session_id, occurred_at, scope_key)
-     VALUES(?,?,?,?,?,?,?)`,
-  ).run(row.id, row.kind, row.summary, row.detail, row.session_id, row.occurred_at, row.scope_key)
+    `INSERT INTO events(id, kind, summary, detail, session_id, source, occurred_at, scope_key)
+     VALUES(?,?,?,?,?,?,?,?)`,
+  ).run(row.id, row.kind, row.summary, row.detail, row.session_id, row.source, row.occurred_at, row.scope_key)
   return row
 }
 
@@ -332,6 +339,75 @@ export function listEvents(db: DB, scopeKey: string, limit = 50): TimelineEvent[
   return db
     .prepare('SELECT * FROM events WHERE scope_key = ? ORDER BY occurred_at DESC, rowid DESC LIMIT ?')
     .all(scopeKey, limit) as TimelineEvent[]
+}
+
+/** Events within [fromMs, toMs) — the day ledger's data source (local day bounds). */
+export function listEventsBetween(db: DB, scopeKey: string, fromMs: number, toMs: number): TimelineEvent[] {
+  return db
+    .prepare('SELECT * FROM events WHERE scope_key = ? AND occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at DESC, rowid DESC')
+    .all(scopeKey, fromMs, toMs) as TimelineEvent[]
+}
+
+// ---------- session summaries (v0.3.0 ledger source badges) ----------
+
+export function upsertSessionSummary(
+  db: DB,
+  data: { session_id: string; summary: string; scope_key: string },
+): void {
+  db.prepare(
+    `INSERT INTO session_summaries(session_id, summary, scope_key, updated_at)
+     VALUES(?,?,?,?)
+     ON CONFLICT(session_id) DO UPDATE SET summary = excluded.summary, updated_at = excluded.updated_at`,
+  ).run(data.session_id, data.summary, data.scope_key, now())
+}
+
+export function listSessionSummaries(db: DB, scopeKey: string): SessionSummary[] {
+  return db.prepare('SELECT * FROM session_summaries WHERE scope_key = ?').all(scopeKey) as SessionSummary[]
+}
+
+// ---------- notifications (v0.3.0 cards + badge) ----------
+
+export function addNotification(
+  db: DB,
+  data: { kind: NotificationKind; title: string; body?: string | null; todo_id?: string | null; scope_cwd?: string | null; scope_key: string },
+): Notification {
+  const row: Notification = {
+    id: genId(),
+    kind: data.kind,
+    title: data.title,
+    body: data.body ?? null,
+    todo_id: data.todo_id ?? null,
+    scope_cwd: data.scope_cwd ?? null,
+    created_at: now(),
+    handled_at: null,
+    scope_key: data.scope_key,
+  }
+  db.prepare(
+    `INSERT INTO notifications(id, kind, title, body, todo_id, scope_cwd, created_at, handled_at, scope_key)
+     VALUES(?,?,?,?,?,?,?,NULL,?)`,
+  ).run(row.id, row.kind, row.title, row.body, row.todo_id, row.scope_cwd, row.created_at, row.scope_key)
+  return row
+}
+
+export function listNotifications(db: DB, scopeKey: string, limit = 20): Notification[] {
+  return db
+    .prepare('SELECT * FROM notifications WHERE scope_key = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
+    .all(scopeKey, limit) as Notification[]
+}
+
+export function listUnhandledNotifications(db: DB, scopeKey: string): Notification[] {
+  return db
+    .prepare('SELECT * FROM notifications WHERE scope_key = ? AND handled_at IS NULL ORDER BY created_at ASC')
+    .all(scopeKey) as Notification[]
+}
+
+export function markNotificationHandled(db: DB, id: string): void {
+  db.prepare('UPDATE notifications SET handled_at = ? WHERE id = ? AND handled_at IS NULL').run(now(), id)
+}
+
+/** Clear every unhandled reminder notification attached to a todo (any handling path). */
+export function markTodoNotificationsHandled(db: DB, todoId: string): void {
+  db.prepare("UPDATE notifications SET handled_at = ? WHERE todo_id = ? AND handled_at IS NULL AND kind = 'reminder'").run(now(), todoId)
 }
 
 // ---------- fuzzy title matching (M8) ----------
@@ -364,7 +440,8 @@ const MILESTONE_STATUS_LABEL: Record<MilestoneStatus, string> = {
 }
 
 /** Apply a domain action to a todo. Terminal todos and unknown ids no-op
- * (return the row as-is / null) — callers decide whether that is an error. */
+ * (return the row as-is / null) — callers decide whether that is an error.
+ * Any transition also clears the todo's unhandled reminder notifications. */
 export function applyTodoAction(
   db: DB,
   id: string,
@@ -376,19 +453,21 @@ export function applyTodoAction(
   if (t.status === 'done' || t.status === 'cancelled') return t
   const ts = now()
   const session_id = args?.session_id ?? null
+  // no session ⇒ the panel/UI entrance; the badge reads 看板操作 instead of 早期记录
+  const source = session_id ? null : ('manual' as const)
   switch (action) {
     case 'start':
       if (t.status === 'in_progress') return t
       db.prepare('UPDATE todos SET status = ?, updated_at = ? WHERE id = ?').run('in_progress', ts, id)
-      addEvent(db, { kind: 'todo_started', summary: `开始：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id })
+      addEvent(db, { kind: 'todo_started', summary: `开始：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
       break
     case 'complete':
       setTodoStatus(db, id, 'done')
-      addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id })
+      addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
       break
     case 'cancel':
       setTodoStatus(db, id, 'cancelled')
-      addEvent(db, { kind: 'todo_cancelled', summary: `取消：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id })
+      addEvent(db, { kind: 'todo_cancelled', summary: `取消：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
       break
     case 'postpone': {
       if (!args?.due_at) return t
@@ -403,14 +482,49 @@ export function applyTodoAction(
         scope_key: t.scope_key,
         occurred_at: ts,
         session_id,
+        source,
       })
       break
     }
     case 'remind_again':
       db.prepare('UPDATE todos SET last_reminded_at = NULL, updated_at = ? WHERE id = ?').run(ts, id)
-      addEvent(db, { kind: 'todo_remind_again', summary: `再次提醒：「${t.title}」`, scope_key: t.scope_key, occurred_at: ts, session_id })
+      addEvent(db, { kind: 'todo_remind_again', summary: `再次提醒：「${t.title}」`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
       break
   }
+  markTodoNotificationsHandled(db, id)
+  return db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo
+}
+
+/** Inline-edit a todo's plan fields (v0.3.0 E). Only provided fields change;
+ * title edits resync FTS; every change writes a todo_updated audit event.
+ * Goal progress is deliberately NOT editable here (D14: no fake progress). */
+export function applyTodoUpdate(
+  db: DB,
+  id: string,
+  patch: { title?: string; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null },
+  sessionId?: string | null,
+): Todo | null {
+  const t = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
+  if (!t) return null
+  const title = patch.title?.trim() ? patch.title.trim() : t.title
+  const due = patch.due_at !== undefined ? patch.due_at : t.due_at
+  const pri = patch.priority !== undefined ? patch.priority : t.priority
+  const ms = patch.milestone_id !== undefined ? patch.milestone_id : t.milestone_id
+  const ts = now()
+  db.prepare('UPDATE todos SET title = ?, due_at = ?, priority = ?, milestone_id = ?, updated_at = ? WHERE id = ?').run(title, due, pri, ms, ts, id)
+  syncTodoFts(db, id, title, t.detail ?? null)
+  const changes: string[] = []
+  if (title !== t.title) changes.push(`标题「${t.title}」→「${title}」`)
+  if (due !== t.due_at) changes.push(`截止 ${t.due_at ?? '无'} → ${due ?? '无'}`)
+  if (pri !== t.priority) changes.push(`优先级 ${t.priority ?? '无'} → ${pri ?? '无'}`)
+  addEvent(db, {
+    kind: 'todo_updated',
+    summary: `更新「${title}」${changes.length ? `（${changes.join('；')}）` : ''}`,
+    scope_key: t.scope_key,
+    occurred_at: ts,
+    session_id: sessionId ?? null,
+    source: 'manual',
+  })
   return db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo
 }
 
@@ -426,6 +540,7 @@ export function applyGoalProgress(db: DB, id: string, progress: number, note?: s
     detail: note ?? null,
     scope_key: g.scope_key,
     session_id: sessionId ?? null,
+    source: sessionId ? null : 'manual',
   })
   return db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal
 }
@@ -441,8 +556,65 @@ export function applyMilestoneStatus(db: DB, id: string, status: MilestoneStatus
     summary: `里程碑「${m.title}」${MILESTONE_STATUS_LABEL[status]}`,
     scope_key: m.scope_key,
     session_id: sessionId ?? null,
+    source: sessionId ? null : 'manual',
   })
   return db.prepare('SELECT * FROM milestones WHERE id = ?').get(id) as Milestone
+}
+
+/** Rename a milestone with a timeline event (v0.3.0 E inline edit). */
+export function applyMilestoneRename(db: DB, id: string, title: string, sessionId?: string | null): Milestone | null {
+  const t = title.trim()
+  const m = db.prepare('SELECT * FROM milestones WHERE id = ?').get(id) as Milestone | undefined
+  if (!m || !t || t === m.title) return m ?? null
+  const ts = now()
+  db.prepare('UPDATE milestones SET title = ?, updated_at = ? WHERE id = ?').run(t, ts, id)
+  db.prepare("DELETE FROM yolo_fts WHERE row_type = 'milestone' AND row_id = ?").run(id)
+  db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('milestone', id, t, m.description ?? '')
+  addEvent(db, {
+    kind: 'milestone_status',
+    summary: `里程碑改名「${m.title}」→「${t}」`,
+    scope_key: m.scope_key,
+    session_id: sessionId ?? null,
+    source: 'manual',
+  })
+  return db.prepare('SELECT * FROM milestones WHERE id = ?').get(id) as Milestone
+}
+
+/** Rename a goal with a timeline event (v0.3.0 E inline edit). */
+export function applyGoalRename(db: DB, id: string, title: string, sessionId?: string | null): Goal | null {
+  const t = title.trim()
+  const g = db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal | undefined
+  if (!g || !t || t === g.title) return g ?? null
+  const ts = now()
+  db.prepare('UPDATE goals SET title = ?, updated_at = ? WHERE id = ?').run(t, ts, id)
+  db.prepare("DELETE FROM yolo_fts WHERE row_type = 'goal' AND row_id = ?").run(id)
+  db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('goal', id, t, g.description ?? '')
+  addEvent(db, {
+    kind: 'goal_progress',
+    summary: `目标改名「${g.title}」→「${t}」`,
+    scope_key: g.scope_key,
+    session_id: sessionId ?? null,
+    source: 'manual',
+  })
+  return db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal
+}
+
+/** Abandon (soft-delete) a goal with a timeline event (v0.3.0 E). */
+export function applyGoalAbandon(db: DB, id: string, sessionId?: string | null): Goal | null {
+  const g = db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal | undefined
+  if (!g) return null
+  if (g.status === 'abandoned') return g
+  const ts = now()
+  db.prepare('UPDATE goals SET status = ?, updated_at = ? WHERE id = ?').run('abandoned', ts, id)
+  db.prepare("DELETE FROM yolo_fts WHERE row_type = 'goal' AND row_id = ?").run(id)
+  addEvent(db, {
+    kind: 'goal_status',
+    summary: `目标「${g.title}」已放弃`,
+    scope_key: g.scope_key,
+    session_id: sessionId ?? null,
+    source: 'manual',
+  })
+  return db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal
 }
 
 // ---------- extraction log ----------

@@ -12,6 +12,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Panel 1.0 (v0.3.0, per `docs/product-design.md` — 已评审定稿).** The sidebar
+  button now opens a session-width full panel instead of the narrow drawer:
+  看板 Tab (default) + 对话 Tab, plus a collapsible 侧栏对话 that anchors to the
+  card you clicked 聊一聊 on (Esc/✕ collapses; the header 对话 toggle opens it
+  board-wide). Tab, filter and side-chat state survive close/reopen via a
+  module-scope UI store (`client/panel/state.ts`).
+- **Kanban view with pure filtering logic.** Preset tabs 今日/全部/已完成, focus
+  pills (逾期/今日/未来7天/滞留), and AND-combined detail filters (进行中/逾期/滞留/
+  里程碑/关键词) all resolve in `src/shared/filters.ts` — pinned by tests, not UI
+  code. Inline todo editing (title/due/priority/milestone), goal & milestone
+  rename + status, delete-with-audit, and 快速记一条 (writes storage directly,
+  today-due, no LLM roundtrip).
+- **YOLO resident session (one thread per workspace).** Session id
+  `yolo-w-<sha1(cwd)/12>`, created lazily, resumed across host restarts; the
+  panel chat channel (`GET /yolo/session/messages`, `POST /yolo/session/send`)
+  and reminder delivery both target it. Work sessions are 100% silent (TB-1).
+- **Day ledger (今日台账).** The kanban bottom section lists today's events with
+  source badges — each session gets a one-line summary at extraction time
+  (`session_summaries`), quick-capture rows read 快速记一条, older rows read
+  早期记录 (`events.source` column drives the label).
+- **Daily briefs (早报/晚报).** Configurable times (Settings, defaults 09:00 /
+  18:00), once per local day with catch-up; facts come from deterministic
+  storage queries, one optional LLM call polishes them, and any failure falls
+  back to the plain markdown fact list (TD-6).
+- **Notification cards + sidebar badge.** `notifications` table: due reminders
+  and briefs surface as cards at the kanban top with quick actions (✓ 完成 /
+  +1d / 聊一聊 / ✕ handled); the sidebar badge shows the unhandled count and
+  decrements as cards are handled (TB-3).
+
+### Changed
+
+- **Reminder delivery rerouted to the YOLO side.** Due todos now write a
+  notification card + deliver into the workspace's YOLO resident thread; the
+  old session-start replay into whatever work session started next is gone
+  (`pending_reminders` stays in the schema for compatibility, nothing feeds it).
+- **Dashboard API extended** (`GET /yolo/dashboard`): `ledger`, `ledgerDay`,
+  `ledgerSessions`, `notifications`, `unhandled`; todo rows carry
+  `session_label`. Actions API gained `update` / `rename` / `abandon` /
+  `quick_add` / `handled` (notification).
+
+### Added (stateful plan)
+
 - **Stateful plan (Organizer): the plan is now stateful.** Three entrances —
   automatic extraction, in-chat replies, dashboard clicks — converge on one set
   of storage-layer domain actions, and every action writes a timeline event.

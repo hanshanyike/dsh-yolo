@@ -38,7 +38,7 @@ describe('todos', () => {
   })
 
   it('setTodoStatus(done) sets completed_at and stops matching search', () => {
-    const t = repo.upsertTodo(db, { title: 'ship the feature', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: 'ship the feature', scope_key: SCOPE })
     repo.setTodoStatus(db, t.id, 'done')
     expect(repo.listTodos(db, SCOPE, 'done')).toHaveLength(1)
     // FTS row removed for done todos
@@ -168,7 +168,7 @@ describe('snapshot', () => {
 
 describe('reminders + extraction log', () => {
   it('queues, lists, and deletes pending reminders', () => {
-    const t = repo.upsertTodo(db, { title: 'call mom', due_at: '2026-08-20', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: 'call mom', due_at: '2026-08-20', scope_key: SCOPE })
     repo.queuePendingReminder(db, { todo_id: t.id, fire_at: 1000, payload: 'remind: call mom', scope_key: SCOPE })
     expect(repo.listPendingReminders(db, SCOPE, 2000)).toHaveLength(1)
     const [r] = repo.listPendingReminders(db, SCOPE, 2000)

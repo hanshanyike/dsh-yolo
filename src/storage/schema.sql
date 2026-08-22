@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS todos (
   scope_key     TEXT NOT NULL,
   dedup_key     TEXT,                -- rule/llm dedup (see extract/merge.ts)
   source        TEXT,
+  session_id    TEXT,                -- originating dsh session (ledger source badge, v0.3.0)
   created_at    INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,
   completed_at  INTEGER,
@@ -96,11 +97,36 @@ CREATE TABLE IF NOT EXISTS events (
   summary     TEXT NOT NULL,
   detail      TEXT,
   session_id  TEXT,                  -- originating dsh session (nullable)
+  source      TEXT,                  -- llm|tool|manual (nullable; drives ledger labels)
   occurred_at INTEGER NOT NULL,
   scope_key   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_time ON events(occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_scope ON events(scope_key);
+CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id) WHERE session_id IS NOT NULL;
+
+-- one-line summary per originating session (ledger source badges, v0.3.0)
+CREATE TABLE IF NOT EXISTS session_summaries (
+  session_id TEXT PRIMARY KEY,
+  summary    TEXT NOT NULL,
+  scope_key  TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- kanban notification cards + sidebar badge (reminders & briefs, v0.3.0).
+-- Handled = quick action applied, chat-processed (todo transitioned), or dismissed.
+CREATE TABLE IF NOT EXISTS notifications (
+  id         TEXT PRIMARY KEY,       -- ULID
+  kind       TEXT NOT NULL,          -- reminder|brief
+  title      TEXT NOT NULL,
+  body       TEXT,                   -- brief markdown / reminder detail
+  todo_id    TEXT,
+  scope_cwd  TEXT,                   -- workspace the item belongs to (action routing)
+  created_at INTEGER NOT NULL,
+  handled_at INTEGER,
+  scope_key  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_open ON notifications(scope_key, handled_at);
 
 -- extraction audit log + dedup guard
 CREATE TABLE IF NOT EXISTS extraction_log (

@@ -8,7 +8,8 @@ import { startReminderScheduler } from '../src/reminder/scheduler.ts'
 function mockYolo(overrides: Partial<Record<keyof Yolo, unknown>> = {}) {
   return {
     listDueTodos: vi.fn(() => []),
-    queueReminder: vi.fn(),
+    addNotification: vi.fn(),
+    addEvent: vi.fn(),
     setTodoReminded: vi.fn(),
     lastSnapshotDate: vi.fn(() => new Date().toISOString().slice(0, 10)),
     writeSnapshot: vi.fn(),
@@ -32,7 +33,6 @@ describe('startReminderScheduler', () => {
     const cleanup = startReminderScheduler(mockCtx(), {
       yolo,
       cwd: () => '/tmp',
-      getLatestAgent: () => undefined,
       intervalMs: 1000,
     })
 
@@ -53,7 +53,6 @@ describe('startReminderScheduler', () => {
     const cleanup = startReminderScheduler(ctx, {
       yolo,
       cwd: () => '/tmp',
-      getLatestAgent: () => undefined,
       intervalMs: 1000,
     })
 

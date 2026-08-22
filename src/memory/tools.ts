@@ -75,14 +75,16 @@ export function registerYoloTools(ctx: YoloContext): void {
       async execute(args, exec) {
         const cwd = cwdOfExec(exec)
         switch (args.kind) {
-          case 'todo':
-            return json(y.addTodo(cwd, {
+          case 'todo': {
+            const { todo } = y.addTodo(cwd, {
               title: args.title,
               detail: args.detail,
               due_at: args.due_at,
               priority: (args.priority ?? undefined) as Priority | undefined,
               source: 'tool',
-            }))
+            })
+            return json(todo)
+          }
           case 'milestone':
             return json(y.addMilestone(cwd, { title: args.title, target_date: args.target_date, description: args.detail, source: 'tool' }))
           case 'goal':

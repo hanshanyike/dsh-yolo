@@ -98,10 +98,10 @@ describe('validateExtraction: updates array', () => {
 
 describe('merge: state updates land on known items', () => {
   it('completes / starts / cancels / postpones todos by title', async () => {
-    const a = yolo.addTodo(cwd, { title: '写季度报告初稿', due_at: '2026-08-22' })
-    const b = yolo.addTodo(cwd, { title: '修登录bug' })
-    const c = yolo.addTodo(cwd, { title: '放弃的实验' })
-    const d = yolo.addTodo(cwd, { title: '改期的会议', due_at: '2026-08-22' })
+    const { todo: a } = yolo.addTodo(cwd, { title: '写季度报告初稿', due_at: '2026-08-22' })
+    const { todo: b } = yolo.addTodo(cwd, { title: '修登录bug' })
+    const { todo: c } = yolo.addTodo(cwd, { title: '放弃的实验' })
+    const { todo: d } = yolo.addTodo(cwd, { title: '改期的会议', due_at: '2026-08-22' })
 
     await runTurn(
       JSON.stringify({

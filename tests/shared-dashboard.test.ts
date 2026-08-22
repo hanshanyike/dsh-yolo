@@ -73,6 +73,8 @@ describe('YoloDashboardData serialization contract', () => {
     const data: YoloDashboardData = {
       scopeKey: 'k', cwd: '/w', at: 1,
       todos: [], goals: [], milestones: [], events: [], preferences: [],
+      ledger: [], ledgerDay: '2026-08-22', ledgerSessions: 0,
+      notifications: [], unhandled: 0,
     }
     expect(JSON.parse(JSON.stringify(data))).toEqual(data)
   })
@@ -83,6 +85,10 @@ describe('YoloDashboardData serialization contract', () => {
       todos: [{ id: 't', title: 'x', status: 'pending', milestone_title: 'm', updated_at: 1, overdue: true, stale: false }],
       goals: [{ id: 'g', title: 'y', status: 'active', progress: 50, milestone_title: 'm' }],
       milestones: [], events: [], preferences: [],
+      ledger: [{ id: 'e', kind: 'todo_completed', summary: '完成：x', occurred_at: 1, label: '会话摘要' }],
+      ledgerDay: '2026-08-22', ledgerSessions: 1,
+      notifications: [{ id: 'n', kind: 'reminder', title: '⏰ x', todo_id: 't', created_at: 1, handled: false }],
+      unhandled: 1,
     }
     expect(JSON.parse(JSON.stringify(data))).toEqual(data)
   })

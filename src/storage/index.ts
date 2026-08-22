@@ -20,11 +20,14 @@ import type {
   GoalStatus,
   Milestone,
   MilestoneStatus,
+  Notification,
+  NotificationKind,
   PendingReminder,
   Preference,
   RowType,
   ScopeMode,
   SearchHit,
+  SessionSummary,
   Source,
   TimelineEvent,
   Todo,
@@ -83,12 +86,15 @@ export default class Yolo extends Service {
   }
 
   // ---- todos ----
+  /** Upsert a todo; `created` tells the caller whether a new row landed
+   * (drives the todo_created ledger event). */
   addTodo(
     cwd: string,
-    data: { title: string; detail?: string | null; priority?: Priority | null; due_at?: string | null; milestone_id?: string | null; source?: Source },
-  ): Todo {
+    data: { title: string; detail?: string | null; priority?: Priority | null; due_at?: string | null; milestone_id?: string | null; source?: Source; session_id?: string | null },
+  ): { todo: Todo; created: boolean } {
     const h = this.resolve(cwd)
-    return repo.upsertTodo(h.db, { ...data, scope_key: h.scopeKey })
+    const { row, created } = repo.upsertTodo(h.db, { ...data, scope_key: h.scopeKey })
+    return { todo: row, created }
   }
   setTodoStatus(cwd: string, id: string, status: TodoStatus): void {
     repo.setTodoStatus(this.resolve(cwd).db, id, status)
@@ -131,10 +137,22 @@ export default class Yolo extends Service {
     if (!id) return null
     return repo.applyMilestoneStatus(h.db, id, status, sessionId)
   }
+  applyMilestoneRename(cwd: string, id: string, title: string, sessionId?: string | null): Milestone | null {
+    return repo.applyMilestoneRename(this.resolve(cwd).db, id, title, sessionId)
+  }
   /** Fuzzy title -> milestone id (M8 extraction linking); null when unmatched. */
   findMilestoneId(cwd: string, title: string): string | null {
     const h = this.resolve(cwd)
     return repo.findMilestoneByTitle(h.db, h.scopeKey, title)?.id ?? null
+  }
+  /** Inline-edit todo plan fields (v0.3.0 E); writes a todo_updated event. */
+  applyTodoUpdate(
+    cwd: string,
+    id: string,
+    patch: { title?: string; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null },
+    sessionId?: string | null,
+  ): Todo | null {
+    return repo.applyTodoUpdate(this.resolve(cwd).db, id, patch, sessionId)
   }
 
   // ---- milestones ----
@@ -168,6 +186,12 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.listGoals(h.db, h.scopeKey, status)
   }
+  applyGoalRename(cwd: string, id: string, title: string, sessionId?: string | null): Goal | null {
+    return repo.applyGoalRename(this.resolve(cwd).db, id, title, sessionId)
+  }
+  applyGoalAbandon(cwd: string, id: string, sessionId?: string | null): Goal | null {
+    return repo.applyGoalAbandon(this.resolve(cwd).db, id, sessionId)
+  }
 
   // ---- preferences ----
   addPreference(cwd: string, data: { key: string; value: string }): Preference {
@@ -182,7 +206,7 @@ export default class Yolo extends Service {
   // ---- events ----
   addEvent(
     cwd: string,
-    data: { kind: EventKind; summary: string; detail?: string | null; session_id?: string | null; occurred_at?: number },
+    data: { kind: EventKind; summary: string; detail?: string | null; session_id?: string | null; source?: Source | null; occurred_at?: number },
   ): TimelineEvent | null {
     const h = this.resolve(cwd)
     return repo.addEvent(h.db, { ...data, scope_key: h.scopeKey })
@@ -190,6 +214,52 @@ export default class Yolo extends Service {
   listEvents(cwd: string, limit = 50): TimelineEvent[] {
     const h = this.resolve(cwd)
     return repo.listEvents(h.db, h.scopeKey, limit)
+  }
+  /** Events within [fromMs, toMs) — day ledger aggregation (v0.3.0 C). */
+  listEventsBetween(cwd: string, fromMs: number, toMs: number): TimelineEvent[] {
+    const h = this.resolve(cwd)
+    return repo.listEventsBetween(h.db, h.scopeKey, fromMs, toMs)
+  }
+
+  // ---- session summaries (v0.3.0 C) ----
+  upsertSessionSummary(cwd: string, sessionId: string, summary: string): void {
+    const h = this.resolve(cwd)
+    repo.upsertSessionSummary(h.db, { session_id: sessionId, summary, scope_key: h.scopeKey })
+  }
+  listSessionSummaries(cwd: string): SessionSummary[] {
+    const h = this.resolve(cwd)
+    return repo.listSessionSummaries(h.db, h.scopeKey)
+  }
+
+  // ---- notifications (v0.3.0 B/D cards + badge) ----
+  addNotification(
+    cwd: string,
+    data: { kind: NotificationKind; title: string; body?: string | null; todo_id?: string | null; scope_cwd?: string | null },
+  ): Notification {
+    const h = this.resolve(cwd)
+    return repo.addNotification(h.db, { ...data, scope_key: h.scopeKey })
+  }
+  listNotifications(cwd: string, limit = 20): Notification[] {
+    const h = this.resolve(cwd)
+    return repo.listNotifications(h.db, h.scopeKey, limit)
+  }
+  listUnhandledNotifications(cwd: string): Notification[] {
+    const h = this.resolve(cwd)
+    return repo.listUnhandledNotifications(h.db, h.scopeKey)
+  }
+  markNotificationHandled(cwd: string, id: string): boolean {
+    const h = this.resolve(cwd)
+    const before = repo.listUnhandledNotifications(h.db, h.scopeKey).length
+    repo.markNotificationHandled(h.db, id)
+    return repo.listUnhandledNotifications(h.db, h.scopeKey).length < before
+  }
+
+  // ---- brief day-stamps (v0.3.0 D: fire each brief once per local day) ----
+  getBriefStamp(cwd: string, kind: 'morning' | 'evening'): string | undefined {
+    return getMeta(this.resolve(cwd).db, `brief_${kind}_day`)
+  }
+  setBriefStamp(cwd: string, kind: 'morning' | 'evening', day: string): void {
+    setMeta(this.resolve(cwd).db, `brief_${kind}_day`, day)
   }
 
   // ---- search ----
