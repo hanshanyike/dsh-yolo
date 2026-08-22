@@ -67,7 +67,9 @@ export const YOLO_CSS = `
 .yolo-scope[data-y-theme="dark"] input[type="date"] { color-scheme: dark; }
 
 /* ===== panel shell ===== */
-.yolo-scope .panel { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--y-bg); animation: yolo-panel-in var(--y-dur-3) var(--y-ease-out); }
+/* compound selector (no space): the root element carries BOTH classes, so a
+   descendant selector would never match it and the flex column would be lost. */
+.yolo-scope.panel { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--y-bg); animation: yolo-panel-in var(--y-dur-3) var(--y-ease-out); }
 @keyframes yolo-panel-in { from { opacity: 0; transform: translateY(4px); } }
 
 /* header (48px) */
