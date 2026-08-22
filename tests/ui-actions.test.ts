@@ -66,6 +66,14 @@ describe('POST /yolo/actions', () => {
     expect(yolo.applyTodoAction).toHaveBeenCalledWith('/tmp/proj', { id: 't1' }, 'postpone', { due_at: '2026-08-25', session_id: null })
   })
 
+  it('reopens a done todo (undo of complete) → 200 with the reopen action', async () => {
+    const { server, yolo } = setup()
+    const r = await call(server, 'POST', JSON.stringify({ action: 'reopen', kind: 'todo', id: 't1' }))
+    expect(r.status).toBe(200)
+    expect(r.body.ok).toBe(true)
+    expect(yolo.applyTodoAction).toHaveBeenCalledWith('/tmp/proj', { id: 't1' }, 'reopen', { session_id: null })
+  })
+
   it('goal set_progress and milestone set_status → 200', async () => {
     const { server, yolo } = setup()
     const g = await call(server, 'POST', JSON.stringify({ action: 'set_progress', kind: 'goal', title: '学会 Rust', progress: 60 }))

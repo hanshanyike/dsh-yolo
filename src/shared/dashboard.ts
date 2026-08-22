@@ -15,6 +15,8 @@ export interface YoloTodoRow {
   milestone_title?: string | null
   /** Epoch ms of the last status/content change — powers the stale signal. */
   updated_at?: number
+  /** Epoch ms when the todo was completed — powers the「完成 HH:MM」due-slot (5.4). */
+  completed_at?: number | null
   /** due_at is before today and the todo is still open. */
   overdue?: boolean
   /** Still open but untouched for more than 7 days. */

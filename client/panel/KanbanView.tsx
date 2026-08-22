@@ -125,6 +125,14 @@ function fmtDue(iso: string | null | undefined): string {
   return `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}${time}`
 }
 
+/** Done-slot text「完成 HH:MM」for completed rows (5.4). */
+function fmtDone(epochMs: number): string {
+  const d = new Date(epochMs)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `完成 ${hh}:${mm}`
+}
+
 /** Days since the last touch, for the stale meta signal (4.4). */
 function untouchedDays(t: YoloTodoRow): number {
   if (!t.updated_at) return 0
@@ -153,7 +161,7 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [completing, setCompleting] = useState<Set<string>>(new Set())
-  const [toastText, setToastText] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ text: string; undo?: YoloTodoRow } | null>(null)
   const [editor, setEditor] = useState<EditorDraft | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [quickAdd, setQuickAdd] = useState('')
@@ -167,12 +175,12 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
 
   useEffect(() => { writePanelState({ filter }) }, [filter])
 
-  // Toast auto-retire (5.1): 2.4s.
+  // Toast auto-retire (5.1): 2.4s; completion toasts hold the 4s undo window (5.4).
   useEffect(() => {
-    if (!toastText) return
-    const t = window.setTimeout(() => { setToastText(null) }, 2_400)
+    if (!toast) return
+    const t = window.setTimeout(() => { setToast(null) }, toast.undo ? 4_000 : 2_400)
     return () => { window.clearTimeout(t) }
-  }, [toastText])
+  }, [toast])
 
   const act = useCallback(
     async (key: string, body: Record<string, unknown>): Promise<boolean> => {
@@ -198,12 +206,19 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
     [refresh],
   )
 
-  // Complete flow (5.4): optimistic fill + retire, POST, refresh.
+  // Complete flow (5.4): optimistic fill + retire, POST, refresh, toast with undo.
   const completeTodo = useCallback(async (t: YoloTodoRow): Promise<void> => {
     setCompleting((s) => { const n = new Set(s); n.add(t.id); return n })
     const ok = await act(t.id, { action: 'complete', kind: 'todo', id: t.id })
     setCompleting((s) => { const n = new Set(s); n.delete(t.id); return n })
-    if (ok) setToastText(`已完成 · ${t.title}`)
+    if (ok) setToast({ text: `已完成 · ${t.title}`, undo: t })
+  }, [act])
+
+  // Undo of complete (5.4, 4s window): reopen restores the row.
+  const undoComplete = useCallback(async (t: YoloTodoRow): Promise<void> => {
+    setToast(null)
+    const ok = await act(`reopen-${t.id}`, { action: 'reopen', kind: 'todo', id: t.id })
+    if (ok) setToast({ text: `已撤销 · ${t.title}` })
   }, [act])
 
   const counts = useMemo(() => focusCounts(data.todos), [data.todos])
@@ -263,7 +278,7 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
     const ok = await act('quick-add', { action: 'quick_add', kind: 'todo', title: text })
     if (ok) {
       setQuickAdd('')
-      setToastText('已记下 · 今日到期')
+      setToast({ text: '已记下 · 今日到期' })
     }
     setQuickBusy(false)
   }
@@ -590,10 +605,13 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
         <span className={`enter-hint${quickAdd.trim() ? ' lit' : ''}`}>↵</span>
       </footer>
 
-      {/* toast (5.1) */}
-      {toastText && (
+      {/* toast (5.1); completion toast carries 撤销 (5.4) */}
+      {toast && (
         <div className="toast show" role="status">
-          <span>{toastText}</span>
+          <span>{toast.text}</span>
+          {toast.undo && (
+            <button type="button" onClick={() => { void undoComplete(toast.undo as YoloTodoRow) }}>撤销</button>
+          )}
         </div>
       )}
     </div>
@@ -653,7 +671,7 @@ function TodoRowView({ t, busy, completing, onComplete, onAct, onEdit, onChat }:
           {t.status === 'in_progress' && <span className="inprog-tag">进行中</span>}
         </div>
         <div className="row-meta">
-          <span className="due">{fmtDue(t.due_at)}</span>
+          <span className="due">{done && t.completed_at ? fmtDone(t.completed_at) : fmtDue(t.due_at)}</span>
           {open && t.overdue && <span style={{ color: 'var(--y-danger-text)' }}>逾期</span>}
           {open && t.stale && (
             <>

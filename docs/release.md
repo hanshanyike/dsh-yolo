@@ -9,6 +9,8 @@ one version bump, one publish, one tag.
   (first publish claims the name; `publishConfig.access` is already `public`).
 - `pnpm build` green and `pnpm check` / `pnpm test:run` green on main
   (CI confirms this on both Linux and Windows).
+- For releases touching the UI: a live E2E walkthrough of the panel completed
+  on the current build ([testing.md §七](testing.md#七真机端到端验证)).
 
 ## Steps
 

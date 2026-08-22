@@ -43,6 +43,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Complete-flow undo (v0.3.3, design spec 5.4).** Completing a task now ends
+  in a toast carrying a 撤销 button (4s window); undo POSTs the new `reopen`
+  action through `POST /yolo/actions` — the row returns to pending,
+  `completed_at` clears, the FTS entry is restored, and a `todo_reopened`
+  audit event lands in the ledger. Done rows show their completion time
+  (「完成 HH:MM」) in the due slot; `completed_at` joins the dashboard payload.
+  Verified live (W3 walkthrough, 2026-08-22).
+- **Live E2E verification in the dev process (v0.3.3).** `docs/testing.md` §七
+  pins the real-machine walkthrough: trigger scope (any `client/**` /
+  design-system / API-shape change), run instructions, the W1–W8 checklist
+  and pass/skip rules. `CONTRIBUTING.md` gates UI changes on the walkthrough
+  and `docs/release.md` gates UI releases; the README quality bar states it.
 - **Detail polish (v0.3.1, per user review).** Four pass-quality fixes:
   (1) copy no longer leaks implementation details — the quick-add placeholder
   reads `+ 快速记一条，回车保存（默认今日到期）` and the panel footer just says

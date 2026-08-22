@@ -18,12 +18,13 @@ export type EventKind =
   | 'todo_remind_again'
   | 'todo_started'
   | 'todo_updated'
+  | 'todo_reopened'
   | 'goal_progress'
   | 'goal_status'
   | 'milestone_status'
   | 'brief_generated'
-/** Domain action applicable to a todo (M8 Organizer). */
-export type TodoAction = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again'
+/** Domain action applicable to a todo (M8 Organizer). reopen = undo of complete (5.4). */
+export type TodoAction = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again' | 'reopen'
 export type ExtractionStrategy = 'rule' | 'llm'
 export type ExtractionStatus = 'ok' | 'empty' | 'error'
 export type ScopeMode = 'workspace' | 'user' | 'global'

@@ -1,7 +1,7 @@
 # 测试文档（Testing Guide）
 
 > 面向开发者的测试体系说明：如何运行、每个测试文件测什么、测试手法、如何新增测试。
-> 当前状态：**20 个测试文件 / 175 个用例全部通过**，`tsc --noEmit` clean。
+> 当前状态：**22 个测试文件 / 207 个用例全部通过**，`tsc --noEmit` clean。
 
 ---
 
@@ -13,6 +13,7 @@
 4. [测试手法与模式](#四测试手法与模式)
 5. [如何新增测试](#五如何新增测试)
 6. [覆盖率](#六覆盖率)
+7. [真机端到端验证](#七真机端到端验证)
 
 ---
 
@@ -48,26 +49,28 @@ pnpm test:run -- --coverage   # 带覆盖率报告（输出到 ./coverage/）
 | 测试文件 | 用例数 | 测什么 |
 |---|---|---|
 | `storage.test.ts` | 23 | 存储层纯函数：建表、去重、状态流转、FTS 搜索与软删、快照渲染、待提醒、抽取日志（用**内存 SQLite**） |
-| `storage-actions.test.ts` | 16 | **领域动作**：状态迁移、FTS 软删、事件写入、标题模糊匹配边界 |
+| `storage-actions.test.ts` | 18 | **领域动作**：状态迁移、FTS 软删、事件写入、撤销完成（reopen）、标题模糊匹配边界 |
 | `memory-tools.test.ts` | 14 | 5 个模型可见工具的 `execute()`：读写各类记忆、搜索、软删、状态流转、快照、待提醒、`yolo_action` 分支 |
 | `shared-dashboard.test.ts` | 13 | 看板载荷：行投影形状（含 overdue/stale/milestone_title）、todoSummary、空载荷往返 |
-| `ui-actions.test.ts` | 12 | **`POST /yolo/actions`**：正常/坏 JSON/未知动作/not-found |
+| `ui-actions.test.ts` | 13 | **`POST /yolo/actions`**：正常/坏 JSON/未知动作/not-found/reopen 撤销 |
 | `extract-updates.test.ts` | 11 | **状态变化提取**：prompt 含状态摘要、validateExtraction 强转、mergeExtraction 应用 updates + milestone 关联 |
 | `extract-index.test.ts` | 9 | extract 插件接线：turn 结束抽取、节流、配置开关、去重摘要、失败隔离 |
 | `reminder.test.ts` | 9 | 提醒逻辑：到期文本（含可回复指引）、注入/排队、每日快照、N 轮快照 |
+| `filters.test.ts` | 18 | **看板筛选（v0.3.0 E）**：预设 Tab / 焦点桶 / 组合筛选的纯逻辑解析、时段预设区间（今天/本周/本月）、自定义起止、区间 chip 标签与匹配 |
+| `reminder-brief.test.ts` | 10 | 早晚报：要素收集、每日一次 + 补发、配置开关与时间越界 |
 | `memory-index.test.ts` | 8 | memory 插件接线：注册工具与 prompt、跟踪最新用户消息、FTS5 语法字符回归 |
 | `extract-llm.test.ts` | 8 | LLM 提取核心：JSON 解析容错、stream 折叠、畸形条目处理 |
 | `scope.test.ts` | 8 | 作用域解析：scope key、数据目录、DB 文件名、git 分支回退 |
 | `shared-text.test.ts` | 8 | 文本工具：内容块拼接、标题归一化、本地日期 |
 | `extract-prompt.test.ts` | 7 | 提取提示词：日期内嵌、JSON-only 约束、scheduled commitments 分类、去重摘要上限、updates[] |
-| `ui-dashboard.test.ts` | 6 | 看板投影：五类数据投影、JSON 序列化、端点 200/500 |
+| `ui-dashboard.test.ts` | 7 | 看板投影：五类数据投影、台账/通知载荷、JSON 序列化、端点 200/500 |
 | `memory-recall.test.ts` | 5 | 动态召回：section/context 注册、偏好渲染、FTS 命中渲染 |
 | `ui-index.test.ts` | 5 | ui 插件接线：`config: undefined` 回归、端点注册、scope 跟随最近会话 |
 | `reminder-index.test.ts` | 4 | reminder 插件接线：session-start 回放、turn 快照触发 |
 | `shared-session.test.ts` | 4 | **session 工具**：`sessionCwd`/`sessionId` 从 header 读取、legacy `meta` 形状不复活 |
 | `ui-config.test.ts` | 3 | 配置 schema：默认值、覆盖、越界校验 |
 | `reminder-scheduler.test.ts` | 2 | 调度器生命周期：间隔 tick、失败隔离、cleanup |
-| **合计** | **175** | |
+| **合计** | **207** | |
 
 > `tests/fixtures/` 目前是空目录（保留给未来的测试夹具）。
 
@@ -149,3 +152,55 @@ pnpm test:run -- --coverage
   语句覆盖略降、分支覆盖上升；README 徽章同步为 74% stmts / 86% branches）。
 - CI（`.github/workflows/ci.yml`）在 Linux 与 Windows 上跑 typecheck + tests + build，
   并上传覆盖率报告产物。
+
+---
+
+## 七、真机端到端验证
+
+单测与 tsc 验证不了表达层——布局塌陷、主题残留、动效越界、宿主集成断裂只有
+真机能暴露。因此**提交门槛是三件套**：`pnpm check` + `pnpm test:run` + 真机走查（触发范围内）。
+
+### 触发范围（改了就必须走查）
+
+- `client/**` — 面板表达层的任何改动（组件、样式、图标、动效、状态持久化）；
+- `src/ui/**`，或 `GET /yolo/dashboard` / `POST /yolo/actions` 的载荷形状；
+- `client/design/**`（设计系统）或主题判定逻辑；
+- 切版本发布前（UI 相关版本，见 [release.md](release.md) 前置条件）。
+
+纯 `src/**` 后端逻辑（存储 / 提取 / 提醒）且不触碰上述范围的改动，可免走查，
+靠单测 + tsc 兜底。
+
+### 如何运行
+
+```bash
+pnpm build        # dist 是宿主实际加载的产物，改完必须重建
+pnpm dev:web      # 启动 dsh web 宿主 → http://127.0.0.1:4080
+```
+
+打开 <http://127.0.0.1:4080>，选择工作区，点击**左侧边栏底部 YOLO 按钮**打开面板。
+`dev.mjs` 幂等——宿主已在跑也没关系；bundle 按文件名静态服务，重建后刷新页面即拿到新版本。
+
+### 核心清单（面板改动通用，W1–W8）
+
+| # | 场景 | 通过标准 |
+|---|---|---|
+| W1 | 打开面板（亮色） | 骨架短暂出现后完整渲染；无控制台报错；无 Emoji 字形残留（图标全部为 SVG） |
+| W2 | 工具条 | 预设 Tab 切换 + 下划线指示；焦点胶囊过滤与计数一致；筛选菜单开合；时段 chip 出现 / ✕ 清除 |
+| W3 | 任务行 | hover 浮现操作组；完成 → retire → 撤销 toast 全链路；行内编辑表单开合 |
+| W4 | 捕获条 | 回车入库、默认今日到期；中文输入法组合态回车不误触 |
+| W5 | 侧栏对话 ⇄ 全屏 | 340px 停靠栏开合；消息发送气泡正常；全屏展开 / 收回；Esc 逐级退出（全屏 → 侧栏 → 关闭面板） |
+| W6 | 暗色主题 | 宿主切暗色后重开面板：深底浅字、无亮色残留、强调色可读 |
+| W7 | 窄面板（<480px） | 对话直接进入全屏态；无横向滚动；Esc 逐级退回 |
+| W8 | 今日台账 | 记录数 / 会话数正确；来源徽标渲染，可跳转态有 hover 样式 |
+
+功能场景的深度走查按需引用既有验收表：
+
+- 产品行为（提醒 / 台账 / 简报 / 编辑）：[product-design.md](product-design.md) 第八节 TA/TB/TC/TD/TE 系列；
+- 视觉与动效（主题 / 动效 / 空态 / reduced-motion）：[frontend-redesign.md](frontend-redesign.md) 8.6 VA-1~VA-8。
+
+### 通过标准与记录
+
+- 清单全部 PASS 才能提交；FAIL 项修复后重走对应场景（不必全量重走）。
+- 走查结论记入**提交说明**；重大 UI 版本（如 v0.3.2）同步写入 CHANGELOG。
+- 无法在当前环境验证的场景（如 reduced-motion、特定 DPI）标注 **SKIP + 原因**，
+  不得默认放行；连续两次 SKIP 的场景应在下个版本补真机验证。

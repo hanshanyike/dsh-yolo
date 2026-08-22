@@ -36,7 +36,7 @@ export type YoloActionOutcome =
   | { ok: true; item: Record<string, unknown> }
   | { ok: false; error: string; httpStatus: 400 | 404 }
 
-const TODO_ACTIONS: readonly TodoAction[] = ['complete', 'start', 'cancel', 'postpone', 'remind_again']
+const TODO_ACTIONS: readonly TodoAction[] = ['complete', 'start', 'cancel', 'postpone', 'remind_again', 'reopen']
 const MILESTONE_STATUSES: readonly MilestoneStatus[] = ['planned', 'active', 'done', 'abandoned']
 
 function toPriority(v: unknown): Priority | null | undefined {

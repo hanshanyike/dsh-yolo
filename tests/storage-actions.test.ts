@@ -39,6 +39,28 @@ describe('applyTodoAction', () => {
     expect(repo.listEvents(db, SCOPE).filter((e) => e.kind === 'todo_completed')).toHaveLength(1)
   })
 
+  it('reopen undoes a completion — status back, completed_at cleared, FTS restored, event written', () => {
+    const { row: t } = repo.upsertTodo(db, { title: '撤销测试任务', scope_key: SCOPE })
+    repo.applyTodoAction(db, t.id, 'complete')
+    expect(ftsSearch(db, '撤销测试', 5, ['todo'])).toHaveLength(0)
+
+    const back = repo.applyTodoAction(db, t.id, 'reopen')
+    expect(back?.status).toBe('pending')
+    expect(back?.completed_at).toBeNull()
+    expect(repo.listTodos(db, SCOPE, 'done')).toHaveLength(0)
+    expect(repo.listTodos(db, SCOPE, 'pending')).toHaveLength(1)
+    expect(ftsSearch(db, '撤销测试', 5, ['todo'])).toHaveLength(1)
+    expect(lastEvent()?.kind).toBe('todo_reopened')
+    expect(lastEvent()?.summary).toContain('撤销测试任务')
+  })
+
+  it('reopen on an open todo no-ops — no state change, no event', () => {
+    const { row: t } = repo.upsertTodo(db, { title: '未完成任务', scope_key: SCOPE })
+    const same = repo.applyTodoAction(db, t.id, 'reopen')
+    expect(same?.status).toBe('pending')
+    expect(repo.listEvents(db, SCOPE)).toHaveLength(0)
+  })
+
   it('cancel writes a todo_cancelled event', () => {
     const { row: t } = repo.upsertTodo(db, { title: '不再需要的任务', scope_key: SCOPE })
     const cancelled = repo.applyTodoAction(db, t.id, 'cancel')

@@ -51,6 +51,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     due_at: t.due_at,
     milestone_title: t.milestone_id ? msTitle.get(t.milestone_id) ?? null : null,
     updated_at: t.updated_at,
+    completed_at: t.completed_at ?? null,
     overdue: isTodoOverdue(t.due_at, t.status, new Date(now)),
     stale: isTodoStale(t.status, t.updated_at, now),
     session_label: t.session_id

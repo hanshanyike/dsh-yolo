@@ -10,7 +10,7 @@
 | 安装、配置、日常使用 | [使用文档](usage.md)（中文） |
 | 了解整体架构、设计决策、已验证的平台行为 | [架构设计](architecture.md)（英文） |
 | 查某个模块的文件/类型/API | [模块设计](modules.md)（中文） |
-| 跑测试 / 加测试 | [测试文档](testing.md)（中文） |
+| 跑测试 / 加测试 / 真机走查 | [测试文档](testing.md)（中文） |
 | 看有状态计划（状态/进度/可回复提醒）怎么设计 | [有状态计划设计文档](design-m8-organizer.md)（中文） |
 | 看产品设计的全景蓝图与 v0.3.0 需求 | [产品设计文档](product-design.md)（中文）· [HTML 精装版 + 可交互原型](product-design.html) |
 | 查两个已定位待修的问题（时间线归属 / 提醒不可见） | [问题定位：时间线会话归属](issue-timeline-session-attribution.md) · [问题定位：提醒不可见](issue-reminder-visibility.md)（中文） |
@@ -30,10 +30,12 @@ dsh-yolo/
     ├── architecture.md     架构设计：数据流 · 插件接缝 · 设计决策 · 已验证平台行为（英文）
     ├── modules.md          模块设计：逐模块文件/类型/API/坑 · 故障排查（中文）
     ├── usage.md            使用文档：安装 · 配置 · 功能 · 数据存储 · FAQ（中文）
-    ├── testing.md         测试文档：运行 · 文件清单 · 手法 · 新增测试（中文）
+    ├── testing.md         测试文档：运行 · 文件清单 · 手法 · 新增测试 · 真机端到端验证（中文）
     ├── issue-*.md         问题定位文档：现象 · 证据链 · 根因 · 修复方案（中文）
     ├── product-design.md  产品设计：全景蓝图 · 信息架构 · v0.3.0 需求（中文）
     ├── product-design.html 产品设计精装版：含可交互面板原型（单文件）
+    ├── frontend-redesign.md 前端视觉重设计（Mono 设计系统）：规范 · 组件 · 动效 · 验收（中文）
+    ├── frontend-redesign-prototype.html Mono 设计系统可交互原型（单文件）
     └── release.md         发布流程（英文）
 ```
 

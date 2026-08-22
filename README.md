@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](package.json)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.19-339933?logo=node.js&logoColor=white)](package.json)
-[![Tests](https://img.shields.io/badge/tests-175%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-207%20passing-brightgreen)](tests/)
 [![Coverage](https://img.shields.io/badge/coverage-74%25%20stmts%20%7C%2086%25%20branches-green)](vitest.config.ts)
 [![Built on](https://img.shields.io/badge/built%20on-deepseek--harness-1E90FF)](https://github.com/deepseek-ai/deepseek-harness)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -178,7 +178,9 @@ time, and YOLO fires when it's due** — you reply to act, no ceremony.
 > `memory_search` / `yolo_query` when they need context. Full rationale in
 > [docs/VISION.md](docs/VISION.md).
 
-Current quality bar: **175 tests passing**, `tsc --noEmit` clean.
+Current quality bar: **207 tests passing**, `tsc --noEmit` clean, and a live
+E2E walkthrough of the panel (see [docs/testing.md §七](docs/testing.md)) for
+every change touching the UI.
 
 ## 📚 Docs
 
@@ -198,6 +200,8 @@ Start at the [docs index](docs/README.md) — it maps every document to its audi
 - Found a bug or have an idea? Open an **issue** — architecture/ADR-style discussions welcome.
 - Want to help? Pick a "Next" item from the roadmap — semantic recall is the current front.
 - Keep `pnpm check` clean and `pnpm test` green before opening a PR.
+- **UI changes additionally require a live E2E walkthrough** (`pnpm build && pnpm dev:web`,
+  then work through the W1–W8 checklist in [docs/testing.md §七](docs/testing.md#七真机端到端验证)).
 
 ```bash
 pnpm check   # tsc --noEmit

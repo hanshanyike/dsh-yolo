@@ -450,7 +450,7 @@ export function applyTodoAction(
 ): Todo | null {
   const t = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
   if (!t) return null
-  if (t.status === 'done' || t.status === 'cancelled') return t
+  if (action !== 'reopen' && (t.status === 'done' || t.status === 'cancelled')) return t
   const ts = now()
   const session_id = args?.session_id ?? null
   // no session ⇒ the panel/UI entrance; the badge reads 看板操作 instead of 早期记录
@@ -464,6 +464,12 @@ export function applyTodoAction(
     case 'complete':
       setTodoStatus(db, id, 'done')
       addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
+      break
+    case 'reopen':
+      if (t.status !== 'done') return t
+      db.prepare("UPDATE todos SET status = 'pending', completed_at = NULL, updated_at = ? WHERE id = ?").run(ts, id)
+      syncTodoFts(db, id, t.title, t.detail ?? null)
+      addEvent(db, { kind: 'todo_reopened', summary: `撤销完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
       break
     case 'cancel':
       setTodoStatus(db, id, 'cancelled')

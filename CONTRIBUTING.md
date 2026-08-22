@@ -12,6 +12,10 @@ Thanks for considering contributing! YOLO is a small, opinionated plugin bundle 
   pnpm check    # tsc --noEmit
   pnpm test     # vitest — only tests/ runs; the config excludes the dev host
   ```
+- **UI changes additionally need a live walkthrough**: `pnpm build && pnpm dev:web`,
+  then work through the W1–W8 checklist in
+  [`docs/testing.md §七`](docs/testing.md#七真机端到端验证) — unit tests can't
+  catch layout, theme or host-integration regressions.
 - **Document platform gotchas** in [`docs/architecture.md`](docs/architecture.md)
   (the "Verified platform behavior" section) and build/troubleshooting notes in
   [`docs/modules.md`](docs/modules.md) (the "故障排查" section)
