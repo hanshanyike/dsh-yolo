@@ -12,6 +12,8 @@
 | 查某个模块的文件/类型/API | [模块设计](modules.md)（中文） |
 | 跑测试 / 加测试 | [测试文档](testing.md)（中文） |
 | 看有状态计划（状态/进度/可回复提醒）怎么设计 | [有状态计划设计文档](design-m8-organizer.md)（中文） |
+| 查两个已定位待修的问题（时间线归属 / 提醒不可见） | [问题定位：时间线会话归属](issue-timeline-session-attribution.md) · [问题定位：提醒不可见](issue-reminder-visibility.md)（中文） |
+| 看看板的产品规划（体验驱动，分期演进） | [看板产品规划](product-dashboard.md)（中文） |
 | 发版流程 | [发布流程](release.md)（英文） |
 | 版本历史 | [CHANGELOG](../CHANGELOG.md) |
 | 项目总览与快速开始 | [README](../README.md) |
@@ -28,8 +30,10 @@ dsh-yolo/
     ├── architecture.md     架构设计：数据流 · 插件接缝 · 设计决策 · 已验证平台行为（英文）
     ├── modules.md          模块设计：逐模块文件/类型/API/坑 · 故障排查（中文）
     ├── usage.md            使用文档：安装 · 配置 · 功能 · 数据存储 · FAQ（中文）
-    ├── testing.md          测试文档：运行 · 文件清单 · 手法 · 新增测试（中文）
-    └── release.md          发布流程（英文）
+    ├── testing.md         测试文档：运行 · 文件清单 · 手法 · 新增测试（中文）
+    ├── issue-*.md         问题定位文档：现象 · 证据链 · 根因 · 修复方案（中文）
+    ├── product-dashboard.md 看板产品规划：场景 · 痛点 · 分期路线（中文）
+    └── release.md         发布流程（英文）
 ```
 
 ## 维护约定
