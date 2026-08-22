@@ -43,6 +43,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Automated browser E2E suite (Playwright + real host).** `tests/e2e/*.spec.ts`
+  drive a running dsh web host (`:4080`) through the real
+  `GET /yolo/dashboard` + `POST /yolo/actions` endpoints and real SQLite in a
+  real browser (`channel: msedge`, `workers: 1`), covering TA-1~TA-6 core panel
+  interactions (incl. the complete→撤销 round-trip, 5.4), TB-3~TB-6 reminder/
+  badge closure, and W6/W7 theme + narrow-panel behavior. `scripts/e2e.mjs`
+  idempotently ensures a host and reuses one already up; fixtures carry a
+  unique `[E2E]` prefix and self-clean in `afterAll`. It is a local lane — CI
+  still runs the keyless unit suite only. `docs/testing.md` gains a §五 E2E
+  chapter; `pnpm test:e2e` wires it up.
+- **Test wording realism sweep.** Test fixtures now read like real user
+  sentences (e.g. 提醒我把演示稿发给研发) instead of self-referential test-ese
+  ("更新测试文档""撤销测试任务"…); the rule is pinned as a regression constraint
+  in `docs/testing.md` §五 and `AGENTS.md`; machine fixtures keep the `[E2E]`
+  prefix. The panel also gains a deterministic `author_notification` action so
+  reminder/brief cards can be seeded through the same storage path the
+  scheduler uses.
+- **AGENTS.md added.** Agent/collaborator runbook for this repo: what the
+  project is, tech-stack + design-system (Mono) conventions, common commands,
+  memory/reminder/dashboard core mechanics, testing rules (unit/E2E/真机 W1–W8),
+  and the pre-commit checklist.
 - **Checkpoint commits required.** CONTRIBUTING now pins the rule: commit at
   logical checkpoints (fix + tests + docs together), never batch unrelated
   changes into one mega-commit — history, bisect and reverts depend on it.

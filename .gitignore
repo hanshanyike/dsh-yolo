@@ -49,6 +49,13 @@ logs/
 coverage/
 .vitest-cache/
 
+# Playwright browser E2E artifacts (tests/e2e/*.spec.ts)
+test-results/
+playwright-report/
+
+# throwaway local UI-verification scaffolding (not part of the repo)
+.tmp-e2e/
+
 # lockfile IS committed (registry deps) — CI installs with --frozen-lockfile
 
 # tool-generated temp artifacts

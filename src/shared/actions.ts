@@ -26,6 +26,8 @@ export interface YoloActionRequest {
   milestone_title?: string
   /** Originating dsh session, stamped on the audit event (chat actions only). */
   session_id?: string
+  /** Notification sub-kind when authoring a card (author_notification): 'reminder' | 'brief'. */
+  notif_kind?: string
 }
 
 /**
@@ -63,6 +65,22 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
     return changed
       ? { ok: true, item: { id: ref.id, handled: true } }
       : { ok: false, error: 'notification not found (or already handled)', httpStatus: 404 }
+  }
+
+  // notification card authoring (E2E + assist surfaces): mirror of the scheduler's
+  // addNotification, so a card (and its badge) can be surfaced on demand.
+  if (action === 'author_notification') {
+    if (kind !== 'notification' || !ref.title) {
+      return { ok: false, error: 'author_notification requires kind=notification and title', httpStatus: 400 }
+    }
+    const notif = yolo.addNotification(cwd, {
+      kind: r.notif_kind === 'brief' ? 'brief' : 'reminder',
+      title: ref.title,
+      body: typeof r.note === 'string' && r.note ? r.note : null,
+      todo_id: ref.id ?? null,
+      scope_cwd: cwd,
+    })
+    return { ok: true, item: notif as unknown as Record<string, unknown> }
   }
 
   // ---- quick capture (v0.3.0 A): direct write, no LLM in the loop ----

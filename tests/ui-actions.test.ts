@@ -113,6 +113,34 @@ describe('POST /yolo/actions', () => {
     expect(r.body.error).toContain('unsupported action')
   })
 
+  it('author_notification surfaces a reminder card through addNotification', async () => {
+    const addNotification = vi.fn((_cwd, data) => ({ id: 'n1', ...data }))
+    const { server } = setup({ addNotification })
+    const r = await call(
+      server,
+      'POST',
+      JSON.stringify({ action: 'author_notification', kind: 'notification', title: '⏰ 提醒我去开会', note: '10 楼会议室', notif_kind: 'reminder' }),
+    )
+    expect(r.status).toBe(200)
+    expect(r.body.ok).toBe(true)
+    expect(addNotification).toHaveBeenCalledWith('/tmp/proj', {
+      kind: 'reminder',
+      title: '⏰ 提醒我去开会',
+      body: '10 楼会议室',
+      todo_id: null,
+      scope_cwd: '/tmp/proj',
+    })
+  })
+
+  it('author_notification without title → 400', async () => {
+    const addNotification = vi.fn()
+    const { server } = setup({ addNotification })
+    const r = await call(server, 'POST', JSON.stringify({ action: 'author_notification', kind: 'notification' }))
+    expect(r.status).toBe(400)
+    expect(r.body.error).toContain('title')
+    expect(addNotification).not.toHaveBeenCalled()
+  })
+
   it('postpone without due_at → 400', async () => {
     const { server } = setup()
     const r = await call(server, 'POST', JSON.stringify({ action: 'postpone', kind: 'todo', title: 'x' }))

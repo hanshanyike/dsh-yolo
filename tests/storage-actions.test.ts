@@ -40,18 +40,18 @@ describe('applyTodoAction', () => {
   })
 
   it('reopen undoes a completion — status back, completed_at cleared, FTS restored, event written', () => {
-    const { row: t } = repo.upsertTodo(db, { title: '撤销测试任务', scope_key: SCOPE })
+    const { row: t } = repo.upsertTodo(db, { title: '给下周产品评审做演示预演', scope_key: SCOPE })
     repo.applyTodoAction(db, t.id, 'complete')
-    expect(ftsSearch(db, '撤销测试', 5, ['todo'])).toHaveLength(0)
+    expect(ftsSearch(db, '演示预演', 5, ['todo'])).toHaveLength(0)
 
     const back = repo.applyTodoAction(db, t.id, 'reopen')
     expect(back?.status).toBe('pending')
     expect(back?.completed_at).toBeNull()
     expect(repo.listTodos(db, SCOPE, 'done')).toHaveLength(0)
     expect(repo.listTodos(db, SCOPE, 'pending')).toHaveLength(1)
-    expect(ftsSearch(db, '撤销测试', 5, ['todo'])).toHaveLength(1)
+    expect(ftsSearch(db, '演示预演', 5, ['todo'])).toHaveLength(1)
     expect(lastEvent()?.kind).toBe('todo_reopened')
-    expect(lastEvent()?.summary).toContain('撤销测试任务')
+    expect(lastEvent()?.summary).toContain('给下周产品评审做演示预演')
   })
 
   it('reopen on an open todo no-ops — no state change, no event', () => {
