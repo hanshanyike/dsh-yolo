@@ -326,8 +326,11 @@ export function addEvent(
 }
 
 export function listEvents(db: DB, scopeKey: string, limit = 50): TimelineEvent[] {
+  // rowid DESC breaks same-millisecond ties (occurred_at is ms-precision, so
+  // two events created in one tick have equal keys and SQLite does not
+  // guarantee their order — this made the timeline flaky across platforms).
   return db
-    .prepare('SELECT * FROM events WHERE scope_key = ? ORDER BY occurred_at DESC LIMIT ?')
+    .prepare('SELECT * FROM events WHERE scope_key = ? ORDER BY occurred_at DESC, rowid DESC LIMIT ?')
     .all(scopeKey, limit) as TimelineEvent[]
 }
 
