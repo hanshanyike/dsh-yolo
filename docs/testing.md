@@ -48,11 +48,11 @@ pnpm test:run -- --coverage   # 带覆盖率报告（输出到 ./coverage/）
 | 测试文件 | 用例数 | 测什么 |
 |---|---|---|
 | `storage.test.ts` | 23 | 存储层纯函数：建表、去重、状态流转、FTS 搜索与软删、快照渲染、待提醒、抽取日志（用**内存 SQLite**） |
-| `storage-actions.test.ts` | 16 | **M8 领域动作**：状态迁移、FTS 软删、事件写入、标题模糊匹配边界 |
+| `storage-actions.test.ts` | 16 | **领域动作**：状态迁移、FTS 软删、事件写入、标题模糊匹配边界 |
 | `memory-tools.test.ts` | 14 | 5 个模型可见工具的 `execute()`：读写各类记忆、搜索、软删、状态流转、快照、待提醒、`yolo_action` 分支 |
 | `shared-dashboard.test.ts` | 13 | 看板载荷：行投影形状（含 overdue/stale/milestone_title）、todoSummary、空载荷往返 |
-| `ui-actions.test.ts` | 12 | **M8 `POST /yolo/actions`**：正常/坏 JSON/未知动作/not-found |
-| `extract-updates.test.ts` | 11 | **M8 状态变化提取**：prompt 含状态摘要、validateExtraction 强转、mergeExtraction 应用 updates + milestone 关联 |
+| `ui-actions.test.ts` | 12 | **`POST /yolo/actions`**：正常/坏 JSON/未知动作/not-found |
+| `extract-updates.test.ts` | 11 | **状态变化提取**：prompt 含状态摘要、validateExtraction 强转、mergeExtraction 应用 updates + milestone 关联 |
 | `extract-index.test.ts` | 9 | extract 插件接线：turn 结束抽取、节流、配置开关、去重摘要、失败隔离 |
 | `reminder.test.ts` | 9 | 提醒逻辑：到期文本（含可回复指引）、注入/排队、每日快照、N 轮快照 |
 | `memory-index.test.ts` | 8 | memory 插件接线：注册工具与 prompt、跟踪最新用户消息、FTS5 语法字符回归 |
@@ -64,7 +64,7 @@ pnpm test:run -- --coverage   # 带覆盖率报告（输出到 ./coverage/）
 | `memory-recall.test.ts` | 5 | 动态召回：section/context 注册、偏好渲染、FTS 命中渲染 |
 | `ui-index.test.ts` | 5 | ui 插件接线：`config: undefined` 回归、端点注册、scope 跟随最近会话 |
 | `reminder-index.test.ts` | 4 | reminder 插件接线：session-start 回放、turn 快照触发 |
-| `shared-session.test.ts` | 4 | **M8 session 工具**：`sessionCwd`/`sessionId` 从 header 读取、legacy `meta` 形状不复活 |
+| `shared-session.test.ts` | 4 | **session 工具**：`sessionCwd`/`sessionId` 从 header 读取、legacy `meta` 形状不复活 |
 | `ui-config.test.ts` | 3 | 配置 schema：默认值、覆盖、越界校验 |
 | `reminder-scheduler.test.ts` | 2 | 调度器生命周期：间隔 tick、失败隔离、cleanup |
 | **合计** | **175** | |
@@ -145,7 +145,7 @@ pnpm test:run -- --coverage
 ```
 
 - 只统计 `src/**` 与 `client/**`（dev host 不计入）。
-- 当前基线（M8 后）：Statements 73.94% / Branches 86.25%（M8 新增领域动作与 HTTP 分支，
+- 当前基线：Statements 73.94% / Branches 86.25%（领域动作与 HTTP 分支加入后
   语句覆盖略降、分支覆盖上升；README 徽章同步为 74% stmts / 86% branches）。
 - CI（`.github/workflows/ci.yml`）在 Linux 与 Windows 上跑 typecheck + tests + build，
   并上传覆盖率报告产物。

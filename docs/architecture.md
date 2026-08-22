@@ -107,7 +107,7 @@ SQLite + FTS5 index ──► each state change also writes a timeline event
 ```
 
 Extraction is **LLM-only by design**. The early per-message regex fast path was
-removed in M7: regexes cannot judge semantics, so they produced noise (every
+removed: regexes cannot judge semantics, so they produced noise (every
 greeting that happened to match a pattern) and missed everything phrased
 unusually. The industry converged on the opposite shape — [Mem0](https://github.com/mem0ai/mem0)
 and Claude Code's auto-memory both run one LLM pass *after* a useful
@@ -116,7 +116,7 @@ deduplicated by feeding the model a compact digest of what is already stored
 ("do not re-extract unchanged facts"), so repeat turns cost tokens only when
 something actually changed.
 
-M8 extends the same pull with an `updates[]` output: changes to *already-known*
+The same pull is extended with an `updates[]` output: changes to *already-known*
 items (completed / started / postponed / progress statements) are returned as
 state changes, not as duplicate items. The digest carries each item's status,
 progress and due date so the model can tell what moved. `mergeExtraction`
@@ -137,7 +137,7 @@ Dynamic recall FTS-searches the latest user message against the trigram index
 and renders up to `recallTopK` hits under a `Related memory` heading. Reminders
 queue while the host is offline and replay on `agent/session-start`.
 
-M8 makes the push *reply-able*: the reminder message carries the todo id and
+The push is *reply-able*: the reminder message carries the todo id and
 explicit routing instructions, so the agent can answer a natural-language reply
 (「已完成 / 推迟到明天 / 再提醒一次」) by calling the `yolo_action` tool in place.
 
@@ -154,10 +154,10 @@ The dashboard is a **global surface, not a per-session one**: memory outlives an
 single conversation, so the panel lives in the sidebar footer (session-independent)
 and its scope follows the workspace of the most recent session. The earlier
 per-session dashboard tab (and the `yolo/snapshot` durable events that fed it)
-was removed in M7 — publishing a full memory snapshot into every session log was
+was removed — publishing a full memory snapshot into every session log was
 pure bloat.
 
-M8 makes the dashboard *actionable*: open todos carry ✓ 完成 / +1d / ✕ buttons
+The dashboard is *actionable*: open todos carry ✓ 完成 / +1d / ✕ buttons
 that POST `/yolo/actions`, which dispatches through the same
 `applyYoloAction` path as the `yolo_action` model tool — so a click and a chat
 reply produce identical state changes and audit events.
@@ -178,7 +178,7 @@ data/
 - **Snapshots are the source of truth**: the DB is a rebuildable cache. The
   snapshot cadence is daily plus every 10 turns (`DEFAULTS.snapshotKeepDays`
   bounds retention on disk).
-- **Domain actions with event audit (M8)** — state never changes by direct
+- **Domain actions with event audit** — state never changes by direct
   column writes anymore. Todos flow through `applyTodoAction` (`complete` /
   `cancel` / `postpone` / `remind_again` / `start`), goals through
   `applyGoalProgress` (0–100, ≥100 auto-achieves), milestones through
@@ -194,15 +194,15 @@ Key design decisions and their rationale:
 
 | decision | rationale |
 |---|---|
-| SQLite + FTS5, not a vector store | zero external services, deterministic, CJK-friendly substring recall; semantic recall is roadmap (M9), deliberately deferred |
+| SQLite + FTS5, not a vector store | zero external services, deterministic, CJK-friendly substring recall; semantic recall is the next roadmap item, deliberately deferred |
 | LLM-only extraction, no regex fast path | regex cannot judge semantics — noise in, misses out; one model pass per turn with known-memory dedup matches the industry pattern (Mem0, Claude Code auto-memory) |
 | global sidebar dashboard, not a per-session tab | memory is cross-session by nature; per-session snapshots duplicated data into every session log |
 | Markdown as durable record | git-diffable, human-reviewable, survives DB schema changes |
 | workspace+branch scoping | projects and experiments stay isolated; branch scope keys make long-running branches their own memory context |
 | shared constants module | dsh is v0.1.0-rc; API drift should be a one-place change |
-| domain actions with event audit (M8) | one state-transition path shared by extraction, chat replies and the dashboard — behavior and audit stay identical, and the timeline becomes the auditable answer to "到哪了" |
-| reply-able reminders (M8) | the reminder message carries the todo id + routing instructions, so the agent can act on natural-language replies instead of just echoing them |
-| fuzzy title matching for updates (M8) | LLM output rarely reproduces stored titles exactly; normalized containment lookup locates items without ids, and unmatched updates drop silently — hallucinated titles are the norm, not an error |
+| domain actions with event audit | one state-transition path shared by extraction, chat replies and the dashboard — behavior and audit stay identical, and the timeline becomes the auditable answer to "到哪了" |
+| reply-able reminders | the reminder message carries the todo id + routing instructions, so the agent can act on natural-language replies instead of just echoing them |
+| fuzzy title matching for updates | LLM output rarely reproduces stored titles exactly; normalized containment lookup locates items without ids, and unmatched updates drop silently — hallucinated titles are the norm, not an error |
 
 ## Extension points used
 
@@ -248,11 +248,11 @@ used is recorded. These override assumptions whenever they conflict.
 
 | fact | consequence |
 |---|---|
-| `agent/turn-stopping` payload is `{ agent, turn, signal }` (serial) | `agent.session` is the live `Session`; `session.deriveMessages()` gives model-visible history; scope cwd: read `session.header.cwd` via `sessionCwd()` — the old `session.meta?.cwd` read never existed on the class and silently fell back to `process.cwd()` (M8 fix) |
+| `agent/turn-stopping` payload is `{ agent, turn, signal }` (serial) | `agent.session` is the live `Session`; `session.deriveMessages()` gives model-visible history; scope cwd: read `session.header.cwd` via `sessionCwd()` — the old `session.meta?.cwd` read never existed on the class and silently fell back to `process.cwd()` (fixed) |
 | `session/event` emits `(session, event)` | `event.type: 'user/message' \| 'assistant/message'` carry `event.data.content: ContentBlock[]` |
 | `AssembleContext` is **only** `{ scope?, signal? }` — no `userMessage` | the memory plugin caches the latest user text via `session/event`; the recall context reads that cache |
 | `agent/session-start` payload is `{ agent, source }` | used to track the latest active agent and replay queued reminders |
-| `Agent.inject/followup/steer` take a `UserMessage` | `createUserMessage` **requires** `source` (`{ kind: 'user' }`) or typecheck fails. **M8 finding:** `inject()` parks context without waking the driver, and a bare `followup()` throws — the reminder path uses a single `followup(msg)` |
+| `Agent.inject/followup/steer` take a `UserMessage` | `createUserMessage` **requires** `source` (`{ kind: 'user' }`) or typecheck fails. **Verified finding:** `inject()` parks context without waking the driver, and a bare `followup()` throws — the reminder path uses a single `followup(msg)` |
 | `AgentRegistry` has no "list active agents" API | the reminder plugin keeps its own `latestAgent` from `agent/session-start` |
 | `ctx.systemPrompt.section({name, order, text, complete?})` / `.context({name, order, text})` | duplicate `name` throws; YOLO orders: 120 prefs / 220 recall |
 | `ctx.effect(() => start())` returns the cleanup function | cordis effect cleanup contract confirmed |
@@ -272,7 +272,7 @@ used is recorded. These override assumptions whenever they conflict.
 |---|---|
 | FTS5 trigram (better-sqlite3 11.10.0, Win/x64 + Node 22) | good CJK recall for queries ≥ 3 chars; 2-char queries fall back to substring scan (may miss) |
 | pnpm ignores native build scripts by default | `pnpm-workspace.yaml` needs `allowBuilds: { better-sqlite3: true, esbuild: true }` + `nodeLinker: hoisted` (hoisted also avoids the empty-dir virtual-store bug that broke tsdown) |
-| SQLite has no `ADD COLUMN IF NOT EXISTS` | `openDb()` checks `PRAGMA table_info(...)` and `ALTER TABLE` for pre-M3 DBs |
+| SQLite has no `ADD COLUMN IF NOT EXISTS` | `openDb()` checks `PRAGMA table_info(...)` and `ALTER TABLE` for older DBs |
 
 ### Windows environment
 

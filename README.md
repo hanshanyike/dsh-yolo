@@ -72,7 +72,7 @@ accurate without spamming your tokens.
         │                                                    │
         │  dsh-yolo-storage   Service `ctx.yolo`             │
         │    └─ SQLite + FTS5 + Markdown snapshot + scopes   │
-        │       + domain actions w/ event audit (M8)         │
+        │       + domain actions w/ event audit            │
         │  dsh-yolo-extract   turn-end LLM semantic pull     │
         │    └─ new items + state-change updates[]           │
         │  dsh-yolo-memory    memory_* + yolo_action tools   │
@@ -145,31 +145,38 @@ time.
 
 ## 🧭 Roadmap
 
-The roadmap isn't a list of chores — it's a path toward [docs/VISION.md](docs/VISION.md): from *remember* to
-*manage → anticipate → accompany*, growing into a Jarvis-style work & life assistant — always **managing, never
-doing your work**, and always staying zero-external-service.
+One idea, delivered step by step — [docs/VISION.md](docs/VISION.md): *remember what you say,
+keep it on track*. The core mechanic is deliberately simple: **every record carries a target
+time, and YOLO fires when it's due** — you reply to act, no ceremony.
 
-| Phase | Goal | Status |
-|---|---|---|
-| **0 · Keeper** (anchor) | remembers well, stable `0.2.0` | ✅ delivered (M0–M5, M7) · ⏳ stable `0.2.0` release (M6) |
-| **1 · Organizer** | tasks get state, goals get progress, preferences take effect; YOLO as its own reply-able conversation (postpone / complete / reshape) | ✅ shipped (M8) |
-| **2 · Manager** | a YOLO conversation that reminds you — right-time, right-tone, reply-to-act; cross-workspace aggregation | 🗓 planned (absorbs M9, M10) |
-| **3 · Companion** | pairs with your coding agent, plans your day, deeply personal | 🌱 future (the Jarvis endgame) |
+**✅ Shipped**
 
-> **North star:** YOLO delivers through *its own conversation* — it speaks to you when the time is
-> right, and you can reply to act (postpone / mark done / reschedule). It does **not** shovel memory
-> into every session; per-session injection is optional and off by default — agents ask via
-> `memory_search` / `yolo_query` when they need context. Full rationale in [docs/VISION.md](docs/VISION.md).
+- Memory foundation — LLM semantic extraction (todos / milestones / goals / preferences /
+  events), SQLite + FTS5 storage, Markdown snapshots, automatic recall
+- Proactive reminders — due records wake the agent; queued & replayed while offline
+- Global sidebar dashboard — timeline, task board, goals, milestones, preferences
+- Stateful plan — task status, goal progress, milestone transitions, every change audited
+- Reply-to-act — answer 「已完成 / 推迟到明天 / 再提醒一次」 and it just happens; the
+  dashboard carries the same in-place actions
+- Release engineering — CI, npm package claimed ([`0.2.0-alpha.1`](https://www.npmjs.com/package/dsh-plugin-yolo))
 
-**Already shipped** — the Keeper foundation (mapped to phases, full detail in VISION.md):
+**🔜 Next**
 
-| Milestone | Phase | Status |
-|---|---|---|
-| **M0–M3** | 0 | skeleton · storage service · LLM extraction · prompt/recall injection + reminders |
-| **M4–M5** | 0 | settings + dashboard shell · snapshot scheduling + scheduler hardening |
-| **M7** | 0 | semantic-first extraction (no regex) · global sidebar dashboard · crash & scope fixes |
-| **M6** | 0 | **release engineering** — CI · npm manifest · name claimed ([`0.2.0-alpha.1`](https://www.npmjs.com/package/dsh-plugin-yolo)) · ⏳ stable `v0.2.0` |
-| **M8** | 1 | **Organizer** — stateful tasks & goals with event audit · state-change extraction · `yolo_action` + reply-able reminders · actionable dashboard (maps to the `0.3.0` line) |
+- Semantic recall — FTS keyword search upgraded to meaning-based matching (search
+  「季度总结」 and hit “Q3 report”)
+- Cross-workspace aggregation — one view over all workspaces' due items (isolated by
+  default, aggregation opt-in)
+- Stable `v0.3.0` release
+
+**🌱 Future**
+
+- Pair with your coding agent, plan your day, grow deeply personal — the Jarvis endgame
+
+> **North star:** YOLO delivers through *its own conversation* — a record fires when due, and
+> you reply to act (postpone / mark done / reschedule). It does **not** shovel memory into
+> every session; per-session injection is optional and off by default — agents ask via
+> `memory_search` / `yolo_query` when they need context. Full rationale in
+> [docs/VISION.md](docs/VISION.md).
 
 Current quality bar: **175 tests passing**, `tsc --noEmit` clean.
 
@@ -189,7 +196,7 @@ Start at the [docs index](docs/README.md) — it maps every document to its audi
 ## 🤝 Contributing
 
 - Found a bug or have an idea? Open an **issue** — architecture/ADR-style discussions welcome.
-- Want to help? Pick a roadmap milestone (M9 semantic recall next) — each is a self-contained deliverable.
+- Want to help? Pick a "Next" item from the roadmap — semantic recall is the current front.
 - Keep `pnpm check` clean and `pnpm test` green before opening a PR.
 
 ```bash

@@ -7,13 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> Versioning note: M8 is the Phase 1 Organizer drop and maps to the `0.3.0` line
-> per `docs/release.md` ("M8 → 0.3.0"); the section below closes when that
-> release is actually cut.
+> The stateful-plan drop — maps to the `0.3.0` line per `docs/release.md`;
+> this section closes when that release is actually cut.
 
 ### Added
 
-- **M8 — Phase 1 Organizer: the plan is now stateful.** Three entrances —
+- **Stateful plan (Organizer): the plan is now stateful.** Three entrances —
   automatic extraction, in-chat replies, dashboard clicks — converge on one set
   of storage-layer domain actions, and every action writes a timeline event.
   Todos flow `pending → in_progress → done/cancelled` (plus `start` /
@@ -59,12 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   troubleshooting table now live in `docs/modules.md`, and Windows environment
   fixes moved into `docs/usage.md` FAQ. All cross-references (README, docs index,
   CONTRIBUTING, release, `scripts/dev.mjs`) were updated to point at the new homes.
-- **M7 — LLM-only semantic extraction.** The per-message regex fast path (rules / candidate buffer / merge) was removed entirely: regexes cannot judge semantics, produced noise, and missed anything phrased unusually. Extraction is now a single LLM structured pull at every `agent/turn-stopping`, following the industry pattern (Mem0, Claude Code auto-memory). The extraction prompt was rewritten around durable-knowledge selection, and the model now receives a compact **known-memories digest** so it never re-extracts unchanged facts. Live-session testing exposed a taxonomy gap in the first prompt cut — scheduled commitments (trips, appointments) fell between "task" and "decision" and were silently dropped — the todo/event definitions now explicitly cover them (verified against the real API both ways: extracts the trip, still respects "don't record this").
-- **M7 — global sidebar dashboard.** The per-session dashboard tab (conversation view builder, chat node, header button, `/yolo` command, `yolo/snapshot` durable events) was removed — memory is cross-session by nature, so the dashboard now lives in the sidebar footer: a full-height drawer with open-todo badge, five sections, manual refresh and a 30s poll while open. Data comes from a new host endpoint `GET /yolo/dashboard` whose scope follows the most recent session's workspace.
+- **LLM-only semantic extraction.** The per-message regex fast path (rules / candidate buffer / merge) was removed entirely: regexes cannot judge semantics, produced noise, and missed anything phrased unusually. Extraction is now a single LLM structured pull at every `agent/turn-stopping`, following the industry pattern (Mem0, Claude Code auto-memory). The extraction prompt was rewritten around durable-knowledge selection, and the model now receives a compact **known-memories digest** so it never re-extracts unchanged facts. Live-session testing exposed a taxonomy gap in the first prompt cut — scheduled commitments (trips, appointments) fell between "task" and "decision" and were silently dropped — the todo/event definitions now explicitly cover them (verified against the real API both ways: extracts the trip, still respects "don't record this").
+- **Global sidebar dashboard.** The per-session dashboard tab (conversation view builder, chat node, header button, `/yolo` command, `yolo/snapshot` durable events) was removed — memory is cross-session by nature, so the dashboard now lives in the sidebar footer: a full-height drawer with open-todo badge, five sections, manual refresh and a 30s poll while open. Data comes from a new host endpoint `GET /yolo/dashboard` whose scope follows the most recent session's workspace.
 
 ### Fixed
 
-- **Workspace scoping was broken end-to-end** (found during M8 live testing):
+- **Workspace scoping was broken end-to-end** (found during live testing):
   every plugin read `session.meta?.cwd`, a property that never existed on the
   host's `Session` class, so all memory silently landed in the harness-root
   scope via the `process.cwd()` fallback. Scope resolution now goes through

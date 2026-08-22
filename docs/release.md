@@ -70,6 +70,6 @@ format).
 
 - `0.x` — the dsh platform itself is `0.1.0-rc`; breaking changes are allowed
   in minor bumps, note them in the CHANGELOG.
-- Patch bumps for fixes only; minor bumps for features / milestone drops
-  (M6+M7 → `0.2.0`, M8 → `0.3.0`, …).
+- Patch bumps for fixes only; minor bumps for feature drops
+  (memory foundation → `0.2.0`, stateful plan + reply-to-act → `0.3.0`, …).
 - Peer dep on `@deepseek-ai/cordis` stays `*` — the host provides it.
