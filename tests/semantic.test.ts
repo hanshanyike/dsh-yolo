@@ -122,6 +122,24 @@ describe('SemanticRecall', () => {
     expect(s.shouldExpand('足够长的查询文本')).toBe(false)
   })
 
+  it('auto-degrades semantic widening after consecutive empty runs (R15/P39)', () => {
+    const s = new SemanticRecall({ enabled: true, minQueryChars: 0, degradeAfterEmpty: 2 })
+    expect(s.shouldExpand('a')).toBe(true)
+    s.noteOutcome(false)
+    expect(s.isDegraded()).toBe(false)
+    s.noteOutcome(false)
+    expect(s.isDegraded()).toBe(true)
+    expect(s.shouldExpand('b')).toBe(false) // degraded → deterministic recall only
+    s.noteOutcome(true)
+    expect(s.isDegraded()).toBe(false)
+    expect(s.shouldExpand('c')).toBe(true)
+    s.noteOutcome(false)
+    s.noteOutcome(false)
+    expect(s.isDegraded()).toBe(true)
+    s.resetDegrade()
+    expect(s.isDegraded()).toBe(false)
+  })
+
   it('caps expansions at expansionsPerQuery', () => {
     const s = new SemanticRecall({ expansionsPerQuery: 2 })
     s.rememberExpansions('q', ['a', 'b', 'c'])

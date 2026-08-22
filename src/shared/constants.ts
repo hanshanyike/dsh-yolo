@@ -43,6 +43,7 @@ export const DEFAULTS = {
     maxRerankCandidates: 8,
     dailyBudget: 60,
     minQueryChars: 6,
+    degradeAfterEmpty: 5,
   },
   ui: {
     aggregateAcrossWorkspaces: false,

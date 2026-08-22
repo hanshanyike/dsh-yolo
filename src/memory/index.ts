@@ -60,6 +60,7 @@ export function apply(ctx: Context): void {
       try {
         const expansions = await expandQuery(llm, { model: cfg.model, text: query, topK: cfg.expansionsPerQuery })
         const latency = Date.now() - started
+        semantic.noteOutcome(expansions.length > 0)
         semantic.rememberExpansions(query, expansions)
         semantic.consumeDaily()
         const detHits = yctx.yolo.search(cwd, query, DEFAULTS.recallTopK)
@@ -84,6 +85,7 @@ export function apply(ctx: Context): void {
           status: expansions.length ? 'ok' : 'empty',
         })
       } catch (e) {
+        semantic.noteOutcome(false)
         yctx.yolo.logRecall(cwd, {
           session_id,
           query,

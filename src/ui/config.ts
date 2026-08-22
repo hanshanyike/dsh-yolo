@@ -43,6 +43,7 @@ export interface Config {
     maxRerankCandidates: number
     dailyBudget: number
     minQueryChars: number
+    degradeAfterEmpty: number
   }
   ui: {
     aggregateAcrossWorkspaces: boolean
@@ -86,6 +87,7 @@ export const Config: z<Config> = z.object({
     maxRerankCandidates: z.number().default(8).min(2).max(20),
     dailyBudget: z.number().default(60).min(0),
     minQueryChars: z.number().default(6).min(0),
+    degradeAfterEmpty: z.number().default(5).min(0).max(50),
   }),
   ui: z.object({
     aggregateAcrossWorkspaces: z.boolean().default(false),

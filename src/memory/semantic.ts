@@ -22,6 +22,10 @@ export interface SemanticConfig {
   maxRerankCandidates: number
   dailyBudget: number
   minQueryChars: number
+  /** R15/P39 auto-degrade guard: after this many consecutive empty expansion
+   * runs, stop calling the LLM for the rest of the day (deterministic FTS only).
+   * 0 disables the guard. */
+  degradeAfterEmpty: number
 }
 
 export function defaultSemanticConfig(): SemanticConfig {
@@ -166,6 +170,8 @@ export class SemanticRecall {
   private readonly rerankCache = new Map<string, RerankVerdict[]>()
   private usedToday = 0
   private today = dayKey()
+  private consecutiveEmpty = 0
+  private degraded = false
 
   constructor(cfg?: Partial<SemanticConfig>) {
     this.cfg = { ...defaultSemanticConfig(), ...cfg }
@@ -173,6 +179,10 @@ export class SemanticRecall {
 
   setConfig(cfg: Partial<SemanticConfig>): void {
     this.cfg = { ...this.cfg, ...cfg }
+    if (cfg.degradeAfterEmpty === 0) {
+      this.consecutiveEmpty = 0
+      this.degraded = false
+    }
   }
 
   private rollDay(): void {
@@ -188,9 +198,37 @@ export class SemanticRecall {
     this.rollDay()
     const q = query.trim()
     if (!this.cfg.enabled || this.cfg.expansionsPerQuery <= 0) return false
+    if (this.degraded) return false
     if (q.length < this.cfg.minQueryChars) return false
     if (this.usedToday >= this.cfg.dailyBudget) return false
     return !this.expCache.has(q)
+  }
+
+  /** Feed back the outcome of an expansion run (R15/P39 auto-degrade guard).
+   * A non-empty result resets the streak; repeated empty results (a flaky or
+   * unavailable model) degrade semantic widening to deterministic recall. */
+  noteOutcome(hasContent: boolean): void {
+    this.rollDay()
+    const cap = this.cfg.degradeAfterEmpty
+    if (hasContent) {
+      this.consecutiveEmpty = 0
+      this.degraded = false
+      return
+    }
+    if (cap <= 0) return
+    this.consecutiveEmpty += 1
+    if (this.consecutiveEmpty >= cap) this.degraded = true
+  }
+
+  /** True when the auto-degrade guard has silenced semantic widening today. */
+  isDegraded(): boolean {
+    return this.degraded
+  }
+
+  /** Bypass the degrade guard (manual recovery / degrade disabled). */
+  resetDegrade(): void {
+    this.consecutiveEmpty = 0
+    this.degraded = false
   }
 
   getExpansions(query: string): string[] {
