@@ -309,7 +309,7 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
   const rangeActive = filter.rangeFrom !== null || filter.rangeTo !== null
 
   return (
-    <div style={{ minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {/* ② toolbar 40px */}
       <div className="p-toolbar">
         <div className="seg" role="tablist">

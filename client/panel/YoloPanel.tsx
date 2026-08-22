@@ -171,7 +171,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
               </div>
             )}
             {state.data !== null && (
-              <div style={state.error ? { opacity: 0.6 } : undefined}>
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...(state.error ? { opacity: 0.6 } : {}) }}>
                 <KanbanView data={state.data} refresh={load} onOpenChat={openAnchoredChat} openSession={openSession} sweepTick={sweepTick} />
               </div>
             )}
