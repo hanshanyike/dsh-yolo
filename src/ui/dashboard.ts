@@ -12,17 +12,20 @@
 
 import { basename } from 'node:path'
 import type Yolo from '../storage/index.ts'
-import type { TimelineEvent } from '../storage/types.ts'
+import type { Notification, TimelineEvent, Todo } from '../storage/types.ts'
 import type {
   YoloDashboardData,
   YoloLedgerEntry,
   YoloNotificationRow,
   YoloWorkspaceInfo,
   YoloMemoryHealth,
+  YoloItemSource,
+  YoloTodoRow,
   WorkspaceTag,
 } from '../shared/dashboard.ts'
-import { isTodoOverdue, isTodoStale } from '../shared/dashboard.ts'
+import { isTodoOpen, isTodoOverdue, isTodoStale } from '../shared/dashboard.ts'
 import { localDateStr, dayBounds } from '../shared/text.ts'
+import { buildDashboardSummary, selectPrimaryAttention } from '../attention/index.ts'
 
 export interface WebServerLike {
   register(opts: {
@@ -50,6 +53,45 @@ export function workspaceLabel(cwd: string, scopeKey: string): string {
   return name || scopeKey
 }
 
+function workspaceTag(cwd: string, scopeKey: string, supplied?: WorkspaceTag): WorkspaceTag {
+  return {
+    slug: supplied?.slug ?? scopeKey,
+    label: supplied?.label ?? workspaceLabel(cwd, scopeKey),
+    cwd: supplied?.cwd ?? cwd,
+  }
+}
+
+function itemSource(todo: Todo, sessions: Map<string, string>, ws: WorkspaceTag): YoloItemSource {
+  if (todo.session_id) {
+    return { type: 'session', label: sessions.get(todo.session_id) ?? '来源会话', session_id: todo.session_id, workspace: ws }
+  }
+  if (todo.source === 'manual') return { type: 'manual', label: '快速记一条', session_id: null, workspace: ws }
+  if (todo.source === 'tool') return { type: 'tool', label: '助手操作', session_id: null, workspace: ws }
+  if (todo.source === 'llm') return { type: 'legacy', label: '会话记录', session_id: null, workspace: ws }
+  return { type: 'legacy', label: '早期记录', session_id: null, workspace: ws }
+}
+
+function postponedTitle(summary: string): string | undefined {
+  return /^推迟：「(.+)」→\s/.exec(summary)?.[1]
+}
+
+function unhandledReminderMap(rows: readonly Notification[]): Map<string, { id: string; count: number; lastFiredAt: number }> {
+  const out = new Map<string, { id: string; count: number; lastFiredAt: number }>()
+  for (const row of rows) {
+    if (row.kind !== 'reminder' || !row.todo_id || row.handled_at != null) continue
+    const current = out.get(row.todo_id)
+    if (!current) out.set(row.todo_id, { id: row.id, count: 1, lastFiredAt: row.created_at })
+    else {
+      current.count += 1
+      if (row.created_at >= current.lastFiredAt) {
+        current.id = row.id
+        current.lastFiredAt = row.created_at
+      }
+    }
+  }
+  return out
+}
+
 /** Surface memory-health metrics for the current scope (recall/extraction quality + duplicate candidates). */
 export function buildMemoryHealth(yolo: Yolo, cwd: string): YoloMemoryHealth {
   const todayStart = new Date().setHours(0, 0, 0, 0)
@@ -69,17 +111,45 @@ export function buildMemoryHealth(yolo: Yolo, cwd: string): YoloMemoryHealth {
 /** Build the full dashboard projection for a workspace scope. */
 export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr(), ws?: WorkspaceTag): YoloDashboardData {
   const now = Date.now()
+  const scopeKey = ws?.slug ?? yolo.resolve(cwd).scopeKey
+  const owner = workspaceTag(cwd, scopeKey, ws)
   const milestones = yolo.listMilestones(cwd)
   const msTitle = new Map(milestones.map((m) => [m.id, m.title]))
+  const msStatus = new Map(milestones.map((m) => [m.id, m.status]))
   const sessions = new Map(yolo.listSessionSummaries(cwd).map((s) => [s.session_id, s.summary]))
+  const storageTodos = yolo.listTodos(cwd)
+  const openByMilestone = new Map<string, number>()
+  for (const todo of storageTodos) {
+    if (!todo.milestone_id || todo.status === 'done' || todo.status === 'cancelled') continue
+    openByMilestone.set(todo.milestone_id, (openByMilestone.get(todo.milestone_id) ?? 0) + 1)
+  }
 
-  const todos = yolo.listTodos(cwd).map((t) => ({
+  // Event rows do not yet carry a todo id. Exact current-title matching is a
+  // conservative, auditable derivation: edits may under-count but never invent
+  // postpones. A future schema can replace this projection without changing the
+  // attention contract.
+  const recentEvents = yolo.listEvents(cwd, 1_000)
+  const postponeByTitle = new Map<string, number>()
+  for (const event of recentEvents) {
+    if (event.kind !== 'todo_postponed') continue
+    const title = postponedTitle(event.summary)
+    if (title) postponeByTitle.set(title, (postponeByTitle.get(title) ?? 0) + 1)
+  }
+
+  const unhandledNotifications = yolo.listUnhandledNotifications(cwd)
+  const reminders = unhandledReminderMap(unhandledNotifications)
+
+  const todos: YoloTodoRow[] = storageTodos.map((t) => ({
     id: t.id,
     title: t.title,
+    detail: t.detail ?? null,
     status: t.status,
     priority: t.priority,
     due_at: t.due_at,
     milestone_title: t.milestone_id ? msTitle.get(t.milestone_id) ?? null : null,
+    milestone_id: t.milestone_id ?? null,
+    milestone_status: t.milestone_id ? msStatus.get(t.milestone_id) ?? null : null,
+    milestone_open_todo_count: t.milestone_id ? openByMilestone.get(t.milestone_id) ?? 0 : 0,
     updated_at: t.updated_at,
     completed_at: t.completed_at ?? null,
     overdue: isTodoOverdue(t.due_at, t.status, new Date(now)),
@@ -89,9 +159,23 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
       : t.source === 'manual'
         ? '快速记一条'
         : null,
+    session_id: t.session_id ?? null,
+    source: itemSource(t, sessions, owner),
+    scope_cwd: cwd,
+    postpone_count: postponeByTitle.get(t.title) ?? 0,
+    ...(reminders.has(t.id)
+      ? {
+          reminder: {
+            id: reminders.get(t.id)!.id,
+            unhandled: true,
+            unhandled_count: reminders.get(t.id)!.count,
+            last_fired_at: reminders.get(t.id)!.lastFiredAt,
+          },
+        }
+      : { reminder: { unhandled: false, unhandled_count: 0 } }),
     // v0.3.2 feedback signal (P/B1): how the user's history treats this commitment
     belief: { good: t.good_count ?? 0, stale: t.stale_count ?? 0 },
-    ws,
+    ws: owner,
   }))
 
   const { from, to } = dayBounds(day)
@@ -104,7 +188,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     occurred_at: e.occurred_at,
     label: eventLabel(e, sessions),
     session_id: e.session_id ?? null,
-    ws,
+    ws: owner,
   }))
   const ledgerSessions = new Set(dayEvents.map((e) => e.session_id).filter((s): s is string => !!s)).size
 
@@ -116,14 +200,23 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     todo_id: n.todo_id ?? null,
     created_at: n.created_at,
     handled: n.handled_at != null,
-    ws,
+    scope_cwd: cwd,
+    ws: owner,
   }))
 
-  const scopeKey = yolo.resolve(cwd).scopeKey
+  const attention = selectPrimaryAttention(todos, new Date(now)).attention
   return {
     scopeKey,
     cwd,
     at: now,
+    ui_contract_version: 2,
+    attention,
+    summary: buildDashboardSummary(todos, day, ledger.length),
+    capabilities: {
+      preferenceUndo: false,
+      notificationSeen: false,
+      sourceExcerpt: false,
+    },
     todos,
     goals: yolo.listGoals(cwd).map((g) => ({
       id: g.id,
@@ -131,27 +224,27 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
       status: g.status,
       progress: g.progress,
       milestone_title: g.milestone_id ? msTitle.get(g.milestone_id) ?? null : null,
-      ws,
+      ws: owner,
     })),
     milestones: milestones.map((m) => ({
       id: m.id,
       title: m.title,
       status: m.status,
       target_date: m.target_date,
-      ws,
+      ws: owner,
     })),
-    events: yolo.listEvents(cwd, 30).map((e) => ({
+    events: recentEvents.slice(0, 30).map((e) => ({
       id: e.id,
       kind: e.kind,
       summary: e.summary,
       occurred_at: e.occurred_at,
-      ws,
+      ws: owner,
     })),
     preferences: yolo.listPreferences(cwd).map((p) => ({
       id: p.id,
       key: p.key,
       value: p.value,
-      ws,
+      ws: owner,
     })),
     ledger,
     ledgerDay: day,
@@ -160,7 +253,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     // v0.3.3 review fix: count ALL unhandled notifications, not just those that
     // fit the 12-row display slice — the badge is a promise ("N 件未处理") and
     // must not undercount when older cards are still open.
-    unhandled: yolo.listUnhandledNotifications(cwd).length,
+    unhandled: unhandledNotifications.length,
     health: buildMemoryHealth(yolo, cwd),
     focusDefaultCount: 0,
   }
@@ -217,13 +310,14 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
     const slug = d.scopeKey
     const label = d.todos[0]?.ws?.label ?? workspaceLabel(d.cwd, slug)
     const existing = wsMap.get(slug)
-    const count = d.todos.filter((t) => t.status !== 'done' && t.status !== 'cancelled').length
+    const count = d.todos.filter((t) => isTodoOpen(t.status)).length
     if (existing) existing.count += count
     else wsMap.set(slug, { slug, label, count })
   }
 
   return {
     ...base,
+    ui_contract_version: 2,
     scope: 'all',
     workspaces: [...wsMap.values()],
     workspaceCount: wsMap.size,
@@ -235,6 +329,13 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
     ledger: allLedger,
     ledgerSessions: list.reduce((n, d) => n + d.ledgerSessions, 0),
     notifications: allNotifications,
+    attention: selectPrimaryAttention(allTodos, new Date(Math.max(...list.map((d) => d.at)))).attention,
+    summary: buildDashboardSummary(
+      allTodos,
+      base.ledgerDay,
+      allLedger.length,
+      list.some((d) => d.summary?.partial === true || (d.workspaceErrors?.length ?? 0) > 0),
+    ),
     // per-workspace unhandled is already a full count (not the display slice) —
     // summing them keeps the aggregate badge exact.
     unhandled: list.reduce((n, d) => n + (d.unhandled ?? 0), 0),
@@ -267,11 +368,13 @@ export function registerDashboardEndpoint(
         const day = ledgerDayOf(req)
         const focusDefault = opts?.focusDefaultCount?.() ?? 0
         const metas = yolo.listWorkspaceMeta()
-        if (metas.length > 1) {
-          // One broken workspace (corrupt/locked DB) must not take the whole
-          // board down: skip it, keep the rest, and surface what was skipped.
-          const list: YoloDashboardData[] = []
-          const errors: string[] = []
+        // One broken workspace (corrupt/locked DB) must not take the whole
+        // board down: skip it, keep the rest, and surface what was skipped.
+        // Even a one-workspace result is normalized through the aggregate
+        // projection so v2 always means "all known workspaces".
+        const list: YoloDashboardData[] = []
+        const errors: string[] = []
+        if (metas.length > 0) {
           for (const { cwd: wcwd, scopeKey } of metas) {
             try {
               // Pin to the REGISTRY's scopeKey so the projection (and every
@@ -283,16 +386,16 @@ export function registerDashboardEndpoint(
               ctx.logger?.warn?.('[yolo] dashboard skipped workspace %s: %s', wcwd, e instanceof Error ? e.message : String(e))
             }
           }
-          if (list.length === 0) throw new Error(errors[0] ?? 'no workspace could be read')
-          const data = aggregateDashboards(list)
-          data.focusDefaultCount = focusDefault
-          if (errors.length > 0) data.workspaceErrors = errors
-          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
-          res.end(JSON.stringify(data))
-          return
+        } else {
+          list.push(buildDashboardData(yolo, cwd(), day))
         }
-        const data = buildDashboardData(yolo, cwd(), day)
+        if (list.length === 0) throw new Error(errors[0] ?? 'no workspace could be read')
+        const data = aggregateDashboards(list)
         data.focusDefaultCount = focusDefault
+        if (errors.length > 0) {
+          data.workspaceErrors = errors
+          if (data.summary) data.summary.partial = true
+        }
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
         res.end(JSON.stringify(data))
       } catch (e) {
@@ -302,5 +405,3 @@ export function registerDashboardEndpoint(
     },
   })
 }
-
-

@@ -126,12 +126,13 @@ describe('buildDashboardData ws tagging', () => {
   it('attaches the ws tag to every row type', () => {
     const ws = wsTag(SCOPE_A, 'dsh-yolo')
     const d = buildDashboardData(yolo, 'C:\\work\\projA', localDateStr(), ws)
-    expect(d.todos[0].ws).toEqual(ws)
-    expect(d.goals[0].ws).toEqual(ws)
-    expect(d.milestones[0].ws).toEqual(ws)
-    expect(d.events[0].ws).toEqual(ws)
-    expect(d.preferences[0].ws).toEqual(ws)
-    expect(d.notifications[0].ws).toEqual(ws)
+    const owner = { ...ws, cwd: 'C:\\work\\projA' }
+    expect(d.todos[0].ws).toEqual(owner)
+    expect(d.goals[0].ws).toEqual(owner)
+    expect(d.milestones[0].ws).toEqual(owner)
+    expect(d.events[0].ws).toEqual(owner)
+    expect(d.preferences[0].ws).toEqual(owner)
+    expect(d.notifications[0].ws).toEqual(owner)
   })
 })
 
@@ -180,9 +181,11 @@ describe('registerDashboardEndpoint scope handling', () => {
     return captured.data
   }
 
-  it('returns the current workspace (no scope flag) when aggregate is off', () => {
+  it('normalizes even one known workspace to the all-workspaces v2 projection', () => {
     const data = run(baseYolo(), false, '/yolo/dashboard?scope=all')
-    expect(data?.scope).toBeUndefined()
+    expect(data?.scope).toBe('all')
+    expect(data?.workspaceCount).toBe(1)
+    expect(data?.ui_contract_version).toBe(2)
   })
 
   it('aggregates across known workspaces when scope=all and allowed', () => {
@@ -225,7 +228,5 @@ describe('registerDashboardEndpoint scope handling', () => {
     expect(data?.workspaceErrors?.[0]).toContain('database locked')
   })
 })
-
-
 
 

@@ -15,15 +15,79 @@ export interface WorkspaceTag {
   cwd?: string
 }
 
+/** Structured provenance used by dashboard v2 instead of a display-only badge. */
+export interface YoloItemSource {
+  type: 'session' | 'manual' | 'tool' | 'legacy'
+  label: string
+  session_id?: string | null
+  excerpt?: string | null
+  workspace?: WorkspaceTag
+}
+
+export type YoloAttentionReasonCode =
+  | 'reminder_due'
+  | 'overdue'
+  | 'due_soon'
+  | 'high_priority'
+  | 'repeated_postpone'
+  | 'stale'
+  | 'milestone_risk'
+
+export interface YoloAttentionEvidence {
+  code: string
+  label: string
+  value?: string | number
+}
+
+/** One deterministic, server-ranked judgment candidate (dashboard v2). */
+export interface YoloAttentionRow {
+  /** Stable owner + todo key; a changed judgment is identified by its fingerprint. */
+  id: string
+  todo_id: string
+  scope_cwd: string
+  ws: WorkspaceTag
+  score: number
+  level: 'critical' | 'attention' | 'normal'
+  reason_code: YoloAttentionReasonCode
+  short_reason: string
+  explanation: string
+  evidence: YoloAttentionEvidence[]
+  reason_version: string
+  evidence_fingerprint: string
+  seen_at?: number | null
+  suppressed_until?: number | null
+  source?: YoloItemSource
+}
+
+export interface YoloDashboardSummary {
+  open: number
+  overdue: number
+  dueToday: number
+  completedToday: number
+  changesToday: number
+  partial: boolean
+}
+
+export interface YoloDashboardCapabilities {
+  preferenceUndo: boolean
+  notificationSeen: boolean
+  sourceExcerpt: boolean
+}
+
 /** Compact row shapes (a projection of the storage rows, safe for serialization). */
 export interface YoloTodoRow {
   id: string
   title: string
+  detail?: string | null
   status: string
   priority?: string | null
   due_at?: string | null
   /** Owning milestone title (M8 plan view); null when unlinked. */
   milestone_title?: string | null
+  /** Stable milestone facts used by the deterministic attention rules. */
+  milestone_id?: string | null
+  milestone_status?: string | null
+  milestone_open_todo_count?: number
   /** Epoch ms of the last status/content change — powers the stale signal. */
   updated_at?: number
   /** Epoch ms when the todo was completed — powers the「完成 HH:MM」due-slot (5.4). */
@@ -34,6 +98,19 @@ export interface YoloTodoRow {
   stale?: boolean
   /** Source badge label — the creating session's one-line summary (v0.3.0). */
   session_label?: string | null
+  session_id?: string | null
+  /** Structured dashboard-v2 provenance. */
+  source?: YoloItemSource
+  /** Owning cwd duplicated explicitly for action routing without parsing labels. */
+  scope_cwd?: string
+  /** Conservatively derived from auditable todo_postponed events. */
+  postpone_count?: number
+  reminder?: {
+    id?: string
+    unhandled: boolean
+    unhandled_count?: number
+    last_fired_at?: number | null
+  }
   /** v0.3.2 feedback track: times completed (good) vs cancelled (stale). */
   belief?: { good: number; stale: number }
   /** Owning workspace when aggregated across scopes (v0.3.0). */
@@ -97,6 +174,8 @@ export interface YoloNotificationRow {
   todo_id?: string | null
   created_at: number
   handled: boolean
+  /** Owning cwd for routing notification actions in an aggregate projection. */
+  scope_cwd?: string
   /** Owning workspace when aggregated across scopes (v0.3.0). */
   ws?: WorkspaceTag
 }
@@ -128,6 +207,8 @@ export interface YoloDashboardData {
   scopeKey: string
   cwd: string
   at: number
+  /** Additive dashboard-v2 contract marker; old clients safely ignore it. */
+  ui_contract_version?: 2
   /** 'current' (default) or 'all' (cross-workspace aggregation, v0.3.0). */
   scope?: 'current' | 'all'
   /** Aggregate workspace list when scope === 'all'. */
@@ -137,6 +218,10 @@ export interface YoloDashboardData {
   /** Workspaces that failed to read in the aggregate view ("label: error"),
    *  present only when at least one was skipped (v0.3.3 review fix). */
   workspaceErrors?: string[]
+  /** At most one server-selected judgment in v2. */
+  attention?: YoloAttentionRow[]
+  summary?: YoloDashboardSummary
+  capabilities?: YoloDashboardCapabilities
   todos: YoloTodoRow[]
   goals: YoloGoalRow[]
   milestones: YoloMilestoneRow[]
@@ -185,4 +270,3 @@ export function todoSummary(row: YoloTodoRow): string {
   if (row.priority && row.priority !== 'normal') parts.push(`[${row.priority}]`)
   return parts.join(' ')
 }
-
