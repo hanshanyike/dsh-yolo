@@ -146,6 +146,7 @@ describe('registerDashboardEndpoint scope handling', () => {
   function baseYolo(metas: Array<{ cwd: string; scopeKey: string }> = [{ cwd: 'C:\\work\\projA', scopeKey: SCOPE_A }]): Yolo {
     return {
       resolve: (cwd: string) => ({ scopeKey: cwd.includes('projB') ? SCOPE_B : SCOPE_A, db: {}, dataDir: '' }),
+      runInScope: (_cwd: string, _scopeKey: string, fn: () => unknown) => fn(),
       listTodos: () => [],
       listGoals: () => [],
       listMilestones: () => [],
@@ -199,6 +200,7 @@ describe('registerDashboardEndpoint scope handling', () => {
   it('skips an unreadable workspace and still serves the rest with workspaceErrors', () => {
     const yolo = {
       resolve: (cwd: string) => ({ scopeKey: cwd.includes('projB') ? SCOPE_B : SCOPE_A, db: {}, dataDir: '' }),
+      runInScope: (_cwd: string, _scopeKey: string, fn: () => unknown) => fn(),
       listTodos: (cwd: string) => {
         if (cwd.includes('projB')) throw new Error('database locked')
         return []

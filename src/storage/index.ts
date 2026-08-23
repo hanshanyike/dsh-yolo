@@ -67,6 +67,12 @@ export default class Yolo extends Service {
    * so cross-branch memory separation keeps working. */
   readonly SCOPE_KEY_TTL_MS = 5_000
 
+  /** Active runInScope pins (innermost last). resolve() consults these so a
+   * whole operation lands in ONE exact DB even if the git branch changes
+   * mid-operation (v0.3.3 review fix: a board row rendered from branch A must
+   * stay editable on branch A, not silently re-route to branch B's store). */
+  private readonly scopePins: Array<{ cwd: string; scopeKey: string }> = []
+
   constructor(ctx: Context) {
     super(ctx, 'yolo')
     // close cached DB handles when the owning fiber unloads (Windows-safe)
@@ -86,9 +92,29 @@ export default class Yolo extends Service {
     this.scopeKeys.clear()
   }
 
+  /**
+   * Run `fn` with every workspace-mode resolve(cwd) pinned to `scopeKey`.
+   * Sync-only by design (all current callers — applyYoloAction, dashboard
+   * projection builders — are synchronous). The pinned key comes from
+   * listWorkspaceMeta(), i.e. the registry the board rows were rendered from,
+   * so actions and projections hit exactly the store the user is looking at.
+   */
+  runInScope<T>(cwd: string, scopeKey: string, fn: () => T): T {
+    this.scopePins.push({ cwd, scopeKey })
+    try {
+      return fn()
+    } finally {
+      this.scopePins.pop()
+    }
+  }
+
   /** Resolve (and lazily open+cache) the DB handle for a scope. */
   resolve(cwd: string, mode: ScopeMode = 'workspace'): ScopeHandle {
-    const scopeKey = this.scopeKeyOf(cwd, mode)
+    const pin =
+      mode === 'workspace'
+        ? [...this.scopePins].reverse().find((p) => p.cwd === cwd)
+        : undefined
+    const scopeKey = pin ? pin.scopeKey : this.scopeKeyOf(cwd, mode)
     const dataDir = resolveDataDir(mode, cwd)
     const dbPath = join(dataDir, dbFileName(scopeKey))
     let h = this.scopes.get(dbPath)

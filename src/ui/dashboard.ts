@@ -274,7 +274,10 @@ export function registerDashboardEndpoint(
           const errors: string[] = []
           for (const { cwd: wcwd, scopeKey } of metas) {
             try {
-              list.push(buildDashboardData(yolo, wcwd, day, { slug: scopeKey, label: workspaceLabel(wcwd, scopeKey), cwd: wcwd }))
+              // Pin to the REGISTRY's scopeKey so the projection (and every
+              // action later routed to this row) reads exactly this store even
+              // if the workspace's git branch switches mid-flight.
+              list.push(yolo.runInScope(wcwd, scopeKey, () => buildDashboardData(yolo, wcwd, day, { slug: scopeKey, label: workspaceLabel(wcwd, scopeKey), cwd: wcwd })))
             } catch (e) {
               errors.push(`${workspaceLabel(wcwd, scopeKey)}: ${e instanceof Error ? e.message : String(e)}`)
               ctx.logger?.warn?.('[yolo] dashboard skipped workspace %s: %s', wcwd, e instanceof Error ? e.message : String(e))

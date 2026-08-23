@@ -4,7 +4,7 @@
 // conversational reply produce identical state transitions + audit events.
 
 import type Yolo from '../storage/index.ts'
-import { applyYoloAction, type YoloActionRequest } from '../shared/actions.ts'
+import { applyYoloAction, type YoloActionRequest, type YoloActionOutcome } from '../shared/actions.ts'
 
 export interface WebServerLike {
   register(opts: {
@@ -92,20 +92,35 @@ export function registerActionsEndpoint(ctx: { webServer?: WebServerLike }, yolo
           send(res, 400, { ok: false, error: 'body must be a JSON object' })
           return
         }
-        // v0.3.3: a row in the all-workspaces board carries its owning cwd; an
-        // action on it routes to that scope (the default is the latest session's).
         const req = body as YoloActionRequest & { scope_cwd?: string }
-        const actionCwd = typeof req.scope_cwd === 'string' && req.scope_cwd ? req.scope_cwd : cwd()
-        const outcome = applyYoloAction(yolo, actionCwd, req)
-        if (outcome.ok && req.action !== 'handled') {
-          // keep today's Markdown snapshot in lockstep with the DB (TE-8);
-          // notification dismissals are pure UI state and skip the rewrite
-          try {
-            yolo.writeSnapshot(actionCwd)
-          } catch {
-            /* snapshot failure must not fail the action */
-          }
+        // v0.3.3 review fix: route by the workspace REGISTRY the board rows were
+        // rendered from (listWorkspaceMeta). An unknown scope_cwd must NOT
+        // silently create a "ghost workspace" store on disk; a known one is
+        // PINNED to its registered scopeKey so a git-branch switch between
+        // rendering the row and clicking it cannot re-route the action into
+        // another branch's DB ("todo not found" / cross-branch edits).
+        const scopeHeader = typeof req.scope_cwd === 'string' && req.scope_cwd ? req.scope_cwd : undefined
+        const meta = scopeHeader ? yolo.listWorkspaceMeta().find((m) => m.cwd === scopeHeader) : undefined
+        if (scopeHeader && !meta) {
+          send(res, 400, { ok: false, error: 'unknown workspace scope' })
+          return
         }
+        const dispatch = (): YoloActionOutcome => {
+          const actionCwd = meta ? meta.cwd : cwd()
+          const outcome = applyYoloAction(yolo, actionCwd, req)
+          if (outcome.ok && req.action !== 'handled') {
+            // keep today's Markdown snapshot in lockstep with the DB (TE-8);
+            // notification dismissals are pure UI state and skip the rewrite.
+            // Snapshot failure must not fail the action.
+            try {
+              yolo.writeSnapshot(actionCwd)
+            } catch {
+              /* best-effort */
+            }
+          }
+          return outcome
+        }
+        const outcome = meta ? yolo.runInScope(meta.cwd, meta.scopeKey, dispatch) : dispatch()
         send(res, outcome.ok ? 200 : outcome.httpStatus, outcome)
       } catch (e) {
         send(res, 400, { ok: false, error: e instanceof Error ? e.message : String(e) })
