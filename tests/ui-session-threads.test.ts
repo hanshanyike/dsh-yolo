@@ -77,6 +77,20 @@ describe('YoloChatThreads (fresh 聊一聊 threads)', () => {
     expect(created[0]).not.toBe(created[1])
   })
 
+  it('isolates the same thread key between two workspaces', async () => {
+    const { agents, created } = makeAgents()
+    const threads = new YoloChatThreads(agents)
+
+    const workspaceA = await threads.ensure('/ws/a', 'shared-card')
+    const workspaceB = await threads.ensure('/ws/b', 'shared-card')
+
+    expect(workspaceA).not.toBe(workspaceB)
+    expect(created).toHaveLength(2)
+    expect(created[0]).not.toBe(created[1])
+    expect(threads.get('/ws/a', 'shared-card')).toBe(workspaceA)
+    expect(threads.get('/ws/b', 'shared-card')).toBe(workspaceB)
+  })
+
   it('peeks without creating before the first send', async () => {
     const { agents } = makeAgents()
     const threads = new YoloChatThreads(agents)

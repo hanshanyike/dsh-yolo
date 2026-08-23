@@ -90,7 +90,13 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
     { info: (f, ...a) => ctx.logger?.info?.(f, ...a), warn: (f, ...a) => ctx.logger?.warn?.(f, ...a) },
     defaultModel,
   )
-  registerSessionEndpoints(ctx, sessions, threads, () => latestSessionCwd ?? process.cwd())
+  registerSessionEndpoints(
+    ctx,
+    sessions,
+    threads,
+    () => latestSessionCwd ?? process.cwd(),
+    () => ctx.yolo.listWorkspaceMeta(),
+  )
 
   ctx.logger?.info?.('[yolo] ui plugin loaded')
 }

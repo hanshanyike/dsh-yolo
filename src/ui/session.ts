@@ -15,6 +15,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 // created agent errors with `prompt variable "{{model}}" has no value`.
 import { installModelSelection, type ModelSelectionRef, type ModelSelection } from '@deepseek-ai/dsh-agent'
 import { contentBlocksToText } from '../shared/text.ts'
+import { findKnownWorkspaceScope, type WorkspaceScopeMeta } from './workspace-scope.ts'
 
 /** Minimal structural view of a dsh Agent (avoids linking the agent package). */
 export interface AgentLike {
@@ -256,6 +257,7 @@ export function registerSessionEndpoints(
   sessions: YoloSessions,
   threads: YoloChatThreads | undefined,
   defaultCwd: () => string,
+  listWorkspaceMeta: () => readonly WorkspaceScopeMeta[],
 ): void {
   const readBody = (req: { on(event: 'data', cb: (c: Buffer) => void): unknown; on(event: 'end', cb: () => void): unknown }): Promise<unknown> =>
     new Promise((resolveBody, reject) => {
@@ -280,8 +282,15 @@ export function registerSessionEndpoints(
         return
       }
       try {
-        const cwd = new URL(r!.url ?? '/', 'http://local').searchParams.get('cwd') ?? defaultCwd()
-        const thread = new URL(r!.url ?? '/', 'http://local').searchParams.get('thread')
+        const params = new URL(r!.url ?? '/', 'http://local').searchParams
+        const requestedCwd = params.get('cwd')
+        const workspace = requestedCwd === null ? undefined : findKnownWorkspaceScope(requestedCwd, listWorkspaceMeta())
+        if (requestedCwd !== null && !workspace) {
+          send(res, 400, { ok: false, error: 'unknown workspace scope', code: 'unknown_workspace_scope' })
+          return
+        }
+        const cwd = workspace?.cwd ?? defaultCwd()
+        const thread = params.get('thread')
         if (thread) {
           // anchored chat: the thread is created lazily on first SEND; a GET
           // before that returns [] so a freshly-opened 聊一聊 starts empty.
@@ -307,13 +316,21 @@ export function registerSessionEndpoints(
         return
       }
       try {
-        const body = (await readBody(r as never)) as { cwd?: string; text?: string; thread?: string }
+        const body = (await readBody(r as never)) as { cwd?: unknown; text?: string; thread?: string }
         const text = typeof body.text === 'string' ? body.text.trim() : ''
         if (!text) {
           send(res, 400, { ok: false, error: 'text required' })
           return
         }
-        const cwd = typeof body.cwd === 'string' && body.cwd ? body.cwd : defaultCwd()
+        const hasExplicitCwd = Object.prototype.hasOwnProperty.call(body, 'cwd')
+        const workspace = hasExplicitCwd && typeof body.cwd === 'string'
+          ? findKnownWorkspaceScope(body.cwd, listWorkspaceMeta())
+          : undefined
+        if (hasExplicitCwd && !workspace) {
+          send(res, 400, { ok: false, error: 'unknown workspace scope', code: 'unknown_workspace_scope' })
+          return
+        }
+        const cwd = workspace?.cwd ?? defaultCwd()
         const thread = typeof body.thread === 'string' && body.thread ? body.thread : undefined
         const agent = thread
           ? await threads?.ensure(cwd, thread)
