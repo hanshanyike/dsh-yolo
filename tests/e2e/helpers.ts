@@ -59,8 +59,12 @@ export async function openYoloPanel(page: Page): Promise<void> {
   const capture = page.locator('.capture .cap-input')
   for (let i = 0; i < 2; i++) {
     if (await capture.isVisible().catch(() => false)) break
-    const refresh = page.locator('button[aria-label="立即刷新"]')
-    if (await refresh.isVisible().catch(() => false)) await refresh.click()
+    const more = page.getByRole('button', { name: '更多看板操作' })
+    if (await more.isVisible().catch(() => false)) {
+      await more.click()
+      const refresh = page.getByRole('menuitem', { name: '刷新看板' })
+      if (await refresh.isVisible().catch(() => false)) await refresh.click()
+    }
     await capture.waitFor({ state: 'visible', timeout: 6_000 }).catch(() => {})
   }
   await expect(capture).toBeVisible()

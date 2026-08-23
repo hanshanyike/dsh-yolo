@@ -31,10 +31,19 @@ test('暗色宿主下面板解析为 dark 主题（W6）', async ({ page }) => {
 })
 
 test('窄屏面板为紧凑态，对话直接全屏展开（W7）', async ({ page }) => {
-  await openPanelUnderBackground(page, '#ffffff', { width: 460, height: 800 })
+  // 400px host viewport leaves roughly 340px beside the native sidebar: the
+  // product's formal compact width, not merely a generic mobile breakpoint.
+  await openPanelUnderBackground(page, '#ffffff', { width: 400, height: 800 })
 
   // compact reduces the panel & opens chat full-screen, not a side dock
   await expect(page.locator('.yolo-scope')).toHaveClass(/compact/)
+  const tabs = page.getByRole('tab')
+  await expect(tabs).toHaveCount(3)
+  await expect(page.getByRole('tab', { name: /今天/ })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /即将/ })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /已完成/ })).toBeVisible()
+  expect(await page.locator('.p-head').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  expect(await page.locator('.y-tabs').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   await page.locator('.p-head .ctoggle').filter({ hasText: '对话' }).click()
   await expect(page.locator('.p-head .ctoggle').filter({ hasText: '侧栏' })).toBeVisible()
   await expect(page.locator('.dock')).toHaveCount(0)
@@ -44,4 +53,25 @@ test('窄屏面板为紧凑态，对话直接全屏展开（W7）', async ({ pag
   await expect(page.locator('.p-head .ctoggle').filter({ hasText: '对话' })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.locator('.yolo-scope')).toHaveCount(0)
+})
+
+test('更多菜单承载辅助视图、刷新和目标主题，并在 Esc 后恢复焦点', async ({ page }) => {
+  await openPanelUnderBackground(page, '#ffffff')
+  await expect(page.locator('.p-head .flt')).toHaveCount(0)
+  await expect(page.locator('.list-tools .flt')).toBeVisible()
+  const more = page.getByRole('button', { name: '更多看板操作' })
+  await more.click()
+
+  await expect(page.getByRole('menuitem', { name: '目标与里程碑' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '今日台账' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '高级筛选' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '刷新看板' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '切换为深色主题' })).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(more).toBeFocused()
+
+  await more.click()
+  await page.getByRole('menuitem', { name: '目标与里程碑' }).click()
+  await expect(page.getByRole('heading', { name: '目标与里程碑' })).toBeVisible()
 })

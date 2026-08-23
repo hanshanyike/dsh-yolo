@@ -22,10 +22,11 @@ import {
 } from '../../src/shared/filters.ts'
 import { ensureYoloStyle, detectYoloTheme } from '../design/style.ts'
 import { yoloTokens } from '../design/tokens.ts'
-import { IcBell, IcChat, IcCheck, IcChevron, IcClose, IcExpand, IcFilter, IcRefresh, IcShrink } from '../design/icons.tsx'
+import { IcBell, IcChat, IcCheck, IcChevron, IcClose, IcExpand, IcFilter, IcShrink } from '../design/icons.tsx'
 import { YoloLogo } from '../YoloLogo.tsx'
 import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
 import { KanbanView } from './KanbanView.tsx'
+import { MoreMenu } from './MoreMenu.tsx'
 import { ViewTabs, type ViewKey } from './ViewTabs.tsx'
 import { readPanelState, writePanelState } from './state.ts'
 
@@ -35,6 +36,8 @@ export interface YoloPanelProps {
   onClose: () => void
   /** Jump to a dsh session (ledger source badges); no-op when unavailable. */
   openSession?: (sessionId: string) => void
+  /** Host-owned durable theme preference. Optional only for isolated renders. */
+  themeControl?: { set: (theme: 'dark' | 'light') => void }
 }
 
 interface LoadState {
@@ -65,9 +68,17 @@ function presetForView(v: ViewKey): PresetTab {
   return v === 'today' ? 'today' : v === 'done' ? 'done' : 'all'
 }
 
-export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.Element {
+const VIEW_LABELS: Record<ViewKey, string> = {
+  today: '今天',
+  upcoming: '即将',
+  done: '已完成',
+  goals: '目标与里程碑',
+  ledger: '今日台账',
+}
+
+export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPanelProps): JSX.Element {
   ensureYoloStyle()
-  const theme = useMemo(() => detectYoloTheme(), [])
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => detectYoloTheme())
 
   const [state, setState] = useState<LoadState>({ loading: true, error: null, data: null })
   const initial = useMemo(() => readPanelState(), [])
@@ -95,6 +106,24 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
     return () => { window.removeEventListener('resize', on) }
   }, [left])
   const compact = width < yoloTokens.compactBreakpoint
+
+  // Follow host theme changes while the panel is mounted. The More menu uses
+  // the same body attribute contract as the host theme presenter, so the
+  // target-theme label and native control color-scheme stay in sync.
+  useEffect(() => {
+    const body = document.body
+    const sync = (): void => { setTheme(body.hasAttribute('data-ds-dark-theme') ? 'dark' : 'light') }
+    const observer = new MutationObserver(sync)
+    observer.observe(body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
+    return () => { observer.disconnect() }
+  }, [])
+
+  const toggleTheme = useCallback((): void => {
+    const next = document.body.hasAttribute('data-ds-dark-theme') ? 'light' : 'dark'
+    if (themeControl) themeControl.set(next)
+    else document.body.toggleAttribute('data-ds-dark-theme', next === 'dark')
+    setTheme(next)
+  }, [themeControl])
 
   const load = useCallback(async (): Promise<void> => {
     setState((s) => ({ ...s, loading: true, error: null }))
@@ -157,6 +186,8 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
   // Filter menu: outside-pointer + Esc close (Esc must not unwind the panel).
   useEffect(() => {
     if (!filterMenuOpen) return
+    const first = menuRef.current?.querySelector<HTMLElement>('[tabindex], button, input, select')
+    first?.focus()
     const onPointer = (e: PointerEvent): void => {
       const t = e.target as Node | null
       if (!t) return
@@ -166,8 +197,10 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
     }
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
+      e.preventDefault()
       e.stopPropagation()
       setFilterMenuOpen(false)
+      window.setTimeout(() => { fltBtnRef.current?.focus() }, 0)
     }
     document.addEventListener('pointerdown', onPointer)
     document.addEventListener('keydown', onKey, true)
@@ -251,101 +284,120 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
     </div>
   )
 
+  // Filters belong to the todo list context, not to the product-level header.
+  // Goals and ledger do not consume the todo filter, so the toolbar disappears
+  // on those auxiliary views instead of suggesting a false global scope.
+  const listTools = view !== 'goals' && view !== 'ledger' ? (
+    <div className="list-tools" aria-label="事项列表工具">
+      {rangeActive && (
+        <button type="button" className="range-chip" title="按时段筛选生效中，点击清除" onClick={() => { patchFilter({ rangeFrom: null, rangeTo: null }) }}>
+          <b>{rangeLabel(filter.rangeFrom, filter.rangeTo)}</b><IcClose size={10} />
+        </button>
+      )}
+      <div className="flt-wrap">
+        <button
+          ref={fltBtnRef}
+          type="button"
+          className={`flt${hasDetailFilter(filter) ? ' has-filters' : ''}`}
+          aria-haspopup="dialog"
+          aria-expanded={filterMenuOpen}
+          aria-controls="yolo-list-filter"
+          onClick={() => { setFilterMenuOpen((value) => !value) }}
+        >
+          <IcFilter size={13} />筛选<span className="chev"><IcChevron size={10} /></span><span className="flt-dot" />
+        </button>
+        <div id="yolo-list-filter" ref={menuRef} className={`menu${filterMenuOpen ? ' open' : ''}`} role="dialog" aria-label="筛选事项" hidden={!filterMenuOpen}>
+          <div className="menu-g">状态</div>
+          <FilterRow label="仅逾期" on={filter.overdueOnly} onToggle={() => { patchFilter({ overdueOnly: !filter.overdueOnly }) }} />
+          <FilterRow label="仅进行中" on={filter.inProgressOnly} onToggle={() => { patchFilter({ inProgressOnly: !filter.inProgressOnly }) }} />
+          <FilterRow label="仅滞留" on={filter.staleOnly} onToggle={() => { patchFilter({ staleOnly: !filter.staleOnly }) }} />
+          <div className="menu-g">时段（到期日）</div>
+          <select
+            className="msel"
+            value={matchRangePreset(filter.rangeFrom, filter.rangeTo) ?? ''}
+            aria-label="到期时段"
+            onChange={(e) => {
+              const value = e.target.value
+              if (!value) patchFilter({ rangeFrom: null, rangeTo: null })
+              else if (value !== 'custom') patchFilter(rangeOfPreset(value as RangePresetKind))
+            }}
+          >
+            <option value="">不限</option>
+            <option value="today">今天</option>
+            <option value="thisWeek">本周</option>
+            <option value="thisMonth">本月</option>
+            {rangeActive && matchRangePreset(filter.rangeFrom, filter.rangeTo) === 'custom' && <option value="custom">自定义</option>}
+          </select>
+          <div className="range-inputs">
+            <input type="date" className="mdate" value={filter.rangeFrom ?? ''} title="起（含当天）" aria-label="到期开始日期" onChange={(e) => { patchFilter({ rangeFrom: e.target.value || null }) }} />
+            <span className="range-tilde">~</span>
+            <input type="date" className="mdate" value={filter.rangeTo ?? ''} title="止（含当天）" aria-label="到期结束日期" onChange={(e) => { patchFilter({ rangeTo: e.target.value || null }) }} />
+          </div>
+          <div className="menu-g">里程碑</div>
+          <select className="msel" value={filter.milestoneTitle ?? ''} aria-label="所属里程碑" onChange={(e) => { patchFilter({ milestoneTitle: e.target.value || null }) }}>
+            <option value="">全部</option>
+            {milestoneTitles.map((title) => (
+              <option key={title} value={title}>{title}</option>
+            ))}
+          </select>
+          <div className="menu-g">关键词</div>
+          <input className="minput" value={filter.keyword ?? ''} aria-label="按标题关键词筛选" placeholder="标题包含…" onChange={(e) => { patchFilter({ keyword: e.target.value }) }} />
+          {hasDetailFilter(filter) && (
+            <div className="menu-clear">
+              <button type="button" className="btn btn-ghost" onClick={() => { setFilter({ ...DEFAULT_FILTER, preset: filter.preset }) }}>清除全部筛选</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null
+
   return (
     <div
       className={`yolo-scope panel${compact ? ' compact' : ''}`}
       data-y-theme={theme}
       style={{ position: 'fixed', left, right: 0, top: 0, bottom: 0, zIndex: 10000 }}
     >
-      {/* ① header 52px: brand + date · 筛选 · 🔔 · 对话 · ⟳ · ✕ */}
+      {/* Product-level actions: chat → notifications → more → close. */}
       <header className="p-head">
         <div className="brand">
           <span className="mark"><YoloLogo size={18} /></span>
           <span className="brand-name">YOLO</span>
+          <span className="surface-name brand-wide">{VIEW_LABELS[view]}</span>
           <span className="p-date mono">{dateLabel}</span>
         </div>
         <div className="p-head-acts">
-          {rangeActive && (
-            <button type="button" className="range-chip" title="按时段筛选生效中，点击清除" onClick={() => { patchFilter({ rangeFrom: null, rangeTo: null }) }}>
-              <b>{rangeLabel(filter.rangeFrom, filter.rangeTo)}</b><IcClose size={10} />
-            </button>
-          )}
-          <div className="flt-wrap">
-            <button
-              ref={fltBtnRef}
-              type="button"
-              className={`flt${hasDetailFilter(filter) ? ' has-filters' : ''}`}
-              aria-expanded={filterMenuOpen}
-              onClick={() => { setFilterMenuOpen((v) => !v) }}
-            >
-              <IcFilter size={12} />筛选<span className="chev"><IcChevron size={10} /></span><span className="flt-dot" />
-            </button>
-            <div ref={menuRef} className={`menu${filterMenuOpen ? ' open' : ''}`}>
-              <div className="menu-g">状态</div>
-              <FilterRow label="仅逾期" on={filter.overdueOnly} onToggle={() => { patchFilter({ overdueOnly: !filter.overdueOnly }) }} />
-              <FilterRow label="仅进行中" on={filter.inProgressOnly} onToggle={() => { patchFilter({ inProgressOnly: !filter.inProgressOnly }) }} />
-              <FilterRow label="仅滞留" on={filter.staleOnly} onToggle={() => { patchFilter({ staleOnly: !filter.staleOnly }) }} />
-              <div className="menu-g">时段（到期日）</div>
-              <select
-                className="msel"
-                value={matchRangePreset(filter.rangeFrom, filter.rangeTo) ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (!v) patchFilter({ rangeFrom: null, rangeTo: null })
-                  else if (v !== 'custom') patchFilter(rangeOfPreset(v as RangePresetKind))
-                }}
-              >
-                <option value="">不限</option>
-                <option value="today">今天</option>
-                <option value="thisWeek">本周</option>
-                <option value="thisMonth">本月</option>
-                {rangeActive && matchRangePreset(filter.rangeFrom, filter.rangeTo) === 'custom' && <option value="custom">自定义</option>}
-              </select>
-              <div className="range-inputs">
-                <input type="date" className="mdate" value={filter.rangeFrom ?? ''} title="起（含当天）" onChange={(e) => { patchFilter({ rangeFrom: e.target.value || null }) }} />
-                <span className="range-tilde">~</span>
-                <input type="date" className="mdate" value={filter.rangeTo ?? ''} title="止（含当天）" onChange={(e) => { patchFilter({ rangeTo: e.target.value || null }) }} />
-              </div>
-              <div className="menu-g">里程碑</div>
-              <select className="msel" value={filter.milestoneTitle ?? ''} onChange={(e) => { patchFilter({ milestoneTitle: e.target.value || null }) }}>
-                <option value="">全部</option>
-                {milestoneTitles.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-              <div className="menu-g">关键词</div>
-              <input className="minput" value={filter.keyword ?? ''} placeholder="标题包含…" onChange={(e) => { patchFilter({ keyword: e.target.value }) }} />
-              {hasDetailFilter(filter) && (
-                <div className="menu-clear">
-                  <button type="button" className="btn btn-ghost" onClick={() => { setFilter({ ...DEFAULT_FILTER, preset: filter.preset }) }}>清除全部筛选</button>
-                </div>
-              )}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="bell"
-            onClick={() => { setView('today'); setNotifFocusTick((t) => t + 1) }}
-            title={unhandled > 0 ? `${unhandled} 条未处理提醒，点击查看` : '通知'}
-            aria-label="通知"
-          >
-            <IcBell size={13} />
-            {unhandled > 0 && <span className="bnum">{unhandled}</span>}
-            {unhandled > 0 && <span className="bdot" />}
-          </button>
           {!chatShowingFull && (
-            <button type="button" className={`ctoggle${sideChatOpen ? ' on' : ''}`} onClick={toggleSideChat} title={sideChatOpen ? '收起侧栏对话 (Esc)' : '展开侧栏对话'}>
-              <span className="tico"><IcChat size={13} /></span>对话
+            <button type="button" className={`ctoggle head-primary${sideChatOpen ? ' on' : ''}`} onClick={toggleSideChat} title={sideChatOpen ? '收起对话 (Esc)' : '打开对话'}>
+              <IcChat size={14} /><span>对话</span>
             </button>
           )}
           {chatShowingFull && (
-            <button type="button" className="ctoggle" onClick={() => { setChatFullscreen(false) }} title="收起为侧栏 (Esc)">
-              <span className="tico"><IcShrink size={13} /></span>侧栏
+            <button type="button" className="ctoggle head-primary" onClick={() => { setChatFullscreen(false) }} title="收起为侧栏 (Esc)">
+              <IcShrink size={14} /><span>侧栏</span>
             </button>
           )}
-          <button type="button" className={`hbtn${state.loading ? ' spin' : ''}`} onClick={() => { void load() }} title="立即刷新" aria-label="立即刷新">
-            <IcRefresh size={15} />
+          <button
+            type="button"
+            className="head-secondary bell"
+            onClick={() => { setView('today'); setNotifFocusTick((t) => t + 1) }}
+            title={unhandled > 0 ? `${unhandled} 条未处理提醒，点击查看` : '通知'}
+            aria-label={unhandled > 0 ? `通知，${unhandled} 条未处理` : '通知，无未处理消息'}
+          >
+            <IcBell size={13} />
+            <span>通知</span>
+            {unhandled > 0 && <span className="bnum">{unhandled}</span>}
+            {unhandled > 0 && <span className="bdot" />}
           </button>
+          <MoreMenu
+            view={view}
+            loading={state.loading}
+            theme={theme}
+            onViewChange={setView}
+            onOpenFilters={() => { setView('today'); setFilterMenuOpen(true) }}
+            onRefresh={() => { void load() }}
+            onToggleTheme={toggleTheme}
+          />
           <button type="button" className="hbtn" onClick={onClose} title="关闭 (Esc)" aria-label="关闭面板">
             <IcClose size={15} />
           </button>
@@ -354,7 +406,8 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
       </header>
 
       {/* ② horizontal view tabs — the face switcher (vertical nav is the host's) */}
-      <ViewTabs view={view} counts={counts} onChange={setView} />
+      <ViewTabs view={view} counts={counts} onChange={setView} compact={compact} />
+      {!chatShowingFull && listTools}
 
       {/* ③ body: full-screen chat takes over the panel while the board stays
           MOUNTED (display:none) so its editor drafts, the 4s undo window and

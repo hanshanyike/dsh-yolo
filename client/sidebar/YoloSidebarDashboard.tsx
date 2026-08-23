@@ -14,6 +14,8 @@ interface YoloSidebarDashboardProps {
   wide?: boolean
   /** Slot-injected: jump to a dsh session (ledger source badges). */
   openSession?: (sessionId: string) => void
+  /** Slot-injected host theme runtime bridge (durable preference owner). */
+  setTheme?: (theme: 'dark' | 'light') => void
 }
 
 const POLL_MS = 30_000
@@ -39,7 +41,7 @@ function useDismissOnOutsidePointer(
   }, [open, onClose, buttonRef, panelRef])
 }
 
-export function YoloSidebarDashboard({ wide = true, openSession }: YoloSidebarDashboardProps): JSX.Element {
+export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: YoloSidebarDashboardProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [unhandled, setUnhandled] = useState(0)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -140,7 +142,7 @@ export function YoloSidebarDashboard({ wide = true, openSession }: YoloSidebarDa
         // session switch lands and the panel steps aside in one gesture.
         <div ref={panelRef} style={{ position: 'fixed', left: anchorLeft, top: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 10000 }}>
           <div style={{ pointerEvents: 'auto', position: 'absolute', inset: 0 }}>
-            <YoloPanel left={anchorLeft} onClose={close} openSession={openSession} />
+            <YoloPanel left={anchorLeft} onClose={close} openSession={openSession} themeControl={setTheme ? { set: setTheme } : undefined} />
           </div>
         </div>
       )}

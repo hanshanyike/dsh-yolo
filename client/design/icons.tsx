@@ -48,3 +48,5 @@ export const IcTarget = shell('<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy=
 export const IcExpand = shell('<path d="M3 6V3h3"/><path d="M3 3l4.5 4.5"/><path d="M13 10v3h-3"/><path d="M13 13l-4.5-4.5"/>')
 export const IcShrink = shell('<path d="M9 3h4v4"/><path d="M13 3l-4.5 4.5"/><path d="M7 13H3V9"/><path d="M3 13l4.5-4.5"/>')
 export const IcMerge = shell('<path d="M4 4v2.5a3.5 3.5 0 0 0 3.5 3.5h6"/><path d="M4 12V9.5"/><path d="M11.5 7.5L13.5 9.5l-2 2"/>')
+export const IcSun = shell('<circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1"/>')
+export const IcMoon = shell('<path d="M12.8 10.3A5.5 5.5 0 0 1 5.7 3.2 5.5 5.5 0 1 0 12.8 10.3z"/>')

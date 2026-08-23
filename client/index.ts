@@ -10,13 +10,15 @@ import type { ClientContext, ISessions, SessionId } from '@deepseek-ai/dsh-clien
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 // Type-only: pulls the ui-settings-plugins SlotMap merge (settings.plugin.item).
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+// Type-only: contributes ctx.theme, the host-owned durable light/dark runtime.
+import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { SettingsCard } from './settings/SettingsCard.tsx'
 import { YoloSidebarDashboard } from './sidebar/YoloSidebarDashboard.tsx'
 
 export const name = 'yolo-client'
 
-/** Required services: the slot registry + the session service (ledger jump). */
-export const inject = ['slots', 'sessions'] as const
+/** Required services: slots, session jumps, and the host-owned theme runtime. */
+export const inject = ['slots', 'sessions', 'theme'] as const
 
 export function apply(ctx: ClientContext): void {
   ctx.logger?.info?.('[yolo] client bundle loaded')
@@ -43,6 +45,7 @@ export function apply(ctx: ClientContext): void {
           // runtime's ISessions on Context.sessions, so re-narrow here.
           ;(ctx.sessions as unknown as ISessions).open(sessionId as SessionId)
         },
+        setTheme: (theme: 'dark' | 'light'): void => { ctx.theme.setTheme(theme) },
       }),
     }, YoloSidebarDashboard),
   )
