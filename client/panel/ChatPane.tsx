@@ -7,16 +7,30 @@
 // conversation — it starts empty, never loads the resident thread's history.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  IDLE_PENDING_REPLY,
+  isReplyPending,
+  mergeRemoteMessages,
+  messagesBeforePendingReply,
+  reducePendingReply,
+  type ChatMessage,
+  type PendingReplyState,
+} from './chat/pending.ts'
 
-export interface ChatMessage {
-  role: 'user' | 'ai'
-  text: string
-}
+export type { ChatMessage } from './chat/pending.ts'
 
 /** What a card's 聊一聊 anchors the conversation to. */
 export interface ChatAnchor {
   title: string
   detail?: string | null
+  todoId?: string
+  scopeCwd?: string
+  source?: {
+    type: 'session' | 'manual' | 'tool' | 'legacy'
+    label: string
+    sessionId?: string | null
+    excerpt?: string | null
+  }
 }
 
 export interface ChatPaneProps {
@@ -33,7 +47,7 @@ interface ChatState {
   loading: boolean
   error: string | null
   messages: ChatMessage[]
-  sending: boolean
+  pending: PendingReplyState
 }
 
 /** Strip the injected anchor context prefix from a user line (the server stores
@@ -43,16 +57,31 @@ function stripAnchorPrefix(text: string): string {
 }
 
 export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPaneProps): JSX.Element {
-  const [state, setState] = useState<ChatState>({ loading: false, error: null, messages: [], sending: false })
+  const [state, setState] = useState<ChatState>({ loading: false, error: null, messages: [], pending: IDLE_PENDING_REPLY })
   const [draft, setDraft] = useState('')
   const anchorRef = useRef<ChatAnchor | null>(anchor)
   const sentWithContext = useRef(false)
   const listRef = useRef<HTMLDivElement>(null)
   const prevThread = useRef(threadKey)
+  const mountedRef = useRef(false)
+  const sendLockedRef = useRef(false)
+  const controllersRef = useRef(new Set<AbortController>())
+  const replyRefreshTimerRef = useRef<number | null>(null)
   // Live mirror of threadKey: async callbacks compare against it so a response
   // from a thread the user already left can never overwrite the new thread's
   // view (v0.3.3 review fix: up to 4s of cross-thread message bleed).
   const threadRef = useRef(threadKey)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      sendLockedRef.current = false
+      if (replyRefreshTimerRef.current !== null) window.clearTimeout(replyRefreshTimerRef.current)
+      for (const controller of controllersRef.current) controller.abort()
+      controllersRef.current.clear()
+    }
+  }, [])
 
   useEffect(() => {
     anchorRef.current = anchor
@@ -61,6 +90,13 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
 
   useEffect(() => {
     threadRef.current = threadKey
+    sendLockedRef.current = false
+    if (replyRefreshTimerRef.current !== null) {
+      window.clearTimeout(replyRefreshTimerRef.current)
+      replyRefreshTimerRef.current = null
+    }
+    for (const controller of controllersRef.current) controller.abort()
+    controllersRef.current.clear()
   }, [threadKey])
 
   // A new thread (or a jump between resident and anchored) must clear the
@@ -69,23 +105,42 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   useEffect(() => {
     if (prevThread.current !== threadKey) {
       prevThread.current = threadKey
-      setState((s) => ({ ...s, messages: [], error: null, sending: false }))
+      setState((s) => ({ ...s, messages: [], error: null, pending: reducePendingReply(s.pending, { type: 'reset' }) }))
     }
   }, [threadKey])
 
   const load = useCallback(async (): Promise<void> => {
     const keyForCall = threadKey
+    if (!mountedRef.current || threadRef.current !== keyForCall) return
+    const controller = new AbortController()
+    controllersRef.current.add(controller)
     setState((s) => ({ ...s, loading: true, error: null }))
     try {
       const q = keyForCall ? `?thread=${encodeURIComponent(keyForCall)}` : ''
-      const r = await fetch(`/yolo/session/messages${q}`, { headers: { accept: 'application/json' }, cache: 'no-store' })
+      const r = await fetch(`/yolo/session/messages${q}`, {
+        headers: { accept: 'application/json' },
+        cache: 'no-store',
+        signal: controller.signal,
+      })
       const body = (await r.json()) as { ok?: boolean; messages?: ChatMessage[]; error?: string }
-      if (threadRef.current !== keyForCall) return // user switched threads mid-flight
+      if (!mountedRef.current || threadRef.current !== keyForCall) return // user switched threads or unmounted mid-flight
       if (!r.ok || !body.ok) throw new Error(body.error ?? `HTTP ${r.status}`)
-      setState({ loading: false, error: null, messages: body.messages ?? [], sending: false })
+      const remote = body.messages ?? []
+      setState((current) => {
+        const pending = reducePendingReply(current.pending, { type: 'messages_observed', messages: remote })
+        if (!isReplyPending(pending)) sendLockedRef.current = false
+        return {
+          loading: false,
+          error: null,
+          messages: mergeRemoteMessages(remote, current.pending),
+          pending,
+        }
+      })
     } catch (e) {
-      if (threadRef.current !== keyForCall) return
+      if (!mountedRef.current || threadRef.current !== keyForCall || controller.signal.aborted) return
       setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
+    } finally {
+      controllersRef.current.delete(controller)
     }
   }, [threadKey])
 
@@ -99,11 +154,11 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [state.messages.length, state.sending])
+  }, [state.messages.length, state.pending])
 
   const send = useCallback(async (): Promise<void> => {
     const text = draft.trim()
-    if (!text || state.sending) return
+    if (!text || sendLockedRef.current || isReplyPending(state.pending)) return
     let payload = text
     const a = anchorRef.current
     if (a && !sentWithContext.current) {
@@ -111,30 +166,57 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       sentWithContext.current = true
     }
     const keyForCall = threadKey
+    sendLockedRef.current = true
     setDraft('')
-    const before = state.messages
-    setState((s) => ({ ...s, sending: true, messages: [...s.messages, { role: 'user', text }] }))
+    setState((current) => ({
+      ...current,
+      error: null,
+      pending: reducePendingReply(current.pending, { type: 'send_started', messages: current.messages, userText: text }),
+      messages: [...current.messages, { role: 'user', text }],
+    }))
+    const controller = new AbortController()
+    controllersRef.current.add(controller)
     try {
       const r = await fetch('/yolo/session/send', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ text: payload, thread: keyForCall ?? undefined }),
+        signal: controller.signal,
       })
       const body = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null
       if (!r.ok || !body?.ok) throw new Error(body?.error ?? `HTTP ${r.status}`)
+      if (!mountedRef.current || threadRef.current !== keyForCall) return
+      setState((current) => ({
+        ...current,
+        pending: reducePendingReply(current.pending, { type: 'post_succeeded' }),
+      }))
       await load()
       // the reply streams server-side; catch it on the next poll
-      window.setTimeout(() => { void load() }, 2_500)
+      if (mountedRef.current && threadRef.current === keyForCall) {
+        if (replyRefreshTimerRef.current !== null) window.clearTimeout(replyRefreshTimerRef.current)
+        replyRefreshTimerRef.current = window.setTimeout(() => {
+          replyRefreshTimerRef.current = null
+          void load()
+        }, 2_500)
+      }
     } catch (e) {
       // v0.3.3 review fix: a failed send must not leave a phantom「已发出」
       // bubble — restore the pre-send transcript and hand the text back to
       // the input so the user can retry instead of losing it.
-      if (threadRef.current === keyForCall) {
-        setState((s) => ({ ...s, sending: false, error: e instanceof Error ? e.message : String(e), messages: before }))
+      if (mountedRef.current && threadRef.current === keyForCall && !controller.signal.aborted) {
+        sendLockedRef.current = false
+        setState((current) => ({
+          ...current,
+          pending: reducePendingReply(current.pending, { type: 'failed' }),
+          error: e instanceof Error ? e.message : String(e),
+          messages: messagesBeforePendingReply(current.pending) ?? current.messages,
+        }))
         setDraft(text)
       }
+    } finally {
+      controllersRef.current.delete(controller)
     }
-  }, [draft, load, state.messages, state.sending, threadKey])
+  }, [draft, load, state.pending, threadKey])
 
   const input = (
     <input
@@ -178,7 +260,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
           <div key={i} className="msg me">{stripAnchorPrefix(m.text)}</div>
         ),
       )}
-      {state.sending && (
+      {isReplyPending(state.pending) && (
         <div className="msg ai">
           <div className="who">YOLO</div>
           正在处理…
