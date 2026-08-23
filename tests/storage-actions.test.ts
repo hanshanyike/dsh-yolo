@@ -436,6 +436,17 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
     expect(yolo.listTodos(cwd, 'pending').find((row) => row.id === todo.id)?.priority).toBe('high')
   })
 
+  it('updates and indexes the todo detail from the handling panel', () => {
+    const { todo } = yolo.addTodo(cwd, { title: '确认客户访谈排期', detail: '旧备注', source: 'llm' })
+
+    const res = applyYoloAction(yolo, cwd, {
+      action: 'update', kind: 'todo', id: todo.id, detail: '周二前向客户确认新的时间窗口',
+    })
+
+    expect(res).toMatchObject({ ok: true, item: { detail: '周二前向客户确认新的时间窗口' } })
+    expect(yolo.search(cwd, '新的时间窗口').map((row) => row.row_id)).toContain(todo.id)
+  })
+
   it('rejects an unknown milestone title instead of silently unlinking the todo', () => {
     const milestone = yolo.addMilestone(cwd, { title: '产品组验收', source: 'llm' })
     const { todo } = yolo.addTodo(cwd, {

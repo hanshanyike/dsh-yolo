@@ -54,9 +54,9 @@ describe('preset tabs (TE-1)', () => {
     expect(ids).toEqual(['overdue', 'today', 'tomorrow', 'nextweek', 'far', 'undated'])
   })
 
-  it('已完成 = terminal statuses only', () => {
+  it('已完成 excludes cancelled items', () => {
     const ids = applyKanbanFilter(todos, filter({ preset: 'done' }), TODAY).map((t) => t.id)
-    expect(ids).toEqual(['done', 'cancelled'])
+    expect(ids).toEqual(['done'])
   })
 })
 

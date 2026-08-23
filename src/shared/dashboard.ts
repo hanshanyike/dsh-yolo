@@ -106,6 +106,15 @@ export interface YoloTodoRow {
   scope_cwd?: string
   /** Conservatively derived from auditable todo_postponed events. */
   postpone_count?: number
+  /** Server-projected deterministic reason for secondary "需要关注" rows. */
+  attention_reason?: {
+    code: YoloAttentionReasonCode
+    short_reason: string
+    explanation: string
+    evidence: YoloAttentionEvidence[]
+    reason_version: string
+    evidence_fingerprint: string
+  }
   reminder?: {
     id?: string
     unhandled: boolean

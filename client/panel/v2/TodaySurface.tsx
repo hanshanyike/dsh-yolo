@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import type { YoloDashboardData } from '../../../src/shared/dashboard.ts'
 import { AssistantJudgment } from './AssistantJudgment.tsx'
 import type {
@@ -14,10 +14,11 @@ import {
 
 export type TodaySurfaceIntent =
   | { type: 'quick_capture' }
-  | { type: 'judgment_action'; action: JudgmentActionIntent; todo: YoloTodoRowV2; scopeCwd: string; reasonVersion: string }
+  | { type: 'mark_judgment_seen'; judgmentId: string; scopeCwd: string; reasonVersion: string; evidenceFingerprint: string }
+  | { type: 'judgment_action'; action: JudgmentActionIntent; todo: YoloTodoRowV2; scopeCwd: string; reasonVersion: string; evidenceFingerprint: string }
   | { type: 'expand_judgment' }
-  | { type: 'suppress_judgment'; judgmentId: string; scopeCwd: string }
-  | { type: 'feedback_judgment'; judgmentId: string; scopeCwd: string }
+  | { type: 'suppress_judgment'; judgmentId: string; scopeCwd: string; reasonVersion: string; evidenceFingerprint: string }
+  | { type: 'feedback_judgment'; judgmentId: string; scopeCwd: string; reasonVersion: string; evidenceFingerprint: string }
   | { type: 'complete_todo'; todo: YoloTodoRowV2; scopeCwd: string }
   | { type: 'open_task'; todo: YoloTodoRowV2; scopeCwd: string }
   | { type: 'open_source'; source: JudgmentSource; todo: YoloTodoRowV2; scopeCwd: string }
@@ -29,6 +30,7 @@ export interface TodaySurfaceProps extends BuildTodaySurfaceOptions {
   data: YoloDashboardData
   busyTodoId?: string
   renderQuickCapture?: () => ReactNode
+  judgmentExpanded?: boolean
   onIntent: (intent: TodaySurfaceIntent) => void
 }
 
@@ -112,11 +114,30 @@ export function TodaySurface({
   closureDismissed,
   busyTodoId,
   renderQuickCapture,
+  judgmentExpanded = false,
   onIntent,
 }: TodaySurfaceProps): JSX.Element {
   const model = buildTodaySurfaceModel(data, { now, nearQuietHours, closureDismissed })
   const judgment = model.judgment
+  const displayedJudgment = judgment && judgmentExpanded
+    ? { ...judgment, presentation: 'full' as const, reason: judgment.fullReason }
+    : judgment
   const judgmentScopeCwd = model.judgmentScopeCwd ?? data.cwd
+  const reportedJudgment = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!judgment || judgment.presentation !== 'full') return
+    const key = `${judgment.id}\u0000${judgment.version}\u0000${judgment.evidenceFingerprint}`
+    if (reportedJudgment.current === key) return
+    reportedJudgment.current = key
+    onIntent({
+      type: 'mark_judgment_seen',
+      judgmentId: judgment.id,
+      scopeCwd: judgmentScopeCwd,
+      reasonVersion: judgment.version,
+      evidenceFingerprint: judgment.evidenceFingerprint,
+    })
+  }, [judgment, judgmentScopeCwd, onIntent])
 
   return (
     <main className="v2-today-surface" aria-labelledby="v2-today-title">
@@ -136,15 +157,28 @@ export function TodaySurface({
 
       {judgment ? (
         <AssistantJudgment
-          judgment={judgment}
+          judgment={displayedJudgment ?? judgment}
           busy={busyTodoId === judgment.todo.id}
-          partialData={Boolean(model.partialMessage)}
+          partialData={false}
           onIntent={(action) => {
-            onIntent({ type: 'judgment_action', action, todo: judgment.todo, scopeCwd: judgmentScopeCwd, reasonVersion: judgment.version })
+            onIntent({
+              type: 'judgment_action', action, todo: judgment.todo, scopeCwd: judgmentScopeCwd,
+              reasonVersion: judgment.version, evidenceFingerprint: judgment.evidenceFingerprint,
+            })
           }}
           onExpand={() => { onIntent({ type: 'expand_judgment' }) }}
-          onIgnore={() => { onIntent({ type: 'suppress_judgment', judgmentId: judgment.id, scopeCwd: judgmentScopeCwd }) }}
-          onFeedback={() => { onIntent({ type: 'feedback_judgment', judgmentId: judgment.id, scopeCwd: judgmentScopeCwd }) }}
+          onIgnore={() => {
+            onIntent({
+              type: 'suppress_judgment', judgmentId: judgment.id, scopeCwd: judgmentScopeCwd,
+              reasonVersion: judgment.version, evidenceFingerprint: judgment.evidenceFingerprint,
+            })
+          }}
+          onFeedback={() => {
+            onIntent({
+              type: 'feedback_judgment', judgmentId: judgment.id, scopeCwd: judgmentScopeCwd,
+              reasonVersion: judgment.version, evidenceFingerprint: judgment.evidenceFingerprint,
+            })
+          }}
           onOpenSource={(source) => { onIntent({ type: 'open_source', source, todo: judgment.todo, scopeCwd: judgmentScopeCwd }) }}
         />
       ) : null}

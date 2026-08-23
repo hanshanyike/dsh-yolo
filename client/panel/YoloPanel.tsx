@@ -8,7 +8,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData } from '../../src/shared/dashboard.ts'
-import { isTodoOpen } from '../../src/shared/dashboard.ts'
 import {
   DEFAULT_FILTER,
   focusCounts,
@@ -109,6 +108,7 @@ export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPane
     return () => { window.removeEventListener('resize', on) }
   }, [left])
   const compact = width < yoloTokens.compactBreakpoint
+  const medium = width < 960
 
   // Follow host theme changes while the panel is mounted. The More menu uses
   // the same body attribute contract as the host theme presenter, so the
@@ -226,13 +226,13 @@ export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPane
   }, [])
 
   // One chat surface, two sizes; on compact panels the side pane IS fullscreen.
-  const chatShowingFull = chatFullscreen || (sideChatOpen && compact)
-  const showSideDock = sideChatOpen && !chatFullscreen && !compact
+  const chatShowingFull = chatFullscreen || (sideChatOpen && medium)
+  const showSideDock = sideChatOpen && !chatFullscreen && !medium
 
   // Tab counts — the board's live signals at a glance (raw bucket counts).
   const counts = useMemo(() => {
     const openCounts = state.data ? focusCounts(state.data.todos) : { overdue: 0, today: 0, week: 0, stale: 0 }
-    const done = state.data ? state.data.todos.filter((t) => !isTodoOpen(t.status)).length : 0
+    const done = state.data ? state.data.todos.filter((t) => t.status === 'done' || t.status === 'completed').length : 0
     return {
       today: openCounts.today,
       upcoming: openCounts.week,
@@ -260,8 +260,14 @@ export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPane
           <button type="button" className="nact" onClick={() => { void load() }}>重试</button>
         </div>
       )}
+      {state.error && state.data !== null && (
+        <div className="err-line" role="status">
+          <span>刷新失败，当前内容可能不是最新：{state.error}</span>
+          <button type="button" className="nact" onClick={() => { void load() }}>重试</button>
+        </div>
+      )}
       {state.data !== null && (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...(state.error ? { opacity: 0.6 } : {}) }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <KanbanView
             data={state.data}
             refresh={load}
@@ -357,7 +363,7 @@ export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPane
 
   return (
     <div
-      className={`yolo-scope panel${compact ? ' compact' : ''}`}
+      className={`yolo-scope panel${compact ? ' compact' : medium ? ' medium' : ''}`}
       data-y-theme={theme}
       style={{ position: 'fixed', left, right: 0, top: 0, bottom: 0, zIndex: 10000 }}
     >

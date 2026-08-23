@@ -736,20 +736,22 @@ export function applyTodoConsolidate(
 export function applyTodoUpdate(
   db: DB,
   id: string,
-  patch: { title?: string; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null },
+  patch: { title?: string; detail?: string | null; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null },
   sessionId?: string | null,
 ): Todo | null {
   const t = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
   if (!t) return null
   const title = patch.title?.trim() ? patch.title.trim() : t.title
+  const detail = patch.detail !== undefined ? patch.detail : t.detail
   const due = patch.due_at !== undefined ? patch.due_at : t.due_at
   const pri = patch.priority !== undefined ? patch.priority : t.priority
   const ms = patch.milestone_id !== undefined ? patch.milestone_id : t.milestone_id
   const ts = now()
-  db.prepare('UPDATE todos SET title = ?, due_at = ?, priority = ?, milestone_id = ?, updated_at = ? WHERE id = ?').run(title, due, pri, ms, ts, id)
-  syncTodoFts(db, id, title, t.detail ?? null)
+  db.prepare('UPDATE todos SET title = ?, detail = ?, due_at = ?, priority = ?, milestone_id = ?, updated_at = ? WHERE id = ?').run(title, detail, due, pri, ms, ts, id)
+  syncTodoFts(db, id, title, detail ?? null)
   const changes: string[] = []
   if (title !== t.title) changes.push(`标题「${t.title}」→「${title}」`)
+  if (detail !== t.detail) changes.push('备注已更新')
   if (due !== t.due_at) changes.push(`截止 ${t.due_at ?? '无'} → ${due ?? '无'}`)
   if (pri !== t.priority) changes.push(`优先级 ${t.priority ?? '无'} → ${pri ?? '无'}`)
   addEvent(db, {

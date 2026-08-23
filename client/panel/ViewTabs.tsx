@@ -51,6 +51,8 @@ export function ViewTabs({ view, counts, onChange, compact = false }: ViewTabsPr
           key={t.key}
           type="button"
           role="tab"
+          id={`yolo-tab-${t.key}`}
+          aria-controls={`yolo-view-${t.key}`}
           aria-selected={view === t.key}
           tabIndex={view === t.key || (activeIndex === -1 && index === 0) ? 0 : -1}
           className={`ytab${view === t.key ? ' on' : ''}`}

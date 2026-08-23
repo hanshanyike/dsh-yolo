@@ -25,7 +25,12 @@ import type {
 } from '../shared/dashboard.ts'
 import { isTodoOpen, isTodoOverdue, isTodoStale } from '../shared/dashboard.ts'
 import { localDateStr, dayBounds } from '../shared/text.ts'
-import { buildDashboardSummary, rankProjectedAttentionCandidates, selectPrimaryAttention } from '../attention/index.ts'
+import {
+  applyAttentionFeedback,
+  buildDashboardSummary,
+  rankAttentionCandidates,
+  rankProjectedAttentionCandidates,
+} from '../attention/index.ts'
 
 export interface WebServerLike {
   register(opts: {
@@ -205,20 +210,36 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
   }))
 
   const feedback = yolo.listAttentionFeedback?.(cwd) ?? []
-  const attention = selectPrimaryAttention(todos, new Date(now), feedback).attention
+  const rankedAttention = applyAttentionFeedback(rankAttentionCandidates(todos, new Date(now)), feedback, now)
+  const reasonByTodo = new Map(rankedAttention.map((row) => [row.todo_id, row]))
+  const projectedTodos = todos.map((todo) => {
+    const reason = reasonByTodo.get(todo.id)
+    if (!reason) return todo
+    return {
+      ...todo,
+      attention_reason: {
+        code: reason.reason_code,
+        short_reason: reason.short_reason,
+        explanation: reason.explanation,
+        evidence: reason.evidence,
+        reason_version: reason.reason_version,
+        evidence_fingerprint: reason.evidence_fingerprint,
+      },
+    }
+  })
   return {
     scopeKey,
     cwd,
     at: now,
     ui_contract_version: 2,
-    attention,
-    summary: buildDashboardSummary(todos, day, ledger.length),
+    attention: rankedAttention.slice(0, 1),
+    summary: buildDashboardSummary(projectedTodos, day, ledger.length),
     capabilities: {
       preferenceUndo: false,
       notificationSeen: true,
       sourceExcerpt: false,
     },
-    todos,
+    todos: projectedTodos,
     goals: yolo.listGoals(cwd).map((g) => ({
       id: g.id,
       title: g.title,

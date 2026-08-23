@@ -27,6 +27,7 @@ export interface YoloActionRequest {
   /** Inline-edit fields (v0.3.0 E): priority + milestone by title. */
   priority?: string | null
   milestone_title?: string | null
+  detail?: string | null
   /** Consolidate's surviving target (into_*); the source uses the existing id/title. */
   into_id?: string
   into_title?: string
@@ -415,8 +416,9 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
   // ---- todo plan edits + state flow ----
   if (action === 'update') {
     if (kind !== 'todo') return deny(yolo, cwd, r, 'update requires kind=todo', 400)
-    const patch: { title?: string; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null } = {}
+    const patch: { title?: string; detail?: string | null; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null } = {}
     if (typeof r.title === 'string' && r.title.trim()) patch.title = r.title.trim()
+    if (r.detail !== undefined) patch.detail = typeof r.detail === 'string' && r.detail.trim() ? r.detail.trim() : null
     if (r.due_at !== undefined) patch.due_at = typeof r.due_at === 'string' && r.due_at ? r.due_at : null
     if (r.priority !== undefined) {
       const priority = toPriority(r.priority)
@@ -437,7 +439,7 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
       }
     }
     if (Object.keys(patch).length === 0) {
-      return deny(yolo, cwd, r, 'update requires at least one of title/due_at/priority/milestone_title', 400)
+      return deny(yolo, cwd, r, 'update requires at least one of title/detail/due_at/priority/milestone_title', 400)
     }
     const t = ref.id ? yolo.applyTodoUpdate(cwd, ref.id, patch, sessionId) : null
     return t
@@ -491,6 +493,7 @@ export function hashYoloActionRequest(r: YoloActionRequest): string {
     progress: r.progress ?? null,
     status: r.status ?? null,
     note: r.note ?? null,
+    detail: r.detail ?? null,
     priority: r.priority ?? null,
     milestone_title: r.milestone_title ?? null,
     into_id: r.into_id ?? null,

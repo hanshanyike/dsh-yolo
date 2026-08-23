@@ -221,7 +221,7 @@ export default class Yolo extends Service {
   applyTodoUpdate(
     cwd: string,
     id: string,
-    patch: { title?: string; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null },
+    patch: { title?: string; detail?: string | null; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null },
     sessionId?: string | null,
   ): Todo | null {
     return repo.applyTodoUpdate(this.resolve(cwd).db, id, patch, sessionId)
@@ -506,4 +506,3 @@ export default class Yolo extends Service {
 }
 
 export type { ExtractionLog }
-

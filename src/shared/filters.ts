@@ -137,7 +137,7 @@ export function applyKanbanFilter(
   return todos.filter((t) => {
     // preset base (TE-1): 今日 = overdue + today-due, never future items
     if (f.preset === 'done') {
-      if (isOpen(t)) return false
+      if (t.status !== 'done' && t.status !== 'completed') return false
     } else {
       if (!isOpen(t)) return false
       if (f.preset === 'today') {

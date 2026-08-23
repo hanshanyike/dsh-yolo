@@ -1,4 +1,5 @@
 import type { WorkspaceTag, YoloTodoRow } from '../../../src/shared/dashboard.ts'
+import type { AttentionFeedbackReason } from '../../../src/shared/actions.ts'
 
 export type JudgmentPresentation = 'full' | 'compact'
 
@@ -8,12 +9,7 @@ export type JudgmentActionIntent =
   | 'discuss'
   | 'open_panel'
 
-export type JudgmentFeedbackReason =
-  | 'wrong_time'
-  | 'not_important'
-  | 'wrong_goal'
-  | 'stale_signal_unhelpful'
-  | 'other'
+export type JudgmentFeedbackReason = AttentionFeedbackReason
 
 export interface JudgmentEvidence {
   /** Stable server reason/evidence code; the client must not invent it. */
@@ -41,9 +37,11 @@ export interface YoloTodoRowV2 extends YoloTodoRow {
 export interface AssistantJudgmentView {
   id: string
   version: string
+  evidenceFingerprint: string
   todo: YoloTodoRowV2
   presentation: JudgmentPresentation
   reason: string
+  fullReason: string
   evidence: readonly JudgmentEvidence[]
   source?: JudgmentSource
   appearedAt?: number
@@ -56,7 +54,7 @@ export type TaskActionIntent =
   | { type: 'discuss' }
   | { type: 'remind_again' }
   | { type: 'suppress' }
-  | { type: 'feedback' }
+  | { type: 'feedback'; reason: JudgmentFeedbackReason }
   | { type: 'cancel' }
 
 export interface TaskEditDraft {

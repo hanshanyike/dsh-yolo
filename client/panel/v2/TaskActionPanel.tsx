@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { LearningReceipt } from './LearningReceipt.tsx'
 import {
   tomorrowLocalDate,
@@ -18,6 +19,7 @@ export interface TaskActionPanelProps {
   busy?: boolean
   now?: Date
   learningReceipt?: LearningReceiptData | null
+  judgmentFeedbackEnabled?: boolean
   onAction: (intent: TaskActionIntent) => void
   onDraftChange: (next: TaskEditDraft) => void
   onSave: () => void
@@ -36,6 +38,7 @@ export function TaskActionPanel({
   busy = false,
   now = new Date(),
   learningReceipt,
+  judgmentFeedbackEnabled = false,
   onAction,
   onDraftChange,
   onSave,
@@ -44,13 +47,21 @@ export function TaskActionPanel({
   onUndoReceipt,
   onOpenPreferences,
 }: TaskActionPanelProps): JSX.Element {
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const dialogRef = useRef<HTMLElement>(null)
   const titleId = `task-action-title-${item.id}`
   const reasonId = `task-action-reason-${item.id}`
   const tomorrow = tomorrowLocalDate(now)
   const patchDraft = (patch: Partial<TaskEditDraft>): void => { onDraftChange({ ...draft, ...patch }) }
 
+  useEffect(() => {
+    dialogRef.current?.querySelector<HTMLElement>('button, input, select, textarea')?.focus()
+  }, [])
+
   return (
     <aside
+      ref={dialogRef}
       className="v2-task-action-panel"
       role="dialog"
       aria-modal="true"
@@ -61,6 +72,22 @@ export function TaskActionPanel({
         if (event.key === 'Escape') {
           event.stopPropagation()
           onClose()
+          return
+        }
+        if (event.key === 'Tab') {
+          const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ) ?? []).filter((element) => !element.hidden)
+          if (focusable.length === 0) return
+          const first = focusable[0]!
+          const last = focusable[focusable.length - 1]!
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault()
+            last.focus()
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault()
+            first.focus()
+          }
         }
       }}
     >
@@ -110,9 +137,23 @@ export function TaskActionPanel({
         </div>
         <div role="group" aria-label="其他处理">
           <button type="button" disabled={busy} onClick={() => { onAction({ type: 'remind_again' }) }}>再提醒一次</button>
-          <button type="button" disabled={busy} onClick={() => { onAction({ type: 'suppress' }) }}>暂时忽略本次判断</button>
-          <button type="button" disabled={busy} onClick={() => { onAction({ type: 'feedback' }) }}>原因不对</button>
+          {judgmentFeedbackEnabled ? (
+            <>
+              <button type="button" disabled={busy} onClick={() => { onAction({ type: 'suppress' }) }}>暂时忽略本次判断</button>
+              <button type="button" disabled={busy} aria-expanded={feedbackOpen} onClick={() => { setFeedbackOpen((open) => !open) }}>原因不对</button>
+            </>
+          ) : null}
         </div>
+        {judgmentFeedbackEnabled && feedbackOpen ? (
+          <fieldset className="v2-feedback-reasons" disabled={busy}>
+            <legend>选择不准确的原因</legend>
+            <button type="button" onClick={() => { onAction({ type: 'feedback', reason: 'wrong_time' }) }}>时间不合适</button>
+            <button type="button" onClick={() => { onAction({ type: 'feedback', reason: 'not_important' }) }}>没那么重要</button>
+            <button type="button" onClick={() => { onAction({ type: 'feedback', reason: 'wrong_goal' }) }}>目标关联不对</button>
+            <button type="button" onClick={() => { onAction({ type: 'feedback', reason: 'stale_signal_unhelpful' }) }}>长期未动不是风险</button>
+            <button type="button" onClick={() => { onAction({ type: 'feedback', reason: 'other' }) }}>其他原因</button>
+          </fieldset>
+        ) : null}
       </section>
 
       <section aria-label="助手将记录的变化">
@@ -146,7 +187,7 @@ export function TaskActionPanel({
             <span>优先级</span>
             <select value={draft.priority} onChange={(event) => { patchDraft({ priority: event.target.value }) }}>
               <option value="low">低</option>
-              <option value="normal">普通</option>
+              <option value="medium">普通</option>
               <option value="high">高</option>
               <option value="urgent">紧急</option>
             </select>
@@ -165,7 +206,15 @@ export function TaskActionPanel({
 
       <section aria-label="危险操作">
         <h3>危险操作</h3>
-        <button type="button" disabled={busy} onClick={() => { onAction({ type: 'cancel' }) }}>取消事项</button>
+        {cancelConfirmOpen ? (
+          <div role="group" aria-label="确认取消事项">
+            <p>取消后事项会移到“已取消”，可以在那里重新打开。</p>
+            <button type="button" disabled={busy} onClick={() => { onAction({ type: 'cancel' }); setCancelConfirmOpen(false) }}>确认取消</button>
+            <button type="button" disabled={busy} onClick={() => { setCancelConfirmOpen(false) }}>保留事项</button>
+          </div>
+        ) : (
+          <button type="button" disabled={busy} onClick={() => { setCancelConfirmOpen(true) }}>取消事项</button>
+        )}
       </section>
     </aside>
   )

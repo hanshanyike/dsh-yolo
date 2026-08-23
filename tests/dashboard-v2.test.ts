@@ -68,6 +68,11 @@ describe('dashboard v2 projection', () => {
       scope_cwd: cwd,
       postpone_count: 1,
       reminder: { id: 'n1', unhandled: true, unhandled_count: 1 },
+      attention_reason: {
+        code: 'reminder_due',
+        short_reason: '有一条未处理提醒',
+        reason_version: 'attention-v1',
+      },
       source: { type: 'session', label: '季度发布讨论', session_id: 's1' },
       ws: { slug: 'quarterly/main', label: 'quarterly', cwd },
     })

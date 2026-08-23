@@ -10,12 +10,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData, YoloMilestoneRow, YoloTodoRow } from '../../src/shared/dashboard.ts'
 import { isTodoOpen } from '../../src/shared/dashboard.ts'
+import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/shared/actions.ts'
 import {
   applyKanbanFilter,
   dueBucket,
   focusCounts,
-  hasDetailFilter,
-  partitionFocusRows,
   sortForKanban,
   type FocusBucket,
   type KanbanFilter,
@@ -26,8 +25,19 @@ import {
 } from '../design/icons.tsx'
 import type { ChatAnchor } from './ChatPane.tsx'
 import { CaptureBar } from './CaptureBar.tsx'
-import { DayHero } from './DayHero.tsx'
 import type { ViewKey } from './ViewTabs.tsx'
+import {
+  TaskActionPanel,
+  TodaySurface,
+  type JudgmentEvidence,
+  type JudgmentSource,
+  type LearningReceiptData,
+  type TaskActionIntent,
+  type TaskEditDraft,
+  type TodaySurfaceIntent,
+  type YoloTodoRowV2,
+} from './v2/index.ts'
+import { postYoloAction, type ClientActionOutcome } from './v2/api.ts'
 
 export interface KanbanViewProps {
   data: YoloDashboardData
@@ -49,10 +59,26 @@ export interface KanbanViewProps {
 
 interface EditorDraft {
   id: string
+  scopeCwd?: string
   title: string
   due: string
   priority: string
   milestoneTitle: string
+}
+
+interface JudgmentBinding {
+  id: string
+  reasonVersion: string
+  evidenceFingerprint: string
+}
+
+interface OpenTaskPanel {
+  item: YoloTodoRowV2
+  scopeCwd: string
+  reason: string
+  evidence: readonly JudgmentEvidence[]
+  source?: JudgmentSource
+  binding?: JudgmentBinding
 }
 
 const DAY_MS = 86_400_000
@@ -165,6 +191,18 @@ function nextDayStr(dueAt: string | null | undefined): string {
   return addDays(base, 1)
 }
 
+function draftForTodo(todo: YoloTodoRowV2): TaskEditDraft {
+  const due = todo.due_at ?? ''
+  const dueAt = due.length === 10 ? `${due}T09:00` : due.slice(0, 16)
+  return {
+    title: todo.title,
+    dueAt,
+    priority: todo.priority ?? 'medium',
+    milestone: todo.milestone_title ?? '',
+    detail: todo.detail ?? '',
+  }
+}
+
 /** Due text: 今天/明天/昨天 · 周X M/D within a week · M/D beyond (5.2). */
 function fmtDue(iso: string | null | undefined): string {
   if (!iso) return '不限期'
@@ -218,14 +256,20 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [quickBusy, setQuickBusy] = useState(false)
   const [notifShowAll, setNotifShowAll] = useState(false)
-  const [foldedOpen, setFoldedOpen] = useState(false)
   const [renameDraft, setRenameDraft] = useState<{ kind: 'goal' | 'milestone'; id: string; title: string } | null>(null)
   const [msPop, setMsPop] = useState<{ id: string; x: number } | null>(null)
+  const [taskPanel, setTaskPanel] = useState<OpenTaskPanel | null>(null)
+  const [taskDraft, setTaskDraft] = useState<TaskEditDraft | null>(null)
+  const [taskReceipt, setTaskReceipt] = useState<LearningReceiptData | null>(null)
+  const [taskUndo, setTaskUndo] = useState<YoloUndoDescriptor | null>(null)
+  const [judgmentExpanded, setJudgmentExpanded] = useState(false)
+  const [terminalView, setTerminalView] = useState<'completed' | 'cancelled'>('completed')
   // v0.3.2: completion/处理 animations — rows retire with a height collapse
   // before being removed, so nothing "jumps" out of the board.
   const [retiring, setRetiring] = useState<YoloTodoRow[]>([])
   const bodyRef = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
+  const taskReturnFocus = useRef<HTMLElement | null>(null)
 
   // Toast auto-retire (5.1): 2.4s; completion toasts hold the 4s undo window (5.4).
   useEffect(() => {
@@ -245,34 +289,38 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   // Map every board row to its owning workspace cwd so an action on an
   // all-workspaces row routes to that scope (the board is always scope=all).
   const wsCwdById = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const t of data.todos) if (t.ws?.cwd) m.set(t.id, t.ws.cwd)
-    for (const g of data.goals) if (g.ws?.cwd) m.set(g.id, g.ws.cwd)
-    for (const ms of data.milestones) if (ms.ws?.cwd) m.set(ms.id, ms.ws.cwd)
-    for (const n of data.notifications) if (n.ws?.cwd) m.set(n.id, n.ws.cwd)
+    const m = new Map<string, string | null>()
+    const add = (id: string, cwd: string | undefined): void => {
+      if (!cwd) return
+      const current = m.get(id)
+      if (current === undefined || current === cwd) m.set(id, cwd)
+      else m.set(id, null)
+    }
+    for (const t of data.todos) add(t.id, t.scope_cwd ?? t.ws?.cwd)
+    for (const g of data.goals) add(g.id, g.ws?.cwd)
+    for (const ms of data.milestones) add(ms.id, ms.ws?.cwd)
+    for (const n of data.notifications) add(n.id, n.scope_cwd ?? n.ws?.cwd)
     return m
   }, [data])
 
   const act = useCallback(
-    async (key: string, body: Record<string, unknown>): Promise<boolean> => {
+    async (
+      key: string,
+      body: YoloActionRequest,
+      options: { refresh?: boolean } = {},
+    ): Promise<ClientActionOutcome | null> => {
       setBusyKey(key)
       setActionError(null)
       try {
         const payload = { ...body }
         const scopeCwd = wsCwdById.get(String(body.id))
-        if (scopeCwd) payload.scope_cwd = scopeCwd
-        const r = await fetch('/yolo/actions', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        const res = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null
-        if (!r.ok || !res?.ok) throw new Error(res?.error ?? `HTTP ${r.status}`)
-        await refresh()
-        return true
+        if (!payload.scope_cwd && scopeCwd) payload.scope_cwd = scopeCwd
+        const outcome = await postYoloAction(payload)
+        if (options.refresh !== false) await refresh()
+        return outcome
       } catch (e) {
         setActionError(e instanceof Error ? e.message : String(e))
-        return false
+        return null
       } finally {
         setBusyKey(null)
       }
@@ -283,7 +331,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   // Complete flow (5.4): optimistic fill + retire, POST, refresh, toast with undo.
   const completeTodo = useCallback(async (t: YoloTodoRow): Promise<void> => {
     setCompleting((s) => { const n = new Set(s); n.add(t.id); return n })
-    const ok = await act(t.id, { action: 'complete', kind: 'todo', id: t.id })
+    const ok = await act(t.id, { action: 'complete', kind: 'todo', id: t.id, scope_cwd: t.scope_cwd ?? t.ws?.cwd })
     setCompleting((s) => { const n = new Set(s); n.delete(t.id); return n })
     if (ok) {
       const snapshot = { ...t }
@@ -296,7 +344,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   // Undo of complete (5.4, 4s window): reopen restores the row.
   const undoComplete = useCallback(async (t: YoloTodoRow): Promise<void> => {
     setToast(null)
-    const ok = await act(`reopen-${t.id}`, { action: 'reopen', kind: 'todo', id: t.id })
+    const ok = await act(`reopen-${t.id}`, { action: 'reopen', kind: 'todo', id: t.id, scope_cwd: t.scope_cwd ?? t.ws?.cwd })
     if (ok) {
       setRetiring((r) => r.filter((x) => x.id !== t.id))
       setToast({ text: `已撤销 · ${t.title}` })
@@ -308,10 +356,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
 
   // Per-face filtered sets — the shared filter functions stay the source of
   // truth: the face only picks the preset the tab maps to.
-  const visibleToday = useMemo(
-    () => sortForKanban(applyKanbanFilter(data.todos, { ...filter, preset: 'today' })),
-    [data.todos, filter],
-  )
   const visibleUpcoming = useMemo(
     () => sortForKanban(applyKanbanFilter(data.todos, { ...filter, preset: 'all' })),
     [data.todos, filter],
@@ -320,39 +364,15 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
     () => sortForKanban(applyKanbanFilter(data.todos, { ...filter, preset: 'done' })),
     [data.todos, filter],
   )
-
-  // R9: cap the default today face to the top-N focus rows; the rest fold away
-  // so a busy board opens quiet. Only when no detail filter is engaged.
-  const defaultFilterOnly = view === 'today' && !hasDetailFilter(filter)
-  const { focus, folded } = useMemo(
-    () => (defaultFilterOnly ? partitionFocusRows(visibleToday, data.focusDefaultCount ?? 0) : { focus: visibleToday, folded: [] }),
-    [visibleToday, defaultFilterOnly, data.focusDefaultCount],
+  const visibleCancelled = useMemo(
+    () => sortForKanban(data.todos.filter((todo) => todo.status === 'cancelled')),
+    [data.todos],
   )
 
-  const retiringToShowToday = useMemo(
-    () => retiring.filter((t) => !visibleToday.some((v) => v.id === t.id)),
-    [retiring, visibleToday],
-  )
   const retiringToShowUpcoming = useMemo(
     () => retiring.filter((t) => !visibleUpcoming.some((v) => v.id === t.id)),
     [retiring, visibleUpcoming],
   )
-
-  const todaySections = useMemo<Section[]>(() => {
-    // splitStale:false — the 今日 face buckets stale rows by their due date so
-    // the visible rows match the hero/胶囊 counts (stale keeps its「N 天未动」tag).
-    const p = partitionRows(focus, { splitStale: false })
-    for (const t of retiringToShowToday) {
-      if (t.stale) p.stale.push(t)
-      else if (dueBucket(t) === 'overdue') p.overdue.push(t)
-      else if (dueBucket(t) === 'today') p.today.push(t)
-      else p.week.push(t)
-    }
-    return [
-      { key: 'overdue', label: '已逾期', danger: true, accent: false, rows: p.overdue },
-      { key: 'today', label: '今天', danger: false, accent: true, rows: p.today },
-    ].filter((s) => s.rows.length > 0)
-  }, [focus, retiringToShowToday])
 
   const upcomingSections = useMemo<Section[]>(() => {
     const p = partitionRows(visibleUpcoming)
@@ -381,6 +401,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
       action: 'update',
       kind: 'todo',
       id: editor.id,
+      scope_cwd: editor.scopeCwd,
       title: editor.title,
       due_at: editor.due || null,
       priority: editor.priority || null,
@@ -398,14 +419,230 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
       onViewChange('today')
     }
     setQuickBusy(false)
-    return ok
+    return ok !== null
   }, [act, quickBusy, onViewChange])
+
+  const openTaskPanel = useCallback((next: OpenTaskPanel): void => {
+    taskReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setTaskPanel(next)
+    setTaskDraft(draftForTodo(next.item))
+    setTaskReceipt(null)
+    setTaskUndo(null)
+  }, [])
+
+  const closeTaskPanel = useCallback((): void => {
+    setTaskPanel(null)
+    setTaskDraft(null)
+    setTaskReceipt(null)
+    setTaskUndo(null)
+    window.setTimeout(() => { taskReturnFocus.current?.focus() }, 0)
+  }, [])
+
+  const openJudgmentPanel = useCallback((todo: YoloTodoRowV2, binding: JudgmentBinding): void => {
+    const attention = data.attention?.find((row) =>
+      (row.id === binding.id || row.todo_id === todo.id)
+      && row.scope_cwd === (todo.scope_cwd ?? todo.ws?.cwd ?? data.cwd),
+    )
+    openTaskPanel({
+      item: todo,
+      scopeCwd: todo.scope_cwd ?? todo.ws?.cwd ?? data.cwd,
+      reason: attention?.explanation ?? '根据当前事项状态，需要你确认下一步。',
+      evidence: attention?.evidence ?? [],
+      source: todo.source,
+      binding,
+    })
+  }, [data, openTaskPanel])
+
+  const handleTodayIntent = useCallback((intent: TodaySurfaceIntent): void => {
+    if (intent.type === 'quick_capture') return
+    if (intent.type === 'mark_judgment_seen') {
+      void act(`seen-${intent.judgmentId}`, {
+        action: 'seen', kind: 'attention', id: intent.judgmentId, scope_cwd: intent.scopeCwd,
+        reason_version: intent.reasonVersion, evidence_fingerprint: intent.evidenceFingerprint,
+      }, { refresh: false })
+      return
+    }
+    if (intent.type === 'expand_judgment') {
+      setJudgmentExpanded(true)
+      return
+    }
+    if (intent.type === 'complete_todo') {
+      void completeTodo(intent.todo)
+      return
+    }
+    if (intent.type === 'open_task') {
+      openTaskPanel({
+        item: intent.todo,
+        scopeCwd: intent.scopeCwd,
+        reason: intent.todo.overdue ? '这项事情已经逾期。' : intent.todo.stale ? '这项事情已经一段时间没有变化。' : '这项事情安排在今天。',
+        evidence: [],
+        source: intent.todo.source,
+      })
+      return
+    }
+    if (intent.type === 'open_source') {
+      if (intent.source.sessionId) openSession?.(intent.source.sessionId)
+      return
+    }
+    if (intent.type === 'open_ledger' || intent.type === 'review_changes') {
+      onViewChange('ledger')
+      return
+    }
+    if (intent.type === 'discuss_closure') {
+      onOpenChat({ title: '今天的工作与生活收束', detail: '回顾今天的变化，确认仍需要回应的事情。' })
+      return
+    }
+    if (intent.type === 'suppress_judgment') {
+      void (async () => {
+        const outcome = await act(`suppress-${intent.judgmentId}`, {
+          action: 'suppress', kind: 'attention', id: intent.judgmentId, scope_cwd: intent.scopeCwd,
+          reason_version: intent.reasonVersion, evidence_fingerprint: intent.evidenceFingerprint,
+          suppressed_until: Date.now() + DAY_MS,
+        })
+        if (outcome?.learningReceipt) setToast({ text: outcome.learningReceipt.summary })
+      })()
+      return
+    }
+    if (intent.type === 'feedback_judgment') {
+      const todo = data.todos.find((row) => row.id === data.attention?.[0]?.todo_id && (row.scope_cwd ?? row.ws?.cwd ?? data.cwd) === intent.scopeCwd)
+      if (todo) {
+        openJudgmentPanel(todo, {
+          id: intent.judgmentId,
+          reasonVersion: intent.reasonVersion,
+          evidenceFingerprint: intent.evidenceFingerprint,
+        })
+      }
+      return
+    }
+    if (intent.type === 'judgment_action') {
+      const binding = {
+        id: data.attention?.[0]?.id ?? intent.todo.id,
+        reasonVersion: intent.reasonVersion,
+        evidenceFingerprint: intent.evidenceFingerprint,
+      }
+      if (intent.action === 'complete') {
+        void completeTodo(intent.todo)
+      } else if (intent.action === 'postpone_tomorrow') {
+        void (async () => {
+          const outcome = await act(`postpone-${intent.todo.id}`, {
+            action: 'postpone', kind: 'todo', id: intent.todo.id,
+            due_at: nextDayStr(intent.todo.due_at), scope_cwd: intent.scopeCwd,
+          })
+          if (outcome?.learningReceipt) setToast({ text: outcome.learningReceipt.summary })
+        })()
+      } else if (intent.action === 'discuss') {
+        onOpenChat({
+          title: intent.todo.title,
+          detail: data.attention?.[0]?.explanation ?? intent.todo.detail,
+          todoId: intent.todo.id,
+          scopeCwd: intent.scopeCwd,
+          source: intent.todo.source,
+        })
+      } else {
+        openJudgmentPanel(intent.todo, binding)
+      }
+    }
+  }, [act, completeTodo, data, onOpenChat, onViewChange, openJudgmentPanel, openSession, openTaskPanel])
+
+  const handleTaskAction = useCallback((intent: TaskActionIntent): void => {
+    if (!taskPanel) return
+    if (intent.type === 'discuss') {
+      onOpenChat({
+        title: taskPanel.item.title,
+        detail: taskPanel.reason,
+        todoId: taskPanel.item.id,
+        scopeCwd: taskPanel.scopeCwd,
+        source: taskPanel.source,
+      })
+      return
+    }
+    void (async () => {
+      let request: YoloActionRequest
+      if (intent.type === 'postpone') {
+        request = { action: 'postpone', kind: 'todo', id: taskPanel.item.id, due_at: intent.dueAt, scope_cwd: taskPanel.scopeCwd }
+      } else if (intent.type === 'suppress' || intent.type === 'feedback') {
+        if (!taskPanel.binding) {
+          setActionError('当前事项没有可回应的助手判断，请刷新后重试。')
+          return
+        }
+        request = {
+          action: intent.type,
+          kind: 'attention',
+          id: taskPanel.binding.id,
+          scope_cwd: taskPanel.scopeCwd,
+          reason_version: taskPanel.binding.reasonVersion,
+          evidence_fingerprint: taskPanel.binding.evidenceFingerprint,
+          ...(intent.type === 'suppress'
+            ? { suppressed_until: Date.now() + DAY_MS }
+            : { feedback_reason: intent.reason }),
+        }
+      } else {
+        request = { action: intent.type, kind: 'todo', id: taskPanel.item.id, scope_cwd: taskPanel.scopeCwd }
+      }
+      const outcome = await act(`panel-${taskPanel.item.id}`, request)
+      if (!outcome) return
+      setTaskReceipt(outcome.learningReceipt ?? null)
+      setTaskUndo(outcome.undo ?? null)
+      setTaskPanel((current) => current ? { ...current, item: { ...current.item, ...outcome.item } } : current)
+    })()
+  }, [act, onOpenChat, taskPanel])
+
+  const saveTaskPanel = useCallback((): void => {
+    if (!taskPanel || !taskDraft) return
+    void (async () => {
+      const outcome = await act(`panel-edit-${taskPanel.item.id}`, {
+        action: 'update',
+        kind: 'todo',
+        id: taskPanel.item.id,
+        scope_cwd: taskPanel.scopeCwd,
+        title: taskDraft.title,
+        due_at: taskDraft.dueAt || null,
+        priority: taskDraft.priority,
+        milestone_title: taskDraft.milestone,
+        detail: taskDraft.detail,
+      })
+      if (!outcome) return
+      setTaskPanel((current) => current ? { ...current, item: { ...current.item, ...outcome.item } } : current)
+      setToast({ text: '已保存事项编辑' })
+    })()
+  }, [act, taskDraft, taskPanel])
+
+  const undoTaskReceipt = useCallback((): void => {
+    if (!taskPanel || !taskUndo) return
+    if (taskUndo.expires_at !== undefined && taskUndo.expires_at < Date.now()) {
+      setActionError('撤销窗口已结束；当前事项没有被再次修改。')
+      setTaskUndo(null)
+      return
+    }
+    void (async () => {
+      const outcome = await act(`panel-undo-${taskPanel.item.id}`, {
+        ...taskUndo,
+        scope_cwd: taskPanel.scopeCwd,
+      })
+      if (!outcome) return
+      setTaskReceipt(outcome.learningReceipt ?? null)
+      setTaskUndo(null)
+    })()
+  }, [act, taskPanel, taskUndo])
 
   const rowActions = (t: YoloTodoRow): { onComplete: () => void; onAct: (action: string, extra?: { due_at?: string }) => void; onEdit: () => void; onChat: () => void } => ({
     onComplete: () => { void completeTodo(t) },
-    onAct: (action, extra) => { void act(t.id, { action, kind: 'todo', id: t.id, ...extra }) },
-    onEdit: () => { setEditor({ id: t.id, title: t.title, due: dayOf(t.due_at), priority: t.priority ?? '', milestoneTitle: t.milestone_title ?? '' }) },
-    onChat: () => { onOpenChat({ title: t.title, detail: t.due_at ? `到期 ${t.due_at}` : null }) },
+    onAct: (action, extra) => { void act(t.id, { action, kind: 'todo', id: t.id, scope_cwd: t.scope_cwd ?? t.ws?.cwd, ...extra }) },
+    onEdit: () => { setEditor({ id: t.id, scopeCwd: t.scope_cwd ?? t.ws?.cwd, title: t.title, due: dayOf(t.due_at), priority: t.priority ?? '', milestoneTitle: t.milestone_title ?? '' }) },
+    onChat: () => {
+      onOpenChat({
+        title: t.title,
+        detail: t.due_at ? `到期 ${t.due_at}` : null,
+        todoId: t.id,
+        scopeCwd: t.scope_cwd ?? t.ws?.cwd,
+        source: t.source ? {
+          type: t.source.type,
+          label: t.source.label,
+          sessionId: t.source.session_id,
+          excerpt: t.source.excerpt,
+        } : undefined,
+      })
+    },
   })
 
   const renderRow = (t: YoloTodoRow, opts: { retiring?: boolean } = {}): JSX.Element => (
@@ -424,7 +661,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
           const id = t.id
           setConfirmDelete(null)
           setEditor(null)
-          await act(`del-${id}`, { action: 'cancel', kind: 'todo', id })
+          await act(`del-${id}`, { action: 'cancel', kind: 'todo', id, scope_cwd: t.scope_cwd ?? t.ws?.cwd })
         }}
       />
     ) : (
@@ -484,21 +721,28 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
             <div className="notif-acts">
               {n.kind === 'reminder' && n.todo_id && (
                 <>
-                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'complete', kind: 'todo', id: n.todo_id }) }}>
+                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'complete', kind: 'todo', id: n.todo_id!, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
                     <IcCheck size={12} />完成
                   </button>
-                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id, due_at: nextDayStr(dueFor?.due_at ?? null) }) }}>
+                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id!, due_at: nextDayStr(dueFor?.due_at ?? null), scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
                     <IcPlusDay size={12} />+1d
                   </button>
-                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'remind_again', kind: 'todo', id: n.todo_id }) }}>
+                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'remind_again', kind: 'todo', id: n.todo_id!, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
                     <IcBell size={12} />再提醒
                   </button>
                 </>
               )}
-              <button type="button" className="nact nact--chat" onClick={() => { onOpenChat({ title: n.title.replace(/^[⏰☀🌙]\s*/, ''), detail: n.body ?? null }) }}>
+              <button type="button" className="nact nact--chat" onClick={() => {
+                onOpenChat({
+                  title: n.title.replace(/^[⏰☀🌙]\s*/, ''),
+                  detail: n.body ?? null,
+                  todoId: n.todo_id ?? undefined,
+                  scopeCwd: n.scope_cwd ?? n.ws?.cwd,
+                })
+              }}>
                 <IcChat size={12} />聊一聊
               </button>
-              <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id }) }}>
+              <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
                 知道了
               </button>
             </div>
@@ -514,13 +758,16 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
     </div>
   )
 
-  const retiringToday = useMemo(() => new Set(retiringToShowToday.map((t) => t.id)), [retiringToShowToday])
   const retiringUpcoming = useMemo(() => new Set(retiringToShowUpcoming.map((t) => t.id)), [retiringToShowUpcoming])
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <CaptureBar busy={quickBusy} onSubmit={sendQuickAdd} />
-      <div className="p-body" ref={bodyRef}>
+    <div
+      id={`yolo-view-${view}`}
+      role="tabpanel"
+      aria-labelledby={`yolo-tab-${view}`}
+      style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+    >
+      <div className="p-body" ref={bodyRef} aria-hidden={taskPanel ? true : undefined}>
         <main className="p-main">
           {actionError && (
             <div className="err-line">
@@ -531,34 +778,14 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
 
           {view === 'today' && (
             <>
-              <DayHero todayCount={counts.today} overdueCount={counts.overdue} />
-              {caps}
+              <TodaySurface
+                data={data}
+                busyTodoId={busyKey ?? undefined}
+                judgmentExpanded={judgmentExpanded}
+                renderQuickCapture={() => <CaptureBar busy={quickBusy} onSubmit={sendQuickAdd} />}
+                onIntent={handleTodayIntent}
+              />
               {openNotifications.length > 0 && notifCards}
-              {todaySections.map((s) => renderSection(s, { retiringIds: retiringToday }))}
-
-              {folded.length > 0 && (
-                <div className={`fold${foldedOpen ? ' open' : ''}`}>
-                  <button type="button" className="fold-head" onClick={() => { setFoldedOpen((v) => !v) }} aria-expanded={foldedOpen}>
-                    <IcChevron size={12} />
-                    <span>其余 {folded.length} 条</span>
-                    <span className="fold-stat">展开查看</span>
-                  </button>
-                  <div className="fold-body">
-                    <div className="fold-inner">
-                      <div className="fold-pad">
-                        {folded.map((t) => renderRow(t))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {visibleToday.length === 0 && (
-                <div className="empty">
-                  <h4>今天没有挂起的事</h4>
-                  <p>说一句，我来记下</p>
-                </div>
-              )}
             </>
           )}
 
@@ -578,16 +805,30 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
 
           {view === 'done' && (
             <>
-              <div className="heading"><h2>已完成</h2><span className="hint">{visibleDone.length} 件</span></div>
-              {visibleDone.length === 0 ? (
+              <div className="heading"><h2>{terminalView === 'completed' ? '已完成' : '已取消'}</h2><span className="hint">{terminalView === 'completed' ? visibleDone.length : visibleCancelled.length} 件</span></div>
+              <div className="caps" role="group" aria-label="终态事项筛选">
+                <button type="button" className={`cap${terminalView === 'completed' ? ' on' : ''}`} onClick={() => { setTerminalView('completed') }}>已完成 <span className="num">{visibleDone.length}</span></button>
+                <button type="button" className={`cap${terminalView === 'cancelled' ? ' on' : ''}`} onClick={() => { setTerminalView('cancelled') }}>已取消 <span className="num">{visibleCancelled.length}</span></button>
+              </div>
+              {(terminalView === 'completed' ? visibleDone : visibleCancelled).length === 0 ? (
                 <div className="empty">
-                  <h4>还没有完成的事</h4>
-                  <p>完成的待办会出现在这里。</p>
+                  <h4>{terminalView === 'completed' ? '还没有完成的事' : '没有已取消事项'}</h4>
+                  <p>{terminalView === 'completed' ? '完成的事项会出现在这里。' : '取消的事项会单独保留在这里。'}</p>
                 </div>
               ) : (
                 <div className="sec">
-                  {visibleDone.map((t) => (
-                    <TodoRowView key={t.id} t={t} busy={false} completing={false} onComplete={noop} onAct={noop} onEdit={noop} onChat={noop} />
+                  {(terminalView === 'completed' ? visibleDone : visibleCancelled).map((t) => (
+                    <TodoRowView
+                      key={`${t.scope_cwd ?? t.ws?.cwd ?? ''}:${t.id}`}
+                      t={t}
+                      busy={busyKey === `reopen-${t.id}`}
+                      completing={false}
+                      onComplete={noop}
+                      onAct={noop}
+                      onEdit={noop}
+                      onChat={noop}
+                      onReopen={() => { void act(`reopen-${t.id}`, { action: 'reopen', kind: 'todo', id: t.id, scope_cwd: t.scope_cwd ?? t.ws?.cwd }) }}
+                    />
                   ))}
                 </div>
               )}
@@ -610,10 +851,10 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
                   onRenameSave={async () => {
                     const d = renameDraft
                     setRenameDraft(null)
-                    if (d && d.title.trim() && d.title !== g.title) await act(`goal-${g.id}`, { action: 'rename', kind: 'goal', id: g.id, title: d.title.trim() })
+                    if (d && d.title.trim() && d.title !== g.title) await act(`goal-${g.id}`, { action: 'rename', kind: 'goal', id: g.id, title: d.title.trim(), scope_cwd: g.ws?.cwd })
                   }}
                   onRenameCancel={() => { setRenameDraft(null) }}
-                  onAbandon={() => { void act(`goal-${g.id}`, { action: 'abandon', kind: 'goal', id: g.id }) }}
+                  onAbandon={() => { void act(`goal-${g.id}`, { action: 'abandon', kind: 'goal', id: g.id, scope_cwd: g.ws?.cwd }) }}
                   onMsDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
                   msPopId={msPop?.id ?? null}
                 />
@@ -630,10 +871,10 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
                   onRenameSave={async (m) => {
                     const d = renameDraft
                     setRenameDraft(null)
-                    if (d && d.title.trim() && d.title !== m.title) await act(`ms-${m.id}`, { action: 'rename', kind: 'milestone', id: m.id, title: d.title.trim() })
+                    if (d && d.title.trim() && d.title !== m.title) await act(`ms-${m.id}`, { action: 'rename', kind: 'milestone', id: m.id, title: d.title.trim(), scope_cwd: m.ws?.cwd })
                   }}
                   onRenameCancel={() => { setRenameDraft(null) }}
-                  onStatus={(m, status) => { void act(`ms-${m.id}`, { action: 'set_status', kind: 'milestone', id: m.id, status }) }}
+                  onStatus={(m, status) => { void act(`ms-${m.id}`, { action: 'set_status', kind: 'milestone', id: m.id, status, scope_cwd: m.ws?.cwd }) }}
                   onPopClose={() => { setMsPop(null) }}
                 />
               )}
@@ -686,6 +927,25 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
         </main>
       </div>
 
+      {taskPanel && taskDraft ? (
+        <TaskActionPanel
+          item={taskPanel.item}
+          reason={taskPanel.reason}
+          evidence={taskPanel.evidence}
+          source={taskPanel.source}
+          draft={taskDraft}
+          busy={busyKey?.startsWith('panel-') === true}
+          learningReceipt={taskReceipt}
+          judgmentFeedbackEnabled={taskPanel.binding !== undefined}
+          onAction={handleTaskAction}
+          onDraftChange={setTaskDraft}
+          onSave={saveTaskPanel}
+          onClose={closeTaskPanel}
+          onOpenSource={(source) => { if (source.sessionId) openSession?.(source.sessionId) }}
+          onUndoReceipt={taskUndo ? undoTaskReceipt : undefined}
+        />
+      ) : null}
+
       {/* toast (5.1); completion toast carries 撤销 (5.4) */}
       {toast && (
         <div className="toast show" role="status">
@@ -699,7 +959,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   )
 }
 
-function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit, onChat }: {
+function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit, onChat, onReopen }: {
   t: YoloTodoRow
   busy: boolean
   completing: boolean
@@ -708,9 +968,11 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
   onAct: (action: string, extra?: { due_at?: string }) => void
   onEdit: () => void
   onChat: () => void
+  onReopen?: () => void
 }): JSX.Element {
   const open = isTodoOpen(t.status)
-  const done = !open
+  const done = t.status === 'done' || t.status === 'completed'
+  const terminal = !open
   const isUrgent = t.priority === 'urgent'
   const showFlag = isUrgent || t.priority === 'high'
   const isRetiring = retiring === true
@@ -727,7 +989,7 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
     t.status === 'in_progress' ? ' inprog' : '',
     completing ? ' retire' : '',
     isRetiring ? ' retiring' : '',
-    done ? ' done-row' : '',
+    terminal ? ' done-row' : '',
   ].join('')
   return (
     <div
@@ -735,7 +997,7 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
       data-kb-row={open && !isRetiring ? '1' : undefined}
       role="listitem"
       tabIndex={open && !isRetiring ? 0 : undefined}
-      aria-label={open ? `任务：${t.title}` : `已完成：${t.title}`}
+      aria-label={open ? `任务：${t.title}` : done ? `已完成：${t.title}` : `已取消：${t.title}`}
       onKeyDown={(e) => {
         if (isRetiring || !open) return
         // Only the ROW itself owns Space/Enter/E/↑/↓. When focus sits on a
@@ -749,21 +1011,21 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
     >
       <button
         type="button"
-        className={`ctl${done || completing ? ' done' : ''}`}
-        onClick={() => { if (open) onComplete() }}
-        aria-label={open ? `完成：${t.title}` : `已完成：${t.title}`}
-        title={open ? '标记完成' : '已完成'}
+        className={`ctl${terminal || completing ? ' done' : ''}`}
+        onClick={() => { if (open) onComplete(); else onReopen?.() }}
+        aria-label={open ? `完成：${t.title}` : `重新打开：${t.title}`}
+        title={open ? '标记完成' : '重新打开'}
       >
         <IcCheck size={9} />
       </button>
       <div className="row-main">
         <div className="row-title" title={t.title}>
           {showFlag && <IcFlag size={12} className={isUrgent ? 'urgent' : undefined} />}
-          <span className={`tt${done ? ' done' : ''}`}>{t.title}</span>
+          <span className={`tt${terminal ? ' done' : ''}`}>{t.title}</span>
           {t.status === 'in_progress' && <span className="inprog-tag">进行中</span>}
         </div>
         <div className="row-meta">
-          <span className="due">{done && t.completed_at ? fmtDone(t.completed_at) : fmtDue(t.due_at)}</span>
+          <span className="due">{done && t.completed_at ? fmtDone(t.completed_at) : t.status === 'cancelled' ? '已取消' : fmtDue(t.due_at)}</span>
           {open && t.overdue && <span style={{ color: 'var(--y-danger)' }}>逾期</span>}
           {open && t.stale && (
             <>
@@ -799,6 +1061,11 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
           <button type="button" className="act" disabled={busy} title="聊一聊" aria-label="聊一聊" onClick={onChat}><IcChat size={14} /></button>
         </div>
       )}
+      {!open && onReopen ? (
+        <div className="row-acts">
+          <button type="button" className="nact" disabled={busy} onClick={onReopen}>重新打开</button>
+        </div>
+      ) : null}
     </div>
   )
 }

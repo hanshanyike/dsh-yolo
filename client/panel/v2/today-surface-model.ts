@@ -108,16 +108,6 @@ function mapTodo(
   }
 }
 
-function attentionFact(todo: YoloTodoRow, today: string): TodayTaskReason | null {
-  const due = todo.due_at?.slice(0, 10) ?? null
-  if (todo.reminder?.unhandled) return { label: '提醒待处理', explanation: '有一条尚未处理的提醒。' }
-  if (todo.overdue || (due !== null && due < today)) return { label: '逾期', explanation: `截止时间为 ${due ?? '过去日期'}。` }
-  if (todo.stale) return { label: '长期未动', explanation: '这项事情已经一段时间没有变化。' }
-  if ((todo.postpone_count ?? 0) >= 2) return { label: '多次推迟', explanation: `已经推迟 ${todo.postpone_count} 次。` }
-  if (todo.priority === 'urgent' || todo.priority === 'high') return { label: '高优先级', explanation: '这项事情被标记为高优先级。' }
-  return null
-}
-
 function findJudgmentTodo(data: YoloDashboardData, attention: YoloAttentionRow): YoloTodoRow | undefined {
   return data.todos.find((todo) => todo.id === attention.todo_id && scopeOf(todo, data) === attention.scope_cwd)
     ?? data.todos.find((todo) => todo.id === attention.todo_id)
@@ -137,9 +127,11 @@ function buildJudgment(
     view: {
       id: attention.id,
       version: attention.reason_version,
+      evidenceFingerprint: attention.evidence_fingerprint,
       todo: mappedTodo,
       presentation,
       reason: presentation === 'compact' ? attention.short_reason : attention.explanation,
+      fullReason: attention.explanation,
       evidence: attention.evidence.map((item) => ({ ...item })),
       source,
     },
@@ -204,7 +196,9 @@ export function buildTodaySurfaceModel(
       scopeCwd: scopeOf(todo, data),
       source: mapSource(todo.source, todo),
     }
-    const fact = attentionFact(todo, today)
+    const fact = todo.attention_reason
+      ? { label: todo.attention_reason.short_reason, explanation: todo.attention_reason.explanation }
+      : null
     if (fact) attentionRows.push({ ...row, reason: fact })
     else if (todo.due_at?.slice(0, 10) === today) todayRows.push(row)
   }
