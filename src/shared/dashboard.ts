@@ -134,6 +134,9 @@ export interface YoloDashboardData {
   workspaces?: YoloWorkspaceInfo[]
   /** Number of workspaces in the aggregate view. */
   workspaceCount?: number
+  /** Workspaces that failed to read in the aggregate view ("label: error"),
+   *  present only when at least one was skipped (v0.3.3 review fix). */
+  workspaceErrors?: string[]
   todos: YoloTodoRow[]
   goals: YoloGoalRow[]
   milestones: YoloMilestoneRow[]
