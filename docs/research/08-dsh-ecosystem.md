@@ -118,7 +118,7 @@
 按「做得好 + 与 dsh-yolo 定位契合 + 可落地」排序：
 
 1. **dsh-memento（本地核实，首推）** —— 其 approval 门 + 审计 + 硬预算 + 冻结快照，是与 dsh-yolo「AI 不直接落库、动作统一、审计一致」完全同源的对标实现，工程细节（编解码、审计表、污染处理）最值得逐行对照。（→ `10-dsh-memento.md`）
-2. **dsh-memory-gate（本地核实）** —— 「检索到 ≠ 注入」的门控 + 反馈校准 + supersede 去重，天然契合 dsh-yolo「纯净上下文、低打扰、管理而非代办」；其 autoMine 回挖与自我诊断可作为看板/记忆质量机制的设计蓝本。（→ `11-dsh-memory-gate.md`）
+2. **dsh-memory-gate（本地核实）** —— 「检索到 ≠ 注入」的门控 + 反馈校准 + supersede 去重，天然契合 dsh-yolo「纯净上下文、低打扰、不越权执行」的边界；其 autoMine 回挖与自我诊断可作为看板/记忆质量机制的设计蓝本。（→ `11-dsh-memory-gate.md`）
 3. **dsh-memory-lite / yangyongzhen/dsh-memory（本地核实）** —— 极简却完整的「字节预算注入 + 会话开始注入 + 原子持久化 + 文件即真相」，是 dsh-yolo 实现记忆注入层的最适范本（无向量依赖，MVP 立即可抄）。（→ `12-dsh-memory-lite.md`）
 4. **Aik358/dsh-auto-memory（现已本地核实）** —— 唯一把「三层自动记忆 + proactive calendar reminders + 每轮自巩固 + 跨工具继承」同时做在提醒方向的仓库，与 dsh-yolo「记忆 + 主动提醒」定位最近；但提醒是注入式弱主动、缺 due scheduler。（→ `13-dsh-auto-memory.md`）
 5. **dsh-session-search + bowenliang123/dsh-context（未本地核实）** —— 一个解决「记忆/会话可回溯检索（证据溯源）」，一个解决「上下文构成可视化（渐进披露的观测面）」，是 dsh-yolo 中期做语义召回 + 上下文工程时的现成参照。

@@ -1,7 +1,7 @@
 # 使用文档（User Guide）
 
 > 面向**使用者**：安装、配置、功能、数据存储与常见问题。
-> 安装与快速开始见 [README](../README.md#快速开始)；开发者请转向 [modules.md](architecture/modules.md) 与 [architecture.md](architecture/overview.md)。
+> 安装与快速开始见 [README](../README.md#快速开始)；开发者请转向[架构总览](architecture/overview.md)和[模块索引](architecture/modules.md)。
 
 ---
 
@@ -19,27 +19,30 @@
 
 ## 一、安装与启动
 
-> **前置要求**：Node ≥ 22.19，pnpm ≥ 11，以及已安装的 `dsh`（deepseek-harness CLI）。Windows 上请用
-> **PowerShell** 运行命令（Git Bash 会破坏 pnpm 的安全删除）。
+YOLO 是 dsh 插件。以下步骤从源码构建插件、加入 dsh 的 `web` profile，并启动 Web UI。
+
+> **前置要求**：系统已安装 Node.js ≥ 22.19 和 pnpm ≥ 11。Windows 请使用
+> PowerShell。
 
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
 
-pnpm install           # 安装 YOLO 自身依赖（含 better-sqlite3 原生绑定）
-pnpm build             # 构建 host 插件 + browser client 到 dist/
-pnpm dsh plugin add . --profile web   # 一次性：把本插件按 dsh 标准方式链接进 web profile
-pnpm dsh web --no-open --port 4080    # 启动 dsh 宿主 → http://127.0.0.1:4080
+pnpm install
+pnpm build
+npx @deepseek-ai/dsh plugin add . --profile web
+npx @deepseek-ai/dsh web
 ```
 
-`dsh plugin add .` 是 dsh 生态的标准安装：插件作为 bundle 挂进 `web` profile（`dsh.bundle.patch`
-指向 `cordis.patch.yml`，自动注册全部 host 侧插件行）。`dsh web` 用**已安装的 dsh** 启动，
-与宿主环境一致（默认端口 3080；本机被占故开发用 `--port 4080`）。改完代码重跑 `pnpm build`
-刷新浏览器即可，无需重启宿主。
+`dsh web` 默认打开 [http://127.0.0.1:3080](http://127.0.0.1:3080)，并尝试在默认浏览器中打开页面。
+使用 `--no-open` 可以只启动服务；如果 3080 已被占用，可追加 `--port 4080` 并打开
+[http://127.0.0.1:4080](http://127.0.0.1:4080)。
 
-启动后打开 **http://127.0.0.1:4080**，选择工作区开始对话即可。YOLO 会自动开始工作：
-提到截止时间、设定目标、或说"记住这个"，然后打开左侧边栏底部的 **YOLO 面板** 查看
-时间线、任务板与目标进度。
+启动后选择工作区并开始对话。YOLO 会在对话结束后整理明确的待办、目标和时间安排；
+左侧边栏底部的 **YOLO** 按钮用于打开助手看板。
+
+日常修改代码后，重新运行 `pnpm build` 并刷新浏览器即可。只有插件清单发生变化时，
+才需要再次运行 `plugin add`。E2E 和测试数据清理命令见 [testing-e2e.md](testing-e2e.md)。
 
 ---
 
@@ -71,7 +74,7 @@ pnpm dsh web --no-open --port 4080    # 启动 dsh 宿主 → http://127.0.0.1:4
 
 ### 1. 语义提取（自动记忆）
 
-每轮对话结束后，YOLO 用大模型把整轮对话读一遍，结构化提取**管理相关**的记忆——它只记“值得跟进的承诺 / 计划 / 跟踪规则”，不记人物画像、通用知识或生活细节：
+每轮对话结束后，YOLO 使用大模型识别需要继续跟进的内容。它只保留明确的承诺、计划和提醒规则，不记录人物画像、通用知识或无关闲聊：
 
 - **待办（todos）**：用户承诺的具体任务 + 带时间的**日程承诺**（会议、出行、预约、交付、截止）。
 - **目标（goals）**：跨天/跨周想达成的长期目标。
@@ -173,7 +176,7 @@ YOLO 向模型暴露 5 个工具，agent 可以自己读写并推进计划：
 
 | 问题 | 说明 |
 |---|---|
-| 看板显示"加载失败" | 插件未加载或服务未启动；确认 `pnpm dsh web` 宿主在运行，且 `pnpm dsh plugin add . --profile web` 做过一次 |
+| 看板显示"加载失败" | 插件未加载或服务未启动；确认 `npx @deepseek-ai/dsh web` 宿主在运行，且 `npx @deepseek-ai/dsh plugin add . --profile web` 做过一次 |
 | 看板一直为空 | 完成一轮对话后 YOLO 才会提取；确认配置里"启用 LLM 提取"为开 |
 | 提醒没触发 | 检查"启用提醒"与"扫描间隔"；离线期间的提醒会在下次会话开始回放 |
 | 回复"已完成"没生效 | 确认回复发生在提醒所在会话；若任务标题与提醒不一致，agent 会按标题模糊匹配，匹配不到会提示 |

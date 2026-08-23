@@ -84,7 +84,7 @@ CBDC = **Claim → Belief → Decision → Consumption** 四阶段，不是简�
 
 ## 一句话结论
 
-一套**「纯本地、零额外模型调用、以可解释裁决与反馈闭环控制记忆是否进上下文」的低打扰记忆闸门**，其 use/verify/ignore 门控、反馈回写置信、supersede 去重与自动降级护栏，恰好为 dsh-yolo 的「纯净上下文、管理而非代办」提供了可直接借鉴的「该不该注入」决策范式；但它只解决「记忆使用」，**完全没有提醒调度、看板状态机与主动触发**——这正是 dsh-yolo 的核心差异与价值所在，两者互补而非替代。
+一套**「纯本地、零额外模型调用、以可解释裁决与反馈闭环控制记忆是否进上下文」的低打扰记忆闸门**，其 use/verify/ignore 门控、反馈回写置信、supersede 去重与自动降级护栏，恰好为 dsh-yolo 的「纯净上下文、低打扰、不越权执行」提供了可直接借鉴的注入决策范式；但它只解决「记忆使用」，**完全没有提醒调度、看板状态机与主动触发**——这正是 dsh-yolo 的核心差异与价值所在，两者互补而非替代。
 
 ---
 *资料来源：仓库 src/authority.ts、src/service.ts、src/repository.ts、src/text.ts、src/extractor.ts、src/mine.ts、src/harness.ts、src/commands.ts、docs/architecture.md、README.md、package.json（源码级分析）。*

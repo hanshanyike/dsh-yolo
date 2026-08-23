@@ -4,9 +4,9 @@
 
 # YOLO
 
-**Say it once. Keep it on track.**
+**Turn important conversations into plans you can keep following.**
 
-*A personal assistant for deepseek-harness that watches your conversations, manages your work & life, and reminds you what's due — across every session.*
+*A personal assistant for deepseek-harness that organizes commitments from conversations, tracks changes, and reminds you when needed.*
 
 [中文](README.md) · [Docs index](docs/README.md)
 
@@ -16,97 +16,85 @@
 
 ---
 
-Every session you have, you also *lose* — the goals, deadlines, decisions and
-preferences you just discussed evaporate when the window closes. **YOLO** is an
-assistant that doesn't forget: it catches what you say in a conversation and
-sorts it into a plan that's cross-session, reviewable, and proactively reminded.
+Todos, deadlines, and milestones are often scattered across multiple conversations.
+As sessions accumulate, it becomes difficult to tell what is unfinished and what
+has changed. **YOLO** identifies the items that still need attention and turns them
+into a plan that can be reviewed, updated, and reminded across sessions.
 
-It remembers for you, but doesn't do the work:
+YOLO organizes information and tracks progress; you still decide what to do and
+how to do it. It can:
 
-- It **watches every conversation** and understands what's worth keeping —
-  todos, milestones, goals, preferences and scheduled events.
-- It **manages them across sessions** in a workspace-scoped, searchable store
-  that follows you no matter how many windows you open.
-- It **keeps the plan alive**: say 「做完了 / 进行中 / 推迟到周五 / 写了一半」
-  (or "done / in progress / move it to Friday / half-way done") in any later
-  session and task status, goal progress and due dates update themselves —
-  every change audited on the timeline.
-- It **reminds you when things are due** — proactively, replaying anything missed
-  while the host was offline — and the reminder is *reply-able*: answer
-  「推迟到明天 / 已完成 / 再提醒一次」 and it just happens.
-- It **shows your day at a glance** in a global dashboard right in the dsh
-  sidebar: timeline, task board, goal progress, milestones & preferences — and
-  lets you complete / postpone / cancel todos without leaving it.
+- **Organize automatically** after each turn, identifying explicit todos,
+  goals, milestones, and reminder rules.
+- **Preserve items across sessions** in a workspace-scoped, searchable store.
+- **Track changes** when you say “done,” “move it to Friday,” or “halfway there,”
+  while keeping a record of each update.
+- **Remind you when items are due** through YOLO notifications and its resident
+  conversation, without injecting messages into an active work conversation.
+- **Provide one place to review and act** from the sidebar dashboard, including
+  today, upcoming, completed, goals, and the activity ledger.
 
-YOLO doesn't just *remember* — it *understands*. At every turn end, an LLM
-semantic pass (the same pattern as [Mem0](https://github.com/mem0ai/mem0) or
-Claude Code's auto-memory) reads the whole exchange and extracts only the durable
-asks, deduplicated against what's already stored — so your plan stays accurate
-without spamming your tokens.
+YOLO uses an LLM for semantic extraction rather than keyword matching. It keeps
+items and rules that need continued management while filtering acknowledgements,
+generic knowledge, and unrelated personal profiling.
 
 ## Quick Start
 
-> **Prerequisites**: Node ≥ 22.19, pnpm ≥ 11, and an installed `dsh` CLI (deepseek-harness).
+> **Prerequisites**: Node.js ≥ 22.19 and pnpm ≥ 11 installed on your system.
 > On Windows, run commands from **PowerShell** (Git Bash breaks pnpm's safe-delete).
 
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
 
-pnpm install          # YOLO's own deps (better-sqlite3 native binding included)
-pnpm build            # build the host plugin + browser client into dist/
-pnpm dsh plugin add . --profile web   # one-time: register the plugin bundle in the dsh web profile (standard dsh install)
-pnpm dsh web --no-open --port 4080    # boots dsh web → http://127.0.0.1:4080
+pnpm install
+pnpm build
+npx @deepseek-ai/dsh plugin add . --profile web
+npx @deepseek-ai/dsh web
 ```
 
-`dsh plugin add .` is the standard dsh install path: the plugin mounts as a bundle in
-the `web` profile (`dsh.bundle.patch` points at `cordis.patch.yml`, which registers
-every host-side plugin row). `dsh web` (`web` implies `--profile web`) runs the
-**installed** dsh CLI, matching your host environment (default port **3080**; this
-dev machine uses `--port 4080` because 3080 is occupied). After code changes,
-re-run `pnpm build` and refresh the browser — no host restart needed.
+`dsh web` opens [http://127.0.0.1:3080](http://127.0.0.1:3080) by default and
+tries to open the page in your default browser. Pass `--no-open` to suppress the
+browser launch. If port 3080 is occupied, append `--port 4080` and open
+[http://127.0.0.1:4080](http://127.0.0.1:4080).
 
-Open **http://127.0.0.1:4080**, pick your workspace, and start talking. YOLO is
-already watching: mention a deadline, set a goal, or say "remember this" — then
-open the **YOLO panel** at the bottom of the left sidebar to see your timeline,
-task board, and goal progress.
+After changing code, run `pnpm build` again and refresh the browser. You only need
+to rerun `plugin add` when the plugin manifest changes. Development-only commands,
+including E2E fixture cleanup, are documented in
+[the testing guide](docs/testing-e2e.md).
 
-### How it works — a 10-second demo
+### A typical flow
 
 ```
-you:  帮我下周完成季度报告，然后记得周二开会前提醒我
-yolo: [extract] +todo "季度报告" due=2026-08-27 priority=high
-      [extract] +todo "周二会议" due=2026-08-25
-      [remind] ⏰ scheduler armed — will wake the agent before the meeting
-you:  (next morning, new session)
-yolo: ⏰ "周二会议" is due today — reply to postpone or mark it done.
-you:  推迟到明天，报告已经写了一半
-yolo: [yolo_action] postpone "周二会议" → due 2026-08-26 ✓
-      [extract] updates: "季度报告" → in_progress, goal 进度 50%
+Mention an item and its timing in any dsh conversation
+        ↓
+YOLO organizes it as a todo, goal, or milestone
+        ↓
+Update it later from a conversation or the dashboard
+        ↓
+YOLO reminds you through notifications and its resident conversation
 ```
 
-## Where your memory lives
+## Where your data lives
 
 ```
 data/
 ├── yolo-<scope>.db            # SQLite (WAL + FTS5) — the fast store
 └── snapshots/                 # Markdown — human-readable, versionable
-    └── 2026-08-20.md          #   your memory, diffable and committable
+    └── 2026-08-20.md          #   a readable, comparable record snapshot
 ```
 
-Memory is **workspace-scoped** (`sha1(cwd)/<git-branch>`), so two projects never
-bleed into each other. The DB is a rebuildable cache; the Markdown snapshots are
-the durable, reviewable record — you can restore the DB from a snapshot at any
-time.
+Data is isolated by **workspace and Git branch**, so two projects do not mix
+records. SQLite supports normal queries and state updates; Markdown snapshots
+make the records readable, versionable, and recoverable.
 
 ## Roadmap
 
-YOLO's journey is four stages: **remember → organize → anticipate → accompany**.
-The first two are live — it remembers what you say and sorts it into a stateful
-plan. The third, "anticipate," is simple: every record carries a target time and
-fires when due — reply to act, no ceremony; at other times it stays quiet. The
-endgame, "accompany," is understanding your rhythm and collaborating with your
-agent — that's a later horizon. Full vision in [docs/VISION.md](docs/VISION.md).
+YOLO develops through four stages: **remember → organize → anticipate →
+accompany**. It currently supports cross-session records, plan organization,
+due reminders, and dashboard actions. Future work focuses on better priority
+judgment, rhythm adaptation, and agent collaboration. See the full direction in
+[docs/VISION.md](docs/VISION.md).
 
 ## Docs
 
@@ -116,7 +104,7 @@ Start at the [docs index](docs/README.md) — it maps every document to its audi
 - [Vision](docs/VISION.md) — the project's vision & vision-driven direction (Chinese)
 - [Product design](docs/product-design.md) — the 1.0 dashboard blueprint (Chinese)
 - [Architecture overview](docs/architecture/overview.md) — data flows, plugin seams, decisions (English)
-- [Architecture reference](docs/architecture/modules.md) — per-module files, types, public APIs, gotchas (Chinese)
+- [Module index](docs/architecture/modules.md) — implementation docs by module (Chinese)
 - [Testing](docs/testing.md) — how to run, what's covered, how to add, live walkthrough (Chinese)
 - [Release](docs/release.md) — how to cut a release & publish to npm (English)
 - [CHANGELOG](CHANGELOG.md) — release history
@@ -134,4 +122,4 @@ checklist in [docs/testing.md §七](docs/testing.md#七真机端到端验证)).
 
 ---
 
-<p align="center"><sub>Made for deepseek-harness — <i>"Say it once. Keep it on track."</i></sub></p>
+<p align="center"><sub>Made for deepseek-harness — <i>Turn important conversations into plans you can keep following.</i></sub></p>
