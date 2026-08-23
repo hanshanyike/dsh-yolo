@@ -63,4 +63,14 @@ describe('pending chat reply state', () => {
     expect(messagesBeforePendingReply(posting)).toEqual(oldTranscript)
     expect(reducePendingReply(posting, { type: 'failed' })).toEqual(IDLE_PENDING_REPLY)
   })
+
+  it('does not duplicate an anchored user message echoed with its context prefix', () => {
+    const pending = start()
+    const remote: ChatMessage[] = [
+      ...oldTranscript,
+      { role: 'user', text: '【关于「客户访谈纪要」 · 今天到期】\n把访谈纪要发给产品组' },
+    ]
+
+    expect(mergeRemoteMessages(remote, pending)).toEqual(remote)
+  })
 })

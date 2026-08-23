@@ -71,7 +71,12 @@ export function mergeRemoteMessages(
 ): ChatMessage[] {
   if (!isReplyPending(pending)) return [...remote]
   const remoteTail = remote.slice(pending.messageCountAtSend)
-  const hasSentUser = remoteTail.some((message) => message.role === 'user' && message.text === pending.userText)
+  const hasSentUser = remoteTail.some((message) => {
+    if (message.role !== 'user') return false
+    if (message.text === pending.userText) return true
+    // Anchored chats persist a controlled context line before the user text.
+    return /^【关于「[^」]*」[^】]*】\n/.test(message.text) && message.text.endsWith(`\n${pending.userText}`)
+  })
   return hasSentUser ? [...remote] : [...remote, { role: 'user', text: pending.userText }]
 }
 
