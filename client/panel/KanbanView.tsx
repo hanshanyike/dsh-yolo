@@ -733,6 +733,10 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
       aria-label={open ? `任务：${t.title}` : `已完成：${t.title}`}
       onKeyDown={(e) => {
         if (isRetiring || !open) return
+        // Only the ROW itself owns Space/Enter/E/↑/↓. When focus sits on a
+        // child control (✓/+1d/编辑/聊一聊), let the key activate THAT control
+        // — without this guard, Space on 「聊一聊」 completed the todo.
+        if (e.target !== e.currentTarget) return
         if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onComplete() }
         else if (e.key.toLowerCase() === 'e') { e.preventDefault(); onEdit() }
         else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); navRow(e.key === 'ArrowDown' ? 1 : -1) }
