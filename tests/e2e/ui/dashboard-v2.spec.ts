@@ -113,7 +113,7 @@ test('Today 保持固定阅读顺序、唯一判断，更多处理展示完整�
   await expect(dialog.getByRole('button', { name: '取消事项' })).toBeVisible()
 })
 
-test('助手判断首读为 full，服务端记录 seen 后刷新收为 compact', async ({ page }) => {
+test('W11: 助手判断首读为 full，复读 compact，依据变化后重新 full', async ({ page }) => {
   const primary = await seedPrimaryJudgment('核对发布前的客户验收结论')
   await openYoloPanel(page, { refreshOnSlow: false })
 
@@ -130,6 +130,18 @@ test('助手判断首读为 full，服务端记录 seen 后刷新收为 compact'
   await expect(compact.getByRole('button', { name: '处理' })).toBeVisible()
   await expect(compact.getByRole('button', { name: '展开依据' })).toBeVisible()
   await expect(compact.getByRole('heading', { name: '为什么现在' })).toHaveCount(0)
+
+  // Trust state is bound to the immutable evidence fingerprint. A schedule
+  // change produces new evidence, so the user must receive the full judgment
+  // again instead of inheriting the old compact/seen presentation.
+  await fx.notification(`${primary.title} 的补充截止提醒`, {
+    note: '补充确认客户验收结论是否已经同步给所有参与方。',
+    todoId: primary.id,
+  })
+  await refreshBoard(page)
+  const changed = page.locator('.v2-judgment--full')
+  await expect(changed).toContainText(primary.title)
+  await expect(changed.getByRole('heading', { name: '为什么现在' })).toBeVisible()
 })
 
 test('已完成与已取消严格分离，两类终态事项都可以重新打开', async ({ page }) => {
