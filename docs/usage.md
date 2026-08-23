@@ -1,7 +1,7 @@
 # 使用文档（User Guide）
 
 > 面向**使用者**：安装、配置、功能、数据存储与常见问题。
-> 安装与快速开始见 [README](../README.md#-quick-start)；开发者请转向 [modules.md](modules.md) 与 [architecture.md](architecture.md)。
+> 安装与快速开始见 [README](../README.md#-quick-start)；开发者请转向 [modules.md](architecture/modules.md) 与 [architecture.md](architecture/overview.md)。
 
 ---
 

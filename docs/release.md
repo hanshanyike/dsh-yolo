@@ -44,7 +44,7 @@ CHANGELOG.
 Controlled by the `files` whitelist in `package.json`:
 
 - `dist/` — built host plugins (ESM) + wrapped client bundle (CJS) + `schema.sql`
-- `cordis.bundle.yml` — the plugin bundle manifest the host reads
+- `cordis.patch.yml` — the plugin bundle manifest the host reads (auto-applied by `dsh plugin add`)
 - `README.md`, `LICENSE`, `CHANGELOG.md`
 
 Not published: source, tests, docs/, scripts/ (consumers only need the
@@ -63,9 +63,9 @@ npm install --prefix ~/.dsh/profiles/web dsh-plugin-yolo
 ```
 
 Then reference the same `cordis.dev.local.yml`-style entries (see
-[architecture.md](architecture.md#design-decision-why-not-dynamic-cordis-plugins)
+[architecture.md](architecture/overview.md#design-decision-why-not-dynamic-cordis-plugins)
 for why YOLO uses the patch-overlay path, and
-[modules.md](modules.md#构建契约host-如何发现并加载-bundle) for the runtime patch
+[modules.md](architecture/modules.md#构建契约host-如何发现并加载-bundle) for the runtime patch
 format).
 
 ## Versioning policy

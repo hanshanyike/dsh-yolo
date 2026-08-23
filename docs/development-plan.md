@@ -216,4 +216,4 @@ recall_log 落账（query/expansions/drop原因/重排结果/latency）
 6. 文档与发布：`CHANGELOG`/`README` Roadmap/`docs/README.md` 索引 + `npm version 0.3.0` 发布（见 §七）。
 
 ---
-*关联：`docs/design-m9-recall-quality.md` · `docs/research/09-borrowables.md` · `docs/architecture.md` · `docs/testing.md` · `docs/release.md`。*
+*关联：`docs/design-m9-recall-quality.md` · `docs/research/09-borrowables.md` · `docs/architecture/overview.md` · `docs/testing.md` · `docs/release.md`。*

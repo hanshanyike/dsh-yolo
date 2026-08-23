@@ -139,7 +139,7 @@ applyRecallPolicy(hits, { injected, kindQuota, budgetChars })
 2. 三条并行工作流（A 召回 / B 动作 / C 频控），文件不相交；
 3. 集成：`pnpm check` → `pnpm test:run` → `pnpm build`；
 4. E2E 全套 + W1–W8 真机走查；
-5. 文档（本设计文档、CHANGELOG、architecture.md 召回与事件节）+ 单提交收口。
+5. 文档（本设计文档、CHANGELOG、architecture/overview.md 召回与事件节）+ 单提交收口。
 
 ---
-*关联：`docs/research/09-borrowables.md`（P5/P6/P7/P11/P34/P35/P42/P44 条目原文）· `docs/architecture.md`（数据流）· `docs/testing.md`（W1–W8）。*
+*关联：`docs/research/09-borrowables.md`（P5/P6/P7/P11/P34/P35/P42/P44 条目原文）· `docs/architecture/overview.md`（数据流）· `docs/testing.md`（W1–W8）。*

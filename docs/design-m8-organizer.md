@@ -134,7 +134,7 @@ Milestones: [active] v0.3 发布 (target 2026-09-01)
 这是"提醒即对话"的落地：提醒消息自带路由指引，agent 拿着工具就能就地兑现用户的自然语言回复。注入路径不变（`agent.inject` + `followup`）。
 
 > **交付修正**：实测发现 `inject()` 只驻留上下文不唤醒 driver、裸 `followup()` 会抛异常，
-> 最终实现改为**单个 `agent.followup(msg)`**（见 architecture.md 已验证平台行为）。
+> 最终实现改为**单个 `agent.followup(msg)`**（见 architecture/overview.md 已验证平台行为）。
 
 ### 3.4 交互层 B：看板就地操作与计划视图（G4）
 

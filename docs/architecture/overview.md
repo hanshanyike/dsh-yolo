@@ -7,8 +7,8 @@ decisions behind them.
 
 > **Docs map** — this is the *why* (design decisions, data flows, verified
 > platform behavior). For the *what* (per-module files, types, public APIs) see
-> [modules.md](modules.md); for *how to use* see [usage.md](usage.md); for *how
-> to test* see [testing.md](testing.md).
+> [modules.md](modules.md); for *how to use* see [usage.md](../usage.md); for *how
+> to test* see [testing.md](../testing.md).
 
 ## Design goals
 
@@ -37,7 +37,7 @@ dsh-plugin-yolo
 └── client/               # browser bundle — sidebar dashboard, settings card
 ```
 
-`cordis.bundle.yml` wires each entry; `tsdown` builds the host plugins (ESM,
+`cordis.patch.yml` wires each entry; `tsdown` builds the host plugins (ESM,
 `@deepseek-ai/*` kept external — the host provides them at runtime) and
 `tsdown.client.config.ts` builds the browser bundle (CJS, wrapped by
 `scripts/wrap-client.mjs` into `__ModuleLoader__.load`). See
@@ -363,7 +363,7 @@ the correct local run path.
 | dashboard action API | `src/ui/actions.ts` |
 | sidebar dashboard UI | `client/sidebar/YoloSidebarDashboard.tsx` |
 | build / run / ACL | `scripts/dev.mjs`, `wrap-client.mjs`, `copy-assets.mjs` |
-| adding a test | [testing.md](testing.md) |
+| adding a test | [testing.md](../testing.md) |
 
 The full per-module reference (files, types, public APIs, gotchas) is
 [modules.md](modules.md).

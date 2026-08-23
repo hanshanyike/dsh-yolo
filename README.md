@@ -190,8 +190,8 @@ every change touching the UI.
 Start at the [docs index](docs/README.md) — it maps every document to its audience:
 
 - [`docs/VISION.md`](docs/VISION.md) — the project's vision & the vision-driven roadmap (start here)
-- [`docs/architecture.md`](docs/architecture.md) — data flow, plugin seams, design decisions
-- [`docs/modules.md`](docs/modules.md) — per-module reference: files, key types, public APIs, gotchas (改代码前先查这里)
+- [`docs/architecture/overview.md`](docs/architecture/overview.md) — data flow, plugin seams, design decisions
+- [`docs/architecture/modules.md`](docs/architecture/modules.md) — per-module reference: files, key types, public APIs, gotchas (改代码前先查这里)
 - [`docs/usage.md`](docs/usage.md) — user guide: install, config, features, data storage
 - [`docs/testing.md`](docs/testing.md) — test suite: how to run, what's covered, how to add tests
 - [`docs/release.md`](docs/release.md) — how to cut a release & publish to npm

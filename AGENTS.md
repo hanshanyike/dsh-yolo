@@ -104,7 +104,7 @@ node scripts/e2e.mjs --spec panel   # 只跑某个 spec（tests/e2e/<spec>.spec.
 - **设计**：`docs/design-m8-organizer.md`（M8 · 已交付）· `docs/design-m9-recall-quality.md`（M9）·
   `docs/frontend-redesign.md` / `docs/frontend-redesign-v1-trackhall.md`（Mono 设计系统）
 - **调研 / 参考**：`docs/research/`（00 总报告 · 01–13 逐项 · 09 可借鉴清单 P1–P46）
-- **架构**：`docs/architecture.md`（数据流、决策、扩展点）· `docs/modules.md`（逐模块代码地图，改代码前先查）
+- **架构**：`docs/architecture/overview.md`（数据流、决策、扩展点）· `docs/architecture/modules.md`（逐模块代码地图，改代码前先查）
 - **测试**：`docs/testing.md`（含真机 W1–W8 清单）
 - **发布**：`docs/release.md` · `CHANGELOG.md`
 - **使用**：`docs/usage.md`

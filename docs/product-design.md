@@ -3,7 +3,7 @@
 > 状态：已评审（定稿 · 2026-08-22）
 > 对应愿景：[VISION.md](VISION.md) 根问题「AI 缺乏意图连续性」与口号 *Say it once. Keep it on track.* —— 说一遍，它帮你把这件事沿着轨道稳稳推进。
 > 上游输入：原型（M0–M8）自用验证 + 2026-08-22 产品设计共创讨论（三轮头脑风暴，决策以 D 编号可追溯）+ 外部调研（ChatGPT Tasks、Microsoft Copilot UX 准则、Things/Todoist）。
-> 本文是产品层「做什么、做成什么样」的唯一事实源；怎么实现见 [architecture.md](architecture.md)，为什么做见 [VISION.md](VISION.md)。
+> 本文是产品层「做什么、做成什么样」的唯一事实源；怎么实现见 [architecture.md](architecture/overview.md)，为什么做见 [VISION.md](VISION.md)。
 > 交互原型：[product-design.html](product-design.html)（单文件，可点击体验本文第四节描述的界面）。
 
 ---

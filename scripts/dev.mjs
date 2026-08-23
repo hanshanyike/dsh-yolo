@@ -155,7 +155,7 @@ function warnWindowsAcl() {
 ${aclFixCommands(ROOT).map((c) => `        ${c}`).join('\n')}
       or: node scripts/dev.mjs --fix-acl   (prompts UAC, no terminal needed)
 
-      See docs/architecture.md#windows-environment.
+      See docs/architecture/overview.md#windows-environment.
 `)
 }
 

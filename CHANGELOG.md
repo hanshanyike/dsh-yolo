@@ -244,11 +244,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   goal progress bars; the timeline labels the new state-flow event kinds.
   `YoloTodoRow` gained `milestone_title` / `updated_at` / `overdue` / `stale`.
 - **Documentation suite.** New `docs/README.md` index plus three new guides so
-  contributors stop having to read the source to find things: `docs/modules.md`
+  contributors stop having to read the source to find things: `docs/architecture/modules.md`
   (per-module reference — files, key types, public APIs, gotchas), `docs/usage.md`
   (user guide — install, config, features, data storage) and `docs/testing.md`
   (test suite — how to run, what each file covers, how to add tests).
-  `docs/architecture.md` gained a module dependency graph and a "where to look
+  `docs/architecture/overview.md` gained a module dependency graph and a "where to look
   when changing X" table; README/CONTRIBUTING now link the new docs.
 
 ### Changed
@@ -257,9 +257,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `docs/dev-notes.md` were milestone/session scrapbooks full of stale entries
   (hybrid extraction, the per-session dashboard, the retired `link:` dependency
   scheme). Their still-valid knowledge was folded into the maintained docs:
-  verified platform behavior now lives in `docs/architecture.md` ("Verified
+  verified platform behavior now lives in `docs/architecture/overview.md` ("Verified
   platform behavior" section), the client-bundle build contract and a
-  troubleshooting table now live in `docs/modules.md`, and Windows environment
+  troubleshooting table now live in `docs/architecture/modules.md`, and Windows environment
   fixes moved into `docs/usage.md` FAQ. All cross-references (README, docs index,
   CONTRIBUTING, release, `scripts/dev.mjs`) were updated to point at the new homes.
 - **LLM-only semantic extraction.** The per-message regex fast path (rules / candidate buffer / merge) was removed entirely: regexes cannot judge semantics, produced noise, and missed anything phrased unusually. Extraction is now a single LLM structured pull at every `agent/turn-stopping`, following the industry pattern (Mem0, Claude Code auto-memory). The extraction prompt was rewritten around durable-knowledge selection, and the model now receives a compact **known-memories digest** so it never re-extracts unchanged facts. Live-session testing exposed a taxonomy gap in the first prompt cut — scheduled commitments (trips, appointments) fell between "task" and "decision" and were silently dropped — the todo/event definitions now explicitly cover them (verified against the real API both ways: extracts the trip, still respects "don't record this").
@@ -312,7 +312,7 @@ to try it early.
 - **Dependencies now come from the npm registry** (`@deepseek-ai/*@0.1.1-rc.2` line) instead of `link:` paths into a local deepseek-harness checkout — `pnpm install` alone is enough for typecheck/tests/build, no host clone required; `pnpm-lock.yaml` is committed and CI installs with `--frozen-lockfile`.
 - npm-ready manifest: `files` whitelist, `repository`, `keywords`, `publishConfig` (public access).
 - Rewrote README around a clear product identity (slogan + logo) and corrected the Quick Start to the one-command `dev.mjs` flow; roadmap now lists future milestones M6–M9.
-- Restructured docs: added `docs/architecture.md` (data flow + design decisions), migrated the session change record to `docs/dev-notes.md`, and introduced this standard CHANGELOG.
+- Restructured docs: added `docs/architecture/overview.md` (data flow + design decisions), migrated the session change record to `docs/dev-notes.md`, and introduced this standard CHANGELOG.
 
 ### Fixed
 

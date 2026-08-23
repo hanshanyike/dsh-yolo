@@ -1,8 +1,8 @@
 # 模块设计文档（Module Reference）
 
 > 面向开发者的**逐模块代码地图**：每个模块的职责、文件清单、关键类型、公开 API、依赖与实现细节。
-> 改代码前先查这里，避免挨个翻源码。架构、数据流与已验证的平台行为见 [architecture.md](architecture.md)；
-> 测试体系见 [testing.md](testing.md)。
+> 改代码前先查这里，避免挨个翻源码。架构、数据流与已验证的平台行为见 [overview.md](overview.md)；
+> 测试体系见 [testing.md](../testing.md)。
 
 ---
 
@@ -27,7 +27,7 @@
 ## 一、总览与依赖图
 
 YOLO 不是单个插件，而是 **5 个协作的 Cordis 插件 + 1 个浏览器 bundle**，通过
-`cordis.bundle.yml` 装配。存储服务是唯一共享状态，其余插件都依赖它。
+`cordis.patch.yml` 装配。存储服务是唯一共享状态，其余插件都依赖它。
 
 ```
 ┌────────────────────────────── deepseek-harness host ──────────────────────────────┐
@@ -67,7 +67,7 @@ YOLO 不是单个插件，而是 **5 个协作的 Cordis 插件 + 1 个浏览器
 | 逻辑 | 仅打印 `[yolo] plugin loaded`（`ctx.logger` + `console.log` 双保险） |
 
 **注意**：真正的 5 个插件各自有独立 entry（`src/{storage,memory,extract,reminder,ui}/index.ts`），
-`cordis.bundle.yml` 逐个引用。`src/index.ts` 只是 npm 包根入口。
+`cordis.patch.yml` 逐个引用。`src/index.ts` 只是 npm 包根入口。
 
 ---
 
@@ -485,8 +485,8 @@ Settings 页面（`yolo` 命名空间）可配置项，全部有 schemastery 默
 | 看板动作 API | `src/ui/actions.ts` |
 | 侧边栏看板 UI | `client/sidebar/YoloSidebarDashboard.tsx` |
 | 构建 / 运行 / ACL | `scripts/dev.mjs`、`wrap-client.mjs`、`copy-assets.mjs` |
-| 平台行为 / 运行时踩坑 | [architecture.md](architecture.md) 的"已验证平台行为"章节 |
-| 测试怎么加 | [testing.md](testing.md) |
+| 平台行为 / 运行时踩坑 | [overview.md](overview.md) 的"已验证平台行为"章节 |
+| 测试怎么加 | [testing.md](../testing.md) |
 
 
 
