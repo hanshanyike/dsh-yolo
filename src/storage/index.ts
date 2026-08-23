@@ -58,6 +58,15 @@ export default class Yolo extends Service {
   /** Workspace scopes the plugin has opened (cwd -> latest scopeKey) for cross-workspace aggregation. */
   private readonly knownWorkspaces = new Map<string, string>()
 
+  /** Memoized scope keys: cwd -> { scopeKey, resolvedAt }. See resolve(). */
+  private scopeKeys = new Map<string, { scopeKey: string; at: number }>()
+  /** How long a memoized scope key stays fresh. computeScopeKey shells out to
+   * `git rev-parse` (~200ms on Windows); without memoization every list/count
+   * call re-spawns it — one GET /yolo/dashboard fired ~15 git processes and
+   * cost ~3s (measured). Branch switches are honored after the TTL elapses,
+   * so cross-branch memory separation keeps working. */
+  readonly SCOPE_KEY_TTL_MS = 5_000
+
   constructor(ctx: Context) {
     super(ctx, 'yolo')
     // close cached DB handles when the owning fiber unloads (Windows-safe)
@@ -74,11 +83,12 @@ export default class Yolo extends Service {
       }
     }
     this.scopes.clear()
+    this.scopeKeys.clear()
   }
 
   /** Resolve (and lazily open+cache) the DB handle for a scope. */
   resolve(cwd: string, mode: ScopeMode = 'workspace'): ScopeHandle {
-    const scopeKey = computeScopeKey(cwd)
+    const scopeKey = this.scopeKeyOf(cwd, mode)
     const dataDir = resolveDataDir(mode, cwd)
     const dbPath = join(dataDir, dbFileName(scopeKey))
     let h = this.scopes.get(dbPath)
@@ -89,6 +99,19 @@ export default class Yolo extends Service {
       if (mode === 'workspace') this.knownWorkspaces.set(cwd, scopeKey)
     }
     return h
+  }
+
+  /** Scope key for a cwd, memoized for SCOPE_KEY_TTL_MS (per mode: only the
+   * workspace mode is memoized — user/global modes have no git dimension and
+   * their callers are rare). One process lifetime typically hits git once per
+   * TTL window per workspace instead of once per storage call. */
+  private scopeKeyOf(cwd: string, mode: ScopeMode): string {
+    if (mode !== 'workspace') return computeScopeKey(cwd)
+    const hit = this.scopeKeys.get(cwd)
+    if (hit && Date.now() - hit.at < this.SCOPE_KEY_TTL_MS) return hit.scopeKey
+    const scopeKey = computeScopeKey(cwd)
+    this.scopeKeys.set(cwd, { scopeKey, at: Date.now() })
+    return scopeKey
   }
 
   // ---- todos ----
