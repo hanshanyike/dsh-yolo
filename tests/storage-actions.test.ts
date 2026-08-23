@@ -82,6 +82,17 @@ describe('applyTodoAction', () => {
     expect(repo.listEvents(db, SCOPE)).toHaveLength(0)
   })
 
+  it('reopen restores a cancelled todo and its search projection', () => {
+    const { row: t } = repo.upsertTodo(db, { title: '重新确认客户访谈时间', scope_key: SCOPE })
+    repo.applyTodoAction(db, t.id, 'cancel')
+
+    const reopened = repo.applyTodoAction(db, t.id, 'reopen')
+
+    expect(reopened?.status).toBe('pending')
+    expect(ftsSearch(db, '客户访谈', 5, ['todo']).map((row) => row.row_id)).toContain(t.id)
+    expect(lastEvent()).toMatchObject({ kind: 'todo_reopened', summary: '重新打开：重新确认客户访谈时间' })
+  })
+
   it('cancel writes a todo_cancelled event', () => {
     const { row: t } = repo.upsertTodo(db, { title: '不再需要的任务', scope_key: SCOPE })
     const cancelled = repo.applyTodoAction(db, t.id, 'cancel')

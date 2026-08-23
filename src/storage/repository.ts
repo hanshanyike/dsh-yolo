@@ -624,10 +624,17 @@ export function applyTodoAction(
       addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
       break
     case 'reopen':
-      if (t.status !== 'done') return t
+      if (t.status !== 'done' && t.status !== 'cancelled') return t
       db.prepare("UPDATE todos SET status = 'pending', completed_at = NULL, last_reminded_at = NULL, updated_at = ? WHERE id = ?").run(ts, id)
       syncTodoFts(db, id, t.title, t.detail ?? null)
-      addEvent(db, { kind: 'todo_reopened', summary: `撤销完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
+      addEvent(db, {
+        kind: 'todo_reopened',
+        summary: t.status === 'cancelled' ? `重新打开：${t.title}` : `撤销完成：${t.title}`,
+        scope_key: t.scope_key,
+        occurred_at: ts,
+        session_id,
+        source,
+      })
       break
     case 'cancel':
       setTodoStatus(db, id, 'cancelled')
