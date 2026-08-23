@@ -82,7 +82,22 @@ export function setMilestoneStatus(db: DB, id: string, status: MilestoneStatus):
   if (status === 'done' || status === 'abandoned') {
     // soft-delete from FTS so it stops matching searches
     db.prepare("DELETE FROM yolo_fts WHERE row_type = 'milestone' AND row_id = ?").run(id)
+  } else {
+    const milestone = db.prepare('SELECT title, description FROM milestones WHERE id = ?').get(id) as
+      | Pick<Milestone, 'title' | 'description'>
+      | undefined
+    if (milestone) syncMilestoneFts(db, id, milestone.title, milestone.description)
   }
+}
+
+function syncMilestoneFts(db: DB, id: string, title: string, description: string | null | undefined): void {
+  db.prepare("DELETE FROM yolo_fts WHERE row_type = 'milestone' AND row_id = ?").run(id)
+  db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run(
+    'milestone',
+    id,
+    title,
+    description ?? '',
+  )
 }
 
 export function listMilestones(db: DB, scopeKey: string, status?: MilestoneStatus): Milestone[] {
@@ -130,7 +145,7 @@ export function upsertTodo(
     db.prepare(
       'UPDATE todos SET due_at = ?, priority = ?, detail = ?, milestone_id = ?, updated_at = ? WHERE id = ?',
     ).run(due, pri, detail, ms, ts, existing.id)
-    syncTodoFts(db, existing.id, data.title, detail)
+    syncTodoFts(db, existing.id, existing.title, detail)
     return { row: { ...existing, due_at: due, priority: pri, detail, milestone_id: ms, updated_at: ts }, created: false }
   }
   const row: Todo = {
@@ -610,7 +625,7 @@ export function applyTodoAction(
       break
     case 'reopen':
       if (t.status !== 'done') return t
-      db.prepare("UPDATE todos SET status = 'pending', completed_at = NULL, updated_at = ? WHERE id = ?").run(ts, id)
+      db.prepare("UPDATE todos SET status = 'pending', completed_at = NULL, last_reminded_at = NULL, updated_at = ? WHERE id = ?").run(ts, id)
       syncTodoFts(db, id, t.title, t.detail ?? null)
       addEvent(db, { kind: 'todo_reopened', summary: `撤销完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
       break
@@ -788,8 +803,7 @@ export function applyMilestoneRename(db: DB, id: string, title: string, sessionI
   if (!m || !t || t === m.title) return m ?? null
   const ts = now()
   db.prepare('UPDATE milestones SET title = ?, updated_at = ? WHERE id = ?').run(t, ts, id)
-  db.prepare("DELETE FROM yolo_fts WHERE row_type = 'milestone' AND row_id = ?").run(id)
-  db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('milestone', id, t, m.description ?? '')
+  syncMilestoneFts(db, id, t, m.description)
   addEvent(db, {
     kind: 'milestone_status',
     summary: `里程碑改名「${m.title}」→「${t}」`,
@@ -1001,4 +1015,3 @@ export function countRecallStatusSince(db: DB, status: string, sinceMs: number):
   return row?.n ?? 0
 }
 export type { ExtractionLog }
-

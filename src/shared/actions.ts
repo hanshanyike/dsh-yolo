@@ -25,8 +25,8 @@ export interface YoloActionRequest {
   status?: string
   note?: string
   /** Inline-edit fields (v0.3.0 E): priority + milestone by title. */
-  priority?: string
-  milestone_title?: string
+  priority?: string | null
+  milestone_title?: string | null
   /** Consolidate's surviving target (into_*); the source uses the existing id/title. */
   into_id?: string
   into_title?: string
@@ -86,8 +86,9 @@ const TODO_ACTIONS: readonly TodoAction[] = ['complete', 'start', 'cancel', 'pos
 const MILESTONE_STATUSES: readonly MilestoneStatus[] = ['planned', 'active', 'done', 'abandoned']
 
 function toPriority(v: unknown): Priority | null | undefined {
-  if (typeof v !== 'string') return undefined
-  return PRIORITIES.includes(v as Priority) ? (v as Priority) : null
+  if (v === null || v === '') return null
+  if (typeof v !== 'string' || !PRIORITIES.includes(v as Priority)) return undefined
+  return v as Priority
 }
 
 const ATTENTION_FEEDBACK_REASONS = [
@@ -417,9 +418,23 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
     const patch: { title?: string; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null } = {}
     if (typeof r.title === 'string' && r.title.trim()) patch.title = r.title.trim()
     if (r.due_at !== undefined) patch.due_at = typeof r.due_at === 'string' && r.due_at ? r.due_at : null
-    if (r.priority !== undefined) patch.priority = toPriority(r.priority)
+    if (r.priority !== undefined) {
+      const priority = toPriority(r.priority)
+      if (priority === undefined) {
+        return deny(yolo, cwd, r, 'priority must be low|medium|high|urgent or empty', 400, 'invalid_priority')
+      }
+      patch.priority = priority
+    }
     if (r.milestone_title !== undefined) {
-      patch.milestone_id = r.milestone_title ? yolo.findMilestoneId(cwd, r.milestone_title) : null
+      if (r.milestone_title === null || r.milestone_title.trim() === '') {
+        patch.milestone_id = null
+      } else {
+        const milestoneId = yolo.findMilestoneId(cwd, r.milestone_title.trim())
+        if (!milestoneId) {
+          return deny(yolo, cwd, r, 'milestone not found', 404, 'milestone_not_found')
+        }
+        patch.milestone_id = milestoneId
+      }
     }
     if (Object.keys(patch).length === 0) {
       return deny(yolo, cwd, r, 'update requires at least one of title/due_at/priority/milestone_title', 400)

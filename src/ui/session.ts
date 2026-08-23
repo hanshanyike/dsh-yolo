@@ -144,6 +144,7 @@ export class YoloSessions {
  */
 export class YoloChatThreads {
   private readonly byKey = new Map<string, { handle: AgentHandleLike; agent: AgentLike; lastUsed: number }>()
+  private readonly starting = new Map<string, Promise<AgentLike | undefined>>()
   /** cwd -> thread keys, most-recently-used last (eviction pops the front). */
   private readonly order = new Map<string, string[]>()
   private static readonly MAX_THREADS_PER_WORKSPACE = 8
@@ -164,6 +165,14 @@ export class YoloChatThreads {
       this.touch(cwd, fullKey)
       return hit.agent
     }
+    const pending = this.starting.get(fullKey)
+    if (pending) return pending
+    const starting = this.start(cwd, threadKey, fullKey).finally(() => this.starting.delete(fullKey))
+    this.starting.set(fullKey, starting)
+    return starting
+  }
+
+  private async start(cwd: string, threadKey: string, fullKey: string): Promise<AgentLike | undefined> {
     const id = SessionId(`yolo-a-${createHash('sha1').update(fullKey).digest('hex').slice(0, 12)}`)
     const selection = this.defaultModelSelection?.()
     const createOpts = selection
@@ -178,7 +187,7 @@ export class YoloChatThreads {
         }
       : { sessionId: id, meta: { cwd: resolve(cwd) } }
     try {
-      const handle = await this.agents.create(createOpts)
+      const handle = await this.agents!.create(createOpts)
       this.logger?.info?.('[yolo-thread] created %s (%s)', id, threadKey.slice(0, 24))
       this.byKey.set(fullKey, { handle, agent: handle.agent, lastUsed: Date.now() })
       this.touch(cwd, fullKey)

@@ -49,6 +49,25 @@ describe('YoloChatThreads (fresh 聊一聊 threads)', () => {
     expect(agents.create).toHaveBeenCalledTimes(1)
   })
 
+  it('dedupes concurrent first-use creation for the same anchored thread', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const create = vi.fn(async (opts: { sessionId: { toString(): string } }) => {
+      await gate
+      return handleOf(String(opts.sessionId))
+    })
+    const agents = { create, get: vi.fn(() => undefined) } as unknown as AgentsLike
+    const threads = new YoloChatThreads(agents)
+
+    const first = threads.ensure('/ws/a', 'card-race')
+    const second = threads.ensure('/ws/a', 'card-race')
+    release()
+    const [a, b] = await Promise.all([first, second])
+
+    expect(a).toBe(b)
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+
   it('creates a distinct agent for a different thread key (fresh conversation)', async () => {
     const { agents, created } = makeAgents()
     const threads = new YoloChatThreads(agents)

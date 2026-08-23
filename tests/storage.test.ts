@@ -37,6 +37,17 @@ describe('todos', () => {
     expect(todos[0].priority).toBe('high')
   })
 
+  it('keeps the persisted todo title and its FTS projection identical after a normalized-title upsert', () => {
+    const first = repo.upsertTodo(db, { title: 'Prepare Q3 Report', scope_key: SCOPE })
+    const second = repo.upsertTodo(db, { title: 'Prepare Q3 Report!!!', scope_key: SCOPE })
+    expect(second.row.id).toBe(first.row.id)
+
+    const indexed = db
+      .prepare("SELECT title FROM yolo_fts WHERE row_type = 'todo' AND row_id = ?")
+      .get(first.row.id) as { title: string }
+    expect(indexed.title).toBe(second.row.title)
+  })
+
   it('setTodoStatus(done) sets completed_at and stops matching search', () => {
     const { row: t } = repo.upsertTodo(db, { title: 'ship the feature', scope_key: SCOPE })
     repo.setTodoStatus(db, t.id, 'done')
@@ -75,6 +86,15 @@ describe('milestones & goals', () => {
     expect(ftsSearch(db, 'milestone tests')).toHaveLength(1)
     repo.setMilestoneStatus(db, m.id, 'done')
     expect(ftsSearch(db, 'milestone tests')).toHaveLength(0)
+  })
+
+  it('restores milestone searchability when a terminal milestone is reopened', () => {
+    const m = repo.upsertMilestone(db, { title: '恢复发布里程碑', scope_key: SCOPE })
+    repo.setMilestoneStatus(db, m.id, 'done')
+    expect(ftsSearch(db, '发布里程碑', 5, ['milestone'])).toHaveLength(0)
+
+    repo.setMilestoneStatus(db, m.id, 'active')
+    expect(ftsSearch(db, '发布里程碑', 5, ['milestone'])).toHaveLength(1)
   })
 })
 

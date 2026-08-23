@@ -61,6 +61,20 @@ describe('applyTodoAction', () => {
     expect(lastEvent()?.summary).toContain('给下周产品评审做演示预演')
   })
 
+  it('reopen clears the old reminder stamp so an unfinished due todo can fire again', () => {
+    const { row: t } = repo.upsertTodo(db, {
+      title: '撤销完成后继续提醒我提交报销单',
+      due_at: '2026-08-22',
+      scope_key: SCOPE,
+    })
+    repo.setTodoReminded(db, t.id, 1_000)
+    repo.applyTodoAction(db, t.id, 'complete')
+
+    const reopened = repo.applyTodoAction(db, t.id, 'reopen')
+    expect(reopened?.last_reminded_at).toBeNull()
+    expect(repo.listDueTodos(db, SCOPE, '2026-08-23')).toHaveLength(1)
+  })
+
   it('reopen on an open todo no-ops — no state change, no event', () => {
     const { row: t } = repo.upsertTodo(db, { title: '未完成任务', scope_key: SCOPE })
     const same = repo.applyTodoAction(db, t.id, 'reopen')
@@ -406,5 +420,38 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
     expect(denied.ok).toBe(false)
     const ev = yolo.listEvents(cwd).find((e) => e.kind === 'action_denied')
     expect(ev!.summary).toContain('consolidate requires kind=todo')
+  })
+
+  it('rejects an invalid priority instead of silently clearing the stored priority', () => {
+    const { todo } = yolo.addTodo(cwd, { title: '确认客户访谈排期', priority: 'high', source: 'llm' })
+
+    const res = applyYoloAction(yolo, cwd, {
+      action: 'update',
+      kind: 'todo',
+      id: todo.id,
+      priority: 'critical',
+    })
+
+    expect(res.ok).toBe(false)
+    expect(yolo.listTodos(cwd, 'pending').find((row) => row.id === todo.id)?.priority).toBe('high')
+  })
+
+  it('rejects an unknown milestone title instead of silently unlinking the todo', () => {
+    const milestone = yolo.addMilestone(cwd, { title: '产品组验收', source: 'llm' })
+    const { todo } = yolo.addTodo(cwd, {
+      title: '发送客户访谈纪要',
+      milestone_id: milestone.id,
+      source: 'llm',
+    })
+
+    const res = applyYoloAction(yolo, cwd, {
+      action: 'update',
+      kind: 'todo',
+      id: todo.id,
+      milestone_title: '不存在的里程碑',
+    })
+
+    expect(res.ok).toBe(false)
+    expect(yolo.listTodos(cwd, 'pending').find((row) => row.id === todo.id)?.milestone_id).toBe(milestone.id)
   })
 })
