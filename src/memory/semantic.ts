@@ -190,6 +190,12 @@ export class SemanticRecall {
     if (d !== this.today) {
       this.today = d
       this.usedToday = 0
+      // A new day is a fresh chance for the model: clear the auto-degrade.
+      // Without this, one flaky day silenced semantic recall FOREVER —
+      // shouldExpand() short-circuits on degraded, so noteOutcome(true) could
+      // never run again to lift it (stuck until process restart).
+      this.consecutiveEmpty = 0
+      this.degraded = false
     }
   }
 

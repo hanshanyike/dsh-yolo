@@ -140,6 +140,27 @@ describe('SemanticRecall', () => {
     expect(s.isDegraded()).toBe(false)
   })
 
+  // v0.3.3 review regression: degraded previously stuck until process restart —
+  // shouldExpand() short-circuits on degraded, so noteOutcome(true) could never
+  // run again to lift it, and rollDay() only reset the budget.
+  it('a new day lifts the auto-degrade (one flaky day must not silence recall forever)', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-08-23T10:00:00'))
+      const s = new SemanticRecall({ enabled: true, minQueryChars: 0, degradeAfterEmpty: 2 })
+      s.noteOutcome(false)
+      s.noteOutcome(false)
+      expect(s.isDegraded()).toBe(true)
+      expect(s.shouldExpand('query-a')).toBe(false) // degraded → deterministic only
+
+      vi.setSystemTime(new Date('2026-08-24T10:00:00'))
+      expect(s.shouldExpand('query-b')).toBe(true) // day rolled → fresh chance
+      expect(s.isDegraded()).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('caps expansions at expansionsPerQuery', () => {
     const s = new SemanticRecall({ expansionsPerQuery: 2 })
     s.rememberExpansions('q', ['a', 'b', 'c'])
