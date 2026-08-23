@@ -1,4 +1,6 @@
 export { AssistantJudgment, type AssistantJudgmentProps } from './AssistantJudgment.tsx'
 export { LearningReceipt, type LearningReceiptProps } from './LearningReceipt.tsx'
 export { TaskActionPanel, type TaskActionPanelProps } from './TaskActionPanel.tsx'
+export { TodaySurface, type TodaySurfaceIntent, type TodaySurfaceProps } from './TodaySurface.tsx'
+export * from './today-surface-model.ts'
 export * from './model.ts'
