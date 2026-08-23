@@ -12,9 +12,9 @@ Thanks for considering contributing! YOLO is a small, opinionated plugin bundle 
   pnpm check    # tsc --noEmit
   pnpm test     # vitest — only tests/ runs; the config excludes the dev host
   ```
-- **UI changes additionally need a live walkthrough**: `pnpm build && pnpm dev:web`,
-  then work through the W1–W8 checklist in
-  [`docs/testing.md §七`](docs/testing.md#七真机端到端验证) — unit tests can't
+- **UI changes additionally need a live walkthrough**: `pnpm build && pnpm dsh web --no-open --port 4080`,
+  then work through the W1–W10 checklist in
+  [`docs/testing.md §八`](docs/testing.md#八真机端到端验证) — unit tests can't
   catch layout, theme or host-integration regressions.
 - **Commit at logical checkpoints — never batch everything into one commit.** A
   finished fix/feature with its tests and docs is a commit; unrelated changes
@@ -41,8 +41,9 @@ item is a self-contained deliverable. Semantic recall is the current front;
 ## Development setup
 
 See the **Quick Start** in the [README](README.md#快速开始) —
-`pnpm dev:web:setup` clones the host checkout into `host/` (gitignored) and
-builds everything; `pnpm dev:web` boots it with the YOLO patch applied.
+`pnpm dsh plugin add . --profile web` registers this plugin as a bundle in the
+dsh web profile (one-time), and `pnpm dsh web` boots it with the **installed**
+dsh CLI.
 
 Architecture context: [`docs/architecture/overview.md`](docs/architecture/overview.md).
 Module reference: [`docs/architecture/modules.md`](docs/architecture/modules.md).

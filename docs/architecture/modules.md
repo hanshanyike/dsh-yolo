@@ -45,7 +45,7 @@ YOLO 不是单个插件，而是 **5 个协作的 Cordis 插件 + 1 个浏览器
 │   │ 设置+看板API  │   │ 常量/投影/文本 │   │ 侧边栏看板+设置卡 │        │               │
 │   └──────────────┘   └──────────────┘   └────────────────┘        │               │
 │                                                                                    │
-│   scripts/dev.mjs / wrap-client.mjs / copy-assets.mjs  构建与运行                    │
+│   scripts/e2e.mjs / clean-test-data.mjs / wrap-client.mjs  测试与构建              │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -411,24 +411,14 @@ bundle 作为 classic `<script>` 加载，必须：调用 `window.__ModuleLoader
 
 | 文件 | 作用 |
 |---|---|
-| `dev.mjs` | 幂等一键运行：clone host → install → build → junction → 生成 patch → 启动 dsh web；含 Windows ACL 预检与 `--fix-acl` |
+| `e2e.mjs` | E2E 测试 runner：全局 `dsh web` 拉起/复用宿主（无全局 CLI 时回退 host checkout + junction/patch），拉起前自动清扫 `[E2E]` 夹具，`--lane api\|ui`、`--spec <名>`、`--no-host`、`--no-clean`；详见 [testing-e2e.md](../testing-e2e.md) |
+| `clean-test-data.mjs` | 兜底：手动删除各 `yolo-*.db` 里的 `[E2E]` 夹具行（宿主停止时运行） |
 | `wrap-client.mjs` | post-build：把 client bundle 包进 `__ModuleLoader__.load` + 注入 `process` shim |
 | `copy-assets.mjs` | post-build：把 `src/storage/schema.sql` 复制到 `dist/src/storage/`（db.ts 运行时按 `import.meta.url` 读取） |
 
-`dev.mjs` 命令选项：
-
-| 命令 | 作用 |
-|---|---|
-| `node scripts/dev.mjs` | 完整流程 + 前台启动（默认端口 3080） |
-| `node scripts/dev.mjs --setup` | 只准备不启动 |
-| `node scripts/dev.mjs --update` | 先 `git pull` host 再重装重构建再启动 |
-| `node scripts/dev.mjs --port 4081` | 自定义端口 |
-| `node scripts/dev.mjs --fix-acl` | UAC 提权修复工作区 ACL（Windows） |
-
-> **Windows 注意**：pnpm 的 `safe-delete` trash 在 Git Bash 下会失败（`[safe-delete] trash operation ... aborted`），
-> 请用 **PowerShell** 运行 pnpm。`dev.mjs` 启动前会做 ACL 预检（`icacls`），
-> 若工作区目录 owner 是 `BUILTIN\Administrators` 导致 `SetNamedSecurityInfoW failed (Win32 5)`，
-> 用 `--fix-acl` 提权执行 `takeown` + `icacls /grant` 一次性修复。
+> **本地启动（标准）**：`pnpm dsh plugin add . --profile web`（一次性，bundle 注册全部
+> 插件行）+ `pnpm dsh web --no-open --port 4080`。用**已安装的全局 dsh**，不要从本地
+> checkout 起宿主（凭证格式与全局不一致会启动失败——e2e runner 同样遵循此约定）。
 
 ---
 
@@ -437,15 +427,17 @@ bundle 作为 classic `<script>` 加载，必须：调用 `window.__ModuleLoader
 | 症状 | 原因与解决 |
 |---|---|
 | `EADDRINUSE 3080` | 残留 dsh 进程占端口；PowerShell：`Get-NetTCPConnection -LocalPort 3080 \| Stop-Process` |
-| `frontend dist not built` | host 未 build；跑 `node scripts/dev.mjs --setup` |
+| `frontend dist not built` | host 未 build；跑 `pnpm dsh web`（标准 profile 已含构建产物检查），或重跑 `pnpm build` |
 | `Cannot find package 'better-sqlite3'` | YOLO 未 `pnpm install`；或 `pnpm-workspace.yaml` 的 `allowBuilds` 没设 `true` |
 | `Could not locate the bindings file` | better-sqlite3 native binding 未编译；确认 `allowBuilds: { better-sqlite3: true }` 后重跑 `pnpm install` |
-| `Cannot find package 'dsh-plugin-yolo'` | profile junction 缺失；重跑 `node scripts/dev.mjs`（会重建 junction） |
+| `duplicate loader entry id: yolo` | 用了 `--patch` 又叠加已注册的 bundle；profile 已捆绑插件时**不要**再传 runtime patch |
+| `credentials-local: the value for "version" ... must be a string` | 从本地 host checkout 起宿主撞上全局凭证格式差异；改用**全局 dsh** 启动（AGENTS.md 约定） |
+| `Cannot find package 'dsh-plugin-yolo'` | 插件未链接进 profile；重跑 `pnpm dsh plugin add . --profile web` |
 | `loaded without registering "dsh-plugin-yolo"` | client bundle 缺 `__ModuleLoader__` 包裹；确认 `pnpm build` 跑了 `wrap-client.mjs` |
 | `process is not defined` | client bundle 缺 process shim；确认 `wrap-client.mjs` 是最新版 |
 | `Cannot find module '../package.json'` | tsdown 把 `@deepseek-ai/*` 打包进共享 chunk；确认 `tsdown.config.ts` 有 `external: [/^@deepseek-ai\//]` |
 | 看板不出现 | 见 client 章节"三个必须同时满足的条件" |
-| `SetNamedSecurityInfoW failed (Win32 5)` | 工作区 ACL 问题；见 scripts 章节 + `--fix-acl` |
+| `SetNamedSecurityInfoW failed (Win32 5)` | 工作区 ACL 问题；以管理员身份运行一次 dsh，或把工作区移到用户目录下 |
 | pnpm 报 `[safe-delete] trash operation` | Git Bash 下的坑；用 PowerShell 跑 |
 
 ---
@@ -488,7 +480,7 @@ Settings 页面（`yolo` 命名空间）可配置项，全部有 schemastery 默
 | 看板 JSON 形状 | `src/shared/dashboard.ts` + `src/ui/dashboard.ts` |
 | 看板动作 API | `src/ui/actions.ts` |
 | 侧边栏看板 UI | `client/sidebar/YoloSidebarDashboard.tsx` |
-| 构建 / 运行 / ACL | `scripts/dev.mjs`、`wrap-client.mjs`、`copy-assets.mjs` |
+| 测试 / 构建 | `scripts/e2e.mjs`、`scripts/clean-test-data.mjs`、`wrap-client.mjs`、`copy-assets.mjs` |
 | 平台行为 / 运行时踩坑 | [overview.md](overview.md) 的"已验证平台行为"章节 |
 | 测试怎么加 | [testing.md](../testing.md) |
 

@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > The user-feedback drop — maps to the `0.3.3` line per `docs/release.md`.
 
+### Added — E2E 测试治理（test/e2e-standardization）
+
+- **E2E 从 21.3 分钟（3 failed + 2 flaky）降到 ~67 秒全绿**（17 用例，含宿主拉起；
+  同机实测）。根因与证据记录在 [docs/testing-e2e.md](docs/testing-e2e.md) 第四节。
+- **api/ui 双车道**：`tests/e2e/{api,ui}/`，`node scripts/e2e.mjs --lane api|ui`
+  （HTTP 车道无浏览器、秒级反馈）；`--spec` 支持 `--spec panel-flow` 空格形式。
+- **性能修复 `perf(storage)`**：scope key 按 TTL 记忆化 —— 此前一次
+  `GET /yolo/dashboard` 会孵化 ~15 个 `git rev-parse` 子进程（~3s，实测 15 次 = 2985ms），
+  侧栏角标 30s 轮询与提醒调度器 tick 同样受益。
+- **runner 修复**：bring-up 改为全局 dsh 优先（本地 host checkout 撞凭证格式差异会启动失败，
+  AGENTS.md 早有警告）；不再对已捆绑插件的 profile 打 runtime patch（duplicate loader entry id）
+  ；Windows 下按整棵进程树击杀宿主（此前 node 孙进程变孤儿占端口）；健康探测超时
+  提到 15s；拉起前自动 DB 级清扫 `[E2E]` 夹具（此前靠手工跑 clean-test-data）。
+- **夹具按 id 追踪清理**（`createFixtures`）：替代每个 test 前后两次全量看板扫描；
+  角标用例改为「先种卡后开页」，去掉最长 45s 的轮询硬等。
+- **文档**：新增 docs/testing-e2e.md（场景×用例矩阵、根因记录、agent 运行手册）；
+  testing.md 单测清单修正为 29 文件/324 用例；README/usage/CONTRIBUTING/architecture
+  中残留的 `dev:web*`/`dev.mjs` 死引用全部改指标准 dsh 流程。
+
 ### Added — v0.3.3 用户反馈收敛
 
 - **对话用 harness 自身会话能力（V1）。** Agent 创建/恢复时传入

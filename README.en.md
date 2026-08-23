@@ -46,7 +46,7 @@ without spamming your tokens.
 
 ## Quick Start
 
-> **Prerequisites**: Node ≥ 22.19, pnpm ≥ 11.
+> **Prerequisites**: Node ≥ 22.19, pnpm ≥ 11, and an installed `dsh` CLI (deepseek-harness).
 > On Windows, run commands from **PowerShell** (Git Bash breaks pnpm's safe-delete).
 
 ```bash
@@ -54,16 +54,19 @@ git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
 
 pnpm install          # YOLO's own deps (better-sqlite3 native binding included)
-pnpm dev:web:setup    # one-time: clone & build the host, link the profile, generate the patch overlay
-pnpm dev:web          # boots dsh web → http://127.0.0.1:3080
+pnpm build            # build the host plugin + browser client into dist/
+pnpm dsh plugin add . --profile web   # one-time: register the plugin bundle in the dsh web profile (standard dsh install)
+pnpm dsh web --no-open --port 4080    # boots dsh web → http://127.0.0.1:4080
 ```
 
-`dev.mjs` is idempotent — re-run `pnpm dev:web` any time; use `pnpm dev:web:update`
-to pull the latest host first. First setup clones
-[deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) into
-`host/deepseek-harness`, so nothing is installed globally.
+`dsh plugin add .` is the standard dsh install path: the plugin mounts as a bundle in
+the `web` profile (`dsh.bundle.patch` points at `cordis.patch.yml`, which registers
+every host-side plugin row). `dsh web` (`web` implies `--profile web`) runs the
+**installed** dsh CLI, matching your host environment (default port **3080**; this
+dev machine uses `--port 4080` because 3080 is occupied). After code changes,
+re-run `pnpm build` and refresh the browser — no host restart needed.
 
-Open **http://127.0.0.1:3080**, pick your workspace, and start talking. YOLO is
+Open **http://127.0.0.1:4080**, pick your workspace, and start talking. YOLO is
 already watching: mention a deadline, set a goal, or say "remember this" — then
 open the **YOLO panel** at the bottom of the left sidebar to see your timeline,
 task board, and goal progress.

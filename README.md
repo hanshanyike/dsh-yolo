@@ -38,7 +38,7 @@ cd dsh-yolo
 
 pnpm install          # 安装依赖（better-sqlite3 原生绑定已含）
 pnpm build            # 构建 host 插件 + browser client 到 dist/
-node scripts/clean-test-data.mjs   # 开发前清理上轮 E2E 留下的 [E2E] 测试夹具（防载荷膨胀）
+node scripts/clean-test-data.mjs   # 兜底：手动清理 [E2E] 测试夹具（e2e runner 拉起宿主前会自动清扫）
 pnpm dsh plugin add . --profile web   # 一次性：把本插件按 dsh 标准方式链接进 web profile
 pnpm dsh web --no-open --port 4080    # 启动 dsh 宿主 → http://127.0.0.1:4080
 ```

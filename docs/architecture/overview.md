@@ -71,7 +71,7 @@ dsh-plugin-yolo
 │   │ 设置+看板API  │   │ 常量/投影/文本 │   │ 侧边栏看板+设置卡 │        │               │
 │   └──────────────┘   └──────────────┘   └────────────────┘        │               │
 │                                                                                    │
-│   scripts/dev.mjs / wrap-client.mjs / copy-assets.mjs   build & run                │
+│   scripts/e2e.mjs / wrap-client.mjs / copy-assets.mjs   test & build                │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -375,7 +375,7 @@ used is recorded. These override assumptions whenever they conflict.
 
 | symptom | cause & fix |
 |---|---|
-| `SetNamedSecurityInfoW failed (Win32 5): grantWrite(<workspace>)` | the dsh sandbox needs `WRITE_DAC` on the workspace to add a standing ACE; if the directory is owned by `BUILTIN\Administrators` the grant fails. Fix: run dsh as Administrator once, or take ownership, or move the workspace under `%USERPROFILE%`. `scripts/dev.mjs` runs an ACL preflight and offers `--fix-acl` (elevated `takeown` + `icacls /grant`). If it appears with `Rc55: syntax error near '<'`, the latter is a downstream shell-parse failure |
+| `SetNamedSecurityInfoW failed (Win32 5): grantWrite(<workspace>)` | the dsh sandbox needs `WRITE_DAC` on the workspace to add a standing ACE; if the directory is owned by `BUILTIN\Administrators` the grant fails. Fix: run dsh as Administrator once, or take ownership, or move the workspace under `%USERPROFILE%`. If it appears with `Rc55: syntax error near '<'`, the latter is a downstream shell-parse failure |
 | pnpm `[safe-delete] trash operation ... aborted` | Git Bash trash API failure — run pnpm via PowerShell |
 
 ### Design decision: why not dynamic Cordis plugins
@@ -383,8 +383,9 @@ used is recorded. These override assumptions whenever they conflict.
 YOLO deliberately does **not** use the dynamic plugin mechanism
 (`cordis_define` + `cordis_run`): a dynamic plugin's `code.host` is a pure JS
 function body — no module resolution, no `fs`, no `better-sqlite3` native
-binding. That cannot host a TypeScript + SQLite project. `scripts/dev.mjs` is
-the correct local run path.
+binding. That cannot host a TypeScript + SQLite project. The standard local
+run path is the installed `dsh` CLI with the web profile
+(`pnpm dsh plugin add . --profile web` + `pnpm dsh web`).
 
 ## Where to look when changing X
 
@@ -403,7 +404,7 @@ the correct local run path.
 | dashboard JSON shape | `src/shared/dashboard.ts` + `src/ui/dashboard.ts` |
 | dashboard action API | `src/ui/actions.ts` |
 | sidebar dashboard UI | `client/sidebar/YoloSidebarDashboard.tsx` |
-| build / run / ACL | `scripts/dev.mjs`, `wrap-client.mjs`, `copy-assets.mjs` |
+| build / test / run | `scripts/e2e.mjs`, `wrap-client.mjs`, `copy-assets.mjs`; standard run via the installed `dsh` CLI |
 | adding a test | [testing.md](../testing.md) |
 
 The full per-module reference (files, types, public APIs, gotchas) is

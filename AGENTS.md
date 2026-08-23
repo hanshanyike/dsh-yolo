@@ -39,17 +39,22 @@ pnpm install            # 安装依赖
 pnpm check              # tsc --noEmit 类型检查（改代码后必跑）
 pnpm test:run           # vitest 单测（不依赖 host）
 pnpm build              # 产物到 dist/（host 从 dist 加载插件）
-node scripts/clean-test-data.mjs   # 开发前清理 [E2E] 测试夹具（防脏数据拖慢 E2E）
+node scripts/clean-test-data.mjs   # 手动清理 [E2E] 测试夹具（e2e runner 拉起宿主前会自动做）
 pnpm dsh plugin add . --profile web   # 一次性：把插件链接进 dsh web profile（标准 dsh 方式）
 pnpm dsh web --no-open --port 4080    # 启动宿主（标准 dsh；`web` 已隐含 --profile web，默认端口 3080，本机被占故用 4080）
-node scripts/e2e.mjs    # E2E：保证 host 起来后跑 Playwright 全套
-node scripts/e2e.mjs --spec panel   # 只跑某个 spec（tests/e2e/<spec>.spec.ts）
+node scripts/e2e.mjs                 # E2E：拉起/复用宿主后跑全套（~1 分钟，17 用例）
+node scripts/e2e.mjs --lane api      # 仅 HTTP 车道（无浏览器，秒级反馈；改 src/** 后首选）
+node scripts/e2e.mjs --lane ui       # 仅浏览器车道
+node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/<spec>.spec.ts）
 ```
 
 > **启动与宿主保持一致**：用**已安装的 `dsh`**（全局 CLI）执行 `dsh plugin add . --profile web` + `dsh web`，
-> 不要自建 `dev.mjs` / 本地 host checkout（那会因本地 checkout 的宿主凭证格式与全局不一致而要求扁平化凭证）。
+> 不要自建 `dev.mjs` / 本地 host checkout（那会因本地 checkout 的宿主凭证格式与全局不一致而要求扁平化凭证，
+> e2e runner 的 bring-up 同样遵循此约定：全局 dsh 优先）。
 > 开发时用 `--port 4080`（3080 被本机宿主占用），默认端口 3080。
-> **开发前先跑 `node scripts/clean-test-data.mjs`**，清掉上一轮 E2E 留下的 `[E2E]` 夹具，避免看板载荷膨胀拖慢测试。
+> **[E2E] 夹具清理已自动化**：runner 拉起自己的宿主前会 DB 级清扫 `[E2E]` 行；
+> 只有复用已有宿主（`--no-host`）时才需要手动跑 `clean-test-data.mjs`。
+> E2E 场景矩阵、车道模型、慢因根因记录见 **docs/testing-e2e.md**。
 
 ## 记忆 / 提醒 / 看板的核心机制
 
@@ -71,9 +76,11 @@ node scripts/e2e.mjs --spec panel   # 只跑某个 spec（tests/e2e/<spec>.spec.
 ## 测试（重要）
 
 - **单测**：`tests/**/*.test.ts`，`pnpm test:run`。用内存 SQLite 等隔离手段，**不依赖 host**。
-- **E2E**：`tests/e2e/*.spec.ts`，Playwright + **真实宿主**。运行 `node scripts/e2e.mjs`。
-  - 通过 HTTP 接口 + 真实浏览器驱动；夹具数据统一带 `[E2E]` 前缀并在 `afterAll` 清理（幂等）。
+- **E2E**：`tests/e2e/{api,ui}/*.spec.ts`，Playwright + **真实宿主**，分 **api（HTTP 无浏览器）/ ui（真实 Edge）** 两条车道。
+  运行 `node scripts/e2e.mjs`（全套 ~1 分钟）；`--lane api|ui`、`--spec <名>` 选车道/用例。
+  - 通过 HTTP 接口 + 真实浏览器驱动；夹具统一带 `[E2E]` 唯一前缀，经 `createFixtures` 按 id 在 afterEach 精准清理（幂等）。
   - 配置见 `playwright.config.ts`（缺省 `msedge`、中文、`workers:1`）。
+  - 场景矩阵 / 根因记录 / agent 手册：**docs/testing-e2e.md**。
 - **用语真实（回归约束）**：测试里的对话/提醒夹具必须用**贴合真实场景的用户句子**
   （例如「提醒我把演示稿发给研发」），**禁止**“更新测试文档”“提醒处理”“走查临时任务-勿删”
   这类只在测试语境才会出现的自指性措辞。机器夹具（`[E2E]` 前缀）除外。

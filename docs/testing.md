@@ -1,7 +1,8 @@
 # 测试文档（Testing Guide）
 
 > 面向开发者的测试体系说明：如何运行、每个测试文件测什么、测试手法、如何新增测试。
-> 当前状态：**28 个测试文件 / 320 个用例全部通过**，`tsc --noEmit` clean。
+> 当前状态：**单测 29 文件 / 324 用例全绿（~15s）**，E2E **api+ui 双车道 17 用例 ~1 分钟**
+> （见 [testing-e2e.md](testing-e2e.md)），`tsc --noEmit` clean。
 
 ---
 
@@ -27,7 +28,7 @@ pnpm test:run    # vitest 跑一遍并退出（CI / 提交前用）
 pnpm test:run -- --coverage   # 带覆盖率报告（输出到 ./coverage/）
 ```
 
-> 测试只跑 `tests/**/*.test.ts`，**不依赖 host**（无需 `dev.mjs` 启动）。
+> 测试只跑 `tests/**/*.test.ts`，**不依赖宿主**（无需启动 dsh web）。
 > 依赖已全部来自 npm registry，一条 `pnpm install` 即可跑测试。
 
 ---
@@ -49,29 +50,36 @@ pnpm test:run -- --coverage   # 带覆盖率报告（输出到 ./coverage/）
 
 | 测试文件 | 用例数 | 测什么 |
 |---|---|---|
-| `storage.test.ts` | 23 | 存储层纯函数：建表、去重、状态流转、FTS 搜索与软删、快照渲染、待提醒、抽取日志（用**内存 SQLite**） |
-| `storage-actions.test.ts` | 18 | **领域动作**：状态迁移、FTS 软删、事件写入、撤销完成（reopen）、标题模糊匹配边界 |
-| `memory-tools.test.ts` | 14 | 5 个模型可见工具的 `execute()`：读写各类记忆、搜索、软删、状态流转、快照、待提醒、`yolo_action` 分支 |
+| `storage-actions.test.ts` | 33 | **领域动作**：状态迁移、FTS 软删、事件写入、撤销完成（reopen）、标题模糊匹配边界、合并/目标/里程碑动作 |
+| `storage.test.ts` | 25 | 存储层纯函数：建表、去重、状态流转、FTS 搜索与软删、快照渲染、待提醒、抽取日志（用**内存 SQLite**） |
+| `filters.test.ts` | 21 | **看板筛选（v0.3.0 E）**：预设 Tab / 焦点桶 / 组合筛选的纯逻辑解析、时段预设区间（今天/本周/本月）、自定义起止、区间 chip 标签与匹配 |
+| `recall-policy.test.ts` | 20 | 召回策略：阈值、降级、时间窗与来源权重（M9） |
+| `semantic.test.ts` | 17 | 语义层：嵌入召回、混合排序、空结果回退 |
+| `memory-tools.test.ts` | 16 | 5 个模型可见工具的 `execute()`：读写各类记忆、搜索、软删、状态流转、快照、待提醒、`yolo_action` 分支 |
+| `extract-index.test.ts` | 15 | extract 插件接线：turn 结束抽取、节流、配置开关、去重摘要、失败隔离 |
+| `reminder.test.ts` | 15 | 提醒逻辑：到期文本（含可回复指引）、注入/排队、每日快照、N 轮快照 |
+| `ui-actions.test.ts` | 15 | **`POST /yolo/actions`**：正常/坏 JSON/未知动作/not-found/reopen 撤销 |
 | `shared-dashboard.test.ts` | 13 | 看板载荷：行投影形状（含 overdue/stale/milestone_title）、todoSummary、空载荷往返 |
-| `ui-actions.test.ts` | 13 | **`POST /yolo/actions`**：正常/坏 JSON/未知动作/not-found/reopen 撤销 |
+| `memory-recall.test.ts` | 12 | 动态召回：section/context 注册、偏好渲染、FTS 命中渲染 |
 | `extract-updates.test.ts` | 11 | **状态变化提取**：prompt 含状态摘要、validateExtraction 强转、mergeExtraction 应用 updates + milestone 关联 |
-| `extract-index.test.ts` | 9 | extract 插件接线：turn 结束抽取、节流、配置开关、去重摘要、失败隔离 |
-| `reminder.test.ts` | 9 | 提醒逻辑：到期文本（含可回复指引）、注入/排队、每日快照、N 轮快照 |
-| `filters.test.ts` | 18 | **看板筛选（v0.3.0 E）**：预设 Tab / 焦点桶 / 组合筛选的纯逻辑解析、时段预设区间（今天/本周/本月）、自定义起止、区间 chip 标签与匹配 |
+| `memory-index.test.ts` | 11 | memory 插件接线：注册工具与 prompt、跟踪最新用户消息、FTS5 语法字符回归 |
 | `reminder-brief.test.ts` | 10 | 早晚报：要素收集、每日一次 + 补发、配置开关与时间越界 |
-| `memory-index.test.ts` | 8 | memory 插件接线：注册工具与 prompt、跟踪最新用户消息、FTS5 语法字符回归 |
+| `reminder-scheduler.test.ts` | 10 | 调度器生命周期：间隔 tick、失败隔离、cleanup |
 | `extract-llm.test.ts` | 8 | LLM 提取核心：JSON 解析容错、stream 折叠、畸形条目处理 |
 | `scope.test.ts` | 8 | 作用域解析：scope key、数据目录、DB 文件名、git 分支回退 |
+| `shared-quality.test.ts` | 8 | 抽取质量护栏：自指/低信息条目拦截等 |
 | `shared-text.test.ts` | 8 | 文本工具：内容块拼接、标题归一化、本地日期 |
-| `extract-prompt.test.ts` | 7 | 提取提示词：日期内嵌、JSON-only 约束、scheduled commitments 分类、去重摘要上限、updates[] |
 | `ui-dashboard.test.ts` | 7 | 看板投影：五类数据投影、台账/通知载荷、JSON 序列化、端点 200/500 |
-| `memory-recall.test.ts` | 5 | 动态召回：section/context 注册、偏好渲染、FTS 命中渲染 |
+| `extract-prompt.test.ts` | 7 | 提取提示词：日期内嵌、JSON-only 约束、scheduled commitments 分类、去重摘要上限、updates[] |
+| `dashboard-aggregate.test.ts` | 6 | 跨工作区聚合：mergeRows 去重、workspace 计数、unhandled 汇总 |
 | `ui-index.test.ts` | 5 | ui 插件接线：`config: undefined` 回归、端点注册、scope 跟随最近会话 |
+| `memory-health.test.ts` | 4 | 记忆健康指标：召回成功率、抽取错误、重复候选 |
 | `reminder-index.test.ts` | 4 | reminder 插件接线：session-start 回放、turn 快照触发 |
 | `shared-session.test.ts` | 4 | **session 工具**：`sessionCwd`/`sessionId` 从 header 读取、legacy `meta` 形状不复活 |
+| `ui-session-threads.test.ts` | 4 | 面板会话线程：锚定/常驻线程路由（v0.3.2） |
+| `storage-scope-cache.test.ts` | 4 | **scope key 记忆化回归**：TTL 内只算一次、过期重算、非 workspace 模式不缓存、close 清缓存 |
 | `ui-config.test.ts` | 3 | 配置 schema：默认值、覆盖、越界校验 |
-| `reminder-scheduler.test.ts` | 2 | 调度器生命周期：间隔 tick、失败隔离、cleanup |
-| **合计** | **207** | |
+| **合计（29 文件）** | **324** | |
 
 > `tests/fixtures/` 目前是空目录（保留给未来的测试夹具）。
 
@@ -132,54 +140,42 @@ const ctx = { on: (ev, fn) => { handlers.set(ev, fn) }, ... }
 ## 五、浏览器端到端测试（E2E）
 
 单测用 mock / 内存 SQLite 验证纯逻辑与接线，验证不了真实宿主 + 真实浏览器下的
-表达层与宿主集成。E2E 用 **Playwright 驱动一个真实运行的 dsh web 宿主**（`dev.mjs`
-的 `:3080`），走真实的 `GET /yolo/dashboard` + `POST /yolo/actions` 端点与真实的
-SQLite 存储，覆盖核心面板交互、提醒/角标闭环、主题解析与窄屏态。
+表达层与宿主集成。E2E 用 **Playwright 驱动一个真实运行的 dsh web 宿主**，走真实的
+`GET /yolo/dashboard` + `POST /yolo/actions` 端点与真实的 SQLite 存储。
 
+- **双车道**（2026-08 治理后）：`tests/e2e/api/`（HTTP 契约，无浏览器，秒级）
+  与 `tests/e2e/ui/`（真实 Edge，看板交互/主题/锚定对话）。全套 17 用例 ~1 分钟。
 - 它是一条**本地补充车道**：CI 只跑免 key 的单测套件（提醒/简报/调度器触发逻辑
   已在单测覆盖），E2E 依赖本地已拉起并配好 LLM 的宿主，不在 CI 强制。
-- 依赖系统安装的 Edge/Chrome（无需下载浏览器），`channel: msedge`，`workers: 1`。
+- 依赖系统安装的 Edge/Chrome（无需下载浏览器），`channel: msedge`，`workers: 1`
+  （共享宿主进程 + 共享 SQLite，串行是正确性约束）。
 
 ### 如何运行
 
 ```bash
-node scripts/e2e.mjs              # 保证宿主起来后跑全套（幂等，幂等地启动/复用）
-node scripts/e2e.mjs --spec panel # 只跑某个 spec（tests/e2e/<spec>.spec.ts）
-node scripts/e2e.mjs --no-host    # 复用已在 :3080 运行的宿主，不拉起
+node scripts/e2e.mjs                 # 拉起/复用宿主后跑全部车道
+node scripts/e2e.mjs --lane api      # 仅 HTTP 车道（改 src/** 后的秒级反馈）
+node scripts/e2e.mjs --lane ui       # 仅浏览器车道
+node scripts/e2e.mjs --spec panel-flow   # 单个 spec
 ```
 
-`e2e.mjs` 按需 checkout host、装依赖、build、建 junction + 运行时 patch，然后
-`pnpm dsh web` 到 `:3080`；若宿主已在应答则直接复用，且只停自己拉起的宿主，
-绝不杀掉开发者自有的 dev host。配置见 `playwright.config.ts`。
-
-### E2E 覆盖的清单
-
-| spec | 场景 | 对应验收 |
-|---|---|---|
-| `panel-flow.spec.ts` | 打开助手看板并按真实任务渲染今日行；完成任务弹出撤销、4 秒内撤销恢复原位；逾期聚焦过滤；捕获条快速记一条入库；卡片「聊一聊」锚定对话；Esc 逐级退出 | TA-1~TA-6 / 5.4 |
-| `reminder-badge.spec.ts` | 未处理提醒驱动侧栏角标与看板通知卡，「知道了」处理后归零 | TB-3~TB-6 |
-| `theme-narrow.spec.ts` | 亮/暗宿主下主题解析；窄屏（<480px）对话直接全屏、Esc 逐级退回 | W6 / W7 |
-| `panel-v032.spec.ts` | W10「聊一聊」全新锚定对话（无常驻历史）；W9 看板描边从侧栏开始、侧栏区点击让面板让位 | R18 / R19 |
+runner 全局 `dsh` 优先（AGENTS.md 标准）；拉起自己的宿主前自动 DB 级清扫 `[E2E]`
+夹具行；复用已有宿主时绝不触碰其数据库。完整场景 × 用例矩阵、慢因根因记录、
+失败归因决策树与 agent 运行手册见 **[testing-e2e.md](testing-e2e.md)**。
 
 ### 手法与稳健性约定
 
-- **真实端点**：夹具（任务 / 通知）通过 `POST /yolo/actions` 种入，**不 mock 存储**；
-  「提醒」卡用 `author_notification` 动作经与调度器相同的存储路径确定性产生。
-- **幂等自清理**：夹具统一带唯一 `[E2E]` 前缀，`afterAll` 清理，重复本地跑不污染
-  真实用户数据。
-- **首屏竞态**：面板主体等首个 dashboard 载荷落地后才渲染；若浏览器端该次 fetch
-  偶发迟滞，`openYoloPanel` 会点「立即刷新」重打——与真实用户看到空看板时刷新一致。
-- **瞬断重试**：夹具走的不带浏览器的 API 上下文对偶发 `ECONNRESET` 重试一次。
+- **真实端点**：夹具通过 `POST /yolo/actions` 种入，**不 mock 存储**；「提醒」卡用
+  `author_notification` 动作经与调度器相同的存储路径确定性产生。
+- **按 id 清理**：`createFixtures(api)` 追踪每条夹具，`afterEach → dispose()` 精准
+  处理 —— 不做全量看板扫描（那是 2026-08 治理前的最大开销之一）。
 - **用语真实（回归约束）**：夹具必须是**贴合真实场景的用户句子**（如「提醒我把
-  演示稿发给研发」），**禁止**「更新测试文档」「提醒处理」「走查临时任务-勿删」
-  这类只在测试语境出现的自指措辞；机器夹具（`[E2E]` 前缀）除外。
-
-### 如何新增 E2E
-
-在 `tests/e2e/` 新建 `<场景>.spec.ts`，复用 `helpers.ts`（`connectApi` /
-`openYoloPanel` / 种数清理函数）。经验：慢在真实宿主 + 真实浏览器，断言优先
-落在**持久存在的元素**（如看板行）而非易自动消失的 toast；用足够余量的 expect
-超时吸收每动作后的看板重算。
+  演示稿发给研发」），禁止「更新测试文档」「提醒处理」这类自指措辞；
+  机器前缀 `[E2E]` 除外。
+- **首屏竞态**：面板主体等首个 dashboard 载荷后才渲染；`openYoloPanel` 会像真实
+  用户一样点「立即刷新」重打。
+- **断言持久元素**：落在看板行而非易消失的 toast；不要靠调大超时吸收慢——先查
+  testing-e2e.md 第四节的根因是否回归。
 
 ---
 
@@ -229,11 +225,11 @@ pnpm test:run -- --coverage
 
 ```bash
 pnpm build        # dist 是宿主实际加载的产物，改完必须重建
-pnpm dev:web      # 启动 dsh web 宿主 → http://127.0.0.1:3080
+pnpm dsh web --no-open --port 4080   # 启动 dsh web 宿主（全局 CLI，标准方式）
 ```
 
-打开 <http://127.0.0.1:3080>，选择工作区，点击**左侧边栏底部 YOLO 按钮**打开面板。
-`dev.mjs` 幂等——宿主已在跑也没关系；bundle 按文件名静态服务，重建后刷新页面即拿到新版本。
+打开 <http://127.0.0.1:4080>（或默认 3080），选择工作区，点击**左侧边栏底部 YOLO 按钮**打开面板。
+bundle 按文件名静态服务，重建后刷新页面即拿到新版本。
 
 ### 核心清单（面板改动通用，W1–W8）
 

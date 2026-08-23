@@ -19,21 +19,25 @@
 
 ## 一、安装与启动
 
-> **前置要求**：Node ≥ 22.19，pnpm ≥ 11。Windows 上请用 **PowerShell** 运行命令
-> （Git Bash 会破坏 pnpm 的安全删除）。
+> **前置要求**：Node ≥ 22.19，pnpm ≥ 11，以及已安装的 `dsh`（deepseek-harness CLI）。Windows 上请用
+> **PowerShell** 运行命令（Git Bash 会破坏 pnpm 的安全删除）。
 
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
 
 pnpm install           # 安装 YOLO 自身依赖（含 better-sqlite3 原生绑定）
-pnpm dev:web:setup     # 一次性：克隆并构建 host、建立 profile 链接、生成运行时 patch
-pnpm dev:web           # 启动 dsh web → http://127.0.0.1:3080
+pnpm build             # 构建 host 插件 + browser client 到 dist/
+pnpm dsh plugin add . --profile web   # 一次性：把本插件按 dsh 标准方式链接进 web profile
+pnpm dsh web --no-open --port 4080    # 启动 dsh 宿主 → http://127.0.0.1:4080
 ```
 
-`dev.mjs` 是幂等的——随时可重跑 `pnpm dev:web`；`pnpm dev:web:update` 会先拉取最新 host。
+`dsh plugin add .` 是 dsh 生态的标准安装：插件作为 bundle 挂进 `web` profile（`dsh.bundle.patch`
+指向 `cordis.patch.yml`，自动注册全部 host 侧插件行）。`dsh web` 用**已安装的 dsh** 启动，
+与宿主环境一致（默认端口 3080；本机被占故开发用 `--port 4080`）。改完代码重跑 `pnpm build`
+刷新浏览器即可，无需重启宿主。
 
-启动后打开 **http://127.0.0.1:3080**，选择工作区开始对话即可。YOLO 会自动开始工作：
+启动后打开 **http://127.0.0.1:4080**，选择工作区开始对话即可。YOLO 会自动开始工作：
 提到截止时间、设定目标、或说"记住这个"，然后打开左侧边栏底部的 **YOLO 面板** 查看
 时间线、任务板与目标进度。
 
@@ -171,13 +175,13 @@ YOLO 向模型暴露 5 个工具，agent 可以自己读写并推进计划：
 
 | 问题 | 说明 |
 |---|---|
-| 看板显示"加载失败" | 插件未加载或服务未启动；确认 `pnpm dev:web` 在运行 |
+| 看板显示"加载失败" | 插件未加载或服务未启动；确认 `pnpm dsh web` 宿主在运行，且 `pnpm dsh plugin add . --profile web` 做过一次 |
 | 看板一直为空 | 完成一轮对话后 YOLO 才会提取；确认配置里"启用 LLM 提取"为开 |
 | 提醒没触发 | 检查"启用提醒"与"扫描间隔"；离线期间的提醒会在下次会话开始回放 |
 | 回复"已完成"没生效 | 确认回复发生在提醒所在会话；若任务标题与提醒不一致，agent 会按标题模糊匹配，匹配不到会提示 |
 | 记忆串到别的项目了 | 记忆按工作区隔离；确认你在正确的目录/分支下工作 |
 | 想清空记忆 | 删除对应工作区的 `.dsh/yolo/` 目录（会同时删掉快照） |
 | 中文搜索不到 2 字词 | FTS5 trigram 对 ≥3 字符的 CJK 召回最好；2 字查询可能漏，请用更长关键词 |
-| 启动报 `SetNamedSecurityInfoW failed (Win32 5)` | Windows 下工作区目录 owner 是 `BUILTIN\Administrators` 时 dsh 沙箱授权失败。以管理员身份运行一次 dsh，或 `node scripts/dev.mjs --fix-acl` 提权修复 |
+| 启动报 `SetNamedSecurityInfoW failed (Win32 5)` | Windows 下工作区目录 owner 是 `BUILTIN\Administrators` 时 dsh 沙箱授权失败。以管理员身份运行一次 dsh，或把工作区移到用户目录下 |
 | pnpm 报 `[safe-delete] trash operation` | Git Bash 下的坑；请用 **PowerShell** 运行 pnpm |
 
