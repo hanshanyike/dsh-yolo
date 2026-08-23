@@ -156,7 +156,7 @@ export function registerYoloPrompt(ctx: Context, deps: YoloPromptDeps): void {
     name: 'yolo-instructions',
     order: PROMPT_ORDER.instructions,
     text: () =>
-      'YOLO (the personal memory plugin) is active. It automatically extracts deadlines, todos, goals, milestones, and preferences from the conversation. You do NOT need to create files, run shell commands, or call tools to set reminders for deadlines the user mentions — YOLO handles that.\n' +
+      'YOLO (the management plugin) is active. It automatically extracts commitments (todos), plans (goals/milestones) and tracking rules (preferences) from the conversation, and reminds you when they come due. You do NOT need to create files, run shell commands, or call tools to set reminders for deadlines the user mentions — YOLO handles that.\n' +
       'When the user replies to a YOLO reminder (messages starting with "⏰ YOLO 提醒"), handle the reply with the yolo_action tool, referencing the todo by its title: 已完成 → yolo_action(action="complete", kind="todo", title=...); 推迟到某日 → action="postpone" with due_at="resolved absolute date"; 再提醒 → action="remind_again". Confirm briefly after acting; if the user does not respond to a reminder, never follow up on your own.',
   })
 

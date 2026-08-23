@@ -14,6 +14,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type Yolo from '../storage/index.ts'
 import type { MilestoneStatus, Priority } from '../storage/types.ts'
 import { DEFAULTS } from '../shared/constants.ts'
+import { shouldDropExtracted } from '../shared/quality.ts'
 import { sessionCwd } from '../shared/session.ts'
 import { isYoloSessionId } from '../ui/session.ts'
 import { contentBlocksToText, llmExtract, type ExtractionResult, type ExtractedUpdate } from './llm-extract.ts'
@@ -79,10 +80,16 @@ function messagesToText(messages: readonly Message[], maxChars = 8000): string {
  * session_id, NEW todos write a todo_created ledger event, and a
  * session_summary keeps the ledger's source badge readable. */
 function mergeExtraction(yolo: Yolo, cwd: string, r: ExtractionResult, sessionId: string): void {
-  for (const m of r.milestones) yolo.addMilestone(cwd, { title: m.title, target_date: m.target_date, description: m.description, source: 'llm' })
+  // Write-quality gate (v0.3.2 / B3): junk acknowledgements and bare meta
+  // commands never land in storage — a wrong memory can trigger a wrong reminder.
+  for (const m of r.milestones) {
+    if (shouldDropExtracted('milestone', m.title)) continue
+    yolo.addMilestone(cwd, { title: m.title, target_date: m.target_date, description: m.description, source: 'llm' })
+  }
   const link = (title: string | null | undefined): string | null =>
     title ? yolo.findMilestoneId(cwd, title) : null
   for (const t of r.todos) {
+    if (shouldDropExtracted('todo', t.title)) continue
     const { created } = yolo.addTodo(cwd, { title: t.title, due_at: t.due_at, priority: toPriority(t.priority), milestone_id: link(t.milestone_title), source: 'llm', session_id: sessionId })
     if (created) {
       yolo.addEvent(cwd, {
@@ -94,10 +101,17 @@ function mergeExtraction(yolo: Yolo, cwd: string, r: ExtractionResult, sessionId
       })
     }
   }
-  for (const g of r.goals) yolo.addGoal(cwd, { title: g.title, description: g.description, milestone_id: link(g.milestone_title) })
-  for (const p of r.preferences) yolo.addPreference(cwd, { key: p.key, value: p.value, session_id: sessionId })
+  for (const g of r.goals) {
+    if (shouldDropExtracted('goal', g.title)) continue
+    yolo.addGoal(cwd, { title: g.title, description: g.description, milestone_id: link(g.milestone_title) })
+  }
+  for (const p of r.preferences) {
+    if (shouldDropExtracted('preference', p.key, p.value)) continue
+    yolo.addPreference(cwd, { key: p.key, value: p.value, session_id: sessionId })
+  }
   const recentSummaries = new Set(yolo.listEvents(cwd, 30).map((e) => e.summary))
   for (const e of r.events) {
+    if (shouldDropExtracted('event', e.summary)) continue
     if (recentSummaries.has(e.summary)) continue
     recentSummaries.add(e.summary)
     yolo.addEvent(cwd, { kind: e.kind, summary: e.summary, occurred_at: e.occurred_at ? Date.parse(e.occurred_at) || undefined : undefined, session_id: sessionId, source: 'llm' })

@@ -89,6 +89,8 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
       : t.source === 'manual'
         ? '快速记一条'
         : null,
+    // v0.3.2 feedback signal (P/B1): how the user's history treats this commitment
+    belief: { good: t.good_count ?? 0, stale: t.stale_count ?? 0 },
     ws,
   }))
 
@@ -220,13 +222,10 @@ function ledgerDayOf(req: unknown): string {
   return m ? m[1] : localDateStr()
 }
 
-/** Parse ?scope=current|all; default current. */
-function scopeOf(req: unknown): 'current' | 'all' {
-  const url = (req as { url?: string } | undefined)?.url ?? ''
-  return /[?&]scope=all/.test(url) ? 'all' : 'current'
-}
-
-/** Serve GET /yolo/dashboard — the panel's live data source. */
+/** Serve GET /yolo/dashboard — the panel's live data source.
+ * v0.3.3: ALWAYS unions every known workspace (no 当前/全部 toggle — the board
+ * shows it all, per the user. Cross-workspace rows carry their owning `ws`, and
+ * POST /yolo/actions routes by that row's cwd, so every row stays actionable). */
 export function registerDashboardEndpoint(
   ctx: { webServer?: WebServerLike },
   yolo: Yolo,
@@ -238,14 +237,12 @@ export function registerDashboardEndpoint(
     path: '/yolo/dashboard',
     handler: async (req, res) => {
       try {
-        const scope = scopeOf(req)
-        const aggregate = scope === 'all' && (opts?.allowAggregate?.() ?? false)
+        const day = ledgerDayOf(req)
         const focusDefault = opts?.focusDefaultCount?.() ?? 0
-        if (aggregate) {
-          const metas = yolo.listWorkspaceMeta()
-          const day = ledgerDayOf(req)
+        const metas = yolo.listWorkspaceMeta()
+        if (metas.length > 1) {
           const list = metas.map(({ cwd: wcwd, scopeKey }) => {
-            const ws: WorkspaceTag = { slug: scopeKey, label: workspaceLabel(wcwd, scopeKey) }
+            const ws: WorkspaceTag = { slug: scopeKey, label: workspaceLabel(wcwd, scopeKey), cwd: wcwd }
             return { data: buildDashboardData(yolo, wcwd, day, ws), ws }
           })
           const data = aggregateDashboards(list.map((l) => l.data))
@@ -254,7 +251,7 @@ export function registerDashboardEndpoint(
           res.end(JSON.stringify(data))
           return
         }
-        const data = buildDashboardData(yolo, cwd(), ledgerDayOf(req))
+        const data = buildDashboardData(yolo, cwd(), day)
         data.focusDefaultCount = focusDefault
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
         res.end(JSON.stringify(data))

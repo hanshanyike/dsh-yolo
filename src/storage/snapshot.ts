@@ -2,8 +2,9 @@
 // Written to data/snapshots/YYYY-MM-DD.md and committed to git (per user decision).
 // The DB is a performance cache; snapshots are the durable, reviewable memory.
 
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { renameSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { localDateStr } from '../shared/text.ts'
 import type { DB } from './db.ts'
 import { listEvents, listGoals, listMilestones, listPreferences, listTodos } from './repository.ts'
@@ -64,13 +65,23 @@ export function renderSnapshot(db: DB, scopeKey: string, cwdHint?: string): stri
   return lines.join('\n')
 }
 
-/** Write a snapshot file for today under <dataDir>/snapshots/<date>.md. Returns the path. */
+/** Write a snapshot file for today under <dataDir>/snapshots/<date>.md. Returns the path.
+ * Atomic (tmp + rename, borrowed from dsh-memory-lite): a crash mid-write never
+ * leaves a half-written snapshot — the previous good file stays intact. */
 export function writeSnapshot(db: DB, scopeKey: string, dataDir: string, cwdHint?: string, dateStr?: string): string {
   const dir = join(dataDir, 'snapshots')
   mkdirSync(dir, { recursive: true })
   const date = dateStr ?? localDateStr()
   const path = join(dir, `${date}.md`)
-  writeFileSync(path, renderSnapshot(db, scopeKey, cwdHint), 'utf8')
+  const tmp = join(dir, `.${date}.${randomUUID()}.tmp`)
+  try {
+    writeFileSync(tmp, renderSnapshot(db, scopeKey, cwdHint), 'utf8')
+    renameSync(tmp, path)
+  } catch (e) {
+    // best-effort cleanup so a failed write never leaves stray tmp files
+    try { unlinkSync(tmp) } catch { /* already gone or never created */ }
+    throw e
+  }
   return path
 }
 

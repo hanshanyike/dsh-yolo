@@ -11,6 +11,8 @@ export interface WorkspaceTag {
   slug: string
   /** Human-friendly workspace name (e.g. the workspace folder's basename). */
   label: string
+  /** Absolute workspace cwd — lets the panel route an action to the row's own scope. */
+  cwd?: string
 }
 
 /** Compact row shapes (a projection of the storage rows, safe for serialization). */
@@ -32,6 +34,8 @@ export interface YoloTodoRow {
   stale?: boolean
   /** Source badge label — the creating session's one-line summary (v0.3.0). */
   session_label?: string | null
+  /** v0.3.2 feedback track: times completed (good) vs cancelled (stale). */
+  belief?: { good: number; stale: number }
   /** Owning workspace when aggregated across scopes (v0.3.0). */
   ws?: WorkspaceTag
 }

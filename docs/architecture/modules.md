@@ -83,6 +83,7 @@ YOLO 不是单个插件，而是 **5 个协作的 Cordis 插件 + 1 个浏览器
 | `dashboard.ts` | 看板 JSON 载荷类型（host 与浏览器共享的跨边界形状）+ `todoSummary` |
 | `actions.ts` | `YoloActionRequest` / `applyYoloAction` —— 模型工具、HTTP 端点、提取 updates 三入口共用的动作校验与分发 |
 | `session.ts` | `sessionCwd()` / `sessionId()` —— 从 `session.header` 读取工作区 cwd 与会话 id（修复 scope 失效） |
+| `quality.ts` | `shouldDropExtracted` —— 写入质量闸门，丢弃确认词/裸元命令/空标题/空值 |
 | `text.ts` | `contentBlocksToText` / `normalizeTitle` / `localDateStr` 文本工具 |
 
 ### 关键常量（constants.ts）
@@ -96,7 +97,10 @@ PROMPT_ORDER = { instructions: 110, preferencesPreamble: 120, recallContext: 220
 DEFAULTS = {
   scope: 'workspace',
   reminderCheckIntervalSec: 300,        // 提醒扫描间隔
-  reminderAheadMin: 60,                 // 提前量（分钟）
+  reminderAheadMin: 0,                  // 提前量（分钟；0=到点就触发）
+  reminderQuietEnabled: false,          // v0.3.2安静时段
+  reminderQuietStart: '22:00',
+  reminderQuietEnd: '08:00',
   extractionMinIntervalSec: 30,         // 抽取节流
   extractionTokenBudgetPerTurn: 2048,
   extractionTokenBudgetPerDay: 100_000,

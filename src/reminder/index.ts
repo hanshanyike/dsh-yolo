@@ -8,7 +8,7 @@ import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { createUserMessage, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type Yolo from '../storage/index.ts'
 import { startReminderScheduler, maybeWriteTurnSnapshot, resolveReminderRuntime } from './scheduler.ts'
-import { YoloSessions, type AgentLike, type AgentsLike } from '../ui/session.ts'
+import { YoloSessions, isYoloSessionId, type AgentLike, type AgentsLike } from '../ui/session.ts'
 import { sessionCwd } from '../shared/session.ts'
 import { DEFAULTS } from '../shared/constants.ts'
 
@@ -24,7 +24,7 @@ interface SettingsLike {
   get(ns: unknown): {
     brief?: { enabled?: boolean; morningTime?: string; eveningTime?: string; model?: string }
     storage?: { snapshotInterval?: string }
-    reminder?: { checkIntervalSec?: number; aheadMin?: number; enabled?: boolean }
+    reminder?: { checkIntervalSec?: number; aheadMin?: number; enabled?: boolean; quietHoursEnabled?: boolean; quietStart?: string; quietEnd?: string }
   } | undefined
 }
 
@@ -47,9 +47,8 @@ export function apply(ctx: Context): void {
     if (cwd) latestCwd = cwd
   }
   ctx.on('agent/session-start', (payload: { agent: unknown }) => {
-    // YOLO resident threads must NOT move the tracked workspace
-    const id = (payload.agent as { id?: string } | undefined)?.id
-    if (!id?.startsWith('yolo-w-')) trackCwd(payload.agent)
+    // YOLO threads (resident + anchored chat) must NOT move the tracked workspace
+    if (!isYoloSessionId((payload.agent as { id?: string } | undefined)?.id)) trackCwd(payload.agent)
   })
 
   // turn-cadence snapshot: 'every_10_turns' writes a timestamped Markdown
@@ -70,9 +69,14 @@ export function apply(ctx: Context): void {
   })
 
   // reminder delivery target: the workspace's YOLO resident thread (v0.3.0 B)
+  // v0.3.3: created with the harness model selection so the agent replies.
   const sessions = new YoloSessions(
     (ctx as { agents?: AgentsLike }).agents,
     { info: (f, ...a) => ctx.logger?.info?.(f, ...a), warn: (f, ...a) => ctx.logger?.warn?.(f, ...a) },
+    () => {
+      const sel = (ctx as { get?: (s: string) => { currentSelection(): { provider: string; model: string } } | undefined }).get?.('agentDefaultModel')
+      return sel?.currentSelection()
+    },
   )
   const deliver = async (cwd: string, text: string): Promise<void> => {
     const agent: AgentLike | undefined = await sessions.ensure(cwd)
@@ -90,10 +94,18 @@ export function apply(ctx: Context): void {
       cwd: () => latestCwd ?? process.cwd(),
       deliver,
       // interval cannot re-arm a live timer, so it is fixed at startup;
-      // ahead/enabled are read per tick so Settings edits apply without reload
+      // ahead/enabled/quiet are read per tick so Settings edits apply without reload
       intervalMs: resolveReminderRuntime(reminderCfg()).intervalMs,
       aheadMs: () => resolveReminderRuntime(reminderCfg()).aheadMs,
       reminderEnabled: () => resolveReminderRuntime(reminderCfg()).enabled,
+      quiet: () => {
+        const r = settings?.get(YOLO_NS)?.reminder
+        return {
+          enabled: r?.quietHoursEnabled ?? DEFAULTS.reminderQuietEnabled,
+          start: r?.quietStart ?? DEFAULTS.reminderQuietStart,
+          end: r?.quietEnd ?? DEFAULTS.reminderQuietEnd,
+        }
+      },
       briefs: {
         config: () => {
           const b = settings?.get(YOLO_NS)?.brief

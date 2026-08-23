@@ -89,14 +89,14 @@ export function listMilestones(db: DB, scopeKey: string, status?: MilestoneStatu
   return db.prepare(`SELECT * FROM milestones ${where} ORDER BY created_at DESC`).all(...params) as Milestone[]
 }
 
-/** Fuzzy-locate a non-terminal milestone by title (M8): exact normalized match
- * first, then bidirectional containment (shorter side >= 3 chars to avoid noise). */
+/** Fuzzy-locate a non-terminal milestone by title (M8 + v0.3.2): prefers an
+ * exact match, then active over planned, then most recently updated. */
 export function findMilestoneByTitle(db: DB, scopeKey: string, title: string): Milestone | undefined {
   if (!normalize(title)) return undefined
   const rows = db
     .prepare("SELECT * FROM milestones WHERE scope_key = ? AND status IN ('planned','active')")
     .all(scopeKey) as Milestone[]
-  return rows.find((m) => looseMatch(m.title, title))
+  return bestByTitle(rows, title, (s) => (s === 'active' ? 2 : s === 'planned' ? 1 : 0))
 }
 
 // ---------- todos ----------
@@ -202,14 +202,14 @@ export function setTodoReminded(db: DB, id: string, ts = now()): void {
   db.prepare('UPDATE todos SET last_reminded_at = ? WHERE id = ?').run(ts, id)
 }
 
-/** Fuzzy-locate a non-terminal todo by title (M8): exact normalized match first,
- * then bidirectional containment (shorter side >= 3 chars to avoid noise). */
+/** Fuzzy-locate a non-terminal todo by title (M8 + v0.3.2): an exact normalized
+ *  match wins; otherwise bestByTitle ranks loose matches by status/recency. */
 export function findTodoByTitle(db: DB, scopeKey: string, title: string): Todo | undefined {
   if (!normalize(title)) return undefined
   const rows = db
     .prepare("SELECT * FROM todos WHERE scope_key = ? AND status IN ('pending','in_progress')")
     .all(scopeKey) as Todo[]
-  return rows.find((t) => looseMatch(t.title, title))
+  return bestByTitle(rows, title, RANK_TODO)
 }
 
 function syncTodoFts(db: DB, id: string, title: string, detail: string | null): void {
@@ -263,11 +263,11 @@ export function listGoals(db: DB, scopeKey: string, status?: GoalStatus): Goal[]
   return db.prepare(`SELECT * FROM goals ${where} ORDER BY created_at DESC`).all(...params) as Goal[]
 }
 
-/** Fuzzy-locate an active goal by title (M8): same strategy as todos. */
+/** Fuzzy-locate an active goal by title (M8 + v0.3.2): prefers an exact match. */
 export function findGoalByTitle(db: DB, scopeKey: string, title: string): Goal | undefined {
   if (!normalize(title)) return undefined
   const rows = db.prepare("SELECT * FROM goals WHERE scope_key = ? AND status = 'active'").all(scopeKey) as Goal[]
-  return rows.find((g) => looseMatch(g.title, title))
+  return bestByTitle(rows, title, (s) => (s === 'active' ? 1 : 0))
 }
 
 // ---------- preferences ----------
@@ -464,6 +464,30 @@ function looseMatch(stored: string, query: string): boolean {
   return Math.min(a.length, b.length) >= 3 && (a.includes(b) || b.includes(a))
 }
 
+/**
+ * Pick the best-located row by title (v0.3.2, refined from the unique-substring
+ * idea): an EXACT normalized title wins outright; otherwise rank the loose
+ * matches by activity (status priority, then most recently updated) so an
+ * action never silently lands on an arbitrary first match. This is the
+ * "prefer the right one" half of the ambiguous-ref guard — the full
+ * ambiguous-with-candidates error is a documented follow-up.
+ */
+function bestByTitle<T extends { title: string; status: string; updated_at: number }>(
+  rows: readonly T[],
+  title: string,
+  statusRank: (s: string) => number,
+): T | undefined {
+  const matches = rows.filter((r) => looseMatch(r.title, title))
+  if (matches.length === 0) return undefined
+  const target = looseKey(title)
+  const exact = matches.filter((r) => looseKey(r.title) === target)
+  const pool = exact.length > 0 ? exact : matches
+  return [...pool].sort((a, b) => statusRank(b.status) - statusRank(a.status) || b.updated_at - a.updated_at)[0]
+}
+
+const TODO_STATUS_RANK: Record<TodoStatus, number> = { in_progress: 2, pending: 1, done: 0, cancelled: 0 }
+const RANK_TODO = (s: string): number => TODO_STATUS_RANK[s as TodoStatus] ?? 0
+
 // ---------- domain actions (M8 Organizer) ----------
 // State transitions that ALSO write a timeline event, so "where did it go"
 // is always auditable. Shared by extraction updates, the yolo_action tool and
@@ -500,6 +524,8 @@ export function applyTodoAction(
       break
     case 'complete':
       setTodoStatus(db, id, 'done')
+      // v0.3.2 feedback: a completed commitment is a "good" signal (P/B1)
+      db.prepare('UPDATE todos SET good_count = COALESCE(good_count,0) + 1, updated_at = ?, completed_at = ? WHERE id = ?').run(ts, ts, id)
       addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
       break
     case 'reopen':
@@ -510,6 +536,9 @@ export function applyTodoAction(
       break
     case 'cancel':
       setTodoStatus(db, id, 'cancelled')
+      // v0.3.2 feedback: a cancelled commitment is a "stale" signal — it was
+      // tracked but did not materialize (P/B1)
+      db.prepare('UPDATE todos SET stale_count = COALESCE(stale_count,0) + 1, updated_at = ? WHERE id = ?').run(ts, id)
       addEvent(db, { kind: 'todo_cancelled', summary: `取消：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
       break
     case 'postpone': {

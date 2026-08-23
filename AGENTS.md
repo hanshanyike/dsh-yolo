@@ -24,7 +24,7 @@
 - 存储：SQLite。UI：React + 自研 `Mono` 设计系统（见下）。
 - 配置用 `schemastery` schema；**插件 `apply()` 里必须 `Config(config ?? {})` 归一化默认值**，
   防止加载器传 `undefined` 时空指针（历史事故：`reading 'enabled'`）。
-- Windows 优先；涉及文件权限时启动前做 ACL 预检（`node scripts/dev.mjs --fix-acl`）。
+- Windows 优先；涉及文件权限时用管理员预处理工作区 ACL（见 `docs/architecture/overview.md`）。
 
 ### 设计系统（Mono）
 
@@ -39,7 +39,8 @@ pnpm install            # 安装依赖
 pnpm check              # tsc --noEmit 类型检查（改代码后必跑）
 pnpm test:run           # vitest 单测（不依赖 host）
 pnpm build              # 产物到 dist/（host 从 dist 加载插件）
-node scripts/dev.mjs    # 本地拉起 dev host 到 :3080（默认；--port 可改）
+pnpm dsh plugin add . --profile web   # 一次性：把插件链接进 dsh web profile
+pnpm dsh web --profile web --no-open --port 4080   # 启动宿主（标准 dsh 方式）
 node scripts/e2e.mjs    # E2E：保证 host 起来后跑 Playwright 全套
 node scripts/e2e.mjs --spec panel   # 只跑某个 spec（tests/e2e/<spec>.spec.ts）
 ```
@@ -50,13 +51,14 @@ node scripts/e2e.mjs --spec panel   # 只跑某个 spec（tests/e2e/<spec>.spec.
 - **动作统一**：看板上每个操作（完成/推迟/取消/撤销/新增/改筛选…）都走
   `POST /yolo/actions` → `applyYoloAction`，与模型工具 `yolo_action` 同一条路径，
   保证状态迁移 + 审计事件一致。
-- **看板数据**：`GET /yolo/dashboard`，打开时每 30s 轮询；侧栏角标独立轻量轮询。
+- **看板数据**：`GET /yolo/dashboard` 始终**聚合所有已知工作区**（v0.3.3，不再区分工作区）。
+  打开时加载一次，动作与手动刷新才重新拉取（**打开时不 30s 轮询**）；侧栏角标独立轻量轮询（关闭时也能更新）。
 - **提醒**：调度器按 `checkIntervalSec` 产生**通知卡**（未处理角标 + 看板卡），并投递到
   **YOLO 常驻线程**（`ctx.yolo` 的 resident thread），**绝不注入/打扰工作会话**（红线 D7/TB-1）。
   `完成` toast 带 4 秒「撤销」窗口（服务端 `reopen` 领域动作）；提醒正文只给用户可读文本，
   agent 处理规则放 system 段（`memory/recall.ts` 的 yolo-instructions）。
-- **跨工作区只读**：`scope=all` 聚合是多工作区只读视图；`POST /yolo/actions` 不接受 `scope`，
-  外来工作区行只看不操作（见 `docs/roadmap-ux-priorities.md` 第 4 节）。
+- **动作归属**：聚合看板上的每一行都带其所在工作区（`ws.cwd`）；`POST /yolo/actions` 按该行
+  `scope_cwd` 路由到对应工作区，因此跨工作区行也能操作（不再是只读）。
 
 > 产品红线：**管理而非代办；绝不打扰工作会话；本地优先；类型安全 + 真机验证。**
 
@@ -93,11 +95,11 @@ node scripts/e2e.mjs --spec panel   # 只跑某个 spec（tests/e2e/<spec>.spec.
 - **产品定义**：`docs/product-design.md`（面板 1.0）· `docs/product-design.html`（可点击原型）
 - **设计**：`docs/design-m8-organizer.md`（M8 · 已交付）· `docs/design-m9-recall-quality.md`（M9）·
   `docs/frontend-redesign.md` / `docs/frontend-redesign-v1-trackhall.md`（Mono 设计系统）
-- **调研 / 参考**：`docs/research/`（00 总报告 · 01–13 逐项 · 09 可借鉴清单 P1–P46）
+- **调研 / 参考**：`docs/research/`（00–18 · 18 为借鉴落地结论，作为"得数"入口；其余为逐库素材）
 - **架构**：`docs/architecture/overview.md`（数据流、决策、扩展点）· `docs/architecture/modules.md`（逐模块代码地图，改代码前先查）
 - **测试**：`docs/testing.md`（含真机 W1–W8 清单）
 - **发布**：`docs/release.md` · `CHANGELOG.md`
 - **使用**：`docs/usage.md`
-- **真机反馈**：`docs/issue-*.md`（issue-reminder-visibility · issue-timeline-session-attribution）
+- **真机反馈**：`docs/uiux-real-review.md`（交互/UI 真实体验评审，P0/P1 已修复）
 - **入口**：`README.md` · `docs/README.md`（文档地图）
 - **schema 事实源**：`src/storage/schema.sql`

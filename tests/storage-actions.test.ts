@@ -75,6 +75,25 @@ describe('applyTodoAction', () => {
     expect(lastEvent()?.kind).toBe('todo_cancelled')
   })
 
+  it('feedback counters: complete bumps good, cancel bumps stale (P/B1)', () => {
+    const { row: t } = repo.upsertTodo(db, { title: '跟进收款', scope_key: SCOPE })
+    repo.applyTodoAction(db, t.id, 'complete')
+    repo.applyTodoAction(db, t.id, 'reopen')
+    repo.applyTodoAction(db, t.id, 'complete')
+    expect(repo.applyTodoAction(db, t.id, 'complete')?.good_count).toBe(2)
+
+    const { row: c } = repo.upsertTodo(db, { title: '过期的需求', scope_key: SCOPE })
+    repo.applyTodoAction(db, c.id, 'cancel')
+    expect(repo.applyTodoAction(db, c.id, 'cancel')?.stale_count).toBe(1)
+  })
+
+  it('title locate prefers an exact match over a loose containment match (B6)', () => {
+    repo.upsertTodo(db, { title: '并发评审', scope_key: SCOPE })
+    repo.upsertTodo(db, { title: '并发评审后的复盘会', scope_key: SCOPE })
+    // exact normalized title must win, not the first containment hit
+    expect(repo.findTodoByTitle(db, SCOPE, '并发评审')?.title).toBe('并发评审')
+  })
+
   it('stamps the originating session on the audit event', () => {
     const { row: t } = repo.upsertTodo(db, { title: '会话内完成的任务', scope_key: SCOPE })
     repo.applyTodoAction(db, t.id, 'complete', { session_id: 'session-abc' })

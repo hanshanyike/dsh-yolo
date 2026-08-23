@@ -20,6 +20,9 @@ export interface Config {
     enabled: boolean
     checkIntervalSec: number
     aheadMin: number
+    quietHoursEnabled: boolean
+    quietStart: string
+    quietEnd: string
   }
   brief: {
     enabled: boolean
@@ -64,6 +67,9 @@ export const Config: z<Config> = z.object({
     enabled: z.boolean().default(true),
     checkIntervalSec: z.number().default(300).min(60),
     aheadMin: z.number().default(0).min(0),
+    quietHoursEnabled: z.boolean().default(false),
+    quietStart: z.string().default('22:00'),
+    quietEnd: z.string().default('08:00'),
   }),
   brief: z.object({
     enabled: z.boolean().default(true),

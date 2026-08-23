@@ -24,6 +24,11 @@ export const DEFAULTS = {
   scope: 'workspace' as const,
   reminderCheckIntervalSec: 300,
   reminderAheadMin: 0,
+  // v0.3.2 quiet-hours gate (borrowed from dsh-memory-evolve): outside this
+  // window reminders are held and fire on the first tick after the window.
+  reminderQuietEnabled: false,
+  reminderQuietStart: '22:00',
+  reminderQuietEnd: '08:00',
   extractionMinIntervalSec: 30,
   extractionTokenBudgetPerTurn: 2048,
   extractionTokenBudgetPerDay: 100_000,

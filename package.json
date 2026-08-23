@@ -24,10 +24,6 @@
   },
   "scripts": {
     "build": "tsdown && tsdown -c tsdown.client.config.ts && node scripts/wrap-client.mjs && node scripts/copy-assets.mjs",
-    "dev": "tsdown --watch",
-    "dev:web": "node scripts/dev.mjs",
-    "dev:web:setup": "node scripts/dev.mjs --setup",
-    "dev:web:update": "node scripts/dev.mjs --update",
     "check": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
@@ -38,8 +34,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*"
-  },
-  "repository": {
+  },  "repository": {
     "type": "git",
     "url": "git+https://github.com/hanshanyike/dsh-yolo.git"
   },
@@ -66,6 +61,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "0.1.1-rc.2",
     "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-ui-conversation": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-ui-settings-plugins": "^0.1.1-rc.2",

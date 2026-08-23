@@ -27,7 +27,6 @@ import { DEFAULT_FILTER } from '../../src/shared/filters.ts'
 import { localDateStr } from '../../src/shared/text.ts'
 import {
   IcBell, IcChat, IcCheck, IcChevron, IcClose, IcDots, IcFlag, IcFilter, IcPin, IcPlusDay,
-  IcMerge,
 } from '../design/icons.tsx'
 import type { ChatAnchor } from './ChatPane.tsx'
 import { readPanelState, writePanelState } from './state.ts'
@@ -52,6 +51,9 @@ interface EditorDraft {
 }
 
 const DAY_MS = 86_400_000
+
+/** Notification cards preview before a 查看全部 inbox fold (5.3, P0-1). */
+const NOTIF_PREVIEW = 4
 
 const PRESETS: { key: PresetTab; label: string }[] = [
   { key: 'today', label: '今日' },
@@ -89,6 +91,26 @@ function fmtTime(ms: number): string {
   const d = new Date(ms)
   const p = (n: number): string => String(n).padStart(2, '0')
   return `${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** Relative "due" label for a reminder card header (5.3): how overdue or
+ *  how far out it is, instead of the card's creation time. */
+function dueMomentLabel(iso: string): string {
+  const day = iso.slice(0, 10)
+  const today = localDateStr()
+  const time = iso.length > 10 ? ` ${iso.slice(11, 16)}` : ''
+  if (day < today) {
+    const diff = Math.round((new Date(`${today}T00:00:00`).getTime() - new Date(`${day}T00:00:00`).getTime()) / DAY_MS)
+    return `逾期 ${diff} 天`
+  }
+  return fmtDue(iso) || `${day}${time}`
+}
+
+/** Local "M/D HH:MM" label for brief cards (they are dated, not due-ranked). */
+function localDayLabel(ms: number): string {
+  if (!ms) return ''
+  const d = new Date(ms)
+  return `${d.getMonth() + 1}/${d.getDate()} ${fmtTime(ms)}`
 }
 
 function dayOf(iso: string | null | undefined): string {
@@ -170,10 +192,14 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
   const [quickBusy, setQuickBusy] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [ledgerOpen, setLedgerOpen] = useState(false)
-  const [healthOpen, setHealthOpen] = useState(false)
   const [foldedOpen, setFoldedOpen] = useState(false)
   const [renameDraft, setRenameDraft] = useState<{ kind: 'goal' | 'milestone'; id: string; title: string } | null>(null)
   const [msPop, setMsPop] = useState<{ id: string; x: number } | null>(null)
+  // v0.3.2: notification inbox — show the first N, a 查看全部 expands the rest.
+  const [notifShowAll, setNotifShowAll] = useState(false)
+  // v0.3.2: completion/处理 animations — rows/cards retire with a height
+  // collapse before being removed, so nothing "jumps" out of the board.
+  const [retiring, setRetiring] = useState<YoloTodoRow[]>([])
   const fltBtnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -186,15 +212,29 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
     return () => { window.clearTimeout(t) }
   }, [toast])
 
+  // Map every board row to its owning workspace cwd so an action on an
+  // all-workspaces row routes to that scope (the board is always scope=all).
+  const wsCwdById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const t of data.todos) if (t.ws?.cwd) m.set(t.id, t.ws.cwd)
+    for (const g of data.goals) if (g.ws?.cwd) m.set(g.id, g.ws.cwd)
+    for (const ms of data.milestones) if (ms.ws?.cwd) m.set(ms.id, ms.ws.cwd)
+    for (const n of data.notifications) if (n.ws?.cwd) m.set(n.id, n.ws.cwd)
+    return m
+  }, [data])
+
   const act = useCallback(
     async (key: string, body: Record<string, unknown>): Promise<boolean> => {
       setBusyKey(key)
       setActionError(null)
       try {
+        const payload = { ...body }
+        const scopeCwd = wsCwdById.get(String(body.id))
+        if (scopeCwd) payload.scope_cwd = scopeCwd
         const r = await fetch('/yolo/actions', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify(payload),
         })
         const res = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null
         if (!r.ok || !res?.ok) throw new Error(res?.error ?? `HTTP ${r.status}`)
@@ -207,7 +247,7 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
         setBusyKey(null)
       }
     },
-    [refresh],
+    [refresh, wsCwdById],
   )
 
   // Complete flow (5.4): optimistic fill + retire, POST, refresh, toast with undo.
@@ -215,18 +255,32 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
     setCompleting((s) => { const n = new Set(s); n.add(t.id); return n })
     const ok = await act(t.id, { action: 'complete', kind: 'todo', id: t.id })
     setCompleting((s) => { const n = new Set(s); n.delete(t.id); return n })
-    if (ok) setToast({ text: `已完成 · ${t.title}`, undo: t })
+    if (ok) {
+      // keep a snapshot so the board can animate the collapse before it unmounts
+      const snapshot = { ...t }
+      setRetiring((r) => [...r, snapshot])
+      window.setTimeout(() => { setRetiring((r) => r.filter((x) => x.id !== snapshot.id)) }, 520)
+      setToast({ text: `已完成 · ${t.title}`, undo: t })
+    }
   }, [act])
 
   // Undo of complete (5.4, 4s window): reopen restores the row.
   const undoComplete = useCallback(async (t: YoloTodoRow): Promise<void> => {
     setToast(null)
     const ok = await act(`reopen-${t.id}`, { action: 'reopen', kind: 'todo', id: t.id })
-    if (ok) setToast({ text: `已撤销 · ${t.title}` })
+    if (ok) {
+      setRetiring((r) => r.filter((x) => x.id !== t.id))
+      setToast({ text: `已撤销 · ${t.title}` })
+    }
   }, [act])
 
   const counts = useMemo(() => focusCounts(data.todos), [data.todos])
   const visible = useMemo(() => sortForKanban(applyKanbanFilter(data.todos, filter)), [data.todos, filter])
+  // retired rows being animated out — keep them in their section while collapsing
+  const retiringToShow = useMemo(
+    () => retiring.filter((t) => !visible.some((v) => v.id === t.id)),
+    [retiring, visible],
+  )
   // R9: cap the default view to the top-N focus rows; the rest fold away so a
   // busy board opens quiet. Only applies to the unfiltered default view —
   // engaging any detail filter (or the 'done' preset) shows everything.
@@ -257,13 +311,24 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
       else if (b === 'today') today.push(t)
       else week.push(t)
     }
+    // v0.3.2: collapsing rows re-join their original section so the retire
+    // animation plays in place instead of the row vanishing out of the board.
+    for (const t of retiringToShow) {
+      if (t.stale) stale.push(t)
+      else {
+        const b = dueBucket(t)
+        if (b === 'overdue') overdue.push(t)
+        else if (b === 'today') today.push(t)
+        else week.push(t)
+      }
+    }
     return [
       { key: 'overdue', label: '逾期', danger: true, rows: overdue },
       { key: 'today', label: '今日', danger: false, rows: today },
       { key: 'week', label: '未来 7 天', danger: false, rows: week },
       { key: 'stale', label: '滞留', danger: false, rows: stale },
     ].filter((s) => s.rows.length > 0)
-  }, [focus, filter.preset])
+  }, [focus, filter.preset, retiringToShow])
 
   const patchFilter = (patch: Partial<KanbanFilter>): void => {
     setFilter((f) => ({ ...f, ...patch }))
@@ -425,37 +490,53 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
           {/* notification cards — the only surface above the canvas (5.3) */}
           {openNotifications.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-              {openNotifications.slice(0, 4).map((n) => (
-                <div key={n.id} className={`notif${n.kind === 'reminder' ? ' reminder' : ''}`}>
-                  <div className="notif-head">
-                    <IcBell size={13} />
-                    <span className="notif-type">{notifTypeLabel(n.kind, n.title)}</span>
-                    <span className="notif-time mono">{fmtTime(n.created_at)}</span>
+              {(notifShowAll ? openNotifications : openNotifications.slice(0, NOTIF_PREVIEW)).map((n) => {
+                // 5.3: the header time should read the RELATIVE due moment for a
+                // reminder, not the creation time (which read as "when was this
+                // card made" and told nothing about how overdue it is).
+                const dueFor = n.kind === 'reminder' && n.todo_id ? data.todos.find((td) => td.id === n.todo_id) : undefined
+                const timeLabel = dueFor?.due_at ? dueMomentLabel(dueFor.due_at) : n.kind === 'brief' ? localDayLabel(n.created_at) : fmtTime(n.created_at)
+                return (
+                  <div key={n.id} className={`notif${n.kind === 'reminder' ? ' reminder' : ''}`}>
+                    <div className="notif-head">
+                      <IcBell size={13} />
+                      <span className="notif-type">{notifTypeLabel(n.kind, n.title)}</span>
+                      <span className="notif-time mono">{timeLabel}</span>
+                    </div>
+                    <div className="notif-body">
+                      <div style={{ fontWeight: 500 }}>{n.title.replace(/^[⏰☀🌙]\s*/, '')}</div>
+                      {n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2 }}>{n.body.split('\n')[0]}</div>}
+                    </div>
+                    <div className="notif-acts">
+                      {n.kind === 'reminder' && n.todo_id && (
+                        <>
+                          <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'complete', kind: 'todo', id: n.todo_id }) }}>
+                            <IcCheck size={12} />完成
+                          </button>
+                          <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id, due_at: nextDayStr(null) }) }}>
+                            <IcPlusDay size={12} />+1d
+                          </button>
+                          <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'remind_again', kind: 'todo', id: n.todo_id }) }}>
+                            <IcBell size={12} />再提醒
+                          </button>
+                        </>
+                      )}
+                      <button type="button" className="nact nact--chat" onClick={() => { onOpenChat({ title: n.title.replace(/^[⏰☀🌙]\s*/, ''), detail: n.body ?? null }) }}>
+                        <IcChat size={12} />聊一聊
+                      </button>
+                      <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id }) }}>
+                        知道了
+                      </button>
+                    </div>
                   </div>
-                  <div className="notif-body">
-                    <div style={{ fontWeight: 500 }}>{n.title.replace(/^[⏰☀🌙]\s*/, '')}</div>
-                    {n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2 }}>{n.body.split('\n')[0]}</div>}
-                  </div>
-                  <div className="notif-acts">
-                    {n.kind === 'reminder' && n.todo_id && (
-                      <>
-                        <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'complete', kind: 'todo', id: n.todo_id }) }}>
-                          <IcCheck size={12} />完成
-                        </button>
-                        <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id, due_at: nextDayStr(null) }) }}>
-                          <IcPlusDay size={12} />+1d
-                        </button>
-                      </>
-                    )}
-                    <button type="button" className="nact nact--chat" onClick={() => { onOpenChat({ title: n.title.replace(/^[⏰☀🌙]\s*/, ''), detail: n.body ?? null }) }}>
-                      <IcChat size={12} />聊一聊
-                    </button>
-                    <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id }) }}>
-                      知道了
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
+              {openNotifications.length > NOTIF_PREVIEW && (
+                <button type="button" className="notif-more" onClick={() => { setNotifShowAll((v) => !v) }}>
+                  {notifShowAll ? '收起' : `查看全部 ${openNotifications.length} 条`}
+                  <IcChevron size={10} className={notifShowAll ? 'up' : ''} />
+                </button>
+              )}
             </div>
           )}
 
@@ -492,6 +573,7 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
                     t={t}
                     busy={busyKey === t.id}
                     completing={completing.has(t.id)}
+                    retiring={retiringToShow.some((r) => r.id === t.id)}
                     onComplete={() => { void completeTodo(t) }}
                     onAct={(action, extra) => { void act(t.id, { action, kind: 'todo', id: t.id, ...extra }) }}
                     onEdit={() => { setEditor({ id: t.id, title: t.title, due: dayOf(t.due_at), priority: t.priority ?? '', milestoneTitle: t.milestone_title ?? '' }) }}
@@ -633,55 +715,7 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
             </div>
           </div>
 
-          {/* ⑤b memory-health fold (R8): low-bother expandable quality surface +
-              one-click consolidate for near-duplicate todos (P35). */}
-          {data.health && (
-            <div className={`fold${healthOpen ? ' open' : ''}`}>
-              <button type="button" className="fold-head" onClick={() => { setHealthOpen((v) => !v) }} aria-expanded={healthOpen}>
-                <IcChevron size={12} />
-                <span>记忆健康</span>
-                <span
-                  className="fold-stat"
-                  title="召回命中率、抽取质量与去重候选；展开可见详情与一键去重"
-                >
-                  召回 {Math.round(data.health.recallHitRate * 100)}% · 重复 {data.health.duplicateTodos.length} 对
-                </span>
-              </button>
-              <div className="fold-body">
-                <div className="fold-inner">
-                  <div className="fold-pad">
-                    <div className="health-stats">
-                      <span>今日召回 <b>{data.health.recallRunsToday}</b> 次</span>
-                      {data.health.recallErrorsToday > 0 && <span>召回错误 <b>{data.health.recallErrorsToday}</b></span>}
-                      {data.health.extractionErrorsToday > 0 && <span>抽取错误 <b>{data.health.extractionErrorsToday}</b></span>}
-                      {data.health.deniedToday > 0 && <span>被拒操作 <b>{data.health.deniedToday}</b></span>}
-                    </div>
-                    {data.health.duplicateTodos.length > 0 ? (
-                      <div className="health-dups">
-                        {data.health.duplicateTodos.map((p) => (
-                          <div key={`${p.a}:${p.b}`} className="health-dup">
-                            <span className="health-dup-title" title={p.aTitle}>{p.aTitle}</span>
-                            <span className="health-dup-sep">⇢</span>
-                            <span className="health-dup-title" title={p.bTitle}>{p.bTitle}</span>
-                            <button
-                              type="button"
-                              className="nact"
-                              disabled={busyKey === `health-${p.b}`}
-                              onClick={() => { void act(`health-${p.b}`, { action: 'consolidate', kind: 'todo', id: p.b, into_id: p.a }) }}
-                            >
-                              <IcMerge size={12} />合并
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p style={{ margin: 0, fontSize: 12, color: 'var(--y-text-3)' }} className="health-ok">暂无重复待办；系统性指标正常。</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* v0.3.3: memory-health fold removed from the board. */}
         </main>
       </div>
 
@@ -728,10 +762,11 @@ function FilterRow({ label, on, onToggle }: { label: string; on: boolean; onTogg
   )
 }
 
-function TodoRowView({ t, busy, completing, onComplete, onAct, onEdit, onChat }: {
+function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit, onChat }: {
   t: YoloTodoRow
   busy: boolean
   completing: boolean
+  retiring?: boolean
   onComplete: () => void
   onAct: (action: string, extra?: { due_at?: string }) => void
   onEdit: () => void
@@ -741,15 +776,36 @@ function TodoRowView({ t, busy, completing, onComplete, onAct, onEdit, onChat }:
   const done = !open
   const isUrgent = t.priority === 'urgent'
   const showFlag = isUrgent || t.priority === 'high'
+  const isRetiring = retiring === true
+  // Keyboard navigation within a section: ↑/↓ move focus between rows.
+  const navRow = (dir: 1 | -1): void => {
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.yolo-scope .sec .row[data-kb-row="1"]'))
+    const idx = rows.indexOf(document.activeElement as HTMLElement)
+    const next = rows[(idx + dir + rows.length) % rows.length]
+    next?.focus()
+  }
   const rowCls = [
     'row',
     t.overdue && open ? ' overdue' : '',
     t.status === 'in_progress' ? ' inprog' : '',
     completing ? ' retire' : '',
+    isRetiring ? ' retiring' : '',
     done ? ' done-row' : '',
   ].join('')
   return (
-    <div className={rowCls}>
+    <div
+      className={rowCls}
+      data-kb-row={open && !isRetiring ? '1' : undefined}
+      role="listitem"
+      tabIndex={open && !isRetiring ? 0 : undefined}
+      aria-label={open ? `任务：${t.title}` : `已完成：${t.title}`}
+      onKeyDown={(e) => {
+        if (isRetiring || !open) return
+        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onComplete() }
+        else if (e.key.toLowerCase() === 'e') { e.preventDefault(); onEdit() }
+        else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); navRow(e.key === 'ArrowDown' ? 1 : -1) }
+      }}
+    >
       <button
         type="button"
         className={`ctl${done || completing ? ' done' : ''}`}
@@ -786,9 +842,15 @@ function TodoRowView({ t, busy, completing, onComplete, onAct, onEdit, onChat }:
               <span>{t.session_label}</span>
             </span>
           )}
+          {t.belief && t.belief.stale >= 2 && t.belief.stale > t.belief.good && (
+            <>
+              <span className="sep">·</span>
+              <span className="stale-tag" title="这条待办多次被取消/搁置——考虑它是否真的需要跟进">常忘</span>
+            </>
+          )}
         </div>
       </div>
-      {open && (
+      {open && !isRetiring && (
         <div className="row-acts">
           <button type="button" className="act" disabled={busy} title="标记完成" aria-label="标记完成" onClick={onComplete}><IcCheck size={14} /></button>
           <button type="button" className="act" disabled={busy} title={`推迟到 ${nextDayStr(t.due_at)}`} aria-label="推迟一天" onClick={() => { onAct('postpone', { due_at: nextDayStr(t.due_at) }) }}><IcPlusDay size={14} /></button>
@@ -849,7 +911,7 @@ function TodoEditor({ draft, milestones, busy, confirming, onChange, onSave, onC
           <div className="confirm-strip" role="dialog" aria-label="确认删除">
             <span style={{ flex: 1 }}>确认删除这条待办？（写入审计事件，可追溯）</span>
             <button type="button" className="btn btn-danger ef-btn" disabled={busy} onClick={onConfirmDelete}>删除</button>
-            <button type="button" className="btn btn-ghost ef-btn" onClick={onDelete}>取消</button>
+            <button type="button" className="btn btn-ghost ef-btn" onClick={onCancel}>取消</button>
           </div>
         )}
       </div>

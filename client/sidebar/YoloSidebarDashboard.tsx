@@ -65,13 +65,6 @@ export function YoloSidebarDashboard({ wide = true, openSession }: YoloSidebarDa
     return () => { window.clearInterval(timer) }
   }, [loadBadge])
 
-  // While the panel is open, sync the badge faster: it shares the dashboard.
-  useEffect(() => {
-    if (!open) return
-    const timer = window.setInterval(() => { void loadBadge() }, 5_000)
-    return () => { window.clearInterval(timer) }
-  }, [open, loadBadge])
-
   // Anchor the panel to the sidebar's right edge (the button spans the column).
   useEffect(() => {
     if (!open) {
@@ -138,7 +131,14 @@ export function YoloSidebarDashboard({ wide = true, openSession }: YoloSidebarDa
       </button>
 
       {open && anchorLeft !== undefined && (
-        <div ref={panelRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 10000 }}>
+        // The overlay must START at the sidebar's right edge (anchorLeft), not
+        // cover the whole viewport: a full-viewport pointer-events layer would
+        // swallow clicks on the sidebar session rows, so switching to another
+        // session while the panel is open was impossible without closing it
+        // first. With the overlay left-anchored, sidebar clicks pass through to
+        // the app shell AND useDismissOnOutsidePointer closes the panel — the
+        // session switch lands and the panel steps aside in one gesture.
+        <div ref={panelRef} style={{ position: 'fixed', left: anchorLeft, top: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 10000 }}>
           <div style={{ pointerEvents: 'auto', position: 'absolute', inset: 0 }}>
             <YoloPanel left={anchorLeft} onClose={close} openSession={openSession} />
           </div>

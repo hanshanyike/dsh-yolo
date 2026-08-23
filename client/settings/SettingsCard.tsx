@@ -12,13 +12,14 @@ export function SettingsCard(): JSX.Element {
         YOLO — 管理工作与生活的助手
       </h3>
       <p style={{ margin: '4px 0', color: 'var(--foreground-secondary, #666)' }}>
-        把每轮对话里的待办 / 目标 / 里程碑 / 偏好 / 决策接进你的计划，跨会话整理、到点主动提醒，
+        把每轮对话里的承诺 / 计划 / 里程碑 / 跟踪规则接进你的计划，跨会话整理、到点主动提醒，
         不用每次重新交代。看板位于左侧边栏底部（全局，与具体会话无关）。
       </p>
       <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-        <li>抽取：回合末 LLM 语义提取（可配置模型与节流间隔）</li>
-        <li>召回：新会话自动注入相关记忆与偏好</li>
-        <li>提醒：到期任务自动注入对话</li>
+        <li>抽取：回合末 LLM 语义提取，只留「管理而非代办」的承诺、计划与跟踪规则</li>
+        <li>召回：新会话自动注入相关记忆与跟踪规则</li>
+        <li>提醒：到期任务自动进入 YOLO 会话；可设安静时段避免打扰</li>
+        <li>对话：看板卡片「聊一聊」开全新锚定对话，不混入常驻会话历史</li>
         <li>存储：SQLite + 每日 Markdown 快照</li>
       </ul>
       <p style={{ margin: '8px 0 0', fontSize: 12, opacity: 0.7 }}>

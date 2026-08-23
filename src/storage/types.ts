@@ -72,6 +72,9 @@ export interface Todo {
   updated_at: number
   completed_at?: number | null
   last_reminded_at?: number | null
+  /** v0.3.2 feedback: times the user completed it (good) vs cancelled it (stale). */
+  good_count?: number
+  stale_count?: number
 }
 
 export interface Goal {

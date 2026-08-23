@@ -60,11 +60,29 @@ export interface TickResult {
   notified: number
 }
 
+/** True when a "HH:MM" clock time is inside a quiet window that may wrap
+ *  midnight (e.g. 22:00–08:00). Used to defer reminders outside the user's
+ *  active hours — the "绝不打扰" red line, engineering it in. */
+export function inQuietWindow(hm: string, start: string, end: string): boolean {
+  if (!start || !end || start === end) return false
+  if (start <= end) return hm >= start && hm < end // same-day, e.g. 12:00–14:00
+  return hm >= start || hm < end // wraps midnight, e.g. 22:00–08:00
+}
+
+/** Quiet-hours config consumed by a reminder pass. */
+export interface QuietHours {
+  enabled: boolean
+  start: string
+  end: string
+  now?: () => Date
+}
+
 /** One reminder pass — pure enough to unit test with a mocked yolo. */
 export function runReminderTick(deps: {
   yolo: Yolo
   cwd: () => string
   aheadMs: number
+  quiet?: QuietHours
   deliver?: YoloDeliver
 }): TickResult {
   const cwd = deps.cwd()
@@ -74,8 +92,16 @@ export function runReminderTick(deps: {
   const aheadIso = localIso(new Date(Date.now() + deps.aheadMs))
   const due = deps.yolo.listDueTodos(cwd, aheadIso)
 
+  // Outside the user's active hours, hold the reminder (do NOT mark it
+  // reminded) so it fires on the first tick after the window — the promise
+  // "到点就提醒" is kept without ever pinging at an inappropriate time.
+  const q = deps.quiet
+  const quietNow = deps.quiet ? localHm(q!.now?.() ?? new Date()) : ''
+  const hold = !!q?.enabled && inQuietWindow(quietNow, q!.start, q!.end)
+
   let notified = 0
   for (const t of due) {
+    if (hold) continue
     const text = reminderText(t.title, t.due_at)
     deps.yolo.addNotification(cwd, {
       kind: 'reminder',
@@ -199,6 +225,8 @@ export interface SchedulerDeps {
   aheadMs?: () => number
   /** Reminder kill-switch (default true) — false idles only the due scan. */
   reminderEnabled?: () => boolean
+  /** Quiet-hours gate: read fresh each tick so edits apply without a reload. */
+  quiet?: () => QuietHours
   briefs?: {
     config: () => BriefConfig
     llm?: LlmRuntime
@@ -215,7 +243,13 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
     try {
       // reminder.enabled=false idles ONLY the due scan; snapshots keep their cadence
       if (deps.reminderEnabled?.() ?? true) {
-        runReminderTick({ yolo: deps.yolo, cwd: deps.cwd, aheadMs: aheadMs(), deliver: deps.deliver })
+        runReminderTick({
+          yolo: deps.yolo,
+          cwd: deps.cwd,
+          aheadMs: aheadMs(),
+          quiet: deps.quiet?.(),
+          deliver: deps.deliver,
+        })
       }
       maybeWriteDailySnapshot(deps.yolo, deps.cwd)
     } catch (e) {

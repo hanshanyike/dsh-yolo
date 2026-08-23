@@ -7,8 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> The stateful-plan drop — maps to the `0.3.0` line per `docs/release.md`;
-> this section closes when that release is actually cut.
+> The user-feedback drop — maps to the `0.3.3` line per `docs/release.md`.
+
+### Added — v0.3.3 用户反馈收敛
+
+- **对话用 harness 自身会话能力（V1）。** Agent 创建/恢复时传入
+  `agentDefaultModel.currentSelection()` 并在 `setup` 里
+  `installModelSelection`（headless 同款），因此 `{{model}}`/`{{provider}}` 绑定，
+  YOLO 常驻与「聊一聊」锚定会话真正能回复模型（此前报 `prompt variable "{{model}}" has no value`）。
+- **去掉 `dev.mjs`（V2）。** 改用标准 dsh 流程：`pnpm dsh plugin add . --profile web`（一次性链接）
+  + `pnpm dsh web --profile web --no-open --port 4080`；`package.json` 移除 `dev:web*` 脚本。
+- **看板不再显示「记忆健康」（V3）。** 移除健康折叠与 footer 文本。
+- **不区分工作区（V4）。** 看板始终 `GET /yolo/dashboard?scope=all`（移除「当前/全部」切换），
+  聚合所有已知工作区；每行带 `ws.cwd`，`POST /yolo/actions` 支持 `scope_cwd` 按行路由到对应工作区
+  ——跨工作区行不再只读。
+- **会话来源可跳回（V5）。** 台帐来源徽标点击先收起看板再 `ctx.sessions.open`，回到该会话。
+- **面板打开时不轮询（V7）。** 移除打开时的 30s 刷新；动作 / 手动「立即刷新」才重新拉取；
+  侧栏角标在关闭时仍独立轮询。
+
+### Added — v0.3.2 真机反馈收敛 + 记忆收窄 + 借鉴落地
+
+- **看板打开时侧边栏会话可点 / 自动收起（R18）。** 面板描边改为从侧栏右缘
+  （`left: anchorLeft`）开始，不再整屏拦截点击；点侧栏其它会话会话切到前台、看板自动让位。
+- **「聊一聊」= 全新锚定对话（R19）。** 新增 ephemeral 线程 `yolo-a-*`
+  （`YoloChatThreads`，按工作区 LRU 上限 + 处置）：每张卡片一次全新对话，不再混入常驻会话的旧历史；
+  常驻会话（`yolo-w-*`）保持不变。
+- **记忆收窄为「管理而非代办」（R20）。** 抽取提示词改为「管理助手」：只留承诺（todos）、计划
+  （goals/milestones）与跟踪规则（preferences），明确不要人物画像、通用偏好、知识、生活细节；
+  `memory_write`、system 段文案同步。
+- **写入质量闸门（B3）。** `src/shared/quality.ts`：确认词（好的/收到/ok）、裸元命令（记住/记录下来）、
+  空/单字标题、空值规则在 `mergeExtraction` 落库前被过滤，避免错误记忆触发错误提醒。
+- **提醒安静时段（B5）。** `reminder.quietHoursEnabled/quietStart/quietEnd` + `inQuietWindow`：
+  安静时段内到点的提醒先按住（不 `mark reminded`），窗口结束后补发——把「绝不打扰」落到机制层。
+- **改删定位精确匹配优先（B6）。** `bestByTitle` 在精确归一化标题上直接命中，否则按状态活动度/最近更新排序，
+  避免动作落在无关的首个包含匹配上。
+- **快照原子写（B8）。** `writeSnapshot` 改为 tmp+rename，崩溃不再留下半截 Markdown。
+- **用后反馈计数（B1 数据层）。** todos 新增 `good_count`/`stale_count`；完成→good、取消→stale；
+  看板行显示「常忘」信号。召回层面的降权注入留待后续。
+- **UI 细节打磨（R26）。** 任务行支持键盘漫游（Tab/↑↓/Space 完成/E 编辑）、触屏（`hover:none`）常显操作组、
+  通知「查看全部」收件箱（角标==可视条数）、提醒卡显示相对到期时间 + 「再提醒」动作、完成行收起动效、
+  删除确认「取消」修复、空态与面板头部微调（顶部 indigo 强调条/日期 pill/通知卡 hover）。
 
 ### Added — v0.3.0 semantic recall + cross-workspace aggregation
 

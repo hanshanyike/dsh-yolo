@@ -20,30 +20,34 @@
 
 它替你记，但不替你干：
 
-- 它**看着每一段对话**，听懂哪些值得留下——待办、里程碑、目标、偏好与日程事件。
+- 它**看着每一段对话**，听懂哪些值得留下——承诺（要办的事）、计划（目标与里程碑）与跟踪规则（怎么盯、何时提醒）。
 - 它把这些**跨会话**整理进一个按工作区隔离、可搜索的库，无论你开多少窗口都跟着你。
 - 它**让计划活起来**：之后任意会话里说一句「做完了 / 进行中 / 推迟到周五 / 写了一半」，任务状态、目标进度和截止日自己就更新了，每次变动都留在时间线上。
-- 它**在到期时主动提醒**——即使宿主设备离线错过截止，下次也会补上——而且提醒*可回复*：你回一句「推迟到明天 / 已完成 / 再提醒一次」，它就照做。
-- 它**把一天摊开给你看**：dsh 侧栏里的全局看板——时间线、任务板、目标进度、里程碑与偏好——不用离开就能完成 / 推迟 / 取消待办。
+- 它**在到期时主动提醒**——即使宿主设备离线错过截止，下次也会补上；它只在合适的时间出声（可设安静时段），而且提醒*可回复*：你回一句「推迟到明天 / 已完成 / 再提醒一次」，它就照做。
+- 它**把一天摊开给你看**：dsh 侧栏里的全局看板——时间线、任务板、目标进度、里程碑与跟踪规则——不用离开就能完成 / 推迟 / 取消待办；每张卡片「聊一聊」开一段**全新**的锚定对话。
 
-YOLO 不只是*记住*，它*理解*：每轮对话结束时，它用大模型做一次语义提取（与 [Mem0](https://github.com/mem0ai/mem0)、Claude Code 的自动记忆同一思路），只留下真正值得长期记住的东西，并与已存记忆去重——计划始终准确，又不浪费你的 token。
+YOLO 不只是*记住*，它*理解*：每轮对话结束时，它用大模型做一次语义提取（与 [Mem0](https://github.com/mem0ai/mem0)、Claude Code 的自动记忆同一思路），**只留下真正影响「怎么管」的东西**——承诺、计划、跟踪规则——并把「好的 / 收到」这类寒暄和人物画像、通用知识挡在门外；计划始终准确，又不浪费你的 token。
 
 ## 快速开始
 
-> **前置要求**：Node ≥ 22.19，pnpm ≥ 11。Windows 上用 **PowerShell** 运行命令（Git Bash 会破坏 pnpm 的安全删除）。
+> **前置要求**：Node ≥ 22.19，pnpm ≥ 11，以及已安装的 `dsh`（deepseek-harness CLI）。Windows 上用 **PowerShell** 运行命令。
 
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
 
 pnpm install          # 安装依赖（better-sqlite3 原生绑定已含）
-pnpm dev:web:setup    # 一次性：克隆并构建宿主、建立 profile 链接、生成运行时 patch
-pnpm dev:web          # 启动 dsh web → http://127.0.0.1:3080
+pnpm build            # 构建 host 插件 + browser client 到 dist/
+pnpm dsh plugin add . --profile web   # 一次性：把本插件链接进 dsh 的 web profile（含 bundle patch）
+pnpm dsh web --profile web --no-open --port 4080   # 启动 dsh web → http://127.0.0.1:4080
 ```
 
-`dev.mjs` 是幂等的——随时可重跑 `pnpm dev:web`；`pnpm dev:web:update` 会先拉取最新宿主。首次安装会把 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 克隆进 `host/deepseek-harness`，不污染全局。
+`dsh plugin add .` 用的是 dsh 生态的标准安装方式（`--profile web` 把插件作为 bundle 挂进 web profile；
+`dsh.bundle.patch` 指向 `cordis.patch.yml` 自动注册全部 host 侧插件行）。改完代码重跑 `pnpm build`，
+刷新浏览器即可拿到新版本，无需重启宿主（bundle 按文件名静态服务）。
 
-打开 **http://127.0.0.1:3080**，选好工作区开始对话。YOLO 已经在看着了：提到截止时间、设定目标，或说「记住这个」——然后打开左侧边栏底部的 **YOLO 面板**，就能看到时间线、任务板与目标进度。
+打开 **http://127.0.0.1:4080**，选好工作区开始对话。YOLO 已经在看着了：提到截止时间、设定目标，或说「记住这个」——然后打开左侧边栏底部的 **YOLO 面板**，就能看到时间线、任务板与目标进度。
+> 插件更新（`cordis.patch.yml` 变更）后重跑 `pnpm dsh plugin add . --profile web` 以重新 reconcile bundle。
 
 ### 十秒看懂它怎么工作
 

@@ -13,7 +13,7 @@ import { IcChat, IcClose, IcExpand, IcRefresh, IcShrink } from '../design/icons.
 import { YoloLogo } from '../YoloLogo.tsx'
 import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
 import { KanbanView } from './KanbanView.tsx'
-import { readPanelState, writePanelState, type WorkspaceScope } from './state.ts'
+import { readPanelState, writePanelState } from './state.ts'
 
 export interface YoloPanelProps {
   /** Panel left edge (the sidebar's right edge) — spans to the viewport right. */
@@ -28,8 +28,6 @@ interface LoadState {
   error: string | null
   data: YoloDashboardData | null
 }
-
-const POLL_MS = 30_000
 
 /** Data signature — the sweep line runs only when this actually changes (6.2). */
 function dataSig(d: YoloDashboardData): string {
@@ -52,7 +50,10 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
   const [sideChatOpen, setSideChatOpen] = useState(initial.sideChatOpen)
   const [chatFullscreen, setChatFullscreen] = useState(false)
   const [anchor, setAnchor] = useState<ChatAnchor | null>(null)
-  const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope>(initial.workspaceScope)
+  // v0.3.2 聊一聊: a FRESH ephemeral thread per anchored chat. A new key per
+  // anchored episode, reset on close/switch, so the pane never inherits the
+  // resident thread's history; the unanchored 对话 keeps the resident thread.
+  const [chatThread, setChatThread] = useState<string | undefined>(undefined)
   const [sweepTick, setSweepTick] = useState(0)
   const lastSig = useRef<string | null>(null)
 
@@ -68,7 +69,8 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
   const load = useCallback(async (): Promise<void> => {
     setState((s) => ({ ...s, loading: true, error: null }))
     try {
-      const r = await fetch(`/yolo/dashboard?scope=${workspaceScope}`, { headers: { accept: 'application/json' }, cache: 'no-store' })
+      // v0.3.3: always the all-workspaces board — no 当前/全部 toggle.
+      const r = await fetch('/yolo/dashboard?scope=all', { headers: { accept: 'application/json' }, cache: 'no-store' })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = (await r.json()) as YoloDashboardData
       const sig = dataSig(data)
@@ -78,23 +80,28 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
     } catch (e) {
       setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
     }
-  }, [workspaceScope])
+  }, [])
 
+  // v0.3.3: load once on open + on demand; a manual refresh / action re-fetches.
+  // No 30s poll while the panel is open (side-bar badge polls when closed).
   useEffect(() => { void load() }, [load])
-  useEffect(() => {
-    const timer = window.setInterval(() => { void load() }, POLL_MS)
-    return () => { window.clearInterval(timer) }
-  }, [load])
 
   // Persist view state so reopening keeps the side chat (TA-6).
   useEffect(() => { writePanelState({ sideChatOpen }) }, [sideChatOpen])
-  useEffect(() => { writePanelState({ workspaceScope }) }, [workspaceScope])
+
+  // A ledger source jump should land the user back in that session: close the
+  // panel so it is actually in view (the overlay otherwise stays covering it).
+  const openSessionAndClose = useCallback((id: string): void => {
+    openSession?.(id)
+    onClose()
+  }, [openSession, onClose])
 
   // Esc unwinds the chat surface: fullscreen → side chat → closed panel.
   const closeSideChat = useCallback(() => {
     setSideChatOpen(false)
     setChatFullscreen(false)
     setAnchor(null)
+    setChatThread(undefined)
   }, [])
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {
@@ -109,11 +116,13 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
 
   const openAnchoredChat = useCallback((a: ChatAnchor) => {
     setAnchor(a)
+    setChatThread(`a-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`)
     setSideChatOpen(true)
   }, [])
 
   const toggleSideChat = useCallback(() => {
     setAnchor(null)
+    setChatThread(undefined)
     setSideChatOpen((v) => !v)
   }, [])
 
@@ -138,10 +147,6 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
           <span className="p-date mono">{dateLabel}</span>
         </div>
         <div className="p-head-acts">
-          <div className="wsswitch" role="group" aria-label="工作区范围">
-            <button type="button" className={`wsbtn${workspaceScope === 'current' ? ' on' : ''}`} onClick={() => setWorkspaceScope('current')} title="只看当前工作区">当前</button>
-            <button type="button" className={`wsbtn${workspaceScope === 'all' ? ' on' : ''}`} onClick={() => setWorkspaceScope('all')} title="汇总所有工作区（需在设置开启）">全部</button>
-          </div>
           {!chatShowingFull && (
             <button type="button" className={`ctoggle${sideChatOpen ? ' on' : ''}`} onClick={toggleSideChat} title={sideChatOpen ? '收起侧栏对话 (Esc)' : '展开侧栏对话'}>
               <span className="tico"><IcChat size={13} /></span>对话
@@ -165,7 +170,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
           (display:none) so its filter state survives the round-trip (4.2⑨). */}
       {chatShowingFull ? (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <ChatPane variant="full" anchor={anchor} />
+          <ChatPane variant="full" anchor={anchor} threadKey={chatThread} />
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
@@ -178,7 +183,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
             )}
             {state.data !== null && (
               <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...(state.error ? { opacity: 0.6 } : {}) }}>
-                <KanbanView data={state.data} refresh={load} onOpenChat={openAnchoredChat} openSession={openSession} sweepTick={sweepTick} />
+                <KanbanView data={state.data} refresh={load} onOpenChat={openAnchoredChat} openSession={openSessionAndClose} sweepTick={sweepTick} />
               </div>
             )}
             {state.data === null && !state.error && (
@@ -204,7 +209,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
                   <IcClose size={14} />
                 </button>
               </div>
-              <ChatPane variant="side" anchor={anchor} />
+              <ChatPane variant="side" anchor={anchor} threadKey={chatThread} />
             </aside>
           )}
         </div>
@@ -212,7 +217,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
 
       {/* ⑦ footer 28px */}
       <footer className="p-foot mono">
-        看板每 30 秒自动刷新{state.data?.scope === 'all' ? ` · ${state.data.workspaceCount ?? 0} 个工作区` : state.data?.scopeKey ? ` · 作用域 ${state.data.scopeKey}` : ''}{state.data?.health ? ` · 记忆健康 召回${state.data.health.recallRunsToday}/${state.data.health.recallErrorsToday}错 重复${state.data.health.duplicateTodos.length}个` : ''}
+        看板{state.data?.scope === 'all' ? ` · ${state.data.workspaceCount ?? 0} 个工作区` : state.data?.scopeKey ? ` · 作用域 ${state.data.scopeKey}` : ''}
       </footer>
     </div>
   )

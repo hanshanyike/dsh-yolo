@@ -3,7 +3,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type Yolo from '../src/storage/index.ts'
-import { startReminderScheduler } from '../src/reminder/scheduler.ts'
+import { inQuietWindow, runReminderTick, startReminderScheduler } from '../src/reminder/scheduler.ts'
 import { localDateStr } from '../src/shared/text.ts'
 import { DEFAULTS } from '../src/shared/constants.ts'
 
@@ -126,6 +126,61 @@ describe('startReminderScheduler: reminder config wiring (M9 P44)', () => {
     expect(yolo.listDueTodos).not.toHaveBeenCalled()
     expect(yolo.writeSnapshot).toHaveBeenCalledTimes(1)
     cleanup()
+  })
+})
+
+describe('inQuietWindow (v0.3.2 quiet-hours gate)', () => {
+  it('surfaces no window when start/end are empty or equal', () => {
+    expect(inQuietWindow('10:00', '', '18:00')).toBe(false)
+    expect(inQuietWindow('10:00', '10:00', '10:00')).toBe(false)
+  })
+
+  it('detects a same-day window', () => {
+    expect(inQuietWindow('12:30', '12:00', '14:00')).toBe(true)
+    expect(inQuietWindow('15:00', '12:00', '14:00')).toBe(false)
+  })
+
+  it('detects a window that wraps midnight', () => {
+    expect(inQuietWindow('23:00', '22:00', '08:00')).toBe(true)
+    expect(inQuietWindow('03:00', '22:00', '08:00')).toBe(true)
+    expect(inQuietWindow('09:00', '22:00', '08:00')).toBe(false)
+  })
+})
+
+describe('runReminderTick quiet-hours hold (v0.3.2)', () => {
+  it('does not mark a due todo reminded while outside active hours', () => {
+    const due = [{ id: 't1', title: '发演示稿', due_at: '2026-08-25', status: 'pending', scope_key: 's' }]
+    const yolo = mockYolo({
+      listDueTodos: vi.fn(() => due),
+      addNotification: vi.fn(),
+      addEvent: vi.fn(),
+      setTodoReminded: vi.fn(),
+    })
+    const res = runReminderTick({
+      yolo,
+      cwd: () => '/tmp',
+      aheadMs: 0,
+      quiet: { enabled: true, start: '22:00', end: '08:00', now: () => new Date('2026-08-25T23:30:00') },
+    })
+    expect(res.notified).toBe(0)
+    expect(yolo.addNotification).not.toHaveBeenCalled()
+    expect(yolo.setTodoReminded).not.toHaveBeenCalled() // holds so it fires after the window
+  })
+
+  it('reminds normally during active hours', () => {
+    const due = [{ id: 't1', title: '发演示稿', due_at: '2026-08-25', status: 'pending', scope_key: 's' }]
+    const yolo = mockYolo({
+      listDueTodos: vi.fn(() => due),
+      setTodoReminded: vi.fn(),
+    })
+    const res = runReminderTick({
+      yolo,
+      cwd: () => '/tmp',
+      aheadMs: 0,
+      quiet: { enabled: true, start: '22:00', end: '08:00', now: () => new Date('2026-08-25T10:00:00') },
+    })
+    expect(res.notified).toBe(1)
+    expect(yolo.setTodoReminded).toHaveBeenCalledTimes(1)
   })
 })
 

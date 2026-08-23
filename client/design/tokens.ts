@@ -70,13 +70,16 @@ export const YOLO_CSS = `
 /* compound selector (no space): the root element carries BOTH classes, so a
    descendant selector would never match it and the flex column would be lost. */
 .yolo-scope.panel { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--y-bg); animation: yolo-panel-in var(--y-dur-3) var(--y-ease-out); }
+/* v0.3.2 identity polish — a thin indigo accent strip down the panel's top edge
+   so the surface reads as YOLO, not a generic drawer. */
+.yolo-scope.panel::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--y-accent-fill), color-mix(in srgb, var(--y-accent-fill) 45%, transparent) 55%, transparent); pointer-events: none; z-index: 1; }
 @keyframes yolo-panel-in { from { opacity: 0; transform: translateY(4px); } }
 
 /* header (48px) */
 .yolo-scope .p-head { flex: none; height: 48px; display: flex; align-items: center; gap: 14px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--y-line); }
 .yolo-scope .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.yolo-scope .brand-name { font-size: 14px; font-weight: 700; letter-spacing: .02em; }
-.yolo-scope .p-date { font-size: 11px; color: var(--y-text-3); }
+.yolo-scope .brand-name { font-size: 14px; font-weight: 700; letter-spacing: .03em; }
+.yolo-scope .p-date { font-size: 11px; color: var(--y-text-3); padding: 2px 8px; border: 1px solid var(--y-line); border-radius: var(--y-r-sm); background: var(--y-surface-2); white-space: nowrap; }
 .yolo-scope .p-head-acts { margin-left: auto; display: flex; gap: 2px; align-items: center; }
 .yolo-scope .hbtn { width: 30px; height: 30px; border-radius: var(--y-r-sm); border: none; background: none; color: var(--y-text-3); display: grid; place-items: center; cursor: pointer; transition: background var(--y-dur-1), color var(--y-dur-1); }
 .yolo-scope .hbtn:hover { background: var(--y-surface-2); color: var(--y-text-1); }
@@ -149,7 +152,9 @@ export const YOLO_CSS = `
 @keyframes yolo-chat-in { from { opacity: 0; } }
 
 /* notifications — the only surface above the canvas (5.3) */
-.yolo-scope .notif { position: relative; background: var(--y-surface); border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); box-shadow: var(--y-e1); padding: 10px 12px 10px 15px; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
+.yolo-scope .notif { position: relative; background: var(--y-surface); border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); box-shadow: var(--y-e1); padding: 10px 12px 10px 15px; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); transition: box-shadow var(--y-dur-2) var(--y-ease-out), transform var(--y-dur-2) var(--y-ease-out); }
+.yolo-scope .notif:hover { box-shadow: 0 6px 18px rgba(0,0,0,.10); transform: translateY(-1px); }
+.yolo-scope[data-y-theme="dark"] .notif:hover { box-shadow: 0 6px 18px rgba(0,0,0,.46); }
 .yolo-scope .notif::before { content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 2px; border-radius: 2px; background: var(--y-accent-fill); }
 .yolo-scope .notif.reminder::before { background: var(--y-danger-text); }
 .yolo-scope .notif-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; color: var(--y-text-2); }
@@ -158,6 +163,11 @@ export const YOLO_CSS = `
 .yolo-scope .notif-time { font-size: 11px; color: var(--y-text-3); margin-left: auto; }
 .yolo-scope .notif-body { font-size: 13px; line-height: 19px; color: var(--y-text-1); margin-bottom: 9px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .yolo-scope .notif-acts { display: flex; gap: 6px; }
+/* notification inbox fold — preview N, expand the rest (P0-1: badge == visible). */
+.yolo-scope .notif-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; margin-top: -2px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: none; color: var(--y-text-2); font-size: 11px; cursor: pointer; transition: all var(--y-dur-1); }
+.yolo-scope .notif-more:hover { background: var(--y-surface-2); color: var(--y-text-1); }
+.yolo-scope .notif-more svg { color: var(--y-text-3); transition: transform var(--y-dur-2) var(--y-ease-out); }
+.yolo-scope .notif-more svg.up { transform: rotate(180deg); }
 
 /* buttons */
 .yolo-scope .btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 12px; border-radius: var(--y-r-sm); border: 1px solid transparent; font-size: 12px; cursor: pointer; transition: all var(--y-dur-1); white-space: nowrap; }
@@ -182,10 +192,16 @@ export const YOLO_CSS = `
 .yolo-scope .sec-count { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 600; color: var(--y-text-2); }
 .yolo-scope .sec-count.danger { color: var(--y-danger-text); }
 .yolo-scope .sec-rule { flex: 1; height: 1px; background: var(--y-line); }
-.yolo-scope .row { position: relative; display: flex; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--y-line); min-height: 0; transition: background var(--y-dur-1), opacity var(--y-dur-2); }
+.yolo-scope .row { position: relative; display: flex; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--y-line); min-height: 0; max-height: 480px; transition: background var(--y-dur-1), opacity var(--y-dur-2); }
 .yolo-scope .row:hover, .yolo-scope .row:focus-within { background: var(--y-surface-2); }
 .yolo-scope .row.retire { opacity: .45; }
 .yolo-scope .row.done-row { opacity: .55; }
+/* v0.3.2 completion/处理 collapse — the row re-joins its section with a
+   height collapse so it never "jumps" out of the board (5.4). */
+.yolo-scope .row.retiring { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; overflow: hidden; border-bottom-color: transparent; transition: max-height .45s var(--y-ease-out), opacity .3s var(--y-ease-out), padding .45s var(--y-ease-out); }
+/* keyboard rows: a focused task row is a full, tappable target (P0-2). */
+.yolo-scope .row[tabindex="0"]:focus { background: var(--y-surface-2); outline: 2px solid var(--y-accent-soft); outline-offset: -2px; }
+.yolo-scope .row[tabindex="0"] { cursor: pointer; }
 .yolo-scope .ctl { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 1.5px solid var(--y-line-strong); background: transparent; color: transparent; cursor: pointer; display: grid; place-items: center; padding: 0; transition: border-color var(--y-dur-2), background var(--y-dur-2); }
 .yolo-scope .ctl svg { width: 9px; height: 9px; }
 .yolo-scope .row:hover .ctl { border-color: var(--y-text-3); }
@@ -204,6 +220,7 @@ export const YOLO_CSS = `
 .yolo-scope .due { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; color: var(--y-text-2); }
 .yolo-scope .row.overdue .due { color: var(--y-danger-text); }
 .yolo-scope .sep { color: var(--y-line-strong); }
+.yolo-scope .stale-tag { flex: none; font-size: 10px; font-weight: 600; color: var(--y-text-3); background: var(--y-surface-3); padding: 1px 6px; border-radius: 4px; }
 .yolo-scope .src { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .yolo-scope .src svg { flex: none; width: 11px; height: 11px; opacity: .7; }
 .yolo-scope .src span { overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
@@ -213,6 +230,11 @@ export const YOLO_CSS = `
 .yolo-scope .act:hover { background: var(--y-surface-3); color: var(--y-text-1); }
 .yolo-scope .act:disabled { opacity: .4; cursor: default; }
 .yolo-scope .act svg { width: 14px; height: 14px; }
+/* touch (no hover): row acts stay visible so they are reachable without a
+   pointer-first hierarchy (P0-2/P1-1). */
+@media (hover: none) {
+  .yolo-scope .row-acts { opacity: 1; }
+}
 @keyframes yolo-row-in { from { opacity: 0; transform: translateY(4px); } }
 
 /* inline editor */
@@ -281,7 +303,8 @@ export const YOLO_CSS = `
 .yolo-scope .lg-src-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* empty / skeleton (5.7) */
-.yolo-scope .empty { padding: 40px 16px; text-align: center; }
+.yolo-scope .empty { padding: 48px 16px; text-align: center; }
+.yolo-scope .empty::before { content: ""; display: block; width: 30px; height: 3px; border-radius: 2px; margin: 0 auto 14px; background: linear-gradient(90deg, var(--y-accent-fill), transparent); }
 .yolo-scope .empty h4 { margin: 0 0 6px; font-size: 15px; font-weight: 600; color: var(--y-text-1); }
 .yolo-scope .empty p { margin: 0; font-size: 12px; color: var(--y-text-3); }
 .yolo-scope .err-line { display: flex; align-items: center; gap: 10px; padding: 12px 2px 0; color: var(--y-danger-text); font-size: 13px; }

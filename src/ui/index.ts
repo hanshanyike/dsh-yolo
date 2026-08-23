@@ -14,7 +14,7 @@ import type Yolo from '../storage/index.ts'
 import { registerActionsEndpoint } from './actions.ts'
 import { Config, type Config as ConfigSchema } from './config.ts'
 import { registerDashboardEndpoint, type WebServerLike } from './dashboard.ts'
-import { YoloSessions, registerSessionEndpoints, type AgentsLike } from './session.ts'
+import { YoloSessions, YoloChatThreads, registerSessionEndpoints, isYoloSessionId, type AgentsLike } from './session.ts'
 import { sessionCwd } from '../shared/session.ts'
 
 /** The namespace is the join key shared with the client half (settings.plugin.item). */
@@ -48,8 +48,7 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   // actually working on. Falls back to the host process cwd.
   let latestSessionCwd: string | undefined
   ctx.on('agent/session-start', (payload: { agent?: unknown }) => {
-    const id = (payload.agent as { id?: string } | undefined)?.id
-    if (id?.startsWith('yolo-w-')) return // resident threads don't move the workspace
+    if (isYoloSessionId((payload.agent as { id?: string } | undefined)?.id)) return // YOLO threads don't move the workspace
     const cwd = sessionCwd((payload.agent as { session?: unknown } | undefined)?.session)
     if (cwd) latestSessionCwd = cwd
   })
@@ -66,13 +65,25 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   // v0.3.0 E: + update/rename/abandon/quick_add/handled + snapshot sync
   registerActionsEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
   // v0.3.0 A/B: the YOLO resident thread (对话 Tab + 侧栏对话)
+  // v0.3.3: agents are created with the harness's model selection so they reply.
+  const defaultModel = (): { provider: string; model: string } | undefined => {
+    const sel = ctx.get('agentDefaultModel')
+    return sel ? sel.currentSelection() : undefined
+  }
   const sessions = new YoloSessions(
     // inject declares 'agents' (runtime access is legal); the structural cast
     // sidesteps the AgentRegistry / AgentsLike signature mismatch
     ctx.agents as unknown as AgentsLike,
     { info: (f, ...a) => ctx.logger?.info?.(f, ...a), warn: (f, ...a) => ctx.logger?.warn?.(f, ...a) },
+    defaultModel,
   )
-  registerSessionEndpoints(ctx, sessions, () => latestSessionCwd ?? process.cwd())
+  // v0.3.2 聊一聊 anchored chats are fresh ephemeral threads, not resident history
+  const threads = new YoloChatThreads(
+    ctx.agents as unknown as AgentsLike,
+    { info: (f, ...a) => ctx.logger?.info?.(f, ...a), warn: (f, ...a) => ctx.logger?.warn?.(f, ...a) },
+    defaultModel,
+  )
+  registerSessionEndpoints(ctx, sessions, threads, () => latestSessionCwd ?? process.cwd())
 
   ctx.logger?.info?.('[yolo] ui plugin loaded')
 }

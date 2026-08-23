@@ -185,6 +185,7 @@ that POST `/yolo/actions`, which dispatches through the same `applyYoloAction`
 path as the `yolo_action` model tool — so a click and a chat reply produce
 identical state changes and audit events. 快速记一条 also bypasses the LLM
 entirely: it writes a today-due todo straight through the actions API.
+
 `applyYoloAction` is also the **denial gate** (M9 / P34): every validation
 failure writes an `action_denied` timeline event before returning
 `{ok:false}` — the only silent rejection is the idempotent "already handled"
@@ -194,6 +195,45 @@ inherited (missing due, higher priority), the source is cancelled with its
 notifications resolved, and a single `todo_consolidated` event records the
 merge. `memory_forget` routes through the same action path (cancel /
 set_status abandoned / abandon), so no mutation can bypass the audit trail.
+
+### v0.3.2 — managing-assistant refinement
+
+- **Chat threads (R19).** `registerSessionEndpoints` gained an optional `thread`
+  on both `GET /yolo/session/messages` and `POST /yolo/session/send`. The
+  unanchored 对话 tab still targets the per-workspace **resident** thread
+  (`yolo-w-*`, `YoloSessions`). A card's 聊一聊 passes a fresh ephemeral
+  `thread` key resolved by `YoloChatThreads` to a disposable agent session
+  (`yolo-a-*`), created lazily on first send, LRU-capped per workspace (oldest
+  evicted + disposed). The pane therefore starts empty — a focused conversation
+  that never inherits the resident thread's history. Both `yolo-w-*` and
+  `yolo-a-*` count as YOLO-internal (`isYoloSessionId`), so extraction and the
+  workspace tracker skip them.
+- **Model selection on agent creation (v0.3.3).** Both `YoloSessions` and
+  `YoloChatThreads` now pass `agentOptions: { provider, model }` from
+  `agentDefaultModel.currentSelection()` and run `installModelSelection` in
+  `setup` (the headless-runner pattern). Without this, a programmatically
+  created agent errored with `prompt variable "{{model}}" has no value` and never
+  replied; with it, both the resident and the anchored threads actually run a
+  model turn.
+- **Memory scope (R20).** The extraction prompt is now framed for a *managing*
+  assistant: only commitments (todos), plans (goals/milestones) and tracking
+  rules (preferences) are kept; persona, taste, general knowledge and
+  life-detail memory are explicitly out of scope. `memory_write` and the
+  `yolo-instructions` system section mirror that.
+- **Write-quality gate (B3).** `src/shared/quality.ts` `shouldDropExtracted`
+  rejects acknowledgements ("好的/收到/ok"), bare meta commands ("记住这个"),
+  empty/single-char titles and empty rule values before `mergeExtraction` lands
+  them — a wrong memory can trigger a wrong reminder.
+- **Reminder quiet-hours (B5).** `inQuietWindow` + `reminder.quiet*` config:
+  inside the window the reminder is held (not `mark reminded`) and fires on the
+  first tick after — the "绝不打扰" line, engineered in.
+- **Activity-aware title locate (B6).** `bestByTitle` prefers an exact
+  normalized match, then ranks loose matches by status-recency, so a title ref
+  never lands on an arbitrary first containment hit.
+- **Feedback counters (B1 data layer).** `todos.good_count`/`stale_count`
+  (complete→good, cancel→stale) surfaced on the dashboard row as `belief`; a
+  stale-dominated row shows a `常忘` chip. Recall-side demotion is a follow-up.
+- **Atomic snapshot (B8).** `writeSnapshot` uses tmp+rename.
 
 ### Reminder & brief path — proactive, YOLO-side only
 

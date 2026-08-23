@@ -60,7 +60,7 @@ describe('registerYoloPrompt', () => {
   it('instructions section renders capability guidance', () => {
     const { ctx, sections } = makeCtx()
     registerYoloPrompt(ctx as never, deps())
-    expect(sections[0].text()).toContain('YOLO (the personal memory plugin) is active')
+    expect(sections[0].text()).toContain('YOLO (the management plugin) is active')
   })
 
   it('prefs section renders preferences or empty', () => {

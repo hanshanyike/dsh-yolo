@@ -54,6 +54,7 @@ function mockYolo(): Yolo {
     listPreferences: () => [pref],
     listSessionSummaries: () => [{ session_id: 's1', summary: '修登录bug', scope_key: 'test/main', updated_at: now }],
     listNotifications: () => [notification],
+    listWorkspaceMeta: () => [],
   } as unknown as Yolo
 }
 

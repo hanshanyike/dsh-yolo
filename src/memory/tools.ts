@@ -57,7 +57,7 @@ export function registerYoloTools(ctx: YoloContext): void {
   ctx.tools.register(
     defineTool({
       name: 'memory_write',
-      description: 'Write a memory item into YOLO for tracking: todo, milestone, goal, preference or timeline event. Use when the user explicitly asks to remember or track something.',
+      description: 'Write a memory item into YOLO for TRACKING: a commitment (todo), plan (milestone/goal) or tracking rule (preference). Use when the user asks YOLO to remember/track something so it can remind and manage it. This is NOT a general diary — do not store facts, knowledge, or personal taste.',
       parameters: {
         kind: { type: 'string', required: true, description: 'todo|milestone|goal|preference|event' },
         title: { type: 'string', required: true, description: 'Item title / summary text.' },
@@ -65,8 +65,8 @@ export function registerYoloTools(ctx: YoloContext): void {
         due_at: { type: 'string', description: 'ISO8601 due datetime for todos.' },
         target_date: { type: 'string', description: 'YYYY-MM-DD target date for milestones.' },
         priority: { type: 'string', description: 'low|medium|high|urgent for todos.' },
-        key: { type: 'string', description: 'Preference key (kind=preference).' },
-        value: { type: 'string', description: 'Preference value (kind=preference).' },
+        key: { type: 'string', description: 'Preference key: a tracking rule slug (e.g. reminder-ahead, working-hours).' },
+        value: { type: 'string', description: 'Preference value (kind=preference): the tracking rule itself.' },
       },
       output: {
         schema: { type: 'object', additionalProperties: true },

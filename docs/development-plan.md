@@ -1,13 +1,58 @@
-# WorkBuddy（dsh-yolo）后续开发计划
+# WorkBuddy（dsh-yolo）开发计划
 
-> 状态：定稿（v0.3.0 批）· 2026-08-22
-> 依据：`docs/research/00-total.md`（调研总报告）· `docs/research/09-borrowables.md`（可借鉴清单 P1–P46）
-> 版本线：**v0.3.0**（一次性发布，不中途升版）· 实现范围：到「跨工作区聚合」为止
-> 红线不变：**管理而非代办；绝不打扰工作会话；零外部服务（仅 better-sqlite3）；类型安全 + 真机验证。**
+> **当前批：v0.3.3**（2026-08-23）· 主题：**用户反馈收敛（对话能用 harness 自身会话能力 / 去掉 dev.mjs / 不区分工作区 / 去健康 / 去打开轮询 / 来源可跳）**。
+> 上一批（v0.3.2：真机反馈 + 记忆收窄 + 借鉴落地）已交付，保留在下方。
+> 红线不变：**管理而非代办；绝不打扰工作会话；本地优先；类型安全 + 真机验证。**
 
 ---
 
-## 一、背景与现状
+## 一、v0.3.3 批范围与状态
+
+| 项 | 改动 | 落点 |
+|---|---|---|
+| V1 对话用 harness 会话能力 | agent 创建/恢复时传 `agentDefaultModel.currentSelection()` + `installModelSelection`（headless 同款），`{{model}}` 绑定，常驻/锚定进程真回复 | `src/ui/session.ts` · `src/ui/index.ts` · `src/reminder/index.ts` · `package.json` |
+| V2 去掉 dev.mjs | 删除 `scripts/dev.mjs`；改用标准 `pnpm dsh plugin add . --profile web` + `pnpm dsh web --profile web` | `package.json` · `README.md` · `AGENTS.md` |
+| V3 去「记忆健康」 | 移除看板健康折叠 + footer | `client/panel/KanbanView.tsx` · `YoloPanel.tsx` |
+| V4 不区分工作区 | 看板始终聚合所有已知工作区；每行带 `ws.cwd`，动作按 `scope_cwd` 路由 | `src/ui/{dashboard,actions}.ts` · `src/shared/dashboard.ts` · `client/panel/{YoloPanel,state,KanbanView}.tsx` |
+| V5 会话来源可跳 | 台帐来源徽标先关面板再 `ctx.sessions.open` 跳回 | `client/panel/YoloPanel.tsx` |
+| V7 打开不轮询 | 面板打开时去 30s poll；关闭时角标独立轮询 | `client/panel/YoloPanel.tsx` · `client/sidebar/YoloSidebarDashboard.tsx` |
+
+## 二、明确说明
+
+- **存储仍按工作区分库**（数据位置不变、不迁移、不丢）。「不区分工作区」指**看板视图**始终聚合；动作按行归属路由到对应库，因此跨工作区行也可操作（v0.3.0 的「跨工作区只读」限制随本次放开）。
+- `scripts/dev.mjs` 删除后，本地开发用标准 dsh 流程（见 README / AGENTS.md）；`scripts/e2e.mjs` 仍用于 E2E 自助拉起宿主。
+
+---
+
+## 三、上一批（v0.3.2）历史背景
+
+
+本批对应三件事：把真机暴露的交互问题修掉、把「啥都记」的记忆收窄成领域化的管理记忆、把调研里「借了但没落地」的成熟做法真正落到代码。全部改动均已通过 `pnpm check` / `pnpm test:run`；涉及 `client/**`、设计系统、API payload 的已触发真机 W1–W8（含新增 W9/W10）。
+
+| 项 | 改动 | 落点 |
+|---|---|---|
+| R18 看板打开时切换会话 | 面板描边改为 `left: anchorLeft` 起，不再整屏拦截；点侧栏会话即切换并收起看板 | `client/sidebar/YoloSidebarDashboard.tsx` |
+| R19 「聊一聊」= 全新对话 | 新增 ephemeral 线程 `yolo-a-*`（`YoloChatThreads`），每卡片一次全新对话 | `src/ui/session.ts` · `client/panel/{YoloPanel,ChatPane}.tsx` |
+| R20 记忆收窄 | 抽取提示词改为「管理助手」，只留承诺/计划/跟踪规则；`memory_write`/system 段同步 | `src/extract/prompt.ts` · `src/memory/{tools,recall}.ts` |
+| R21 写入质量闸门 (B3) | `shared/quality.ts` + `mergeExtraction` 过滤确认词/裸元命令/空标题/空值 | `src/shared/quality.ts` · `src/extract/index.ts` |
+| R22 提醒安静时段 (B5) | `reminder.quiet*` + `inQuietWindow`；安静时段到点先按住、窗口后补发 | `src/reminder/{scheduler,index}.ts` · `src/ui/config.ts` · `src/shared/constants.ts` |
+| R23 改删定位精确匹配 (B6) | `bestByTitle`：精确归一化标题优先，再按状态/最近更新 | `src/storage/repository.ts` |
+| R24 快照原子写 (B8) | `writeSnapshot` 改 tmp+rename | `src/storage/snapshot.ts` |
+| R25 用后反馈计数 (B1 数据层) | todos 增 `good_count`/`stale_count`；完成→good、取消→stale；看板行「常忘」信号 | `src/storage/{schema.sql,db.ts,repository.ts}` · `src/shared/dashboard.ts` · `src/ui/dashboard.ts` |
+| R26 UI 细节打磨 | 行键盘漫游 / 触屏常显 / 通知收件箱 / 相对到期 / 再提醒 / 完成收起动效 / 删除确认修复 / 空态头部微调 | `client/panel/KanbanView.tsx` · `client/design/tokens.ts` |
+
+## 二、本批明确「不做 / 下批再做」
+
+- **B1 召回排序民主化**：数据层（good/stale 计数 + 看板信号）已落地；把高 `stale` 的记忆在 `applyRecallPolicy`/`ftsRecallSearch` 里降权注入是下批（需给 `SearchHit` 带 belief，影响面在召回）。
+- **B2 召回基准**、**B4 价值分层 TTL**、**B7 跨工具只读继承**：列为下批。
+- **改删歧义报候选清单**：本批只做「精确匹配优先 + 活动度排序」（R23）；完整的 `ambiguous + 候选清单` 错报警告作为后续增强。
+
+---
+
+## 三、上一批（v0.3.0）历史背景
+
+> v0.3.0：语义召回（宿主 LLM 扩写 + 重排 + 兜底 + `recall_log`）与跨工作区只读聚合（`?scope=all`），加上 M9 收尾。以下为当时的计划文本，保留作历史。
+
 
 dsh-yolo 已完成原型：跨会话长期记忆 + 主动提醒 + 看板式管理。当前代码实况：
 

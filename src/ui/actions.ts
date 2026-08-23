@@ -92,12 +92,16 @@ export function registerActionsEndpoint(ctx: { webServer?: WebServerLike }, yolo
           send(res, 400, { ok: false, error: 'body must be a JSON object' })
           return
         }
-        const outcome = applyYoloAction(yolo, cwd(), body as YoloActionRequest)
-        if (outcome.ok && (body as YoloActionRequest).action !== 'handled') {
+        // v0.3.3: a row in the all-workspaces board carries its owning cwd; an
+        // action on it routes to that scope (the default is the latest session's).
+        const req = body as YoloActionRequest & { scope_cwd?: string }
+        const actionCwd = typeof req.scope_cwd === 'string' && req.scope_cwd ? req.scope_cwd : cwd()
+        const outcome = applyYoloAction(yolo, actionCwd, req)
+        if (outcome.ok && req.action !== 'handled') {
           // keep today's Markdown snapshot in lockstep with the DB (TE-8);
           // notification dismissals are pure UI state and skip the rewrite
           try {
-            yolo.writeSnapshot(cwd())
+            yolo.writeSnapshot(actionCwd)
           } catch {
             /* snapshot failure must not fail the action */
           }

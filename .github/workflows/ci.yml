@@ -12,7 +12,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node: [22]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +21,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          # use the runner's preinstalled (system) node, not a pinned version
           cache: pnpm
 
       - name: Install dependencies
@@ -51,7 +50,6 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
           cache: pnpm
 
       - name: Install dependencies

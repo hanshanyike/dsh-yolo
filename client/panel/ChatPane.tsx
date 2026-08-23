@@ -3,6 +3,8 @@
 // column, dock-input) and the full-screen expansion (720px column + capture-
 // bar-spec input). Anchored openings (聊一聊) prefix the first sent message
 // with the card context so the thread knows what "它" refers to.
+// v0.3.2: when a `threadKey` is present the pane is a FRESH ephemeral
+// conversation — it starts empty, never loads the resident thread's history.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -21,6 +23,8 @@ export interface ChatPaneProps {
   anchor?: ChatAnchor | null
   /** 'side' = the kanban side dock (compact); 'full' = the expanded surface. */
   variant?: 'side' | 'full'
+  /** Anchored (聊一聊) thread key; a fresh value starts a brand-new conversation. */
+  threadKey?: string
 }
 
 const POLL_MS = 4_000
@@ -32,29 +36,47 @@ interface ChatState {
   sending: boolean
 }
 
-export function ChatPane({ anchor = null, variant = 'full' }: ChatPaneProps): JSX.Element {
+/** Strip the injected anchor context prefix from a user line (the server stores
+ *  the prefixed payload; the UI should show the plain sentence the user typed). */
+function stripAnchorPrefix(text: string): string {
+  return text.replace(/^【关于「[^」]*」[^】]*】\n?/, '')
+}
+
+export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPaneProps): JSX.Element {
   const [state, setState] = useState<ChatState>({ loading: false, error: null, messages: [], sending: false })
   const [draft, setDraft] = useState('')
   const anchorRef = useRef<ChatAnchor | null>(anchor)
   const sentWithContext = useRef(false)
   const listRef = useRef<HTMLDivElement>(null)
+  const prevThread = useRef(threadKey)
 
   useEffect(() => {
     anchorRef.current = anchor
     sentWithContext.current = false
   }, [anchor])
 
+  // A new thread (or a jump between resident and anchored) must clear the
+  // visible history — 聊一聊 always starts fresh. The [load] effect below
+  // re-fetches when threadKey changes; here we only drop the old lines.
+  useEffect(() => {
+    if (prevThread.current !== threadKey) {
+      prevThread.current = threadKey
+      setState((s) => ({ ...s, messages: [], error: null, sending: false }))
+    }
+  }, [threadKey])
+
   const load = useCallback(async (): Promise<void> => {
     setState((s) => ({ ...s, loading: true, error: null }))
     try {
-      const r = await fetch('/yolo/session/messages', { headers: { accept: 'application/json' }, cache: 'no-store' })
+      const q = threadKey ? `?thread=${encodeURIComponent(threadKey)}` : ''
+      const r = await fetch(`/yolo/session/messages${q}`, { headers: { accept: 'application/json' }, cache: 'no-store' })
       const body = (await r.json()) as { ok?: boolean; messages?: ChatMessage[]; error?: string }
       if (!r.ok || !body.ok) throw new Error(body.error ?? `HTTP ${r.status}`)
       setState({ loading: false, error: null, messages: body.messages ?? [], sending: false })
     } catch (e) {
       setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
     }
-  }, [])
+  }, [threadKey])
 
   useEffect(() => { void load() }, [load])
   useEffect(() => {
@@ -83,7 +105,7 @@ export function ChatPane({ anchor = null, variant = 'full' }: ChatPaneProps): JS
       const r = await fetch('/yolo/session/send', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: payload }),
+        body: JSON.stringify({ text: payload, thread: threadKey ?? undefined }),
       })
       const body = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null
       if (!r.ok || !body?.ok) throw new Error(body?.error ?? `HTTP ${r.status}`)
@@ -93,7 +115,7 @@ export function ChatPane({ anchor = null, variant = 'full' }: ChatPaneProps): JS
     } catch (e) {
       setState((s) => ({ ...s, sending: false, error: e instanceof Error ? e.message : String(e) }))
     }
-  }, [draft, load, state.sending])
+  }, [draft, load, state.sending, threadKey])
 
   const input = (
     <input
@@ -122,7 +144,9 @@ export function ChatPane({ anchor = null, variant = 'full' }: ChatPaneProps): JS
       {!state.error && !state.loading && state.messages.length === 0 && (
         <div className="msg ai">
           <div className="who">YOLO</div>
-          这是 YOLO 的常驻会话——可以问「我这周干了什么」、随手记事、改计划、解读简报。工作会话不受影响。
+          {anchor
+            ? `这是关于「${anchor.title}」的全新对话——就它追问、改计划、做安排。工作会话与常驻会话都不受影响。`
+            : '这是 YOLO 的常驻会话——可以问「我这周干了什么」、随手记事、改计划、解读简报。工作会话不受影响。'}
         </div>
       )}
       {state.messages.map((m, i) =>
@@ -132,7 +156,7 @@ export function ChatPane({ anchor = null, variant = 'full' }: ChatPaneProps): JS
             {m.text}
           </div>
         ) : (
-          <div key={i} className="msg me">{m.text}</div>
+          <div key={i} className="msg me">{stripAnchorPrefix(m.text)}</div>
         ),
       )}
       {state.sending && (
