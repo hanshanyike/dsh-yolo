@@ -18,10 +18,17 @@
 //                     there (machine-readable summary for agents/CI)
 //
 // Host bring-up mirrors scripts/dev conventions (idempotent): ensure checkout,
-// deps, build, junction + runtime patch, then `pnpm dsh web`. If a host already
-// answers GET /yolo/dashboard we reuse it and never touch its database — only a
-// host THIS runner starts gets the pre-run [E2E] fixture sweep, and only a host
-// this runner started is stopped afterwards.
+// deps, build, then `pnpm dsh web`. Plugin injection has two paths:
+//   1. standard install (AGENTS.md): the dsh web profile bundles
+//      dsh-plugin-yolo (`dsh plugin add . --profile web`) — the host starts
+//      with NO runtime patch, because inserting the same loader ids again is
+//      a fatal "duplicate loader entry id" error;
+//   2. fallback for machines without the standard install: junction into the
+//      profiles tree + generated cordis.dev.local.yml patch (legacy dev.mjs
+//      style).
+// If a host already answers GET /yolo/dashboard we reuse it and never touch
+// its database — only a host THIS runner starts gets the pre-run [E2E]
+// fixture sweep, and only a host this runner started is stopped afterwards.
 //
 // Why the sweep exists: crashed/interrupted runs used to leak `[E2E]` rows that
 // bloated the dashboard payload and slowed every later call (the old habit was
@@ -41,6 +48,7 @@ const HOST_REPO = 'https://github.com/deepseek-ai/deepseek-harness.git'
 const PROFILE_DIR = join(homedir(), '.dsh', 'profiles')
 const LINK_DIR = join(PROFILE_DIR, 'node_modules')
 const LINK = join(LINK_DIR, 'dsh-plugin-yolo')
+const PROFILE_WEB = join(PROFILE_DIR, 'web')
 const PATCH = join(ROOT, 'cordis.dev.local.yml')
 const PORT = Number(process.env.YOLO_E2E_PORT ?? process.env.PORT ?? 3080)
 const BASE = `http://127.0.0.1:${PORT}`
@@ -145,25 +153,60 @@ function sweepE2EFixtures() {
   console.log(total > 0 ? `[e2e] fixture sweep done: ${total} stale rows removed` : '[e2e] fixture sweep: nothing to remove')
 }
 
+/**
+ * True when the dsh web profile already bundles this plugin (the standard
+ * `dsh plugin add . --profile web` install — AGENTS.md). In that case the
+ * profile composition carries every yolo loader row itself and a --patch
+ * overlay inserting the same ids is a FATAL duplicate ("duplicate loader
+ * entry id: yolo"). The runner then starts the host without a patch; the
+ * patch/junction path below remains as the fallback for machines that never
+ * ran `dsh plugin add`.
+ */
+function profileBundlesYolo() {
+  try {
+    const pkg = JSON.parse(readFileSync(join(PROFILE_WEB, 'package.json'), 'utf8'))
+    const bundles = pkg?.dsh?.profile?.bundles ?? []
+    if (bundles.includes('dsh-plugin-yolo')) {
+      const dep = pkg?.dependencies?.['dsh-plugin-yolo']
+      console.log(`[e2e] web profile bundles dsh-plugin-yolo (${dep ?? 'bundle'}) — no runtime patch`)
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+/** True when a globally installed `dsh` CLI answers --version. AGENTS.md makes
+ * the installed dsh + web profile THE standard runtime; a host started from the
+ * local checkout instead trips over credential-format differences ("the value
+ * for \"version\" in ~/.dsh/.credentials.yaml must be a string") and needs its
+ * own checkout+build. Global first; the source path stays as a fallback. */
+function globalDshAvailable() {
+  const r = spawnSync('dsh', ['--version'], { shell: win, encoding: 'utf8', timeout: 30_000, env: childEnv(), windowsHide: true })
+  return r.status === 0
+}
+
+/** Kill a spawned process AND its whole tree. child.kill() only terminates the
+ * shell wrapper (pnpm/cmd) — the node grandchild survives and keeps holding
+ * the port (observed: an orphan dsh web kept answering long after this runner
+ * exited, breaking the next run's bring-up). taskkill /T gets everything. */
+function killTree(child) {
+  if (!child?.pid) return
+  if (win) {
+    try { execFileSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }) } catch {}
+  } else {
+    try { process.kill(-child.pid, 'SIGTERM') } catch { try { child.kill() } catch {} }
+  }
+}
+
 async function bringUpHost() {
   const step = (n, label) => console.log(`\n[e2e] step ${n}: ${label}`)
 
-  step(1, 'host checkout')
-  if (!existsSync(join(HOST, 'package.json'))) {
-    mkdirSync(join(ROOT, 'host'), { recursive: true })
-    execFileSync('git', ['clone', '--depth', '1', HOST_REPO, HOST], { stdio: 'inherit' })
-  }
-
-  step(2, 'host deps')
-  if (!existsSync(join(HOST, 'node_modules'))) run('pnpm', ['install'], { cwd: HOST })
-
-  step(3, 'host build')
-  if (!existsSync(join(HOST, 'apps', 'web', 'dist'))) run('pnpm', ['run', 'build'], { cwd: HOST })
-
-  step(4, 'YOLO deps')
+  step(1, 'YOLO deps')
   if (!existsSync(join(ROOT, 'node_modules'))) run('pnpm', ['install'])
 
-  step(5, 'YOLO build (client bundle)')
+  step(2, 'YOLO build (dist is what the host actually loads)')
   // A stale/incomplete dist (e.g. client bundle present but runtime assets like
   // schema.sql missing) silently breaks every dashboard query later, so rebuild
   // whenever any required artifact is absent rather than keying on index.mjs only.
@@ -172,21 +215,59 @@ async function bringUpHost() {
     !existsSync(join(ROOT, 'dist', 'src', 'storage', 'schema.sql'))
   ) run('pnpm', ['build'])
 
-  step(6, 'profile junction')
-  mkdirSync(LINK_DIR, { recursive: true })
-  let ok = false
-  try { ok = readlinkSync(LINK).toLowerCase() === ROOT.toLowerCase() } catch { ok = false }
-  if (!ok) {
-    if (existsSync(LINK)) {
-      if (win) execFileSync('cmd', ['/c', 'rmdir', LINK])
-      else rmSync(LINK, { recursive: true, force: true })
-    }
-    try { symlinkSync(ROOT, LINK, 'junction'); console.log(`[e2e] junction: ${LINK} -> ${ROOT}`) }
-    catch (e) { console.error(`[e2e] junction failed: ${e.message}`); process.exit(1) }
-  }
+  const bundled = profileBundlesYolo()
+  const useGlobal = globalDshAvailable()
+  let cmd, argsList, cwd
 
-  step(7, 'runtime patch')
-  writeFileSync(PATCH, `# Generated by scripts/e2e.mjs — do not edit.
+  if (useGlobal) {
+    if (!bundled) {
+      console.error('[e2e] the web profile does not bundle dsh-plugin-yolo.')
+      console.error('[e2e] run ONCE: pnpm dsh plugin add . --profile web   (see AGENTS.md)')
+      console.error('[e2e] then re-run this script; or delete the global dsh shim to force the legacy source path.')
+      process.exit(2)
+    }
+    step(3, '[E2E] fixture sweep (DB closed — safe window)')
+    if (noClean) console.log('[e2e] skipped (--no-clean)')
+    else sweepE2EFixtures()
+    step(4, `start installed dsh web on :${PORT}`)
+    cmd = 'dsh'
+    argsList = ['web', '--no-open', '--port', String(PORT)]
+    cwd = ROOT
+  } else {
+    console.log('[e2e] no global dsh CLI — falling back to the host-checkout path')
+    step(3, 'host checkout')
+    if (!existsSync(join(HOST, 'package.json'))) {
+      mkdirSync(join(ROOT, 'host'), { recursive: true })
+      execFileSync('git', ['clone', '--depth', '1', HOST_REPO, HOST], { stdio: 'inherit' })
+    }
+    step(4, 'host deps')
+    if (!existsSync(join(HOST, 'node_modules'))) run('pnpm', ['install'], { cwd: HOST })
+    step(5, 'host build')
+    if (!existsSync(join(HOST, 'apps', 'web', 'dist'))) run('pnpm', ['run', 'build'], { cwd: HOST })
+
+    step(6, 'profile junction')
+    if (bundled) {
+      console.log('[e2e] junction: skipped (the web profile links the plugin itself)')
+    } else {
+      mkdirSync(LINK_DIR, { recursive: true })
+      let ok = false
+      try { ok = readlinkSync(LINK).toLowerCase() === ROOT.toLowerCase() } catch { ok = false }
+      if (!ok) {
+        if (existsSync(LINK)) {
+          if (win) execFileSync('cmd', ['/c', 'rmdir', LINK])
+          else rmSync(LINK, { recursive: true, force: true })
+        }
+        try { symlinkSync(ROOT, LINK, 'junction'); console.log(`[e2e] junction: ${LINK} -> ${ROOT}`) }
+        catch (e) { console.error(`[e2e] junction failed: ${e.message}`); process.exit(1) }
+      }
+    }
+
+    step(7, 'runtime patch')
+    const patchArgs = []
+    if (bundled) {
+      console.log('[e2e] patch: skipped (profile bundle already registers every yolo row)')
+    } else {
+      writeFileSync(PATCH, `# Generated by scripts/e2e.mjs — do not edit.
 - insert:
   - id: yolo
     name: dsh-plugin-yolo
@@ -201,37 +282,44 @@ async function bringUpHost() {
   - id: yolo-ui
     name: dsh-plugin-yolo/dist/src/ui
 `)
+      patchArgs.push('--patch', PATCH)
+    }
 
-  if (noClean) {
-    console.log('[e2e] step 7b: [E2E] fixture sweep skipped (--no-clean)')
-  } else {
     step('7b', '[E2E] fixture sweep (DB closed — safe window)')
-    sweepE2EFixtures()
+    if (noClean) console.log('[e2e] skipped (--no-clean)')
+    else sweepE2EFixtures()
+
+    step(8, `start dsh web (host checkout) on :${PORT}`)
+    cmd = 'pnpm'
+    argsList = ['dsh', 'web', ...patchArgs, '--no-open', '--port', String(PORT)]
+    cwd = HOST
   }
 
-  step(8, `start dsh web on :${PORT}`)
-  const child = spawn('pnpm', ['dsh', 'web', '--patch', PATCH, '--no-open', '--port', String(PORT)], {
-    cwd: HOST, env: childEnv(), stdio: 'ignore', shell: win, detached: !win,
+  const child = spawn(cmd, argsList, {
+    cwd, env: childEnv(), stdio: 'ignore', shell: win, detached: !win,
   })
-  const deadline = Date.now() + 180_000
+  const deadline = Date.now() + 120_000
   while (Date.now() < deadline) {
     if (hostUp()) return child
     if (child.exitCode !== null || child.signalCode !== null) {
-      console.error('[e2e] host process exited during bring-up')
+      console.error('[e2e] host process exited during bring-up (stdio was suppressed; re-run the same command manually to see why)')
       process.exit(1)
     }
     await sleep(1000)
   }
   console.error(`[e2e] host did not become ready on ${BASE}`)
-  try { child.kill() } catch {}
+  killTree(child)
   process.exit(1)
 }
 
-/** Map --lane/--spec to Playwright path filters (paths are relative to testDir). */
+/** Map --lane/--spec to Playwright path filters.
+ * Playwright positionals are regex filters matched against forward-slash
+ * relative test paths — an absolute Windows path never matches ("No tests
+ * found"), so always pass repo-relative slash form. */
 function selectionArgs() {
-  if (SPEC) return [join(ROOT, 'tests', 'e2e', `${SPEC.replace(/\.spec\.ts$/, '')}.spec.ts`)]
-  if (LANE === 'api') return [join(ROOT, 'tests', 'e2e', 'api')]
-  if (LANE === 'ui') return [join(ROOT, 'tests', 'e2e', 'ui')]
+  if (SPEC) return [`tests/e2e/${SPEC.replace(/\.spec\.ts$/, '')}.spec.ts`]
+  if (LANE === 'api') return ['tests/e2e/api/']
+  if (LANE === 'ui') return ['tests/e2e/ui/']
   if (LANE) {
     console.error(`[e2e] unknown lane "${LANE}" (use api | ui | all)`)
     process.exit(2)
@@ -261,7 +349,7 @@ function selectionArgs() {
 
   if (startedChild) {
     console.log('[e2e] stopping the host this runner started')
-    try { startedChild.kill() } catch {}
+    killTree(startedChild)
   }
   const report = process.env.YOLO_E2E_REPORT
   if (report && existsSync(report)) {
