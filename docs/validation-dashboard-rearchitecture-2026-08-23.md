@@ -3,12 +3,12 @@
 - 验证日期：2026-08-23
 - 范围：`docs/prd-assistant-dashboard-rearchitecture.md`、助手看板 v2、处理/信任链、锚定对话与 W1–W16
 - 环境：Windows，Node.js 22.19.0，系统 Edge，独立 dsh web 宿主 `http://127.0.0.1:4097`
-- 数据路径：真实宿主、真实 SQLite、真实 dashboard/action/session 端点；E2E 夹具按 id 精准清理
+- 数据路径：独立启动的最新构建宿主、真实 SQLite、真实 dashboard/action/session 端点；E2E 夹具按 id 精准清理
 
 ## 结论
 
 本批重构通过类型、单元、构建、真实 API、真实 Edge UI 和真实 LLM 对话门禁。
-全新宿主上的 UI 套件为 **27/27 PASS**，W1–W16 均有对应验证证据；1440、960、400
+独立最新构建宿主上的 UI 套件为 **27/27 PASS**，W1–W16 均有对应验证证据；1440、960、400
 三个宽度的 headed Edge 走查未发现横向溢出、控制台错误、U+FFFD 替换字符或 Emoji 图标残留。
 
 唯一需要保留的验证边界是 W4：computer-use 受安全限制，未能自动操纵 Windows 原生中文输入法。
@@ -22,19 +22,20 @@
 | Node 22 `pnpm check` | PASS | TypeScript `tsc --noEmit` 无错误 |
 | Node 22 `pnpm test:run` | **44 文件 / 404 用例 PASS** | 包含判断、信任动作/存储、Today 模型、Chat pending/scope、样式契约等重构回归 |
 | Node 22 `pnpm build` | PASS | 宿主实际加载的 `dist` 成功生成 |
-| API E2E | **3/3 PASS** | 全新真实宿主，真实 HTTP 与 SQLite |
-| UI E2E | **27/27 PASS** | 全新 `127.0.0.1:4097`，Playwright 驱动系统 Edge，单 worker |
+| API E2E | **3/3 PASS** | 独立最新构建宿主，真实 HTTP 与 SQLite |
+| UI E2E | **27/27 PASS** | 独立 `127.0.0.1:4097`，Playwright 驱动系统 Edge，单 worker |
 | Headed Edge 视觉走查 | PASS | 1440 / 960 / 400；无溢出、console error、U+FFFD、Emoji 图标残留 |
 | 真实 LLM 对话 | PASS | 自然语言创建事项后再自然语言完成；同一 id 从 pending 迁移为 done |
 
-E2E 使用全新独立端口，避免复用旧宿主造成构建版本或数据库状态漂移；运行时同时设置
+E2E 使用独立启动的最新 `dist` 宿主，避免复用旧进程造成构建版本漂移；用例通过唯一前缀和精确 id
+隔离自身夹具，但保留真实用户数据库作为兼容性背景。运行时同时设置
 `YOLO_E2E_HOST=http://127.0.0.1:4097` 与 `YOLO_E2E_PORT=4097`。
 
 ## W1–W16 逐项映射
 
 | # | 结果 | 验证证据 |
 |---|---:|---|
-| W1 打开面板 | PASS | headed Edge 亮色首屏在 1440/960/400 均完整渲染；console error 为 0；未见 U+FFFD、Emoji 图标或损坏字形 |
+| W1 打开面板 | PASS | headed Edge 亮色首屏在 1440/400 完整渲染，960 为暗色复核；console error 为 0；未见 U+FFFD、Emoji 图标或损坏字形 |
 | W2 工具条 | PASS | `accessibility-feedback.spec.ts` 验证关闭菜单从可见性/键盘序列移除；UI 套件同时覆盖 Tab、筛选、More 菜单和 Esc 恢复焦点 |
 | W3 任务处理 | PASS | `panel-flow.spec.ts` 覆盖完成、4 秒内撤销与恢复；处理面板覆盖编辑字段可访问名称及主要动作 |
 | W4 捕获条 | PASS（有限制） | `capture-composition.spec.ts` 在真实 Edge 验证 composition 中 Enter 不提交、结束后一次入库且默认今日；未执行 Windows 原生 IME 自动化 |
@@ -72,6 +73,13 @@ E2E 使用全新独立端口，避免复用旧宿主造成构建版本或数据�
 
 三个宽度均检查：页面与关键容器无横向溢出；console error 为 0；可见文本不含 U+FFFD；
 产品图标不以 Emoji 字形表达。
+
+## 本机 dashboard 时延抽样
+
+在同一 4097 真实宿主和现有兼容性数据上顺序请求 `GET /yolo/dashboard` 40 次：响应体约
+105,940 bytes，p50 17.44ms、p95 45.30ms、最大 285.60ms。该抽样低于 PRD 的 500ms p95 目标，
+但没有专门生成“10 个工作区 / 2,000 条事项”的参考数据集，因此只能证明本轮真实数据规模，
+不能替代大规模容量基准。若聚合查询、排序或数据库索引再次改动，应补独立基准数据集复测。
 
 ## 真实 LLM 对话闭环
 
