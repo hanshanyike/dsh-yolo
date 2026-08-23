@@ -227,11 +227,23 @@ export interface SchedulerDeps {
   reminderEnabled?: () => boolean
   /** Quiet-hours gate: read fresh each tick so edits apply without a reload. */
   quiet?: () => QuietHours
+  /** Every known workspace to scan each tick (v0.3.3 review fix). The board
+   * aggregates ALL workspaces, so reminders/briefs/snapshots must too —
+   * scanning only the latest cwd silently dropped due todos everywhere else.
+   * Read fresh each tick; defaults to [{ cwd }] when absent or empty. */
+  workspaces?: () => ReadonlyArray<{ cwd: string }>
   briefs?: {
     config: () => BriefConfig
     llm?: LlmRuntime
     provider?: string
   }
+}
+
+/** Per-tick scan targets: every known workspace, falling back to the single
+ * tracked cwd (the shape all pre-existing single-workspace callers get). */
+function targetsOf(deps: SchedulerDeps): ReadonlyArray<{ cwd: string }> {
+  const ws = deps.workspaces?.() ?? []
+  return ws.length > 0 ? ws : [{ cwd: deps.cwd() }]
 }
 
 /** Create the scheduler (reminder tick + brief tick); returns a cleanup function. */
@@ -240,35 +252,40 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
   const aheadMs = (): number => deps.aheadMs?.() ?? DEFAULTS.reminderAheadMin * 60_000
 
   const tick = (): void => {
-    try {
-      // reminder.enabled=false idles ONLY the due scan; snapshots keep their cadence
-      if (deps.reminderEnabled?.() ?? true) {
-        runReminderTick({
-          yolo: deps.yolo,
-          cwd: deps.cwd,
-          aheadMs: aheadMs(),
-          quiet: deps.quiet?.(),
-          deliver: deps.deliver,
-        })
+    // One failing workspace (corrupt/locked DB) must not block the others.
+    for (const t of targetsOf(deps)) {
+      try {
+        // reminder.enabled=false idles ONLY the due scan; snapshots keep their cadence
+        if (deps.reminderEnabled?.() ?? true) {
+          runReminderTick({
+            yolo: deps.yolo,
+            cwd: () => t.cwd,
+            aheadMs: aheadMs(),
+            quiet: deps.quiet?.(),
+            deliver: deps.deliver,
+          })
+        }
+        maybeWriteDailySnapshot(deps.yolo, () => t.cwd)
+      } catch (e) {
+        ctx.logger?.warn?.('[yolo-reminder] tick failed (%s): %s', t.cwd, e instanceof Error ? e.message : String(e))
       }
-      maybeWriteDailySnapshot(deps.yolo, deps.cwd)
-    } catch (e) {
-      ctx.logger?.warn?.('[yolo-reminder] tick failed: %s', e instanceof Error ? e.message : String(e))
     }
   }
 
   // briefs run on a tighter loop so a configured minute lands on time (TD-1)
   const briefTick = (): void => {
     if (!deps.briefs) return
-    void runBriefTick({
-      yolo: deps.yolo,
-      cwd: deps.cwd,
-      config: deps.briefs.config(),
-      llm: deps.briefs.llm,
-      provider: deps.briefs.provider,
-    }).catch((e: unknown) => {
-      ctx.logger?.warn?.('[yolo-brief] tick failed: %s', e instanceof Error ? e.message : String(e))
-    })
+    for (const t of targetsOf(deps)) {
+      void runBriefTick({
+        yolo: deps.yolo,
+        cwd: () => t.cwd,
+        config: deps.briefs.config(),
+        llm: deps.briefs.llm,
+        provider: deps.briefs.provider,
+      }).catch((e: unknown) => {
+        ctx.logger?.warn?.('[yolo-brief] tick failed (%s): %s', t.cwd, e instanceof Error ? e.message : String(e))
+      })
+    }
   }
 
   const timer = setInterval(tick, intervalMs)

@@ -9,6 +9,7 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { contentBlocksToText } from '../shared/text.ts'
 import { sessionCwd, sessionId } from '../shared/session.ts'
+import { isYoloSessionId } from '../ui/session.ts'
 import { DEFAULTS } from '../shared/constants.ts'
 import { RecallDedupTracker, registerYoloPrompt } from './recall.ts'
 import { registerYoloTools, type YoloContext } from './tools.ts'
@@ -99,6 +100,10 @@ export function apply(ctx: Context): void {
   }
 
   ctx.on('session/event', (session: Session, event: SessionEvent) => {
+    // YOLO threads own their scope: their events never move lastSessionCwd,
+    // and recall prewarm skips them (reminder/tool traffic must not burn the
+    // semantic-recall budget or pollute the tracked user message).
+    if (isYoloSessionId(sessionId(session))) return
     const sessionWd = sessionCwd(session)
     if (sessionWd) lastSessionCwd = sessionWd
     if (event.type !== 'user/message') return

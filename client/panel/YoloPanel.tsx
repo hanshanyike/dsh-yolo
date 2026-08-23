@@ -213,6 +213,44 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
   const d = new Date()
   const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日 · 周${'日一二三四五六'[d.getDay()]}`
 
+  // The board column, extracted so the fullscreen-chat branch can keep it
+  // mounted (display:none) instead of unmounting KanbanView and losing
+  // editor drafts / the undo window / fold states (v0.3.3 review fix).
+  const boardColumn = (
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      {state.error && state.data === null && (
+        <div className="err-line">
+          <span>看板加载失败：{state.error}</span>
+          <button type="button" className="nact" onClick={() => { void load() }}>重试</button>
+        </div>
+      )}
+      {state.data !== null && (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...(state.error ? { opacity: 0.6 } : {}) }}>
+          <KanbanView
+            data={state.data}
+            refresh={load}
+            filter={filter}
+            patchFilter={patchFilter}
+            view={view}
+            onViewChange={setView}
+            onOpenChat={openAnchoredChat}
+            openSession={openSessionAndClose}
+            notifFocusTick={notifFocusTick}
+          />
+        </div>
+      )}
+      {state.data === null && !state.error && (
+        <div className="p-main" aria-hidden="true">
+          <div className="skel-notif" />
+          <div className="skel-head" />
+          <div className="skel-row" /><div className="skel-row" /><div className="skel-row" />
+          <div className="skel-head" />
+          <div className="skel-row" /><div className="skel-row" />
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div
       className={`yolo-scope panel${compact ? ' compact' : ''}`}
@@ -292,7 +330,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
             aria-label="通知"
           >
             <IcBell size={13} />
-            <span className="bnum">{unhandled}</span>
+            {unhandled > 0 && <span className="bnum">{unhandled}</span>}
             {unhandled > 0 && <span className="bdot" />}
           </button>
           {!chatShowingFull && (
@@ -318,46 +356,20 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
       {/* ② horizontal view tabs — the face switcher (vertical nav is the host's) */}
       <ViewTabs view={view} counts={counts} onChange={setView} />
 
-      {/* ③ body: full-screen chat takes over the panel; the board stays mounted
-          (display:none) so its filter state survives the round-trip (4.2⑨). */}
+      {/* ③ body: full-screen chat takes over the panel while the board stays
+          MOUNTED (display:none) so its editor drafts, the 4s undo window and
+          fold/notification states survive the round-trip (4.2⑨) — the previous
+          conditional render actually unmounted KanbanView and lost them. */}
       {chatShowingFull ? (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <ChatPane variant="full" anchor={anchor} threadKey={chatThread} />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <div style={{ display: 'none' }} aria-hidden="true">{boardColumn}</div>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <ChatPane variant="full" anchor={anchor} threadKey={chatThread} />
+          </div>
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            {state.error && state.data === null && (
-              <div className="err-line">
-                <span>看板加载失败：{state.error}</span>
-                <button type="button" className="nact" onClick={() => { void load() }}>重试</button>
-              </div>
-            )}
-            {state.data !== null && (
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...(state.error ? { opacity: 0.6 } : {}) }}>
-                <KanbanView
-                  data={state.data}
-                  refresh={load}
-                  filter={filter}
-                  patchFilter={patchFilter}
-                  view={view}
-                  onViewChange={setView}
-                  onOpenChat={openAnchoredChat}
-                  openSession={openSessionAndClose}
-                  notifFocusTick={notifFocusTick}
-                />
-              </div>
-            )}
-            {state.data === null && !state.error && (
-              <div className="p-main" aria-hidden="true">
-                <div className="skel-notif" />
-                <div className="skel-head" />
-                <div className="skel-row" /><div className="skel-row" /><div className="skel-row" />
-                <div className="skel-head" />
-                <div className="skel-row" /><div className="skel-row" />
-              </div>
-            )}
-          </div>
+          {boardColumn}
 
           {showSideDock && (
             <aside className="dock">

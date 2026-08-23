@@ -54,6 +54,7 @@ function mockYolo(): Yolo {
     listPreferences: () => [pref],
     listSessionSummaries: () => [{ session_id: 's1', summary: '修登录bug', scope_key: 'test/main', updated_at: now }],
     listNotifications: () => [notification],
+    listUnhandledNotifications: () => [notification],
     listWorkspaceMeta: () => [],
   } as unknown as Yolo
 }
@@ -106,6 +107,7 @@ describe('buildDashboardData', () => {
         { session_id: 's2', summary: '会话二', scope_key: 'test/main', updated_at: now },
       ],
       listNotifications: () => [],
+      listUnhandledNotifications: () => [],
     } as unknown as Yolo
     const data = buildDashboardData(yolo, '/tmp/proj')
     // distinct session count ignores manual/tool rows; s9 still counts
@@ -145,6 +147,7 @@ describe('buildDashboardData', () => {
       listPreferences: () => [],
       listSessionSummaries: () => [],
       listNotifications: () => [],
+      listUnhandledNotifications: () => [],
     } as unknown as Yolo
     const data = buildDashboardData(yolo, '/tmp/proj')
     expect(data.todos[0].milestone_title).toBeNull()
@@ -156,6 +159,32 @@ describe('buildDashboardData', () => {
     const json = JSON.stringify(buildDashboardData(mockYolo(), '/tmp/proj'))
     const parsed = JSON.parse(json) as { todos: unknown[] }
     expect(parsed.todos).toHaveLength(1)
+  })
+
+  // v0.3.3 review regression: the badge counted only within the 12-row display
+  // slice, so >12 open cards showed a smaller number (even 0). The badge must
+  // reflect ALL unhandled cards; the display slice stays a preview.
+  it('counts ALL unhandled notifications, beyond the 12-row display cap', () => {
+    const handledAt = Date.now()
+    const yolo = {
+      resolve: () => ({ scopeKey: 'test/main', db: {}, dataDir: '' }),
+      listTodos: () => [],
+      listGoals: () => [],
+      listMilestones: () => [],
+      listEvents: () => [],
+      listEventsBetween: () => [],
+      listPreferences: () => [],
+      listSessionSummaries: () => [],
+      listNotifications: () =>
+        Array.from({ length: 12 }, (_, i) => ({
+          id: `n${i}`, kind: 'brief', title: `早报 ${i}`, body: null, todo_id: null,
+          created_at: handledAt, handled_at: handledAt, scope_key: 'test/main',
+        })),
+      listUnhandledNotifications: () => Array.from({ length: 15 }, (_, i) => ({ id: `u${i}` })),
+    } as unknown as Yolo
+    const data = buildDashboardData(yolo, '/tmp/proj')
+    expect(data.notifications).toHaveLength(12)
+    expect(data.unhandled).toBe(15)
   })
 })
 

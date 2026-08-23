@@ -100,12 +100,15 @@ interface Buckets {
   stale: YoloTodoRow[]
 }
 
-/** Bucket open rows by due date; stale rows always leave for their own bucket
- *  (mirrors the v2 board's section partition — undated rows ride with week). */
-function partitionRows(rows: readonly YoloTodoRow[]): Buckets {
+/** Bucket open rows by due date. By default stale rows leave for their own
+ *  bucket (the 即将 face's 滞留 section). The 今日 face opts OUT: a stale row
+ *  still has a due bucket, and hiding it there made the hero/胶囊 counts show
+ *  rows the list did not — an all-stale day rendered a blank board with no
+ *  empty state (v0.3.3 review fix; undated rows never reach this face). */
+function partitionRows(rows: readonly YoloTodoRow[], opts: { splitStale?: boolean } = {}): Buckets {
   const out: Buckets = { overdue: [], today: [], week: [], stale: [] }
   for (const t of rows) {
-    if (t.stale) { out.stale.push(t); continue }
+    if (opts.splitStale !== false && t.stale) { out.stale.push(t); continue }
     const b = dueBucket(t)
     if (b === 'overdue') out.overdue.push(t)
     else if (b === 'today') out.today.push(t)
@@ -336,7 +339,9 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   )
 
   const todaySections = useMemo<Section[]>(() => {
-    const p = partitionRows(focus)
+    // splitStale:false — the 今日 face buckets stale rows by their due date so
+    // the visible rows match the hero/胶囊 counts (stale keeps its「N 天未动」tag).
+    const p = partitionRows(focus, { splitStale: false })
     for (const t of retiringToShowToday) {
       if (t.stale) p.stale.push(t)
       else if (dueBucket(t) === 'overdue') p.overdue.push(t)
@@ -409,7 +414,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
         key={t.id}
         draft={editor}
         milestones={milestoneTitles}
-        busy={busyKey === `edit-${t.id}`}
+        busy={busyKey === `edit-${t.id}` || busyKey === `del-${t.id}`}
         confirming={confirmDelete === t.id}
         onChange={setEditor}
         onSave={() => { void saveEditor() }}
@@ -482,7 +487,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
                   <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'complete', kind: 'todo', id: n.todo_id }) }}>
                     <IcCheck size={12} />完成
                   </button>
-                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id, due_at: nextDayStr(null) }) }}>
+                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id, due_at: nextDayStr(dueFor?.due_at ?? null) }) }}>
                     <IcPlusDay size={12} />+1d
                   </button>
                   <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'remind_again', kind: 'todo', id: n.todo_id }) }}>
@@ -733,6 +738,10 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
       aria-label={open ? `任务：${t.title}` : `已完成：${t.title}`}
       onKeyDown={(e) => {
         if (isRetiring || !open) return
+        // Only the ROW itself owns Space/Enter/E/↑/↓. When focus sits on a
+        // child control (✓/+1d/编辑/聊一聊), let the key activate THAT control
+        // — without this guard, Space on 「聊一聊」 completed the todo.
+        if (e.target !== e.currentTarget) return
         if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onComplete() }
         else if (e.key.toLowerCase() === 'e') { e.preventDefault(); onEdit() }
         else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); navRow(e.key === 'ArrowDown' ? 1 : -1) }

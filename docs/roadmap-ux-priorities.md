@@ -61,6 +61,7 @@
 | V5 会话来源 + 点击回得去 | ✅ 聚合行带归属；点台帐来源徽标先关面板再 `ctx.sessions.open` 跳回 |
 | V6 真机浏览器验证 | ✅ 真实 host + Playwright（E2E 全绿；对话回复已真机验证） |
 | V7 打开不轮询 | ✅ 面板打开时去掉 30s 轮询（动作/手动刷新才拉）；关闭时角标独立轮询 |
+| V8 评审收敛（工作区归属 / 聚合 / 交互） | ✅ YOLO 线程自有工作区（不漂移 latestCwd）；提醒/简报/快照遍历所有工作区；聚合逐库隔离+全局时序+health 合并；角标全量计数；scope_cwd 注册表校验 + scopeKey 钉住（`Yolo.runInScope`）；行键盘 target 守卫；今日面滞留行归位；对话线程竞态/失败回滚；amber 文字对比度 AA 化。详见 `docs/code-review-v033.md` |
 
 ---
 

@@ -89,11 +89,11 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
     if (kind !== 'notification' || !ref.id) {
       return deny(yolo, cwd, r, 'handled requires kind=notification and id', 400)
     }
-    const changed = yolo.markNotificationHandled(cwd, ref.id)
-    if (!changed) {
-      // idempotent no-op (double-click「知道了」) — deliberately NOT audited
-      return { ok: false, error: 'notification not found (or already handled)', httpStatus: 404 }
-    }
+    // Idempotent success (double-click「知道了」, or a stale client replay):
+    // the requested end state already holds. Deliberately NOT audited — and
+    // NOT an error: the old 404 made the UI show 「操作失败」 for a benign
+    // repeat click (v0.3.3 review fix).
+    yolo.markNotificationHandled(cwd, ref.id)
     return { ok: true, item: { id: ref.id, handled: true } }
   }
 

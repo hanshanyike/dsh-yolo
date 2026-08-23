@@ -157,7 +157,10 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     ledgerDay: day,
     ledgerSessions,
     notifications,
-    unhandled: notifications.filter((n) => !n.handled).length,
+    // v0.3.3 review fix: count ALL unhandled notifications, not just those that
+    // fit the 12-row display slice — the badge is a promise ("N 件未处理") and
+    // must not undercount when older cards are still open.
+    unhandled: yolo.listUnhandledNotifications(cwd).length,
     health: buildMemoryHealth(yolo, cwd),
     focusDefaultCount: 0,
   }
@@ -176,7 +179,10 @@ function mergeRows<T extends { id: string; ws?: WorkspaceTag }>(rows: readonly T
   return out
 }
 
-/** Union several workspace dashboards into one cross-workspace (scope:all) view. */
+/** Union several workspace dashboards into one cross-workspace (scope:all) view.
+ *  v0.3.3 review fixes: ledger/notifications are re-sorted into ONE global time
+ *  order (per-workspace slices were simply concatenated), and memory-health
+ *  metrics are merged across workspaces instead of inheriting the first one. */
 export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDashboardData {
   const base = list[0]
   if (!base) throw new Error('aggregateDashboards: empty dashboard list')
@@ -185,8 +191,26 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
   const allMilestones = mergeRows(list.flatMap((d) => d.milestones))
   const allEvents = mergeRows(list.flatMap((d) => d.events))
   const allPrefs = mergeRows(list.flatMap((d) => d.preferences))
-  const allLedger = mergeRows(list.flatMap((d) => d.ledger))
-  const allNotifications = mergeRows(list.flatMap((d) => d.notifications))
+  const allLedger = mergeRows(list.flatMap((d) => d.ledger)).sort((a, b) => b.occurred_at - a.occurred_at)
+  const allNotifications = mergeRows(list.flatMap((d) => d.notifications)).sort((a, b) => b.created_at - a.created_at)
+
+  // health: sum the counters; weight each hit-rate by its run count
+  const healths = list.map((d) => d.health).filter((h): h is YoloMemoryHealth => h !== undefined)
+  let health: YoloMemoryHealth | undefined
+  if (healths.length > 0) {
+    const sum = (pick: (h: YoloMemoryHealth) => number): number => healths.reduce((n, h) => n + pick(h), 0)
+    const runs = sum((h) => h.recallRunsToday)
+    const weightedRate =
+      runs === 0 ? 0 : Math.round(healths.reduce((n, h) => n + h.recallHitRate * h.recallRunsToday, 0) / runs * 100) / 100
+    health = {
+      recallRunsToday: runs,
+      recallHitRate: weightedRate,
+      recallErrorsToday: sum((h) => h.recallErrorsToday),
+      extractionErrorsToday: sum((h) => h.extractionErrorsToday),
+      deniedToday: sum((h) => h.deniedToday),
+      duplicateTodos: healths.flatMap((h) => h.duplicateTodos),
+    }
+  }
 
   const wsMap = new Map<string, YoloWorkspaceInfo>()
   for (const d of list) {
@@ -211,7 +235,10 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
     ledger: allLedger,
     ledgerSessions: list.reduce((n, d) => n + d.ledgerSessions, 0),
     notifications: allNotifications,
-    unhandled: allNotifications.filter((n) => !n.handled).length,
+    // per-workspace unhandled is already a full count (not the display slice) —
+    // summing them keeps the aggregate badge exact.
+    unhandled: list.reduce((n, d) => n + (d.unhandled ?? 0), 0),
+    ...(health !== undefined ? { health } : {}),
   }
 }
 
@@ -227,7 +254,7 @@ function ledgerDayOf(req: unknown): string {
  * shows it all, per the user. Cross-workspace rows carry their owning `ws`, and
  * POST /yolo/actions routes by that row's cwd, so every row stays actionable). */
 export function registerDashboardEndpoint(
-  ctx: { webServer?: WebServerLike },
+  ctx: { webServer?: WebServerLike; logger?: { warn?(fmt: string, ...args: unknown[]): void } },
   yolo: Yolo,
   cwd: () => string,
   opts?: { allowAggregate?: () => boolean; focusDefaultCount?: () => number },
@@ -241,12 +268,25 @@ export function registerDashboardEndpoint(
         const focusDefault = opts?.focusDefaultCount?.() ?? 0
         const metas = yolo.listWorkspaceMeta()
         if (metas.length > 1) {
-          const list = metas.map(({ cwd: wcwd, scopeKey }) => {
-            const ws: WorkspaceTag = { slug: scopeKey, label: workspaceLabel(wcwd, scopeKey), cwd: wcwd }
-            return { data: buildDashboardData(yolo, wcwd, day, ws), ws }
-          })
-          const data = aggregateDashboards(list.map((l) => l.data))
+          // One broken workspace (corrupt/locked DB) must not take the whole
+          // board down: skip it, keep the rest, and surface what was skipped.
+          const list: YoloDashboardData[] = []
+          const errors: string[] = []
+          for (const { cwd: wcwd, scopeKey } of metas) {
+            try {
+              // Pin to the REGISTRY's scopeKey so the projection (and every
+              // action later routed to this row) reads exactly this store even
+              // if the workspace's git branch switches mid-flight.
+              list.push(yolo.runInScope(wcwd, scopeKey, () => buildDashboardData(yolo, wcwd, day, { slug: scopeKey, label: workspaceLabel(wcwd, scopeKey), cwd: wcwd })))
+            } catch (e) {
+              errors.push(`${workspaceLabel(wcwd, scopeKey)}: ${e instanceof Error ? e.message : String(e)}`)
+              ctx.logger?.warn?.('[yolo] dashboard skipped workspace %s: %s', wcwd, e instanceof Error ? e.message : String(e))
+            }
+          }
+          if (list.length === 0) throw new Error(errors[0] ?? 'no workspace could be read')
+          const data = aggregateDashboards(list)
           data.focusDefaultCount = focusDefault
+          if (errors.length > 0) data.workspaceErrors = errors
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
           res.end(JSON.stringify(data))
           return

@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildDashboardData, aggregateDashboards, registerDashboardEndpoint, workspaceLabel } from '../src/ui/dashboard.ts'
 import type Yolo from '../src/storage/index.ts'
-import type { YoloDashboardData, WorkspaceTag, YoloTodoRow } from '../src/shared/dashboard.ts'
+import type { YoloDashboardData, WorkspaceTag, YoloTodoRow, YoloLedgerEntry, YoloNotificationRow } from '../src/shared/dashboard.ts'
 import type { Todo, Goal, Milestone, TimelineEvent, Preference, Notification } from '../src/storage/types.ts'
 import { localDateStr } from '../src/shared/text.ts'
 
@@ -56,6 +56,49 @@ describe('aggregateDashboards', () => {
     const out = aggregateDashboards([a])
     expect(out.todos).toHaveLength(1)
   })
+
+  // v0.3.3 review fix: per-workspace slices used to be concatenated, so the
+  // ledger read as workspace-blocks instead of one timeline.
+  it('re-sorts ledger and notifications into one global time order', () => {
+    const led = (id: string, at: number, slug: string): YoloLedgerEntry => ({
+      id, kind: 'note', summary: id, occurred_at: at, label: '', ws: wsTag(slug, slug),
+    })
+    const notif = (id: string, at: number, slug: string): YoloNotificationRow => ({
+      id, kind: 'reminder', title: '⏰ 提醒', created_at: at, handled: false, ws: wsTag(slug, slug),
+    })
+    const a = makeDashboard(SCOPE_A, 'projA', [])
+    a.ledger = [led('a1', 1000, SCOPE_A), led('a2', 3000, SCOPE_A)]
+    a.notifications = [notif('na', 500, SCOPE_A)]
+    const b = makeDashboard(SCOPE_B, 'projB', [])
+    b.ledger = [led('b1', 2000, SCOPE_B)]
+    b.notifications = [notif('nb', 4000, SCOPE_B)]
+
+    const out = aggregateDashboards([a, b])
+    expect(out.ledger.map((e) => e.id)).toEqual(['a2', 'b1', 'a1'])
+    expect(out.notifications.map((n) => n.id)).toEqual(['nb', 'na'])
+  })
+
+  // v0.3.3 review fix: the aggregate used to inherit base.health (first
+  // workspace only) — counters now sum and the hit-rate is run-weighted.
+  it('merges memory-health counters across workspaces', () => {
+    const a = makeDashboard(SCOPE_A, 'projA', [])
+    a.health = { recallRunsToday: 10, recallHitRate: 0.8, recallErrorsToday: 1, extractionErrorsToday: 2, deniedToday: 0, duplicateTodos: [] }
+    const b = makeDashboard(SCOPE_B, 'projB', [])
+    b.health = {
+      recallRunsToday: 30, recallHitRate: 1, recallErrorsToday: 0, extractionErrorsToday: 1, deniedToday: 2,
+      duplicateTodos: [{ a: 't1', b: 't2', aTitle: 'A', bTitle: 'B' }],
+    }
+
+    const out = aggregateDashboards([a, b])
+    expect(out.health).toMatchObject({
+      recallRunsToday: 40,
+      recallHitRate: 0.95, // (0.8*10 + 1*30) / 40
+      recallErrorsToday: 1,
+      extractionErrorsToday: 3,
+      deniedToday: 2,
+    })
+    expect(out.health?.duplicateTodos).toHaveLength(1)
+  })
 })
 
 describe('buildDashboardData ws tagging', () => {
@@ -76,6 +119,7 @@ describe('buildDashboardData ws tagging', () => {
     listEvents: () => [event],
     listEventsBetween: () => [event],
     listNotifications: () => [notif],
+    listUnhandledNotifications: () => [notif],
     listSessionSummaries: () => [],
   } as unknown as Yolo
 
@@ -102,6 +146,7 @@ describe('registerDashboardEndpoint scope handling', () => {
   function baseYolo(metas: Array<{ cwd: string; scopeKey: string }> = [{ cwd: 'C:\\work\\projA', scopeKey: SCOPE_A }]): Yolo {
     return {
       resolve: (cwd: string) => ({ scopeKey: cwd.includes('projB') ? SCOPE_B : SCOPE_A, db: {}, dataDir: '' }),
+      runInScope: (_cwd: string, _scopeKey: string, fn: () => unknown) => fn(),
       listTodos: () => [],
       listGoals: () => [],
       listMilestones: () => [],
@@ -109,6 +154,7 @@ describe('registerDashboardEndpoint scope handling', () => {
       listEvents: () => [],
       listEventsBetween: () => [],
       listNotifications: () => [],
+      listUnhandledNotifications: () => [],
       listSessionSummaries: () => [],
       listWorkspaceMeta: () => metas,
     } as unknown as Yolo
@@ -147,6 +193,36 @@ describe('registerDashboardEndpoint scope handling', () => {
     const data = run(yolo, true, '/yolo/dashboard?scope=all')
     expect(data?.scope).toBe('all')
     expect(data?.workspaceCount).toBe(2)
+  })
+
+  // v0.3.3 review fix: one corrupt/locked workspace DB used to 500 the whole
+  // board (including every healthy workspace). It is now skipped and reported.
+  it('skips an unreadable workspace and still serves the rest with workspaceErrors', () => {
+    const yolo = {
+      resolve: (cwd: string) => ({ scopeKey: cwd.includes('projB') ? SCOPE_B : SCOPE_A, db: {}, dataDir: '' }),
+      runInScope: (_cwd: string, _scopeKey: string, fn: () => unknown) => fn(),
+      listTodos: (cwd: string) => {
+        if (cwd.includes('projB')) throw new Error('database locked')
+        return []
+      },
+      listGoals: () => [],
+      listMilestones: () => [],
+      listPreferences: () => [],
+      listEvents: () => [],
+      listEventsBetween: () => [],
+      listNotifications: () => [],
+      listUnhandledNotifications: () => [],
+      listSessionSummaries: () => [],
+      listWorkspaceMeta: () => [
+        { cwd: 'C:\\work\\projA', scopeKey: SCOPE_A },
+        { cwd: 'C:\\work\\projB', scopeKey: SCOPE_B },
+      ],
+    } as unknown as Yolo
+    const data = run(yolo, true, '/yolo/dashboard?scope=all')
+    expect(data?.scope).toBe('all')
+    expect(data?.workspaceCount).toBe(1)
+    expect(data?.workspaceErrors).toHaveLength(1)
+    expect(data?.workspaceErrors?.[0]).toContain('database locked')
   })
 })
 
