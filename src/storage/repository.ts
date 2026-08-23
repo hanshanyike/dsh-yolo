@@ -28,6 +28,8 @@ import type {
   TodoStatus,
   EventKind,
   DuplicateTodoPair,
+  AttentionFeedback,
+  ClientActionRecord,
 } from './types.ts'
 
 const now = () => Date.now()
@@ -453,6 +455,76 @@ export function markNotificationHandled(db: DB, id: string): void {
 /** Clear every unhandled reminder notification attached to a todo (any handling path). */
 export function markTodoNotificationsHandled(db: DB, todoId: string): void {
   db.prepare("UPDATE notifications SET handled_at = ? WHERE todo_id = ? AND handled_at IS NULL AND kind = 'reminder'").run(now(), todoId)
+}
+
+// ---------- dashboard-v2 attention trust + action idempotency ----------
+
+export interface AttentionFeedbackKey {
+  scope_key: string
+  todo_id: string
+  reason_version: string
+  evidence_fingerprint: string
+}
+
+export function getAttentionFeedback(db: DB, key: AttentionFeedbackKey): AttentionFeedback | undefined {
+  return db.prepare(
+    `SELECT * FROM attention_feedback
+     WHERE scope_key = ? AND todo_id = ? AND reason_version = ? AND evidence_fingerprint = ?`,
+  ).get(key.scope_key, key.todo_id, key.reason_version, key.evidence_fingerprint) as AttentionFeedback | undefined
+}
+
+export function listAttentionFeedback(db: DB, scopeKey: string): AttentionFeedback[] {
+  return db.prepare(
+    'SELECT * FROM attention_feedback WHERE scope_key = ? ORDER BY updated_at DESC',
+  ).all(scopeKey) as AttentionFeedback[]
+}
+
+/** Merge one explicit trust signal without clearing the other persisted fields. */
+export function recordAttentionFeedback(
+  db: DB,
+  key: AttentionFeedbackKey,
+  patch: { seen_at?: number | null; suppressed_until?: number | null; feedback_reason?: string | null },
+): AttentionFeedback {
+  const ts = now()
+  db.prepare(
+    `INSERT INTO attention_feedback(
+       scope_key, todo_id, reason_version, evidence_fingerprint,
+       seen_at, suppressed_until, feedback_reason, created_at, updated_at
+     ) VALUES(?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(scope_key, todo_id, reason_version, evidence_fingerprint) DO UPDATE SET
+       seen_at = COALESCE(attention_feedback.seen_at, excluded.seen_at),
+       suppressed_until = COALESCE(excluded.suppressed_until, attention_feedback.suppressed_until),
+       feedback_reason = COALESCE(excluded.feedback_reason, attention_feedback.feedback_reason),
+       updated_at = excluded.updated_at`,
+  ).run(
+    key.scope_key,
+    key.todo_id,
+    key.reason_version,
+    key.evidence_fingerprint,
+    patch.seen_at ?? null,
+    patch.suppressed_until ?? null,
+    patch.feedback_reason ?? null,
+    ts,
+    ts,
+  )
+  return getAttentionFeedback(db, key)!
+}
+
+export function getClientAction(db: DB, scopeKey: string, clientActionId: string): ClientActionRecord | undefined {
+  return db.prepare(
+    'SELECT * FROM client_actions WHERE scope_key = ? AND client_action_id = ?',
+  ).get(scopeKey, clientActionId) as ClientActionRecord | undefined
+}
+
+export function saveClientAction(
+  db: DB,
+  data: { scope_key: string; client_action_id: string; request_hash: string; outcome_json: string },
+): ClientActionRecord {
+  db.prepare(
+    `INSERT INTO client_actions(scope_key, client_action_id, request_hash, outcome_json, created_at)
+     VALUES(?,?,?,?,?)`,
+  ).run(data.scope_key, data.client_action_id, data.request_hash, data.outcome_json, now())
+  return getClientAction(db, data.scope_key, data.client_action_id)!
 }
 
 // ---------- fuzzy title matching (M8) ----------
@@ -929,5 +1001,4 @@ export function countRecallStatusSince(db: DB, status: string, sinceMs: number):
   return row?.n ?? 0
 }
 export type { ExtractionLog }
-
 

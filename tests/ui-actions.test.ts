@@ -152,7 +152,7 @@ describe('POST /yolo/actions', () => {
     const { server } = setup({ applyTodoAction: vi.fn(() => null) })
     const r = await call(server, 'POST', JSON.stringify({ action: 'complete', kind: 'todo', title: '不存在的任务' }))
     expect(r.status).toBe(404)
-    expect(r.body).toEqual({ ok: false, error: 'todo not found', httpStatus: 404 })
+    expect(r.body).toEqual({ ok: false, error: 'todo not found', code: 'not_found', httpStatus: 404 })
   })
 
   it('non-JSON-object body (array) → 400', async () => {
@@ -195,5 +195,15 @@ describe('POST /yolo/actions', () => {
     expect(r.status).toBe(200)
     expect(runInScope).toHaveBeenCalledWith('/ws/known', 'known/main', expect.any(Function))
     expect(yolo.applyTodoAction).toHaveBeenCalledWith('/ws/known', { id: 't1' }, 'complete', { session_id: null })
+  })
+
+  it('returns HTTP 409 with a stable code when a client action id conflicts', async () => {
+    const runIdempotentAction = vi.fn(() => ({ status: 'conflict' as const }))
+    const { server } = setup({ runIdempotentAction })
+    const r = await call(server, 'POST', JSON.stringify({
+      action: 'complete', kind: 'todo', id: 't1', client_action_id: 'duplicate-id',
+    }))
+    expect(r.status).toBe(409)
+    expect(r.body).toMatchObject({ ok: false, code: 'idempotency_conflict', httpStatus: 409 })
   })
 })

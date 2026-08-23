@@ -25,7 +25,7 @@ import type {
 } from '../shared/dashboard.ts'
 import { isTodoOpen, isTodoOverdue, isTodoStale } from '../shared/dashboard.ts'
 import { localDateStr, dayBounds } from '../shared/text.ts'
-import { buildDashboardSummary, selectPrimaryAttention } from '../attention/index.ts'
+import { buildDashboardSummary, rankProjectedAttentionCandidates, selectPrimaryAttention } from '../attention/index.ts'
 
 export interface WebServerLike {
   register(opts: {
@@ -204,7 +204,8 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     ws: owner,
   }))
 
-  const attention = selectPrimaryAttention(todos, new Date(now)).attention
+  const feedback = yolo.listAttentionFeedback?.(cwd) ?? []
+  const attention = selectPrimaryAttention(todos, new Date(now), feedback).attention
   return {
     scopeKey,
     cwd,
@@ -214,7 +215,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     summary: buildDashboardSummary(todos, day, ledger.length),
     capabilities: {
       preferenceUndo: false,
-      notificationSeen: false,
+      notificationSeen: true,
       sourceExcerpt: false,
     },
     todos,
@@ -286,6 +287,7 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
   const allPrefs = mergeRows(list.flatMap((d) => d.preferences))
   const allLedger = mergeRows(list.flatMap((d) => d.ledger)).sort((a, b) => b.occurred_at - a.occurred_at)
   const allNotifications = mergeRows(list.flatMap((d) => d.notifications)).sort((a, b) => b.created_at - a.created_at)
+  const workspaceAttention = list.flatMap((d) => d.attention ?? [])
 
   // health: sum the counters; weight each hit-rate by its run count
   const healths = list.map((d) => d.health).filter((h): h is YoloMemoryHealth => h !== undefined)
@@ -329,7 +331,7 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
     ledger: allLedger,
     ledgerSessions: list.reduce((n, d) => n + d.ledgerSessions, 0),
     notifications: allNotifications,
-    attention: selectPrimaryAttention(allTodos, new Date(Math.max(...list.map((d) => d.at)))).attention,
+    attention: rankProjectedAttentionCandidates(workspaceAttention, allTodos).slice(0, 1),
     summary: buildDashboardSummary(
       allTodos,
       base.ledgerDay,

@@ -56,6 +56,7 @@ export interface YoloAttentionRow {
   evidence_fingerprint: string
   seen_at?: number | null
   suppressed_until?: number | null
+  feedback_reason?: string | null
   source?: YoloItemSource
 }
 

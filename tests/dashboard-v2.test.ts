@@ -58,7 +58,7 @@ describe('dashboard v2 projection', () => {
     const data = buildDashboardData(yoloFor('quarterly/main', todo, notification), cwd, '2026-08-23')
 
     expect(data.ui_contract_version).toBe(2)
-    expect(data.capabilities).toEqual({ preferenceUndo: false, notificationSeen: false, sourceExcerpt: false })
+    expect(data.capabilities).toEqual({ preferenceUndo: false, notificationSeen: true, sourceExcerpt: false })
     expect(data.summary).toMatchObject({ open: 1, overdue: 1, completedToday: 0, changesToday: 1, partial: false })
     expect(data.attention).toHaveLength(1)
     expect(data.attention?.[0]).toMatchObject({ todo_id: 't1', scope_cwd: cwd, reason_code: 'reminder_due' })

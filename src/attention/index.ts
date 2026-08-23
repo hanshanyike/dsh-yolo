@@ -25,6 +25,15 @@ interface ScoredEvidence extends YoloAttentionEvidence {
   qualifies: boolean
 }
 
+export interface AttentionFeedbackState {
+  todo_id: string
+  reason_version: string
+  evidence_fingerprint: string
+  seen_at?: number | null
+  suppressed_until?: number | null
+  feedback_reason?: string | null
+}
+
 function dateOnly(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
@@ -206,40 +215,78 @@ export function scoreAttentionCandidate(row: YoloTodoRow, now = new Date()): Yol
       row.milestone_id ?? null,
       row.milestone_status ?? null,
       row.milestone_open_todo_count ?? null,
+      primary.reason,
+      publicEvidence,
       ATTENTION_REASON_VERSION,
     ]),
     ...(row.source ? { source: row.source } : {}),
   }
 }
 
+function candidateKey(row: Pick<YoloAttentionRow, 'todo_id' | 'reason_version' | 'evidence_fingerprint'>): string {
+  return `${row.todo_id}|${row.reason_version}|${row.evidence_fingerprint}`
+}
+
+/** Apply trust state only to the exact immutable evidence version it belongs to. */
+export function applyAttentionFeedback(
+  rows: readonly YoloAttentionRow[],
+  states: readonly AttentionFeedbackState[],
+  nowMs = Date.now(),
+): YoloAttentionRow[] {
+  const byKey = new Map(states.map((state) => [candidateKey(state), state]))
+  return rows.flatMap((row) => {
+    const state = byKey.get(candidateKey(row))
+    if (!state) return [row]
+    if (state.suppressed_until != null && state.suppressed_until > nowMs) return []
+    return [{
+      ...row,
+      seen_at: state.seen_at ?? null,
+      suppressed_until: state.suppressed_until ?? null,
+      feedback_reason: state.feedback_reason ?? null,
+    }]
+  })
+}
+
+function compareCandidates(a: YoloAttentionRow, b: YoloAttentionRow, todoByKey: Map<string, YoloTodoRow>): number {
+  if (a.score !== b.score) return b.score - a.score
+  const todoA = todoByKey.get(`${a.ws.slug}|${a.todo_id}`)
+  const todoB = todoByKey.get(`${b.ws.slug}|${b.todo_id}`)
+  const dueA = dueMs(todoA?.due_at) ?? Number.POSITIVE_INFINITY
+  const dueB = dueMs(todoB?.due_at) ?? Number.POSITIVE_INFINITY
+  if (dueA !== dueB) return dueA - dueB
+  const priority = priorityRank(todoB?.priority) - priorityRank(todoA?.priority)
+  if (priority !== 0) return priority
+  const updatedA = todoA?.updated_at ?? Number.POSITIVE_INFINITY
+  const updatedB = todoB?.updated_at ?? Number.POSITIVE_INFINITY
+  if (updatedA !== updatedB) return updatedA - updatedB
+  const keyA = `${a.ws.slug}|${a.todo_id}`
+  const keyB = `${b.ws.slug}|${b.todo_id}`
+  return keyA < keyB ? -1 : keyA > keyB ? 1 : 0
+}
+
+export function rankProjectedAttentionCandidates(
+  rows: readonly YoloAttentionRow[],
+  todos: readonly YoloTodoRow[],
+): YoloAttentionRow[] {
+  const todoByKey = new Map(todos.map((row) => [`${row.ws?.slug ?? ''}|${row.id}`, row]))
+  return [...rows].sort((a, b) => compareCandidates(a, b, todoByKey))
+}
+
 /** Stable server-side ranking. No score or explanation is accepted from clients. */
 export function rankAttentionCandidates(rows: readonly YoloTodoRow[], now = new Date()): YoloAttentionRow[] {
-  const todoByKey = new Map(rows.map((row) => [`${row.ws?.slug ?? ''}|${row.id}`, row]))
-  return rows
+  const candidates = rows
     .map((row) => scoreAttentionCandidate(row, now))
     .filter((row): row is YoloAttentionRow => row !== null)
-    .sort((a, b) => {
-      if (a.score !== b.score) return b.score - a.score
-      const todoA = todoByKey.get(`${a.ws.slug}|${a.todo_id}`)!
-      const todoB = todoByKey.get(`${b.ws.slug}|${b.todo_id}`)!
-      const dueA = dueMs(todoA.due_at) ?? Number.POSITIVE_INFINITY
-      const dueB = dueMs(todoB.due_at) ?? Number.POSITIVE_INFINITY
-      if (dueA !== dueB) return dueA - dueB
-      const priority = priorityRank(todoB.priority) - priorityRank(todoA.priority)
-      if (priority !== 0) return priority
-      const updatedA = todoA.updated_at ?? Number.POSITIVE_INFINITY
-      const updatedB = todoB.updated_at ?? Number.POSITIVE_INFINITY
-      if (updatedA !== updatedB) return updatedA - updatedB
-      return `${a.ws.slug}|${a.todo_id}`.localeCompare(`${b.ws.slug}|${b.todo_id}`)
-    })
+  return rankProjectedAttentionCandidates(candidates, rows)
 }
 
 /** Select the unique judgment and a de-duplicated remainder for later lists. */
 export function selectPrimaryAttention(
   rows: readonly YoloTodoRow[],
   now = new Date(),
+  feedback: readonly AttentionFeedbackState[] = [],
 ): { attention: YoloAttentionRow[]; remaining: YoloTodoRow[] } {
-  const ranked = rankAttentionCandidates(rows, now)
+  const ranked = applyAttentionFeedback(rankAttentionCandidates(rows, now), feedback, now.getTime())
   const primary = ranked[0]
   if (!primary) return { attention: [], remaining: [...rows] }
   return {

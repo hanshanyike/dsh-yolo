@@ -146,6 +146,34 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_open ON notifications(scope_key, handled_at);
 
+-- Dashboard-v2 judgment trust state. A judgment version is immutable: when
+-- evidence changes its fingerprint changes and the new judgment starts unseen.
+CREATE TABLE IF NOT EXISTS attention_feedback (
+  scope_key            TEXT NOT NULL,
+  todo_id              TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  reason_version       TEXT NOT NULL,
+  evidence_fingerprint TEXT NOT NULL,
+  seen_at              INTEGER,
+  suppressed_until     INTEGER,
+  feedback_reason      TEXT,
+  created_at           INTEGER NOT NULL,
+  updated_at           INTEGER NOT NULL,
+  PRIMARY KEY(scope_key, todo_id, reason_version, evidence_fingerprint)
+);
+CREATE INDEX IF NOT EXISTS idx_attention_feedback_scope ON attention_feedback(scope_key, updated_at DESC);
+
+-- Durable HTTP/model action idempotency. The request hash prevents a caller
+-- from reusing one client_action_id for a different mutation after restart.
+CREATE TABLE IF NOT EXISTS client_actions (
+  scope_key       TEXT NOT NULL,
+  client_action_id TEXT NOT NULL,
+  request_hash    TEXT NOT NULL,
+  outcome_json    TEXT NOT NULL,
+  created_at      INTEGER NOT NULL,
+  PRIMARY KEY(scope_key, client_action_id)
+);
+CREATE INDEX IF NOT EXISTS idx_client_actions_time ON client_actions(created_at DESC);
+
 -- extraction audit log + dedup guard
 CREATE TABLE IF NOT EXISTS extraction_log (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -229,4 +257,3 @@ CREATE TRIGGER IF NOT EXISTS trg_events_ai AFTER INSERT ON events BEGIN
   INSERT INTO yolo_fts(row_type, row_id, title, body)
   VALUES ('event', new.id, new.summary, COALESCE(new.detail,''));
 END;
-

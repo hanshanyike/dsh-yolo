@@ -79,20 +79,20 @@ export function registerActionsEndpoint(ctx: { webServer?: WebServerLike }, yolo
       const r = toReqLike(req)
       const method = (r?.method ?? '').toUpperCase()
       if (method !== 'POST') {
-        send(res, 405, { ok: false, error: 'method not allowed (POST only)' })
+        send(res, 405, { ok: false, error: 'method not allowed (POST only)', code: 'method_not_allowed' })
         return
       }
       if (!r) {
-        send(res, 400, { ok: false, error: 'bad request' })
+        send(res, 400, { ok: false, error: 'bad request', code: 'bad_request' })
         return
       }
       try {
         const body = await readJsonBody(r)
         if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-          send(res, 400, { ok: false, error: 'body must be a JSON object' })
+          send(res, 400, { ok: false, error: 'body must be a JSON object', code: 'invalid_body' })
           return
         }
-        const req = body as YoloActionRequest & { scope_cwd?: string }
+        const req = body as YoloActionRequest
         // v0.3.3 review fix: route by the workspace REGISTRY the board rows were
         // rendered from (listWorkspaceMeta). An unknown scope_cwd must NOT
         // silently create a "ghost workspace" store on disk; a known one is
@@ -102,13 +102,13 @@ export function registerActionsEndpoint(ctx: { webServer?: WebServerLike }, yolo
         const scopeHeader = typeof req.scope_cwd === 'string' && req.scope_cwd ? req.scope_cwd : undefined
         const meta = scopeHeader ? yolo.listWorkspaceMeta().find((m) => m.cwd === scopeHeader) : undefined
         if (scopeHeader && !meta) {
-          send(res, 400, { ok: false, error: 'unknown workspace scope' })
+          send(res, 400, { ok: false, error: 'unknown workspace scope', code: 'unknown_workspace_scope' })
           return
         }
         const dispatch = (): YoloActionOutcome => {
           const actionCwd = meta ? meta.cwd : cwd()
           const outcome = applyYoloAction(yolo, actionCwd, req)
-          if (outcome.ok && req.action !== 'handled') {
+          if (outcome.ok && req.action !== 'handled' && req.kind !== 'attention') {
             // keep today's Markdown snapshot in lockstep with the DB (TE-8);
             // notification dismissals are pure UI state and skip the rewrite.
             // Snapshot failure must not fail the action.
@@ -123,7 +123,7 @@ export function registerActionsEndpoint(ctx: { webServer?: WebServerLike }, yolo
         const outcome = meta ? yolo.runInScope(meta.cwd, meta.scopeKey, dispatch) : dispatch()
         send(res, outcome.ok ? 200 : outcome.httpStatus, outcome)
       } catch (e) {
-        send(res, 400, { ok: false, error: e instanceof Error ? e.message : String(e) })
+        send(res, 400, { ok: false, error: e instanceof Error ? e.message : String(e), code: 'invalid_request' })
       }
     },
   })

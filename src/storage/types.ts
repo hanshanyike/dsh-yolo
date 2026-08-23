@@ -23,6 +23,9 @@ export type EventKind =
   | 'goal_status'
   | 'milestone_status'
   | 'brief_generated'
+  | 'attention_seen'
+  | 'attention_suppressed'
+  | 'attention_feedback'
   // M9 P34/P35: rejected-action audit + explicit todo merge
   | 'action_denied'
   | 'todo_consolidated'
@@ -149,6 +152,28 @@ export interface Notification {
   created_at: number
   handled_at?: number | null
   scope_key: string
+}
+
+/** Persisted trust state for one immutable assistant-judgment version. */
+export interface AttentionFeedback {
+  scope_key: string
+  todo_id: string
+  reason_version: string
+  evidence_fingerprint: string
+  seen_at?: number | null
+  suppressed_until?: number | null
+  feedback_reason?: string | null
+  created_at: number
+  updated_at: number
+}
+
+/** Durable action outcome used for cross-restart idempotency. */
+export interface ClientActionRecord {
+  scope_key: string
+  client_action_id: string
+  request_hash: string
+  outcome_json: string
+  created_at: number
 }
 
 export interface ExtractionLog {

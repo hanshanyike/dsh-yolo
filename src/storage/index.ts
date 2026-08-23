@@ -41,6 +41,8 @@ import type {
   ExtractionStrategy,
   EventKind,
   Priority,
+  AttentionFeedback,
+  ClientActionRecord,
 } from './types.ts'
 
 export interface ScopeHandle {
@@ -157,6 +159,11 @@ export default class Yolo extends Service {
   listTodos(cwd: string, status?: TodoStatus): Todo[] {
     const h = this.resolve(cwd)
     return repo.listTodos(h.db, h.scopeKey, status)
+  }
+  findTodo(cwd: string, ref: { id?: string; title?: string }): Todo | null {
+    const h = this.resolve(cwd)
+    if (ref.id) return repo.listTodos(h.db, h.scopeKey).find((todo) => todo.id === ref.id) ?? null
+    return ref.title ? repo.findTodoByTitle(h.db, h.scopeKey, ref.title) ?? null : null
   }
   listDueTodos(cwd: string, beforeIso: string): Todo[] {
     const h = this.resolve(cwd)
@@ -332,6 +339,60 @@ export default class Yolo extends Service {
     return repo.listUnhandledNotifications(h.db, h.scopeKey).length < before
   }
 
+  // ---- dashboard-v2 attention trust + durable idempotency ----
+  listAttentionFeedback(cwd: string): AttentionFeedback[] {
+    const h = this.resolve(cwd)
+    return repo.listAttentionFeedback(h.db, h.scopeKey)
+  }
+  recordAttentionFeedback(
+    cwd: string,
+    key: { todo_id: string; reason_version: string; evidence_fingerprint: string },
+    patch: { seen_at?: number | null; suppressed_until?: number | null; feedback_reason?: string | null },
+  ): AttentionFeedback {
+    const h = this.resolve(cwd)
+    return repo.recordAttentionFeedback(h.db, { ...key, scope_key: h.scopeKey }, patch)
+  }
+  getClientAction(cwd: string, clientActionId: string): ClientActionRecord | undefined {
+    const h = this.resolve(cwd)
+    return repo.getClientAction(h.db, h.scopeKey, clientActionId)
+  }
+  saveClientAction(
+    cwd: string,
+    data: { client_action_id: string; request_hash: string; outcome_json: string },
+  ): ClientActionRecord {
+    const h = this.resolve(cwd)
+    return repo.saveClientAction(h.db, { ...data, scope_key: h.scopeKey })
+  }
+  /** Atomically check, execute and persist an idempotent action in one SQLite
+   * transaction. This closes the race between concurrent requests/connections;
+   * nested repository transactions use SQLite savepoints. */
+  runIdempotentAction(
+    cwd: string,
+    clientActionId: string,
+    requestHash: string,
+    execute: () => string,
+  ):
+    | { status: 'fresh' | 'replay'; outcome_json: string }
+    | { status: 'conflict' } {
+    const h = this.resolve(cwd)
+    return h.db.transaction(() => {
+      const existing = repo.getClientAction(h.db, h.scopeKey, clientActionId)
+      if (existing) {
+        return existing.request_hash === requestHash
+          ? { status: 'replay' as const, outcome_json: existing.outcome_json }
+          : { status: 'conflict' as const }
+      }
+      const outcomeJson = execute()
+      repo.saveClientAction(h.db, {
+        scope_key: h.scopeKey,
+        client_action_id: clientActionId,
+        request_hash: requestHash,
+        outcome_json: outcomeJson,
+      })
+      return { status: 'fresh' as const, outcome_json: outcomeJson }
+    })()
+  }
+
   // ---- brief day-stamps (v0.3.0 D: fire each brief once per local day) ----
   getBriefStamp(cwd: string, kind: 'morning' | 'evening'): string | undefined {
     return getMeta(this.resolve(cwd).db, `brief_${kind}_day`)
@@ -445,6 +506,4 @@ export default class Yolo extends Service {
 }
 
 export type { ExtractionLog }
-
-
 
