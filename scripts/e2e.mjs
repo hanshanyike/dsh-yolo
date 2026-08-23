@@ -41,6 +41,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { resolveE2ESelection } from './e2e-selection.mjs'
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const HOST = join(ROOT, 'host', 'deepseek-harness')
@@ -317,14 +318,12 @@ async function bringUpHost() {
  * relative test paths — an absolute Windows path never matches ("No tests
  * found"), so always pass repo-relative slash form. */
 function selectionArgs() {
-  if (SPEC) return [`tests/e2e/${SPEC.replace(/\.spec\.ts$/, '')}.spec.ts`]
-  if (SUITE === 'api') return ['tests/e2e/api/']
-  if (SUITE === 'ui') return ['tests/e2e/ui/']
-  if (SUITE) {
-    console.error(`[e2e] unknown suite "${SUITE}" (use api | ui | all)`)
+  try {
+    return resolveE2ESelection({ spec: SPEC, suite: SUITE, root: ROOT })
+  } catch (error) {
+    console.error(`[e2e] ${error instanceof Error ? error.message : String(error)}`)
     process.exit(2)
   }
-  return []
 }
 
 ;(async () => {
