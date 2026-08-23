@@ -46,16 +46,19 @@ interface LoadState {
   data: YoloDashboardData | null
 }
 
-/** Data signature — the sweep line runs only when this actually changes (6.2). */
-function dataSig(d: YoloDashboardData): string {
-  return [
-    d.at,
-    d.todos.length,
-    d.ledger.length,
-    d.notifications.filter((n) => !n.handled).length,
-    d.goals.map((g) => `${g.id}:${g.progress}:${g.status}`).join(','),
-    d.milestones.map((m) => `${m.id}:${m.status}`).join(','),
-  ].join('|')
+/** Stable business signature; response time alone must not trigger the sweep. */
+export function dashboardSignature(d: YoloDashboardData): string {
+  return JSON.stringify({
+    contract: d.ui_contract_version ?? 1,
+    todos: d.todos.map((row) => [row.ws?.slug, row.id, row.status, row.due_at, row.priority, row.updated_at, row.completed_at]),
+    attention: (d.attention ?? []).map((row) => [row.id, row.evidence_fingerprint, row.seen_at, row.suppressed_until]),
+    notifications: d.notifications.map((row) => [row.ws?.slug, row.id, row.handled, row.created_at]),
+    ledger: d.ledger.map((row) => [row.ws?.slug, row.id, row.kind, row.occurred_at]),
+    goals: d.goals.map((row) => [row.ws?.slug, row.id, row.progress, row.status]),
+    milestones: d.milestones.map((row) => [row.ws?.slug, row.id, row.status, row.target_date]),
+    partial: d.summary?.partial ?? false,
+    workspaceErrors: d.workspaceErrors ?? [],
+  })
 }
 
 /** Map the persisted preset back to a view face; 'all' lands on 今日 (Today-first). */
@@ -132,7 +135,7 @@ export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPane
       const r = await fetch('/yolo/dashboard?scope=all', { headers: { accept: 'application/json' }, cache: 'no-store' })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = (await r.json()) as YoloDashboardData
-      const sig = dataSig(data)
+      const sig = dashboardSignature(data)
       if (lastSig.current !== null && sig !== lastSig.current) setSweepTick((t) => t + 1)
       lastSig.current = sig
       setState({ loading: false, error: null, data })
