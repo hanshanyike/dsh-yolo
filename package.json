@@ -16,8 +16,9 @@
     "./dist/src/ui": "./dist/src/ui/index.mjs"
   },
   "dsh": {
-    "bundle": { "patch": "./cordis.bundle.yml" },
+    "bundle": { "patch": "./cordis.patch.yml" },
     "client": {
+      "inject": ["@deepseek-ai/dsh-client-runtime"],
       "platform": "web"
     }
   },
@@ -54,7 +55,7 @@
   ],
   "files": [
     "dist",
-    "cordis.bundle.yml",
+    "cordis.patch.yml",
     "src/storage/schema.sql",
     "README.md",
     "LICENSE",

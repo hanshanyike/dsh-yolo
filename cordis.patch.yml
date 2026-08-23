@@ -1,0 +1,16 @@
+# YOLO bundle patch — applied automatically on `dsh plugin add`.
+# The `dsh.bundle.patch` manifest (package.json) points here, so installing the
+# package registers every host-side plugin row with no manual profile edit.
+# Each row is one plugin in the YOLO bundle: storage service + 4 consumers;
+# the browser half rides the package's `dsh.client` manifest (client registry).
+- insert:
+  - id: yolo-storage
+    name: 'dsh-plugin-yolo/dist/src/storage'
+  - id: yolo-memory
+    name: 'dsh-plugin-yolo/dist/src/memory'
+  - id: yolo-extract
+    name: 'dsh-plugin-yolo/dist/src/extract'
+  - id: yolo-reminder
+    name: 'dsh-plugin-yolo/dist/src/reminder'
+  - id: yolo-ui
+    name: 'dsh-plugin-yolo/dist/src/ui'

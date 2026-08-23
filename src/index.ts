@@ -2,12 +2,12 @@
 //
 // The YOLO bundle itself is NOT a single plugin: it is five cooperating Cordis
 // plugins (storage service + four consumers) plus a browser client, each with
-// its own entry wired in cordis.bundle.yml:
+// its own entry wired in cordis.patch.yml:
 //   ./dist/src/storage  ./dist/src/memory  ./dist/src/extract
 //   ./dist/src/reminder ./dist/src/ui      ./client (browser bundle)
 //
 // This module exists so `import 'dsh-plugin-yolo'` has a stable identity and a
-// load marker for boot verification. See docs/architecture.md for the layout.
+// load marker for boot verification. See docs/architecture/overview.md for the layout.
 
 import type { Context } from '@deepseek-ai/cordis'
 
