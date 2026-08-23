@@ -49,11 +49,19 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   const sentWithContext = useRef(false)
   const listRef = useRef<HTMLDivElement>(null)
   const prevThread = useRef(threadKey)
+  // Live mirror of threadKey: async callbacks compare against it so a response
+  // from a thread the user already left can never overwrite the new thread's
+  // view (v0.3.3 review fix: up to 4s of cross-thread message bleed).
+  const threadRef = useRef(threadKey)
 
   useEffect(() => {
     anchorRef.current = anchor
     sentWithContext.current = false
   }, [anchor])
+
+  useEffect(() => {
+    threadRef.current = threadKey
+  }, [threadKey])
 
   // A new thread (or a jump between resident and anchored) must clear the
   // visible history — 聊一聊 always starts fresh. The [load] effect below
@@ -66,14 +74,17 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   }, [threadKey])
 
   const load = useCallback(async (): Promise<void> => {
+    const keyForCall = threadKey
     setState((s) => ({ ...s, loading: true, error: null }))
     try {
-      const q = threadKey ? `?thread=${encodeURIComponent(threadKey)}` : ''
+      const q = keyForCall ? `?thread=${encodeURIComponent(keyForCall)}` : ''
       const r = await fetch(`/yolo/session/messages${q}`, { headers: { accept: 'application/json' }, cache: 'no-store' })
       const body = (await r.json()) as { ok?: boolean; messages?: ChatMessage[]; error?: string }
+      if (threadRef.current !== keyForCall) return // user switched threads mid-flight
       if (!r.ok || !body.ok) throw new Error(body.error ?? `HTTP ${r.status}`)
       setState({ loading: false, error: null, messages: body.messages ?? [], sending: false })
     } catch (e) {
+      if (threadRef.current !== keyForCall) return
       setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
     }
   }, [threadKey])
@@ -99,13 +110,15 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       payload = `【关于「${a.title}」${a.detail ? ` · ${a.detail}` : ''}】\n${text}`
       sentWithContext.current = true
     }
+    const keyForCall = threadKey
     setDraft('')
+    const before = state.messages
     setState((s) => ({ ...s, sending: true, messages: [...s.messages, { role: 'user', text }] }))
     try {
       const r = await fetch('/yolo/session/send', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: payload, thread: threadKey ?? undefined }),
+        body: JSON.stringify({ text: payload, thread: keyForCall ?? undefined }),
       })
       const body = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null
       if (!r.ok || !body?.ok) throw new Error(body?.error ?? `HTTP ${r.status}`)
@@ -113,9 +126,15 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       // the reply streams server-side; catch it on the next poll
       window.setTimeout(() => { void load() }, 2_500)
     } catch (e) {
-      setState((s) => ({ ...s, sending: false, error: e instanceof Error ? e.message : String(e) }))
+      // v0.3.3 review fix: a failed send must not leave a phantom「已发出」
+      // bubble — restore the pre-send transcript and hand the text back to
+      // the input so the user can retry instead of losing it.
+      if (threadRef.current === keyForCall) {
+        setState((s) => ({ ...s, sending: false, error: e instanceof Error ? e.message : String(e), messages: before }))
+        setDraft(text)
+      }
     }
-  }, [draft, load, state.sending, threadKey])
+  }, [draft, load, state.messages, state.sending, threadKey])
 
   const input = (
     <input
