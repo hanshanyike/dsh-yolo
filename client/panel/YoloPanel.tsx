@@ -330,7 +330,7 @@ export function YoloPanel({ left, onClose, openSession }: YoloPanelProps): JSX.E
             aria-label="通知"
           >
             <IcBell size={13} />
-            <span className="bnum">{unhandled}</span>
+            {unhandled > 0 && <span className="bnum">{unhandled}</span>}
             {unhandled > 0 && <span className="bdot" />}
           </button>
           {!chatShowingFull && (

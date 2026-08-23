@@ -28,7 +28,7 @@ export function apply(ctx: ClientContext): void {
 
   // 2. GLOBAL sidebar dashboard — app shell footer, independent of any session.
   //    Fetches /yolo/dashboard (host JSON endpoint); the panel refreshes on
-  //    open, on demand, and on a 30s poll while open.
+  //    open, on demand after actions — no poll while open (v0.3.3).
   //    The panel's ledger badges jump to their source session via the runtime
   //    session service (ctx.sessions.open — same call the sidebar rows make).
   ctx.slots.inject('sidebar.footer.action', () =>

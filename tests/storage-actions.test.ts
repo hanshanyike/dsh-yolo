@@ -364,15 +364,16 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
     expect(ev!.summary).toContain('todo not found')
   })
 
-  it('handled on an already-handled notification stays a silent idempotent no-op', () => {
+  it('handled on an already-handled notification stays a silent idempotent SUCCESS', () => {
     const n = yolo.addNotification(cwd, { kind: 'reminder', title: '提醒：把演示稿发给研发' })
     const first = applyYoloAction(yolo, cwd, { action: 'handled', kind: 'notification', id: n.id })
     expect(first.ok).toBe(true)
     expect(yolo.listEvents(cwd)).toHaveLength(0) // handling writes no event
 
+    // v0.3.3 review fix: the second click used to return 404, which the panel
+    // surfaced as 「操作失败」 for a benign double-click. It is now ok:true.
     const second = applyYoloAction(yolo, cwd, { action: 'handled', kind: 'notification', id: n.id })
-    if (second.ok) throw new Error('expected the second handled to be a no-op')
-    expect(second.httpStatus).toBe(404)
+    expect(second.ok).toBe(true)
     // double-clicking「知道了」must not flood the ledger
     expect(yolo.listEvents(cwd)).toHaveLength(0)
   })

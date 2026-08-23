@@ -414,7 +414,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
         key={t.id}
         draft={editor}
         milestones={milestoneTitles}
-        busy={busyKey === `edit-${t.id}`}
+        busy={busyKey === `edit-${t.id}` || busyKey === `del-${t.id}`}
         confirming={confirmDelete === t.id}
         onChange={setEditor}
         onSave={() => { void saveEditor() }}
@@ -487,7 +487,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
                   <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'complete', kind: 'todo', id: n.todo_id }) }}>
                     <IcCheck size={12} />完成
                   </button>
-                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id, due_at: nextDayStr(null) }) }}>
+                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id, due_at: nextDayStr(dueFor?.due_at ?? null) }) }}>
                     <IcPlusDay size={12} />+1d
                   </button>
                   <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'remind_again', kind: 'todo', id: n.todo_id }) }}>
