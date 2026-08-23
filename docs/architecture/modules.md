@@ -11,6 +11,7 @@
 1. [总览与依赖图](#一总览与依赖图)
 2. [src/index.ts — 包入口](#二srcindexts--包入口)
 3. [src/shared/ — 共享层](#三srcshared--共享层)
+   - [src/attention/ — 确定性助手判断](#srcattention--确定性助手判断)
 4. [src/storage/ — 存储服务（ctx.yolo）](#四srcstorage--存储服务ctxyolo)
 5. [src/extract/ — 语义提取](#五srcextract--语义提取)
 6. [src/memory/ — 记忆工具与上下文注入](#六srcmemory--记忆工具与上下文注入)
@@ -54,7 +55,8 @@ YOLO 不是单个插件，而是 **5 个协作的 Cordis 插件 + 1 个浏览器
 - `storage` 是叶子服务，不依赖任何 YOLO 内部模块（只依赖 `shared` 的 `text`）。
 - `extract` / `memory` / `reminder` / `ui` 都通过 `inject: ['yolo']` 注入存储服务。
 - `shared` 被所有模块共用，改动它影响面最大——**优先只加不改**。
-- `client/` 通过 HTTP `GET /yolo/dashboard` 与 host 端 `ui` 插件通信，不直接碰 SQLite。
+- `attention` 是纯函数领域层：只读投影事实，不读 DB、不调 LLM、不接受客户端分数。
+- `client/` 通过 ui 插件的 dashboard / badge / actions / session HTTP 端点通信，不直接碰 SQLite。
 
 ---
 
@@ -81,6 +83,7 @@ YOLO 不是单个插件，而是 **5 个协作的 Cordis 插件 + 1 个浏览器
 |---|---|
 | `constants.ts` | 命名空间、服务名、UI slot key、prompt 顺序、默认配置常量 |
 | `dashboard.ts` | 看板 JSON 载荷类型（host 与浏览器共享的跨边界形状）+ `todoSummary` |
+| `badge.ts` | 轻量角标载荷 `YoloBadgeData` |
 | `actions.ts` | `YoloActionRequest` / `applyYoloAction` —— 模型工具、HTTP 端点、提取 updates 三入口共用的动作校验与分发 |
 | `session.ts` | `sessionCwd()` / `sessionId()` —— 从 `session.header` 读取工作区 cwd 与会话 id（修复 scope 失效） |
 | `quality.ts` | `shouldDropExtracted` —— 写入质量闸门，丢弃确认词/裸元命令/空标题/空值 |
@@ -117,10 +120,20 @@ DEFAULTS = {
 ```ts
 YoloDashboardData = {
   scopeKey: string; cwd: string; at: number;
+  ui_contract_version?: 2;
+  attention?: YoloAttentionRow[];       // 全局最多 1 条
+  summary?: YoloDashboardSummary;       // 含 partial
+  capabilities?: YoloDashboardCapabilities;
+  workspaces?: YoloWorkspaceInfo[]; workspaceErrors?: string[];
   todos: YoloTodoRow[]; goals: YoloGoalRow[]; milestones: YoloMilestoneRow[];
   events: YoloEventRow[]; preferences: YoloPreferenceRow[];
+  ledger: YoloLedgerEntry[]; notifications: YoloNotificationRow[];
 }
 ```
+
+v2 是同一个 `GET /yolo/dashboard` 的聚合读投影，不是 v1/v2 两套写入或两份存储。
+`YoloAttentionRow` 带 `reason_version` + `evidence_fingerprint` + 结构化 `evidence/source`；
+聚合行带 `scope_cwd`/`ws` 供服务端安全路由。
 
 ### 关键函数（text.ts）
 
@@ -144,12 +157,33 @@ YoloDashboardData = {
 
 ```ts
 applyYoloAction(yolo, cwd, r: YoloActionRequest): YoloActionOutcome
-// 永不抛异常；返回 { ok, item } 或 { ok:false, error, httpStatus: 400|404 }
+// 永不抛异常；失败含 code + httpStatus: 400|404|409
 ```
 
-动作白名单：todo `complete|start|cancel|postpone|remind_again`；goal `set_progress`（0–100）；
-milestone `set_status`（planned|active|done|abandoned）。`id` 缺失时按 `title` 模糊匹配；
-`session_id` 会盖到审计事件上。
+动作包括 todo `complete|start|cancel|postpone|remind_again|reopen|update|quick_add|consolidate`，
+goal/milestone 维护，notification `handled|author_notification`，以及 attention
+`seen|suppress|feedback`。Attention 动作必须携带当前
+`reason_version` + `evidence_fingerprint`，否则返回 `attention_binding_required`；证据已变更返回
+409 `stale_attention`。
+
+`client_action_id` 为可选非空幂等键（最长 128）。`hashYoloActionRequest`
+对规范化请求做 SHA-256；同 key+同 payload 跨重启回放原结果，同 key+不同 payload 返回
+409 `idempotency_conflict`。成功结果可包含 `audit_event_id`、`learning_receipt`
+和服务端生成的 `undo`；完成可 `reopen`，推迟可用 `update` 恢复原日期，
+客户端必须遵守 `expires_at` 并通过同一 actions 端点撤销。
+
+### src/attention/ — 确定性助手判断
+
+| 文件 | 内容 |
+|---|---|
+| `index.ts` | `scoreAttentionCandidate` / `rankAttentionCandidates` / `applyAttentionFeedback` / `selectPrimaryAttention` / `buildDashboardSummary` |
+
+`ATTENTION_REASON_VERSION = 'attention-v1'`。规则仅基于未处理提醒、逾期/即将到期、优先级、
+重复推迟、7 天未更新以及活跃里程碑事实评分；同分用 due/priority/updated/key 稳定排序。
+`evidence_fingerprint` 对工作区、todo 状态、due/优先级/提醒/推迟/里程碑事实、主理由、
+公开证据和规则版本做稳定哈希。`attention_feedback` 只能按
+`(todo_id, reason_version, evidence_fingerprint)` 精确回放；未过期 suppression 会移除候选，
+seen 使客户端从首读 full 切到刷新/重开 compact。
 
 ---
 
@@ -181,7 +215,7 @@ EventKind      = 'note' | 'decision' | 'milestone_reached' | 'reminder_fired'   
                | 'todo_completed' | 'todo_cancelled' | 'todo_postponed'          // 状态流转
                | 'todo_started' | 'todo_remind_again' | 'goal_progress'
                | 'milestone_status'
-TodoAction     = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again'
+TodoAction     = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again' | 'reopen'
 Source         = 'rule' | 'llm' | 'tool' | 'manual'   // 记忆来源（审计+去重）
 ScopeMode      = 'workspace' | 'user' | 'global'
 RowType        = 'todo' | 'milestone' | 'goal' | 'preference' | 'event'
@@ -201,6 +235,9 @@ RowType        = 'todo' | 'milestone' | 'goal' | 'preference' | 'event'
 | extraction log | `logExtraction` / `lastExtractionAt` |
 | pending reminders | `queueReminder` / `listPendingReminders` / `deletePendingReminder` |
 | snapshot | `renderSnapshot` / `writeSnapshot` / `lastSnapshotDate` / `setSnapshotDate` |
+| attention trust | `listAttentionFeedback` / `recordAttentionFeedback` |
+| action idempotency | `getClientAction` / `saveClientAction` / `runIdempotentAction` |
+| workspace registry | `listWorkspaceMeta` / `runInScope` |
 | **领域动作** | `applyTodoAction(cwd, ref, action, args?)` / `applyGoalProgress(cwd, ref, progress, note?, sessionId?)` / `applyMilestoneStatus(cwd, ref, status, sessionId?)` —— `ref = { id? \| title? }`，全部同步写审计事件 |
 | **标题查找** | `findTodoByTitle` / `findGoalByTitle` / `findMilestoneByTitle`（归一化包含匹配，仅查非终态条目） |
 
@@ -214,6 +251,10 @@ RowType        = 'todo' | 'milestone' | 'goal' | 'preference' | 'event'
 - **FTS 同步**：INSERT 由 schema.sql 触发器写入 `yolo_fts`；UPDATE/DELETE 在 repository.ts 里显式处理
   （`syncTodoFts` / 软删）。完成/取消的 todo、done/abandoned 的 milestone 会从 FTS 移除。
 - **迁移**：`db.ts` 的 `migrate()` 用 `PRAGMA table_info` 检查列是否存在（SQLite 无 `ADD COLUMN IF NOT EXISTS`）。
+- **`attention_feedback`**：联合主键 `(scope_key, todo_id, reason_version, evidence_fingerprint)`，
+  持久化 `seen_at` / `suppressed_until` / `feedback_reason`，不会把旧反馈套到新证据。
+- **`client_actions`**：联合主键 `(scope_key, client_action_id)`，持久化
+  `request_hash` + `outcome_json`；`runIdempotentAction` 在一个 SQLite transaction 内检查、执行、写入。
 - **快照是真相源**：DB 是可重建缓存；`snapshots/YYYY-MM-DD.md` 是持久、可 diff 的记录。
 
 ---
@@ -307,22 +348,20 @@ agent/turn-stopping
 
 | 文件 | 内容 |
 |---|---|
-| `index.ts` | 插件入口：session-start 回放、turn 快照触发、启动调度器 |
-| `scheduler.ts` | `runReminderTick`（纯函数可测）+ `startReminderScheduler` + 快照写入 |
+| `index.ts` | 插件入口：工作区跟踪、resident session 交付、turn 快照触发、启动调度器 |
+| `scheduler.ts` | `runReminderTick` + `runBriefTick` + `startReminderScheduler` + 快照写入 |
+| `brief.ts` | 早/晚报事实收集、Markdown fallback 与可选 LLM polish |
 
 ### 数据流
 
 ```
 setInterval(reminderCheckIntervalSec=300s)
+  → 遍历 listWorkspaceMeta() 并 runInScope 锁定注册 scopeKey
   → runReminderTick:
       listDueTodos(cwd, aheadIso)          // 本地时间比较（避免 UTC 偏移）
-      → 有活跃 agent: agent.followup(reminderText)（reminded++）
-      → 无 agent: queueReminder 排队（queued++）
-      → setTodoReminded（防重复触发）
+      → addNotification + reminder_fired event + setTodoReminded
+      → 最佳努力 followup 到该 workspace 的 YoloSessions resident thread
   → maybeWriteDailySnapshot（每天一次，meta.last_snapshot_date 盖章）
-
-agent/session-start
-  → 回放 pending_reminders（最多 5 条）→ followup → 删除
 ```
 
 ### 关键细节
@@ -331,10 +370,9 @@ agent/session-start
   否则 date-only 的 due_at 会因 UTC 偏移晚触发（UTC+8 最多差 8 小时）。
 - **快照节奏**：`daily`（每天一次）或 `every_10_turns`（每 10 轮写 `turn-N-<iso>.md`），由配置 `storage.snapshotInterval` 控制。
 - **`last_reminded_at`** 防重复触发；`aheadMin`（默认 60）决定提前多久算"到期"。
-- **可回复提醒**：`reminderText(title, dueAt, id)` 生成的提醒文本带待办 id 与
-  `yolo_action` 路由指引——用户回复「已完成 / 推迟到X / 再提醒一次」时 agent 就地调用工具兑现。
-- **唤醒方式**：用**单个 `agent.followup(msg)`** 唤醒 agent；`inject()` 只驻留上下文
-  不唤醒 driver，裸 `followup()` 会抛异常（曾被 try/catch 吞掉导致 `last_reminded_at` 未盖章）。
+- **提醒卡是保底面**：resident `followup` 失败不影响卡片、审计事件和防重复盖章。
+- **工作会话保持安静**：提醒/简报只进入面板通知卡与 `yolo-w-*` resident thread；
+  `agent/session-start` 只跟踪真实工作区，不回放 `pending_reminders`，YOLO 内部会话 id 也不会移动跟踪作用域。
 
 ---
 
@@ -348,18 +386,26 @@ host 端 UI 半边：注册 Settings 配置 + 提供看板数据端点。
 |---|---|
 | `index.ts` | 插件入口：配置归一化 + 设置 section + 跟踪最新 session cwd |
 | `config.ts` | schemastery 配置 schema（`Config` 接口 + `Config` 校验器） |
-| `dashboard.ts` | `buildDashboardData()` 投影 + `registerDashboardEndpoint()` 注册 `GET /yolo/dashboard` |
-| `actions.ts` | `registerActionsEndpoint()` 注册 `POST /yolo/actions`，body 走 `applyYoloAction` |
+| `dashboard.ts` | per-workspace v2 投影、`aggregateDashboards()` + `GET /yolo/dashboard` |
+| `badge.ts` | `buildBadgeData()` + `GET /yolo/badge`，不构建完整 dashboard |
+| `actions.ts` | `POST /yolo/actions`，工作区白名单/锁定 scope 后走 `applyYoloAction` |
+| `session.ts` | `YoloSessions` resident 和 `YoloChatThreads` anchored 会话 + messages/send 端点 |
+| `workspace-scope.ts` | 将显式 cwd 限定为 `listWorkspaceMeta()` 已知工作区 |
 
 ### 关键细节
 
 - **配置归一化是必须的**：loader 在 bundle yml 无该插件 config 段时传 `undefined`，
   `Config(config ?? {})` 必须先执行再访问 `.enabled`（修复 "Cannot read properties of undefined"）。
-- **看板 scope 跟随最近会话**：`agent/turn-stopping` 时通过 `sessionCwd()` 记录
-  `session.header.cwd`，无会话时回退 `process.cwd()`。
-- **端点**：`GET /yolo/dashboard` → JSON（`YoloDashboardData`），失败返回 500 JSON；
-  `POST /yolo/actions` → `{ ok, item }` / `{ ok:false, error, httpStatus }`（坏 JSON/未知动作 → 400）。
-  浏览器端打开期间每 30s 轮询。
+- **Dashboard v2 聚合**：始终遍历 `listWorkspaceMeta()` 并以 `runInScope(cwd, scopeKey)`
+  锁定读取，全局重排后 `attention.slice(0, 1)`。单库错误进 `workspaceErrors`并将
+  `summary.partial` 置 true；只有全部失败才 500。这是单一 v2 读投影，无 v1 双写。
+- **`scope_cwd` 白名单/路由**：actions 行为仅能指向渲染行所属的已注册 cwd，且锁定当时
+  `scopeKey`；未知 cwd 返回 400 `unknown_workspace_scope`，不解析任意路径。
+- **Resident vs anchored chat**：无 `thread` 时 messages/send 访问每工作区持久
+  `yolo-w-*`；有 `thread` 时访问独立、延迟创建、LRU 清理的 `yolo-a-*`。两端点的显式
+  `cwd` 同样需命中工作区注册表。
+- **端点**：`GET /yolo/dashboard`、`GET /yolo/badge`、`POST /yolo/actions`、
+  `GET /yolo/session/messages`、`POST /yolo/session/send`。
 
 ---
 
@@ -373,18 +419,23 @@ host 端 UI 半边：注册 Settings 配置 + 提供看板数据端点。
 |---|---|
 | `index.ts` | bundle 入口：注入 `settings.plugin.item` 与 `sidebar.footer.action` 两个 slot |
 | `settings/SettingsCard.tsx` | 设置页里的 YOLO 说明卡片 |
-| `sidebar/YoloSidebarDashboard.tsx` | 全局侧边栏看板（footer 按钮 + 全高抽屉） |
+| `sidebar/YoloSidebarDashboard.tsx` | footer 入口、轻量 badge 轮询、面板容器 |
+| `panel/YoloPanel.tsx` / `ViewTabs.tsx` / `MoreMenu.tsx` | 340px shell、响应式导航、对话/通知/更多入口 |
+| `panel/KanbanView.tsx` | dashboard-v2 数据、动作、筛选、目标/台账远端表面 |
+| `panel/v2/` | Today surface、助手判断、任务动作 dialog、learning receipt/undo |
+| `panel/ChatPane.tsx` | resident 对话和按卡片锚定的全新对话共用视图 |
 
 ### 关键细节
 
 - **全局而非会话级**：看板是跨会话的全局表面，挂在侧边栏 footer（`sidebar.footer.action` slot），
   不依赖任何 session。
-- **数据通道**：`fetch('/yolo/dashboard')`，打开时加载 + 手动刷新 + 打开期间 30s 轮询。
-- **就地操作**：未完成待办带 `✓ 完成` / `+1d` / `✕ 取消` 按钮 → `POST /yolo/actions` →
-  成功后立即刷新（失败内联提示）；请求期间按钮禁用防重复提交。`+1d` 推迟到"今天与当前 due 中较晚者 +1 天"。
-- **状态信号**：待办行显示状态徽章（进行中/逾期/滞留）、里程碑标签；目标行渲染进度条；
-  时间线用中文标签标注新的状态流转事件种类。
-- **交互**：待办角标、五板块（待办/目标/里程碑/偏好/时间线）、外点/Esc 关闭、锚定侧边栏右缘自适应宽度。
+- **Dashboard 加载策略**：面板打开时加载一次，动作成功与手动刷新后重拉；不对完整 dashboard 做 30s 轮询。
+- **轻量角标**：侧栏独立轮询 `GET /yolo/badge` 的 `{ unhandled, partial? }`，面板关闭时也能更新，
+  不为一个数字构建全量投影。
+- **信任与反馈**：首读唯一助手判断后自动提交 `seen`；刷新/重开依持久化反馈显示 compact。
+  快速处理回执 `learning_receipt`，只对服务端返回且未过期的 `undo` 开放撤销。
+- **紧凑信息架构**：340px 时主 tab 只显示今天/即将/已完成，目标、台账等低频面进 More；
+  Today 依次呈现判断、需要处理、今天计划、进行中、今日完成。
 
 ### 构建契约（host 如何发现并加载 bundle）
 
@@ -483,6 +534,3 @@ Settings 页面（`yolo` 命名空间）可配置项，全部有 schemastery 默
 | 测试 / 构建 | `scripts/e2e.mjs`、`scripts/clean-test-data.mjs`、`wrap-client.mjs`、`copy-assets.mjs` |
 | 平台行为 / 运行时踩坑 | [overview.md](overview.md) 的"已验证平台行为"章节 |
 | 测试怎么加 | [testing.md](../testing.md) |
-
-
-

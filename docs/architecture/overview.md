@@ -33,6 +33,7 @@ dsh-plugin-yolo
 ├── src/memory/           # dsh-yolo-memory   — tools + prompt injection
 ├── src/reminder/         # dsh-yolo-reminder — scheduler + reply-able wake-ups
 ├── src/ui/               # dsh-yolo-ui       — settings + dashboard API
+├── src/attention/        # deterministic dashboard-v2 judgment rules
 ├── src/shared/           # constants, dashboard projection, text utils
 └── client/               # browser bundle — sidebar dashboard, settings card
 ```
@@ -50,8 +51,8 @@ dsh-plugin-yolo
 | **storage** | `ctx.yolo` service: SQLite (WAL + FTS5 trigram) repository, Markdown snapshots, scope resolution; **domain actions** (`applyTodoAction` / `applyTodoConsolidate` / `applyGoalProgress` / `applyMilestoneStatus`) with event audit + fuzzy title finders | nothing (leaf service) |
 | **extract** | conversation → structured records (new items **+ state-change `updates[]`**) | `ctx.yolo`, `agent/turn-stopping`, `ctx.llm`, settings |
 | **memory** | `memory_search/write/forget` + `yolo_query` / `yolo_action` tools, systemPrompt sections/context | `ctx.yolo`, `ctx.tools`, `ctx.systemPrompt`, `session/event` |
-| **reminder** | time-triggered **reply-able** reminders (todo id + `yolo_action` routing in the message) | `ctx.yolo`, `agent/followup`, `agent/session-start` |
-| **ui** | `GET /yolo/dashboard` + `POST /yolo/actions` JSON APIs, settings section | `ctx.yolo`, `ctx.webServer`, `agent/turn-stopping` |
+| **reminder** | reminder/brief cards plus best-effort delivery to the workspace's YOLO resident thread | `ctx.yolo`, `ctx.agents`, `ctx.llm`, settings |
+| **ui** | dashboard-v2 aggregate, lightweight badge, actions and panel-chat JSON APIs; settings section | `ctx.yolo`, `ctx.webServer`, `ctx.agents`, settings |
 
 ## Module dependency graph
 
@@ -77,8 +78,9 @@ dsh-plugin-yolo
 
 - `storage` is the leaf service — no YOLO-internal dependencies (only `shared/text`).
 - `extract` / `memory` / `reminder` / `ui` all `inject: ['yolo']`.
+- `attention` is a pure deterministic domain module: it consumes projected facts and never reads SQLite, calls an LLM or trusts a client score.
 - `shared` is used by every module — **prefer additive changes** (it has the widest blast radius).
-- `client/` talks to the host `ui` plugin over `GET /yolo/dashboard` (HTTP JSON), never touches SQLite directly.
+- `client/` talks to the host `ui` plugin over HTTP JSON, never touches SQLite directly.
 
 Per-module file maps, key types and public APIs: [modules.md](modules.md).
 
@@ -148,7 +150,8 @@ preference preamble is capped at the `recallPrefsMax` newest entries. Within a
 session, `RecallDedupTracker` commits the previous turn's kept keys only when
 the next user message arrives — one memory is injected once per conversation,
 and repeated assemblies inside a turn stay byte-stable (prefix-cache friendly).
-Reminders queue while the host is offline and replay on `agent/session-start`.
+Reminder cards are the guaranteed surface; delivery into the YOLO resident
+thread is best effort. Nothing is replayed into a work session.
 
 The push is *reply-able*: the reminder message carries the todo id and
 explicit routing instructions, so the agent can answer a natural-language reply
@@ -157,34 +160,53 @@ explicit routing instructions, so the agent can answer a natural-language reply
 ### UI path — memory reaches the human
 
 ```
-ctx.yolo ──► ui plugin serves GET /yolo/dashboard (JSON projection: todos/goals/
-              milestones/events/preferences + ledger + notifications + unhandled)
-            ──► ui plugin accepts POST /yolo/actions (domain actions)
-            ──► ui plugin serves GET /yolo/session/messages + POST /yolo/session/send
-              (the YOLO resident thread — 对话 Tab and 侧栏对话 are two views of it)
-            ──► client bundle: sidebar button (badge = unhandled count) opens the
-                full-width panel — 看板 Tab (default) + 对话 Tab + collapsible
-                侧栏对话 (fetch + 30s poll while open)
+workspace registry ──► GET /yolo/dashboard
+                       ├─ pinned per-workspace v2 projections
+                       ├─ aggregate rows + globally rank one attention judgment
+                       └─ skip unreadable workspaces and mark summary.partial
+ctx.yolo ──► GET /yolo/badge (lightweight aggregate unhandled count)
+         ──► POST /yolo/actions (whitelisted scope routing + domain actions)
+YOLO agents ──► GET /yolo/session/messages + POST /yolo/session/send
+client ──► 340px assistant panel: Today / Upcoming / Completed + chat surfaces
 ```
 
 The panel is a **global surface, not a per-session one**: memory outlives any
 single conversation, so the entry lives in the sidebar footer (session-independent)
-and its scope follows the workspace of the most recent session. The earlier
-per-session dashboard tab (and the `yolo/snapshot` durable events that fed it)
-was removed — publishing a full memory snapshot into every session log was
-pure bloat. v0.3.0 replaced the narrow 440px drawer with a session-width panel
-(`client/panel/`): `YoloPanel` (shell + tabs + Esc handling), `KanbanView`
-(filter bar, notification cards, focus pills, task rows, goals, day ledger,
-quick capture), `ChatPane` (one component for both chat views) and `state.ts`
-(module-scope UI state so close/reopen keeps tab, filter and side-chat).
-Filtering rules live in `src/shared/filters.ts` — pure functions pinned by
-tests, the UI owns none of the semantics.
+and `GET /yolo/dashboard` always unions every workspace recorded by
+`listWorkspaceMeta()`. Each row carries `scope_cwd`/`ws`; actions are routed
+back to that registered workspace and pinned `scopeKey`. A requested
+`scope_cwd` that is not in the registry is rejected with
+`unknown_workspace_scope`, so an HTTP caller cannot use the endpoint to open an
+arbitrary path or create a ghost store. One locked/corrupt workspace is skipped
+and exposed through `workspaceErrors` plus `summary.partial=true`; only an
+all-workspace failure makes the endpoint return 500.
 
-The kanban is *actionable*: rows carry ✓ / +1d / ⋯(inline edit) / 💬 buttons
-that POST `/yolo/actions`, which dispatches through the same `applyYoloAction`
-path as the `yolo_action` model tool — so a click and a chat reply produce
-identical state changes and audit events. 快速记一条 also bypasses the LLM
-entirely: it writes a today-due todo straight through the actions API.
+Dashboard v2 is a **single aggregate read projection**, marked by
+`ui_contract_version: 2`; it is not a second persistence path and there is no
+v1/v2 dual write. `src/attention/index.ts` derives candidates only from
+auditable facts (due/reminder/priority/postponement/staleness/milestone state),
+sorts them with stable tie-breakers and publishes at most one global judgment.
+The server owns `reason_version` (`attention-v1`), wording, score and the
+deterministic `evidence_fingerprint`; clients cannot submit their own score.
+Seen/suppress/reason feedback must echo the exact
+`(todo_id, reason_version, evidence_fingerprint)` binding. Changed evidence
+therefore becomes a new unseen judgment, while a stale response is rejected
+with `stale_attention`. The browser renders an unseen judgment in full and a
+seen one compactly.
+
+The board is *actionable*: every browser mutation posts `/yolo/actions`, which
+dispatches through the same `applyYoloAction` path as the `yolo_action` model
+tool. A non-empty `client_action_id` (at most 128 characters) is stored in
+`client_actions` with a canonical request hash and serialized outcome: the same
+key and payload replays the original result across restarts, while key reuse
+with a different payload returns 409 `idempotency_conflict`.
+
+Successful mutations may return an auditable `audit_event_id`, a typed
+`learning_receipt` that says exactly what changed (and, importantly, when no
+preference was learned), and a truthful short-lived `undo` descriptor.
+Complete returns `reopen`; postpone returns an `update` restoring the previous
+date. The client sends undo through the same action endpoint and honors the
+server `expires_at`; there is no speculative client-only rollback.
 
 `applyYoloAction` is also the **denial gate** (M9 / P34): every validation
 failure writes an `action_denied` timeline event before returning
@@ -208,6 +230,10 @@ set_status abandoned / abandon), so no mutation can bypass the audit trail.
   that never inherits the resident thread's history. Both `yolo-w-*` and
   `yolo-a-*` count as YOLO-internal (`isYoloSessionId`), so extraction and the
   workspace tracker skip them.
+  Both endpoints also accept an explicit workspace (`cwd` query/body field)
+  only when it matches `listWorkspaceMeta()`; anchored chats therefore stay
+  bound to the card's owning workspace. No `thread` means the durable resident
+  channel; a `thread` means a fresh, isolated anchored episode.
 - **Model selection on agent creation (v0.3.3).** Both `YoloSessions` and
   `YoloChatThreads` now pass `agentOptions: { provider, model }` from
   `agentDefaultModel.currentSelection()` and run `installModelSelection` in
@@ -255,7 +281,8 @@ session-start replay into whatever work session started next was removed;
 ```
 data/
 ├── yolo-<scope>.db     # SQLite: todos, milestones, goals, preferences, events,
-│                       #   session_summaries, notifications
+│                       #   session_summaries, notifications, attention_feedback,
+│                       #   client_actions
 │                       #   + FTS5 virtual table (trigram tokenizer)
 └── snapshots/*.md      # Markdown: the durable, reviewable record
 ```
@@ -272,6 +299,12 @@ data/
   badges; `session_summaries` holds each session's one-line summary, written
   during extraction. `notifications` holds reminder/brief cards; the sidebar
   badge is the count of unhandled rows.
+- **Judgment trust state** — `attention_feedback` is keyed by
+  `(scope_key, todo_id, reason_version, evidence_fingerprint)` and stores seen,
+  suppression and reason feedback only for that immutable judgment version.
+- **Mutation idempotency** — `client_actions` is keyed by
+  `(scope_key, client_action_id)` and durably stores request hash + outcome; it
+  does not duplicate the domain row or create a parallel dashboard write path.
 - **Domain actions with event audit** — state never changes by direct
   column writes anymore. Todos flow through `applyTodoAction` (`complete` /
   `cancel` / `postpone` / `remind_again` / `start`), goals through
@@ -291,6 +324,8 @@ Key design decisions and their rationale:
 | SQLite + FTS5, not a vector store | zero external services, deterministic, CJK-friendly substring recall; semantic recall is the next roadmap item, deliberately deferred |
 | LLM-only extraction, no regex fast path | regex cannot judge semantics — noise in, misses out; one model pass per turn with known-memory dedup matches the industry pattern (Mem0, Claude Code auto-memory) |
 | global sidebar dashboard, not a per-session tab | memory is cross-session by nature; per-session snapshots duplicated data into every session log |
+| deterministic server-owned attention judgment | one explainable candidate from auditable facts is stable across refreshes; immutable fingerprints prevent feedback from attaching to changed evidence |
+| aggregate reads, workspace-pinned writes | the human sees one cross-workspace plan, while `scope_cwd` is restricted to the registry and pinned to its original branch scope for safe actions |
 | Markdown as durable record | git-diffable, human-reviewable, survives DB schema changes |
 | workspace+branch scoping | projects and experiments stay isolated; branch scope keys make long-running branches their own memory context |
 | shared constants module | dsh is v0.1.0-rc; API drift should be a one-place change |
@@ -306,13 +341,13 @@ Key design decisions and their rationale:
 |---|---|---|
 | `ctx.effect` / service provide | storage | the `ctx.yolo` service |
 | `session/event` (`user/message`, …) | memory | latest-user-text tracking for dynamic recall |
-| `agent/turn-stopping` | extract, ui | turn-end LLM pull; latest-session-workspace tracking |
+| `agent/turn-stopping` | extract, reminder, ui | turn-end LLM pull; snapshot/workspace tracking while ignoring YOLO-internal threads |
 | `ctx.llm.stream` | extract | structured extraction prompt (`purpose: 'session-title'` segregates auxiliary traffic) |
 | `ctx.tools.register` | memory | `memory_*` + `yolo_query` + `yolo_action` |
 | `ctx.systemPrompt.section/context` | memory | prefs preamble + dynamic recall |
-| `agent/followup` | reminder | reply-able wake-ups (single `followup(msg)` — see verified behavior) |
-| `agent/session-start` | reminder | queue replay |
-| `ctx.webServer` (prefix route) | ui | `GET /yolo/dashboard` + `POST /yolo/actions` JSON APIs |
+| `ctx.agents` + `Agent.followup` | reminder, ui | resident/anchored YOLO threads; proactive delivery never targets work sessions |
+| `agent/session-start` | reminder, ui | track real workspaces; YOLO resident/anchored ids are explicitly ignored |
+| `ctx.webServer` (prefix route) | ui | dashboard, badge, actions and session JSON APIs |
 | `sidebar.footer.action`, `settings.plugin.item` slots | client | global dashboard button + settings card |
 
 ## Verified platform behavior (dsh v0.1.0-rc.8)
@@ -402,8 +437,12 @@ run path is the installed `dsh` CLI with the web profile
 | reminder scheduling / reply-able text / snapshot cadence | `src/reminder/scheduler.ts` + `index.ts` |
 | config schema / defaults | `src/ui/config.ts` + `src/shared/constants.ts` |
 | dashboard JSON shape | `src/shared/dashboard.ts` + `src/ui/dashboard.ts` |
+| deterministic judgment / evidence fingerprint | `src/attention/index.ts` |
+| judgment feedback / durable action idempotency | `src/storage/schema.sql` + `src/shared/actions.ts` |
 | dashboard action API | `src/ui/actions.ts` |
-| sidebar dashboard UI | `client/sidebar/YoloSidebarDashboard.tsx` |
+| resident vs anchored panel chat | `src/ui/session.ts` + `client/panel/ChatPane.tsx` |
+| lightweight badge | `src/shared/badge.ts` + `src/ui/badge.ts` + `client/sidebar/YoloSidebarDashboard.tsx` |
+| assistant panel UI | `client/panel/YoloPanel.tsx` + `client/panel/KanbanView.tsx` + `client/panel/v2/` |
 | build / test / run | `scripts/e2e.mjs`, `wrap-client.mjs`, `copy-assets.mjs`; standard run via the installed `dsh` CLI |
 | adding a test | [testing.md](../testing.md) |
 
