@@ -28,7 +28,7 @@ test.afterEach(async () => {
 })
 
 function rowFor(page: Page, title: string) {
-  return page.locator('.sec .row').filter({ hasText: title })
+  return page.locator('.v2-today-row').filter({ hasText: title })
 }
 
 test('W10:「聊一聊」打开的全新锚定对话不含常驻会话历史', async ({ page }) => {
@@ -36,14 +36,26 @@ test('W10:「聊一聊」打开的全新锚定对话不含常驻会话历史', a
   await fx.todo(title, { due: todayStr() })
   await openYoloPanel(page)
 
-  await rowFor(page, title).locator('[aria-label="聊一聊"]').click()
+  const row = rowFor(page, title)
+  if (await row.count()) {
+    await row.getByRole('button', { name: '处理' }).click()
+    await page.getByRole('dialog', { name: title }).getByRole('button', { name: '和助手讨论' }).click()
+  } else {
+    const judgment = page.locator('.v2-judgment').filter({ hasText: title })
+    const discuss = judgment.getByRole('button', { name: '讨论', exact: true })
+    if (await discuss.count()) await discuss.click()
+    else {
+      await judgment.getByRole('button', { name: '处理' }).click()
+      await page.getByRole('dialog', { name: title }).getByRole('button', { name: '和助手讨论' }).click()
+    }
+  }
   await expect(page.locator('.dock')).toBeVisible()
   await expect(page.locator('.dock-tag')).toHaveText('锚定')
   await expect(page.locator('.dock-ctx')).toHaveText(title)
 
   // fresh: no user bubbles (no old history), and the YOLO welcome line is shown
   await expect(page.locator('.dock-msgs .msg.me')).toHaveCount(0)
-  await expect(page.locator('.dock-msgs .msg.ai').first()).toBeVisible()
+  await expect(page.locator('.dock-msgs .msg.ai').first()).toContainText('全新对话')
 })
 
 test('W9:看板描边从侧栏开始，侧栏区点击可让面板让位', async ({ page }) => {

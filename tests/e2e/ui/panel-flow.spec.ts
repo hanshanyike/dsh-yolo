@@ -35,9 +35,41 @@ test.afterEach(async () => {
   await fx.dispose()
 })
 
-/** A kanban row whose title contains `title` (scoped to rendered task sections). */
-function rowFor(page: Page, title: string) {
-  return page.locator('.sec .row').filter({ hasText: title })
+/** Dashboard-v2 can promote a due item into the unique judgment or keep it in a Today section. */
+function taskFor(page: Page, title: string) {
+  return page.locator('.v2-judgment, .v2-today-row').filter({ hasText: title })
+}
+
+function todayRowFor(page: Page, title: string) {
+  return page.locator('.v2-today-row').filter({ hasText: title })
+}
+
+async function openTaskHandling(page: Page, title: string): Promise<void> {
+  const row = todayRowFor(page, title)
+  if (await row.count()) {
+    await row.getByRole('button', { name: '处理' }).click()
+  } else {
+    const judgment = page.locator('.v2-judgment').filter({ hasText: title })
+    const more = judgment.getByRole('button', { name: '更多处理' })
+    if (await more.count()) await more.click()
+    else await judgment.getByRole('button', { name: '处理' }).click()
+  }
+  await expect(page.getByRole('dialog', { name: title })).toBeVisible()
+}
+
+async function completeTask(page: Page, title: string): Promise<void> {
+  const row = todayRowFor(page, title)
+  if (await row.count()) {
+    await row.getByRole('checkbox', { name: `完成：${title}` }).click()
+  } else {
+    const judgment = page.locator('.v2-judgment').filter({ hasText: title })
+    const complete = judgment.getByRole('button', { name: '完成', exact: true })
+    if (await complete.count()) await complete.click()
+    else {
+      await judgment.getByRole('button', { name: '处理' }).click()
+      await page.getByRole('dialog', { name: title }).getByRole('button', { name: '标记完成' }).click()
+    }
+  }
 }
 
 test('打开助手看板并按真实任务渲染今日行（TA-1/TA-2）', async ({ page }) => {
@@ -46,10 +78,14 @@ test('打开助手看板并按真实任务渲染今日行（TA-1/TA-2）', async
 
   await openYoloPanel(page)
 
-  const row = rowFor(page, title)
-  await expect(row).toBeVisible()
-  // the due slot reads「今天」for a same-day task (5.2)
-  await expect(row.locator('.due')).toHaveText('今天')
+  await expect(taskFor(page, title)).toBeVisible()
+  const row = todayRowFor(page, title)
+  if (await row.count()) {
+    await expect(row.locator('time')).toHaveAttribute('datetime', todayStr())
+  } else {
+    // A same-day due item may be promoted to the unique deterministic judgment.
+    await expect(page.locator('.v2-judgment').filter({ hasText: title })).toContainText('截止时间')
+  }
 })
 
 test('完成任务弹出撤销，4 秒内撤销后任务恢复原位（TA-3 / 5.4）', async ({ page }) => {
@@ -57,38 +93,39 @@ test('完成任务弹出撤销，4 秒内撤销后任务恢复原位（TA-3 / 5.
   await fx.todo(title, { due: todayStr() })
 
   await openYoloPanel(page)
-  const row = rowFor(page, title)
-  await expect(row).toBeVisible()
+  await expect(taskFor(page, title)).toBeVisible()
 
-  // complete via the leading check control
-  await row.locator('.ctl').click()
+  // Complete from whichever approved v2 presentation owns the task.
+  await completeTask(page, title)
   const toast = page.locator('.toast').filter({ hasText: '已完成' })
   await expect(toast).toBeVisible()
   await expect(toast.locator('button', { hasText: '撤销' })).toBeVisible()
   // the row retires from the open sections
-  await expect(row).toHaveCount(0)
+  await expect(taskFor(page, title)).toHaveCount(0)
 
   // undo within the 4s window restores it
   await toast.locator('button', { hasText: '撤销' }).click()
   await expect(page.locator('.toast').filter({ hasText: '已撤销' })).toBeVisible()
-  await expect(row).toBeVisible()
+  await expect(taskFor(page, title)).toBeVisible()
 })
 
-test('逾期聚焦胶囊只保留逾期任务（TA-4）', async ({ page }) => {
+test('逾期事项进入 v2 关注判断并保留可核验处理依据（TA-4）', async ({ page }) => {
   const overdueTitle = uid('把渠道预算缺口补上')
   const todayTitle = uid('给周会整理三点结论')
   await fx.todo(overdueTitle, { due: yesterdayStr() })
   await fx.todo(todayTitle, { due: todayStr() })
 
   await openYoloPanel(page)
-  // both show under their sections by default
-  await expect(rowFor(page, overdueTitle)).toBeVisible()
-  await expect(rowFor(page, todayTitle)).toBeVisible()
+  // Both remain visible, while v2 promotes the overdue fact into an explicit
+  // judgment/attention reason instead of hiding unrelated work behind a capsule.
+  await expect(taskFor(page, overdueTitle)).toBeVisible()
+  await expect(taskFor(page, todayTitle)).toBeVisible()
+  await expect(taskFor(page, overdueTitle)).toContainText('逾期')
 
-  // focus the 逾期 capsule → only the overdue row remains
-  await page.locator('.caps .cap').filter({ hasText: /逾期/ }).click()
-  await expect(rowFor(page, overdueTitle)).toBeVisible()
-  await expect(rowFor(page, todayTitle)).toHaveCount(0)
+  await openTaskHandling(page, overdueTitle)
+  const dialog = page.getByRole('dialog', { name: overdueTitle })
+  await expect(dialog.getByRole('heading', { name: '判断依据' })).toBeVisible()
+  await expect(dialog).toContainText('逾期')
 })
 
 test('捕获条快速记一条并落入看板（TA-2 快捷入口）', async ({ page }) => {
@@ -103,7 +140,7 @@ test('捕获条快速记一条并落入看板（TA-2 快捷入口）', async ({ 
   const d = await api.dashboard()
   const row = ((d.todos ?? []) as { id: string; title: string }[]).find((t) => t.title === title)
   if (row) fx.trackTodo(String(row.id))
-  await expect(rowFor(page, title)).toBeVisible()
+  await expect(taskFor(page, title)).toBeVisible()
 })
 
 test('卡片「聊一聊」打开侧栏对话并锚定该任务（TA-5）', async ({ page }) => {
@@ -111,10 +148,14 @@ test('卡片「聊一聊」打开侧栏对话并锚定该任务（TA-5）', asyn
   await fx.todo(title, { due: todayStr() })
   await openYoloPanel(page)
 
-  await rowFor(page, title).locator('[aria-label="聊一聊"]').click()
+  await openTaskHandling(page, title)
+  await page.getByRole('dialog', { name: title }).getByRole('button', { name: '和助手讨论' }).click()
   await expect(page.locator('.dock')).toBeVisible()
   await expect(page.locator('.dock-tag')).toHaveText('锚定')
   await expect(page.locator('.dock-ctx')).toHaveText(title)
+  const transcript = page.getByRole('log', { name: '对话记录' })
+  await expect(transcript.locator('.msg.me')).toHaveCount(0)
+  await expect(transcript.locator('.msg.ai').first()).toContainText('全新对话')
 })
 
 test('Esc 逐级退出：全屏对话→侧栏→关闭面板（TA-6）', async ({ page }) => {
