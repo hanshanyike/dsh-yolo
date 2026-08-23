@@ -716,7 +716,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
             </div>
             <div className="notif-body">
               <div style={{ fontWeight: 500 }}>{n.title.replace(/^[⏰☀🌙]\s*/, '')}</div>
-              {n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2 }}>{n.body.split('\n')[0]}</div>}
+              {n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2, whiteSpace: 'pre-wrap' }}>{n.body}</div>}
             </div>
             <div className="notif-acts">
               {n.kind === 'reminder' && n.todo_id && (
@@ -1093,19 +1093,20 @@ function TodoEditor({ draft, milestones, busy, confirming, onChange, onSave, onC
         <input
           autoFocus
           className="ef-input ef-title"
+          aria-label="任务标题"
           value={draft.title}
           onChange={(e) => { onChange({ ...draft, title: e.target.value }) }}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) onSave() }}
         />
-        <input type="date" className="ef-input ef-date" value={draft.due} onChange={(e) => { onChange({ ...draft, due: e.target.value }) }} />
-        <select className="ef-sel" value={draft.priority} onChange={(e) => { onChange({ ...draft, priority: e.target.value }) }}>
+        <input type="date" className="ef-input ef-date" aria-label="到期日" value={draft.due} onChange={(e) => { onChange({ ...draft, due: e.target.value }) }} />
+        <select className="ef-sel" aria-label="优先级" value={draft.priority} onChange={(e) => { onChange({ ...draft, priority: e.target.value }) }}>
           <option value="">优先级</option>
           <option value="low">low</option>
           <option value="medium">medium</option>
           <option value="high">high</option>
           <option value="urgent">urgent</option>
         </select>
-        <select className="ef-sel" value={draft.milestoneTitle} onChange={(e) => { onChange({ ...draft, milestoneTitle: e.target.value }) }}>
+        <select className="ef-sel" aria-label="里程碑" value={draft.milestoneTitle} onChange={(e) => { onChange({ ...draft, milestoneTitle: e.target.value }) }}>
           <option value="">无里程碑</option>
           {milestones.map((m) => (
             <option key={m} value={m}>{m}</option>
