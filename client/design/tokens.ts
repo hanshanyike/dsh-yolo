@@ -419,6 +419,150 @@ export const YOLO_CSS = `
 .yolo-scope .toast.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
 .yolo-scope .toast button { border: none; background: none; color: inherit; font-size: 13px; font-weight: 650; cursor: pointer; padding: 0; text-decoration: underline; }
 
+/* ===== dashboard v2 surfaces =====
+   Judgment and task management stay structurally neutral. The host business
+   color is reserved for focus, the current recommendation and primary intent. */
+.yolo-scope .v2-today-surface,
+.yolo-scope .v2-task-action-panel,
+.yolo-scope .v2-learning-receipt { min-width: 0; max-width: 100%; color: var(--y-text-1); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.yolo-scope .v2-today-surface { width: 100%; overflow-x: clip; animation: yolo-crossfade var(--y-dur-2) var(--y-ease-out); }
+.yolo-scope .v2-today-surface button,
+.yolo-scope .v2-task-action-panel button,
+.yolo-scope .v2-learning-receipt button { min-height: 36px; max-width: 100%; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface); color: var(--y-text-1); font-size: 13px; line-height: 1.3; cursor: pointer; transition: background var(--y-dur-1), border-color var(--y-dur-1), color var(--y-dur-1), opacity var(--y-dur-1); }
+.yolo-scope .v2-today-surface button:hover,
+.yolo-scope .v2-task-action-panel button:hover,
+.yolo-scope .v2-learning-receipt button:hover { background: var(--y-hover); border-color: var(--y-text-3); }
+.yolo-scope .v2-today-surface button:disabled,
+.yolo-scope .v2-task-action-panel button:disabled,
+.yolo-scope .v2-learning-receipt button:disabled { opacity: .45; cursor: default; }
+.yolo-scope .v2-today-surface button:focus-visible,
+.yolo-scope .v2-task-action-panel button:focus-visible,
+.yolo-scope .v2-learning-receipt button:focus-visible { outline: 2px solid var(--y-focus); outline-offset: 2px; }
+
+/* Today title and quick-capture context. */
+.yolo-scope .v2-today-surface > header { padding: 20px 0 12px; border-bottom: 1px solid var(--y-line); }
+.yolo-scope .v2-today-surface > header p { margin: 0; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-today-surface > header p:first-child { color: var(--y-text-3); font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
+.yolo-scope .v2-today-surface > header h1 { margin: 3px 0 4px; font-size: 28px; line-height: 1.2; letter-spacing: -.02em; }
+.yolo-scope .v2-today-surface > section[aria-label="快速记录"] { margin-top: 14px; }
+.yolo-scope .v2-today-surface > section[aria-label="快速记录"] > button { width: 100%; min-height: 42px; padding: 0 14px; text-align: left; border-color: var(--y-focus); background: color-mix(in srgb, var(--y-focus) 8%, var(--y-surface)); font-weight: 650; }
+.yolo-scope .v2-today-partial,
+.yolo-scope .v2-judgment-partial { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--y-line-strong); border-left: 3px solid var(--y-focus); border-radius: var(--y-r-sm); background: var(--y-surface-2); color: var(--y-text-2); font-size: 13px; }
+
+/* Full and compact assistant judgment. */
+.yolo-scope .v2-judgment { min-width: 0; margin: 16px 0 22px; padding: 17px 18px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); background: var(--y-surface); box-shadow: var(--y-e1); animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
+.yolo-scope .v2-judgment--full { border-top: 2px solid color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); }
+.yolo-scope .v2-judgment--compact { padding: 12px 14px; border-left: 3px solid var(--y-focus); box-shadow: none; }
+.yolo-scope .v2-judgment-header { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-judgment-header > span:first-child { color: var(--y-text-1); font-weight: 700; }
+.yolo-scope .v2-judgment-header > span:nth-child(2) { padding: 2px 7px; border: 1px solid color-mix(in srgb, var(--y-focus) 42%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--y-focus) 9%, transparent); color: var(--y-text-1); }
+.yolo-scope .v2-judgment-header time { margin-left: auto; color: var(--y-text-3); font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
+.yolo-scope .v2-judgment h2 { margin: 10px 0 5px; font-size: 19px; line-height: 1.35; letter-spacing: -.01em; }
+.yolo-scope .v2-judgment--compact h2 { margin-top: 7px; font-size: 16px; }
+.yolo-scope .v2-judgment-reason { margin: 0; color: var(--y-text-2); font-size: 14px; line-height: 1.55; }
+.yolo-scope .v2-judgment > section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--y-line); }
+.yolo-scope .v2-judgment > section h3 { margin: 0 0 7px; color: var(--y-text-2); font-size: 13px; font-weight: 650; }
+.yolo-scope .v2-judgment > section ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.yolo-scope .v2-judgment > section li { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; padding: 5px 8px; border: 1px solid var(--y-line); border-radius: var(--y-r-sm); background: var(--y-surface-2); color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-judgment > section li strong { color: var(--y-text-1); font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
+.yolo-scope .v2-judgment-source { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px; width: 100%; margin-top: 10px; padding: 7px 9px; border: 0; border-left: 2px solid var(--y-line-strong); border-radius: 0; background: none; color: var(--y-text-2); font-size: 13px; text-align: left; }
+.yolo-scope button.v2-judgment-source:hover { border-color: var(--y-focus); background: var(--y-surface-2); color: var(--y-text-1); }
+.yolo-scope .v2-judgment-source q { flex-basis: 100%; margin-top: 3px; color: var(--y-text-3); }
+.yolo-scope .v2-judgment-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 15px; }
+.yolo-scope .v2-judgment-actions button { min-width: 82px; padding: 0 12px; }
+.yolo-scope .v2-judgment-actions button:first-child { border-color: color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); font-weight: 700; }
+.yolo-scope .v2-judgment--compact .v2-judgment-actions { margin-top: 11px; }
+.yolo-scope .v2-judgment--compact .v2-judgment-actions button { width: 100%; }
+.yolo-scope .v2-judgment-secondary { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.yolo-scope .v2-judgment-secondary button { min-height: 32px; padding: 0 8px; border-color: transparent; background: none; color: var(--y-text-2); }
+.yolo-scope .v2-judgment-impact { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--y-line); color: var(--y-text-2); font-size: 13px; }
+
+/* Today sections, rows, progress and closure. */
+.yolo-scope .v2-today-surface > section[aria-labelledby] { min-width: 0; margin-top: 22px; }
+.yolo-scope .v2-today-surface > section[aria-labelledby] > h2 { margin: 0; padding-bottom: 8px; border-bottom: 1px solid var(--y-line-strong); font-size: 15px; line-height: 1.4; }
+.yolo-scope .v2-today-surface > section[aria-labelledby] > ul { margin: 0; padding: 0; list-style: none; }
+.yolo-scope .v2-today-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: start; gap: 10px; min-width: 0; padding: 12px 8px; border-bottom: 1px solid var(--y-line); transition: background var(--y-dur-1); }
+.yolo-scope .v2-today-row:hover,
+.yolo-scope .v2-today-row:focus-within { background: var(--y-surface-2); }
+.yolo-scope .v2-today-row:focus-visible { outline: 2px solid var(--y-focus); outline-offset: -2px; border-radius: var(--y-r-sm); }
+.yolo-scope .v2-today-row > input[type="checkbox"] { width: 20px; height: 20px; margin: 3px 0 0; accent-color: var(--y-focus); cursor: pointer; }
+.yolo-scope .v2-today-row-body { min-width: 0; }
+.yolo-scope .v2-today-row-body > strong { display: block; color: var(--y-text-1); font-size: 14px; line-height: 1.45; }
+.yolo-scope .v2-today-row-body > p { margin: 4px 0 0; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-today-row-body > p span { color: var(--y-text-1); font-weight: 650; }
+.yolo-scope .v2-today-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; min-width: 0; margin-top: 6px; color: var(--y-text-3); font-size: 13px; }
+.yolo-scope .v2-today-row-meta button { min-height: 32px; padding: 0 6px; border-color: transparent; background: none; color: var(--y-text-2); text-align: left; }
+.yolo-scope .v2-today-row-meta time { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
+.yolo-scope .v2-today-row > button { min-width: 58px; padding: 0 10px; }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-progress-title"] > h2 { border-bottom: 0; }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-progress-title"] > button { width: 100%; min-height: 44px; padding: 9px 12px; border-color: var(--y-line-strong); background: var(--y-surface-2); color: var(--y-text-2); text-align: left; font-variant-numeric: tabular-nums; }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-closure-title"] { padding: 15px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); background: var(--y-surface-2); }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-closure-title"] > h2 { padding: 0; border: 0; }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-closure-title"] > p { margin: 5px 0 12px; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-closure-title"] > button { margin: 0 7px 7px 0; padding: 0 12px; }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-closure-title"] > button:first-of-type { border-color: color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); font-weight: 700; }
+
+/* Task action dialog: full-screen in compact mode, bounded side surface when wide. */
+.yolo-scope .v2-task-action-panel { position: absolute; inset: 0 0 0 auto; z-index: 80; width: min(380px, 100%); height: 100%; overflow-x: clip; overflow-y: auto; border-left: 1px solid var(--y-line-strong); background: var(--y-bg); box-shadow: var(--y-e1); animation: yolo-dock-in var(--y-dur-3) var(--y-ease-out); }
+.yolo-scope .v2-task-action-panel > header { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; padding: 14px 14px 12px; border-bottom: 1px solid var(--y-line-strong); background: var(--y-bg); }
+.yolo-scope .v2-task-action-panel > header > div { min-width: 0; }
+.yolo-scope .v2-task-action-panel > header h2 { margin: 0; font-size: 18px; line-height: 1.35; }
+.yolo-scope .v2-task-action-panel > header p { margin: 3px 0 0; color: var(--y-text-3); font-size: 13px; }
+.yolo-scope .v2-task-action-panel > header button { flex: none; padding: 0 10px; }
+.yolo-scope .v2-task-action-panel > section,
+.yolo-scope .v2-task-action-panel > form { min-width: 0; margin: 0; padding: 15px 14px; border-bottom: 1px solid var(--y-line); }
+.yolo-scope .v2-task-action-panel h3,
+.yolo-scope .v2-task-action-panel legend { margin: 0 0 8px; color: var(--y-text-1); font-size: 14px; font-weight: 700; }
+.yolo-scope .v2-task-action-panel section > p { margin: 0; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-task-action-panel section > ul { margin: 8px 0 0; padding-left: 19px; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-task-action-panel section > blockquote { margin: 8px 0 0; padding: 7px 9px; border-left: 2px solid var(--y-line-strong); background: var(--y-surface-2); color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-task-action-panel section > button { width: 100%; padding: 0 10px; text-align: left; }
+.yolo-scope .v2-task-action-panel [role="group"] { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
+.yolo-scope .v2-task-action-panel [role="group"] button { flex: 1 1 140px; min-width: 0; padding: 7px 10px; }
+.yolo-scope .v2-task-action-panel [role="group"][aria-label="主要处理"] button:first-child { border-color: color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); font-weight: 700; }
+.yolo-scope .v2-task-action-panel fieldset { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.yolo-scope .v2-task-action-panel label { display: grid; gap: 5px; min-width: 0; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-task-action-panel input,
+.yolo-scope .v2-task-action-panel select,
+.yolo-scope .v2-task-action-panel textarea { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface); color: var(--y-text-1); font-size: 13px; outline: none; }
+.yolo-scope .v2-task-action-panel textarea { min-height: 92px; resize: vertical; }
+.yolo-scope .v2-task-action-panel input:focus-visible,
+.yolo-scope .v2-task-action-panel select:focus-visible,
+.yolo-scope .v2-task-action-panel textarea:focus-visible { border-color: var(--y-focus); outline: 2px solid color-mix(in srgb, var(--y-focus) 28%, transparent); outline-offset: 0; }
+.yolo-scope .v2-task-action-panel fieldset > button { width: 100%; border-color: color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); font-weight: 700; }
+.yolo-scope .v2-task-action-panel > section[aria-label="危险操作"] > button { border-color: color-mix(in srgb, var(--y-danger) 45%, var(--y-line-strong)); color: var(--y-danger); text-align: center; }
+
+/* Learning receipt is evidence, not a celebratory card. */
+.yolo-scope .v2-learning-receipt { margin-top: 8px; padding: 11px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface-2); }
+.yolo-scope .v2-learning-receipt > p { margin: 0; color: var(--y-text-1); font-size: 13px; font-weight: 650; }
+.yolo-scope .v2-learning-receipt dl { display: grid; gap: 6px; margin: 9px 0 0; }
+.yolo-scope .v2-learning-receipt dl > div { display: grid; grid-template-columns: minmax(76px, auto) minmax(0, 1fr); gap: 9px; min-width: 0; padding-top: 6px; border-top: 1px solid var(--y-line); }
+.yolo-scope .v2-learning-receipt dt { color: var(--y-text-3); font-size: 13px; }
+.yolo-scope .v2-learning-receipt dd { min-width: 0; margin: 0; color: var(--y-text-2); font-size: 13px; text-align: right; }
+.yolo-scope .v2-learning-receipt-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.yolo-scope .v2-learning-receipt-actions button { flex: 1 1 120px; min-width: 0; padding: 0 9px; }
+
+/* Dashboard v2 responsiveness: component widths follow the panel, never create
+   their own horizontal scroll surface at 340px, 480px or wide workbench sizes. */
+.yolo-scope.compact .v2-today-surface > header { padding-top: 15px; }
+.yolo-scope.compact .v2-today-surface > header h1 { font-size: 24px; }
+.yolo-scope.compact .v2-judgment { padding: 13px 12px; }
+.yolo-scope.compact .v2-judgment-header time { flex-basis: 100%; margin-left: 0; }
+.yolo-scope.compact .v2-today-row { grid-template-columns: 22px minmax(0, 1fr); padding-inline: 4px; }
+.yolo-scope.compact .v2-today-row > button { grid-column: 2; justify-self: start; min-height: 32px; }
+.yolo-scope.compact .v2-task-action-panel { width: 100%; border-left: 0; box-shadow: none; }
+.yolo-scope.compact .v2-task-action-panel [role="group"] button { flex-basis: 100%; min-height: 40px; }
+.yolo-scope.compact .v2-learning-receipt dl > div { grid-template-columns: 1fr; gap: 2px; }
+.yolo-scope.compact .v2-learning-receipt dd { text-align: left; }
+@media (min-width: 480px) {
+  .yolo-scope .v2-today-surface > header { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; }
+  .yolo-scope .v2-today-surface > header h1, .yolo-scope .v2-today-surface > header p:last-child { grid-column: 1 / -1; }
+}
+@media (min-width: 960px) {
+  .yolo-scope .v2-today-surface { max-width: 820px; margin-inline: auto; }
+  .yolo-scope .v2-task-action-panel { width: 380px; }
+}
+
 /* narrow panel (4.3 Compact) */
 .yolo-scope.compact .p-date { display: none; }
 .yolo-scope.compact .brand-wide { display: none; }
