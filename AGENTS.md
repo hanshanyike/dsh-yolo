@@ -74,16 +74,6 @@ node scripts/e2e.mjs --spec panel   # 只跑某个 spec（tests/e2e/<spec>.spec.
 - UI 变更在提交与发布的准入条件里**必须通过 W1–W8**，且修改 `client/**`、设计系统、API payload
   都会触发该验证。
 
-## 规划与排期（防"里程碑堆乱"的关键纪律）
-
-1. **单一事实源**：排期只改 [`docs/roadmap-ux-priorities.md`](docs/roadmap-ux-priorities.md) 与
-   [`docs/development-plan.md`](docs/development-plan.md)；`README` Roadmap 只是对外摘要。
-2. **别为借鉴而堆功能**：任何"可借鉴的点"都必须先转成**一条用户可感知的改进 + 一条可验收标准**，
-   才能进排期；`docs/research/09-borrowables.md`（P1–P46）是参考数据库，不是排期。
-3. **版本由 `development-plan.md` + `docs/release.md` 决定**，一次发版改一处；发布时必须同步
-   README roadmap / `CHANGELOG` / `docs/README.md`，避免"代码超前、文档滞后"。
-4. **真机反馈走 `issue-*.md`**（用户遇到问题）→ 修复 + 补单测/E2E/W1–W8 → 并入 development-plan → 归档。
-5. **不新增与其平行的"路线图/里程碑/规划"文档**；M 编号（`design-m*.md`）归入历史，不再新增平行编号。
 
 ## 提交前检查清单
 
