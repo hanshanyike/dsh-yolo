@@ -45,7 +45,9 @@ export async function openYoloPanel(page: Page): Promise<void> {
   // so waiting for full 'load' has budgeted out (60s) in this suite.
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   const btn = page.locator("button[title^='YOLO 助手看板']").first()
-  await expect(btn).toBeVisible()
+  // The host app boot + sidebar render can exceed the default 15s expect on a
+  // cold machine — wait generously so a slow boot is not a flaky fail.
+  await expect(btn).toBeVisible({ timeout: 30_000 })
   await btn.click()
   await expect(page.locator('.yolo-scope .brand-name')).toHaveText('YOLO')
 
@@ -105,6 +107,52 @@ export async function authorNotification(
 ): Promise<Record<string, any>> {
   const res = await api.action({ action: 'author_notification', kind: 'notification', title, note: opts.note, notif_kind: opts.notifKind })
   return res.item as Record<string, any>
+}
+
+/**
+ * Per-test fixture tracker — records the id of every row created through it
+ * and removes exactly those rows on dispose().
+ *
+ * This replaces the old "scan the whole dashboard for [E2E] rows before every
+ * test" cleanup (cleanupPrefixedTodos/cleanupPrefixedNotifications, removed):
+ * each scan cost a full GET /yolo/dashboard and the suite ran two scans per
+ * test — pure overhead multiplied by every test, scaling with how much junk
+ * sat on the board. Disposal by id is O(created) and touches nothing else.
+ * Rows created through raw browser UI (capture bar) can be registered after
+ * the fact with trackTodo()/trackNotification().
+ */
+export function createFixtures(api: Api) {
+  const todoIds: string[] = []
+  const notificationIds: string[] = []
+  return {
+    /** Create a todo through the real endpoint and track it. */
+    async todo(title: string, opts: { due?: string } = {}): Promise<Record<string, any>> {
+      const item = await createTodo(api, title, opts)
+      todoIds.push(String(item.id))
+      return item
+    },
+    /** Author a notification card through the real endpoint and track it. */
+    async notification(
+      title: string,
+      opts: { note?: string; notifKind?: 'reminder' | 'brief' } = {},
+    ): Promise<Record<string, any>> {
+      const item = await authorNotification(api, title, opts)
+      notificationIds.push(String(item.id))
+      return item
+    },
+    /** Register an id created outside this tracker (e.g. via browser UI). */
+    trackTodo(id: string): void { todoIds.push(id) },
+    trackNotification(id: string): void { notificationIds.push(id) },
+    /** Handle tracked notifications, then cancel tracked todos (reverse order). */
+    async dispose(): Promise<void> {
+      for (const id of [...notificationIds].reverse()) {
+        await api.action({ action: 'handled', kind: 'notification', id }).catch(() => {})
+      }
+      for (const id of [...todoIds].reverse()) {
+        await api.action({ action: 'cancel', kind: 'todo', id }).catch(() => {})
+      }
+    },
+  }
 }
 
 /** Cancel (soft-delete, audited) every todo whose title starts with the prefix. */

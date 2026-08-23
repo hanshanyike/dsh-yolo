@@ -1,4 +1,4 @@
-// E2E — theme resolution (W6) + narrow-panel chat fullscreen (W7).
+// L2 · ui lane — theme resolution (W6) + narrow-panel chat fullscreen (W7).
 // The panel resolves light/dark from the host `--background` CSS variable on
 // <html>; the test pins that contract deterministically by overriding the
 // variable before the panel mounts, then asserts the resolved data-y-theme.
@@ -13,6 +13,8 @@ async function openPanelUnderBackground(page: Page, background: string, viewport
     document.documentElement.style.setProperty('--background', bg)
   }, background)
   const btn = page.locator("button[title^='YOLO 助手看板']").first()
+  // The host app boot + sidebar render can exceed the default expect on a
+  // cold machine — wait generously so a slow boot is not a flaky fail.
   await expect(btn).toBeVisible({ timeout: 30_000 })
   await btn.click()
   await expect(page.locator('.yolo-scope .brand-name')).toHaveText('YOLO')
