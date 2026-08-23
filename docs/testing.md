@@ -250,8 +250,8 @@ bundle 按文件名静态服务，重建后刷新页面即拿到新版本。
 
 - 产品行为（提醒 / 台账 / 简报 / 编辑）：[product-design.md](product-design.md) 第八节 TA/TB/TC/TD/TE 系列；
 - 视觉与动效（主题 / 动效 / 空态 / reduced-motion）：[frontend-redesign.md](frontend-redesign.md) 8.6 VA-1~VA-8。
-- 改动引入的**专项人工验证**（如 scope key 缓存的行为复核、E2E runner 抽查）：
-  [testing-e2e.md](testing-e2e.md) 第八节人工验证清单。
+- 全量**人工走查清单**（所有场景按用户旅程分组，含自动化覆盖标注）：
+  [testing-e2e.md](testing-e2e.md) 第八节；本节 W1–W10 是其中面板通用组的快速版。
 
 ### 通过标准与记录
 
