@@ -1,27 +1,23 @@
-# YOLO development patch — TEMPLATE only.
+# YOLO development patch — portable manual boot.
 #
-# This file loads plugins directly from TS source via file:// URLs (the fast
-# dev loop). For a runnable setup with the browser client bundle, use
-# `node scripts/dev.mjs` (or `pnpm dev:web`) — it generates `cordis.dev.local.yml`
-# (gitignored) whose entries are PACKAGE NAMES (`dsh-plugin-yolo/...`), which is
-# what the ClientModuleRegistry needs to discover the client bundle:
-#   require.resolve('<name>/package.json') → package.json `dsh.client`
-#     → exports['./client'] → dist/client/index.mjs (CJS + __ModuleLoader__).
-# With file:// entries above, the host cannot resolve back to package.json, so
-# the dashboard tab would NOT be served.
+# Entries use PACKAGE NAMES (resolved through the npm package's `exports`),
+# not file:// URLs, so this file works on any machine and serves the browser
+# client bundle. The subpaths (e.g. `/dist/src/storage`) are the built output,
+# so run `pnpm build` before using this file directly.
 #
-# IMPORTANT (Windows): `name` must be a `file://` URL, NOT a bare `D:/...` path.
-# Node's ESM loader treats a bare `D:/...` as protocol "d:" and rejects it
-# (ERR_UNSUPPORTED_ESM_URL_SCHEME). Use the file:///<drive>/abs/path form.
+# The all-in-one dev loop (build + clone host + browser client) is:
+#   pnpm dev:web        # generates the gitignored cordis.dev.local.yml and boots it
+# You can also hand this file to `dsh web --patch cordis.dev.yml` after a build.
 - insert:
-  # M1: storage service (ctx.yolo) + memory tools. M2+ appends extract/reminder/ui.
+  - id: yolo
+    name: 'dsh-plugin-yolo'
   - id: yolo-storage
-    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/storage/index.ts'
+    name: 'dsh-plugin-yolo/dist/src/storage'
   - id: yolo-memory
-    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/memory/index.ts'
+    name: 'dsh-plugin-yolo/dist/src/memory'
   - id: yolo-extract
-    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/extract/index.ts'
+    name: 'dsh-plugin-yolo/dist/src/extract'
   - id: yolo-reminder
-    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/reminder/index.ts'
+    name: 'dsh-plugin-yolo/dist/src/reminder'
   - id: yolo-ui
-    name: 'file:///D:/Code/WorkBuddy/dsh-yolo/src/ui/index.ts'
+    name: 'dsh-plugin-yolo/dist/src/ui'
