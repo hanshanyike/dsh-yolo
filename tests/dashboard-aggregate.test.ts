@@ -76,6 +76,7 @@ describe('buildDashboardData ws tagging', () => {
     listEvents: () => [event],
     listEventsBetween: () => [event],
     listNotifications: () => [notif],
+    listUnhandledNotifications: () => [notif],
     listSessionSummaries: () => [],
   } as unknown as Yolo
 
@@ -109,6 +110,7 @@ describe('registerDashboardEndpoint scope handling', () => {
       listEvents: () => [],
       listEventsBetween: () => [],
       listNotifications: () => [],
+      listUnhandledNotifications: () => [],
       listSessionSummaries: () => [],
       listWorkspaceMeta: () => metas,
     } as unknown as Yolo

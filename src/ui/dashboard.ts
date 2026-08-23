@@ -157,7 +157,10 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     ledgerDay: day,
     ledgerSessions,
     notifications,
-    unhandled: notifications.filter((n) => !n.handled).length,
+    // v0.3.3 review fix: count ALL unhandled notifications, not just those that
+    // fit the 12-row display slice — the badge is a promise ("N 件未处理") and
+    // must not undercount when older cards are still open.
+    unhandled: yolo.listUnhandledNotifications(cwd).length,
     health: buildMemoryHealth(yolo, cwd),
     focusDefaultCount: 0,
   }
@@ -211,7 +214,9 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
     ledger: allLedger,
     ledgerSessions: list.reduce((n, d) => n + d.ledgerSessions, 0),
     notifications: allNotifications,
-    unhandled: allNotifications.filter((n) => !n.handled).length,
+    // per-workspace unhandled is already a full count (not the display slice) —
+    // summing them keeps the aggregate badge exact.
+    unhandled: list.reduce((n, d) => n + (d.unhandled ?? 0), 0),
   }
 }
 
