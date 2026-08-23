@@ -1,4 +1,4 @@
-// L2 · ui lane — core panel interaction flow (TA-1..TA-6), driven against the
+// ui 套件 · 浏览器端到端测试 — core panel interaction flow (TA-1..TA-6), driven against the
 // REAL running host through its HTTP endpoints + a real browser. Fixtures are
 // seeded via POST /yolo/actions with a unique [E2E] prefix and disposed by id
 // after each test (createFixtures), so rows created through raw browser UI

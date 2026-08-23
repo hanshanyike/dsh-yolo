@@ -3,12 +3,12 @@
 // These drive a RUNNING dsh web host (default http://127.0.0.1:3080) with
 // system Edge/Chrome, so they exercise the actual client bundle, the real
 // /yolo/dashboard + /yolo/actions endpoints, and the real SQLite store. They
-// are a LOCAL complementary lane — CI runs the keyless unit suite only
+// are a LOCAL supplementary suite — CI runs the keyless unit tests only
 // (reminder/brief/scheduler triggering is unit-tested; see docs/testing.md).
 //
-//   node scripts/e2e.mjs              # bring up/reuse the host, run all specs
-//   node scripts/e2e.mjs --lane=api   # HTTP-only lane, no browser
-//   node scripts/e2e.mjs --no-host    # reuse whatever host already answers
+//   node scripts/e2e.mjs                # bring up/reuse the host, run all specs
+//   node scripts/e2e.mjs --suite=api    # api suite: HTTP integration tests (no browser)
+//   node scripts/e2e.mjs --no-host      # reuse whatever host already answers
 //
 // Browser: use the system-installed Edge/Chrome channel so no browser download
 // is needed. Override with `--project=chromium` + PLAYWRIGHT_BROWSERS_PATH if

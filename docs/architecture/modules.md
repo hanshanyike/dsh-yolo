@@ -411,7 +411,7 @@ bundle 作为 classic `<script>` 加载，必须：调用 `window.__ModuleLoader
 
 | 文件 | 作用 |
 |---|---|
-| `e2e.mjs` | E2E 测试 runner：全局 `dsh web` 拉起/复用宿主（无全局 CLI 时回退 host checkout + junction/patch），拉起前自动清扫 `[E2E]` 夹具，`--lane api\|ui`、`--spec <名>`、`--no-host`、`--no-clean`；详见 [testing-e2e.md](../testing-e2e.md) |
+| `e2e.mjs` | E2E 测试 runner：全局 `dsh web` 拉起/复用宿主（无全局 CLI 时回退 host checkout + junction/patch），拉起前自动清扫 `[E2E]` 夹具，`--suite api\|ui`、`--spec <名>`、`--no-host`、`--no-clean`；详见 [testing-e2e.md](../testing-e2e.md) |
 | `clean-test-data.mjs` | 兜底：手动删除各 `yolo-*.db` 里的 `[E2E]` 夹具行（宿主停止时运行） |
 | `wrap-client.mjs` | post-build：把 client bundle 包进 `__ModuleLoader__.load` + 注入 `process` shim |
 | `copy-assets.mjs` | post-build：把 `src/storage/schema.sql` 复制到 `dist/src/storage/`（db.ts 运行时按 `import.meta.url` 读取） |

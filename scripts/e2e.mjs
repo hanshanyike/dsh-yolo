@@ -2,8 +2,8 @@
 // YOLO end-to-end test runner (real host + Playwright).
 //
 //   node scripts/e2e.mjs                 # ensure host up, run ALL specs (api + ui)
-//   node scripts/e2e.mjs --lane=api      # HTTP-only lane (no browser, fastest feedback)
-//   node scripts/e2e.mjs --lane=ui       # browser lane only
+//   node scripts/e2e.mjs --suite=api     # api suite: HTTP integration tests (no browser, fastest feedback)
+//   node scripts/e2e.mjs --suite=ui      # ui suite: browser end-to-end tests
 //   node scripts/e2e.mjs --spec panel-flow   # one spec, space or "=" form both work
 //   node scripts/e2e.mjs --no-host       # reuse an already-running host
 //   node scripts/e2e.mjs --no-clean      # skip the [E2E] fixture sweep before bring-up
@@ -66,7 +66,7 @@ function argValue(name) {
   return undefined
 }
 const SPEC = argValue('spec')
-const LANE = (argValue('lane') ?? '').toLowerCase() // api | ui | (empty = all)
+const SUITE = (argValue('suite') ?? '').toLowerCase() // api | ui | (empty = all)
 const skipHost = argv.includes('--no-host')
 const noClean = argv.includes('--no-clean')
 
@@ -312,16 +312,16 @@ async function bringUpHost() {
   process.exit(1)
 }
 
-/** Map --lane/--spec to Playwright path filters.
+/** Map --suite/--spec to Playwright path filters.
  * Playwright positionals are regex filters matched against forward-slash
  * relative test paths — an absolute Windows path never matches ("No tests
  * found"), so always pass repo-relative slash form. */
 function selectionArgs() {
   if (SPEC) return [`tests/e2e/${SPEC.replace(/\.spec\.ts$/, '')}.spec.ts`]
-  if (LANE === 'api') return ['tests/e2e/api/']
-  if (LANE === 'ui') return ['tests/e2e/ui/']
-  if (LANE) {
-    console.error(`[e2e] unknown lane "${LANE}" (use api | ui | all)`)
+  if (SUITE === 'api') return ['tests/e2e/api/']
+  if (SUITE === 'ui') return ['tests/e2e/ui/']
+  if (SUITE) {
+    console.error(`[e2e] unknown suite "${SUITE}" (use api | ui | all)`)
     process.exit(2)
   }
   return []

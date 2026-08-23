@@ -1,7 +1,7 @@
 # 测试文档（Testing Guide）
 
 > 面向开发者的测试体系说明：如何运行、每个测试文件测什么、测试手法、如何新增测试。
-> 当前状态：**单测 29 文件 / 324 用例全绿（~15s）**，E2E **api+ui 双车道 17 用例 ~1 分钟**
+> 当前状态：**单测 29 文件 / 324 用例全绿（~15s）**，E2E **api+ui 两个套件 17 用例 ~1 分钟**
 > （见 [testing-e2e.md](testing-e2e.md)），`tsc --noEmit` clean。
 
 ---
@@ -143,9 +143,10 @@ const ctx = { on: (ev, fn) => { handlers.set(ev, fn) }, ... }
 表达层与宿主集成。E2E 用 **Playwright 驱动一个真实运行的 dsh web 宿主**，走真实的
 `GET /yolo/dashboard` + `POST /yolo/actions` 端点与真实的 SQLite 存储。
 
-- **双车道**（2026-08 治理后）：`tests/e2e/api/`（HTTP 契约，无浏览器，秒级）
-  与 `tests/e2e/ui/`（真实 Edge，看板交互/主题/锚定对话）。全套 17 用例 ~1 分钟。
-- 它是一条**本地补充车道**：CI 只跑免 key 的单测套件（提醒/简报/调度器触发逻辑
+- **两个套件，按测试分层划分**（2026-08 治理后）：`tests/e2e/api/`（HTTP 接口测试，
+  对真实宿主发请求、无浏览器，秒级）与 `tests/e2e/ui/`（浏览器端到端测试，
+  看板交互/主题/锚定对话）。全套 17 用例 ~1 分钟。
+- 它是**本地补充性验证**：CI 只跑免 key 的单测套件（提醒/简报/调度器触发逻辑
   已在单测覆盖），E2E 依赖本地已拉起并配好 LLM 的宿主，不在 CI 强制。
 - 依赖系统安装的 Edge/Chrome（无需下载浏览器），`channel: msedge`，`workers: 1`
   （共享宿主进程 + 共享 SQLite，串行是正确性约束）。
@@ -153,9 +154,9 @@ const ctx = { on: (ev, fn) => { handlers.set(ev, fn) }, ... }
 ### 如何运行
 
 ```bash
-node scripts/e2e.mjs                 # 拉起/复用宿主后跑全部车道
-node scripts/e2e.mjs --lane api      # 仅 HTTP 车道（改 src/** 后的秒级反馈）
-node scripts/e2e.mjs --lane ui       # 仅浏览器车道
+node scripts/e2e.mjs                 # 拉起/复用宿主后跑全部套件
+node scripts/e2e.mjs --suite api     # 仅 api 套件（改 src/** 后的秒级反馈）
+node scripts/e2e.mjs --suite ui      # 仅 ui 套件
 node scripts/e2e.mjs --spec panel-flow   # 单个 spec
 ```
 

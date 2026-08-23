@@ -1,4 +1,4 @@
-// L2 · ui lane — the panel still renders its board with the scope switch in
+// ui 套件 · 浏览器端到端测试 — the panel still renders its board with the scope switch in
 // the header (v0.3.3: the board is always aggregate; the header switch is the
 // remaining surface). A real aggregate view needs the opt-in config toggled in
 // Settings, so the row-level contract lives in api/dashboard-scope.spec.ts.

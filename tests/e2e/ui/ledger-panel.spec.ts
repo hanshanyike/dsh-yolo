@@ -1,4 +1,4 @@
-// L2 · ui lane — the day ledger renders on its real machine surface (v5):
+// ui 套件 · 浏览器端到端测试 — the day ledger renders on its real machine surface (v5):
 // a consolidated merge lands in today's ledger and shows on the 台账 tab.
 
 import { test, expect } from '@playwright/test'

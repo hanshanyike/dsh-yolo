@@ -1,4 +1,4 @@
-// L2 · ui lane — the two真机-exposed interaction fixes (R18 sidebar switch,
+// ui 套件 · 浏览器端到端测试 — the two真机-exposed interaction fixes (R18 sidebar switch,
 // R19 聊一聊 fresh thread), driven against the real host in a real browser.
 //
 // W10: the anchored chat must open FRESH — no resident-thread history leaks in.

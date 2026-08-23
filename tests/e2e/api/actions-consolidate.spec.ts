@@ -1,4 +1,4 @@
-// L1 · api lane — domain-action contracts over plain HTTP, no browser.
+// api 套件 · HTTP 接口测试（无浏览器）— domain-action contracts over plain HTTP, no browser.
 //
 // P35: two seeded todos → POST consolidate → target keeps merged fields,
 // source is cancelled (gone from the open board), one todo_consolidated event

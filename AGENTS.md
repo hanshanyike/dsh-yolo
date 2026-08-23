@@ -43,8 +43,8 @@ node scripts/clean-test-data.mjs   # 手动清理 [E2E] 测试夹具（e2e runne
 pnpm dsh plugin add . --profile web   # 一次性：把插件链接进 dsh web profile（标准 dsh 方式）
 pnpm dsh web --no-open --port 4080    # 启动宿主（标准 dsh；`web` 已隐含 --profile web，默认端口 3080，本机被占故用 4080）
 node scripts/e2e.mjs                 # E2E：拉起/复用宿主后跑全套（~1 分钟，17 用例）
-node scripts/e2e.mjs --lane api      # 仅 HTTP 车道（无浏览器，秒级反馈；改 src/** 后首选）
-node scripts/e2e.mjs --lane ui       # 仅浏览器车道
+node scripts/e2e.mjs --suite api     # 仅 api 套件（HTTP 接口测试，无浏览器，秒级反馈；改 src/** 后首选）
+node scripts/e2e.mjs --suite ui      # 仅 ui 套件（浏览器端到端测试）
 node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/<spec>.spec.ts）
 ```
 
@@ -54,7 +54,7 @@ node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/
 > 开发时用 `--port 4080`（3080 被本机宿主占用），默认端口 3080。
 > **[E2E] 夹具清理已自动化**：runner 拉起自己的宿主前会 DB 级清扫 `[E2E]` 行；
 > 只有复用已有宿主（`--no-host`）时才需要手动跑 `clean-test-data.mjs`。
-> E2E 场景矩阵、车道模型、慢因根因记录见 **docs/testing-e2e.md**。
+> E2E 场景矩阵、套件划分、慢因根因记录见 **docs/testing-e2e.md**。
 
 ## 记忆 / 提醒 / 看板的核心机制
 
@@ -76,8 +76,9 @@ node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/
 ## 测试（重要）
 
 - **单测**：`tests/**/*.test.ts`，`pnpm test:run`。用内存 SQLite 等隔离手段，**不依赖 host**。
-- **E2E**：`tests/e2e/{api,ui}/*.spec.ts`，Playwright + **真实宿主**，分 **api（HTTP 无浏览器）/ ui（真实 Edge）** 两条车道。
-  运行 `node scripts/e2e.mjs`（全套 ~1 分钟）；`--lane api|ui`、`--spec <名>` 选车道/用例。
+- **E2E**：`tests/e2e/{api,ui}/*.spec.ts`，Playwright + **真实宿主**，按测试分层拆成
+  **api（HTTP 接口测试，无浏览器）/ ui（真实 Edge 浏览器端到端）** 两个套件。
+  运行 `node scripts/e2e.mjs`（全套 ~1 分钟）；`--suite api|ui` 选套件、`--spec <名>` 选单个用例文件。
   - 通过 HTTP 接口 + 真实浏览器驱动；夹具统一带 `[E2E]` 唯一前缀，经 `createFixtures` 按 id 在 afterEach 精准清理（幂等）。
   - 配置见 `playwright.config.ts`（缺省 `msedge`、中文、`workers:1`）。
   - 场景矩阵 / 根因记录 / agent 手册：**docs/testing-e2e.md**。

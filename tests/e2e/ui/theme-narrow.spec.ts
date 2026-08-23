@@ -1,4 +1,4 @@
-// L2 · ui lane — theme resolution (W6) + narrow-panel chat fullscreen (W7).
+// ui 套件 · 浏览器端到端测试 — theme resolution (W6) + narrow-panel chat fullscreen (W7).
 // The panel resolves light/dark from the host `--background` CSS variable on
 // <html>; the test pins that contract deterministically by overriding the
 // variable before the panel mounts, then asserts the resolved data-y-theme.

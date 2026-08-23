@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **E2E 从 21.3 分钟（3 failed + 2 flaky）降到 ~67 秒全绿**（17 用例，含宿主拉起；
   同机实测）。根因与证据记录在 [docs/testing-e2e.md](docs/testing-e2e.md) 第四节。
-- **api/ui 双车道**：`tests/e2e/{api,ui}/`，`node scripts/e2e.mjs --lane api|ui`
-  （HTTP 车道无浏览器、秒级反馈）；`--spec` 支持 `--spec panel-flow` 空格形式。
+- **api/ui 两个测试套件（按测试分层拆分）**：`tests/e2e/{api,ui}/`，
+  `node scripts/e2e.mjs --suite api|ui`——api 套件为 HTTP 接口测试
+  （无浏览器、秒级反馈）；`--spec` 支持 `--spec panel-flow` 空格形式。
 - **性能修复 `perf(storage)`**：scope key 按 TTL 记忆化 —— 此前一次
   `GET /yolo/dashboard` 会孵化 ~15 个 `git rev-parse` 子进程（~3s，实测 15 次 = 2985ms），
   侧栏角标 30s 轮询与提醒调度器 tick 同样受益。

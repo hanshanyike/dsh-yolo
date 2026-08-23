@@ -1,4 +1,4 @@
-# E2E 测试规范（场景 · 用例 · 车道）
+# E2E 测试规范（场景 · 用例 · 套件）
 
 > 浏览器端到端测试的单一事实源：有哪些场景、怎么跑、为什么之前慢/不稳定、
 > agent 如何按规范执行与归因。运行/配置总览见 [testing.md](testing.md) 第五节。
@@ -6,21 +6,24 @@
 
 ---
 
-## 一、车道模型
+## 一、测试分层与套件划分
 
-| 车道 | 位置 | 载体 | 验证什么 | 期望耗时 |
-|---|---|---|---|---|
-| L0 单测 | `tests/**/*.test.ts` | vitest + 内存 SQLite / ctx stub | 纯逻辑、领域动作、插件接线 | ~70s 全量 |
-| **L1 api** | `tests/e2e/api/` | 真实宿主 HTTP（无浏览器） | 端点契约：dashboard 形状、动作路由、审计事件 | **< 10s** |
-| **L2 ui** | `tests/e2e/ui/` | 真实宿主 + Edge（Playwright） | 表达层与宿主集成：看板交互、主题、锚定对话 | ~1-2min |
-| L3 真机走查 | docs/testing.md 第八节 | 人肉 W1–W10 清单 | 自动化盲区（IME、动效观感、DPI…） | 按触发范围 |
+按标准测试分层（自下而上）：单元测试 → 集成测试（HTTP 接口）→ 端到端测试（浏览器）→ 手工验收走查。
+中间两层合称 E2E，按载体拆成两个可独立运行的套件：
 
-选择原则：**能用 L1 就不用 L2，能用 L0 就不用 L1。** 断言落在持久元素
-（看板行）而非易消失的 toast；夹具经真实端点种入，绝不 mock 存储。
+| 分层 | 套件 | 位置 | 载体 | 验证什么 | 期望耗时 |
+|---|---|---|---|---|---|
+| 单元测试 | vitest | `tests/**/*.test.ts` | 内存 SQLite / ctx stub | 纯逻辑、领域动作、插件接线 | ~15s 全量 |
+| 集成测试（HTTP 接口） | **api** | `tests/e2e/api/` | 真实宿主 HTTP（无浏览器） | 端点契约：dashboard 形状、动作路由、审计事件 | **< 10s** |
+| 端到端测试（浏览器） | **ui** | `tests/e2e/ui/` | 真实宿主 + Edge（Playwright） | 表达层与宿主集成：看板交互、主题、锚定对话 | ~1min |
+| 手工验收走查 | — | [testing.md](testing.md) 第八节 | 人肉清单 | 自动化盲区（IME、动效观感、DPI…） | 按触发范围 |
+
+选择原则：**能跑低层就不跑高层**——接口层的问题不进浏览器，交互问题才上真机。
+断言落在持久元素（看板行）而非易消失的 toast；夹具经真实端点种入，绝不 mock 存储。
 
 ## 二、场景 × 用例矩阵
 
-### L1 api 车道
+### api 套件 · HTTP 接口测试
 
 | spec · 用例 | 场景 | 验收来源 |
 |---|---|---|
@@ -28,7 +31,7 @@
 | `api/actions-consolidate.spec.ts` · P35 | 合并两条待办：保留方继承字段、被并方退场、台账留 `todo_consolidated` | product-design P35 |
 | `api/actions-consolidate.spec.ts` · P34 | 非法动作 400 且落 `action_denied` 审计——拒绝绝不静默 | product-design P34 |
 
-### L2 ui 车道
+### ui 套件 · 浏览器端到端测试
 
 | spec · 用例 | 场景 | 验收来源 |
 |---|---|---|
@@ -55,9 +58,9 @@ reduced-motion / 特定 DPI。
 ## 三、如何运行
 
 ```bash
-node scripts/e2e.mjs                 # 全部车道（拉起或复用宿主）
-node scripts/e2e.mjs --lane api      # 仅 L1（秒级反馈，改 src/** 后首选）
-node scripts/e2e.mjs --lane ui       # 仅 L2
+node scripts/e2e.mjs                 # 全部套件（拉起或复用宿主）
+node scripts/e2e.mjs --suite api     # 仅 api 套件（秒级反馈，改 src/** 后首选）
+node scripts/e2e.mjs --suite ui      # 仅 ui 套件
 node scripts/e2e.mjs --spec panel-flow   # 单个 spec（--spec= 同价）
 node scripts/e2e.mjs --no-host       # 复用已在跑的宿主（绝不碰它的数据库）
 node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
@@ -95,7 +98,7 @@ node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
 | 8 | `[E2E]` 夹具跨 run 累积膨胀载荷(57KB→清理后 6KB)、拖慢一切 | AGENTS.md 手工清理习惯 | runner 拉起前自动 DB 级清扫（只动 `[E2E]` 行）；`--no-clean` 可关 |
 | 9 | 忙等 `sleep()` 自旋烧 CPU | e2e.mjs 旧 while 循环 | 真 `setTimeout` 异步休眠 |
 
-效果（同机复测，改造后）：API 车道秒级、UI 车道分钟级；详见提交记录中的
+效果（同机复测，改造后）：api 套件秒级、ui 套件分钟级；详见提交记录中的
 前后对照数据。根因 #1 同时是产品修复 —— 侧栏角标每 30s 轮询、提醒调度器
 周期 tick 此前都在反复孵化 git 进程。
 
@@ -119,10 +122,10 @@ node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
 
 ```bash
 # 1) 快速反馈（改了 src/storage|shared|memory 后）
-node scripts/e2e.mjs --lane api
+node scripts/e2e.mjs --suite api
 
 # 2) UI 准出（改了 client/**、src/ui/**、payload 形状后）
-node scripts/e2e.mjs --lane ui
+node scripts/e2e.mjs --suite ui
 
 # 3) 发布前全量 + 机器可读报告
 YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
@@ -146,18 +149,18 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 红线：不要为吸收慢而调大断言超时（那是症状缓解）；先确认是否踩了第四节
 某个根因的回归。
 
-## 七、变更触发范围（何时必须跑哪条）
+## 七、变更触发范围（何时必须跑哪层）
 
 | 改动 | 必须 |
 |---|---|
-| `src/storage/**`, `src/shared/**`, `src/memory/**`, `src/extract/**`, `src/reminder/**` | L0 相关文件 + `--lane api` |
-| `client/**`, `src/ui/**`, dashboard/actions payload 形状 | L0 + `--lane ui` + 本文第八节对应组人工走查 |
+| `src/storage/**`, `src/shared/**`, `src/memory/**`, `src/extract/**`, `src/reminder/**` | 相关单元测试 + `--suite api` |
+| `client/**`, `src/ui/**`, dashboard/actions payload 形状 | 单元测试 + `--suite ui` + 本文第八节对应组人工走查 |
 | `playwright.config.ts`, `tests/e2e/**`, `scripts/e2e.mjs` | 全套 E2E 自证 |
 | 版本发布（UI 相关） | 全量 E2E + 真机走查 |
 
 ## 八、人工验证清单（全场景）
 
-> 自动化（E2E 双车道 + 单测）覆盖契约与交互回归；本清单汇总**所有需要人眼 / 真机 /
+> 自动化（E2E api/ui 两套件 + 单测）覆盖契约与交互回归；本清单汇总**所有需要人眼 / 真机 /
 > 长周期等待**确认的场景，按用户旅程分组，是产品全量的人工走查底表。
 > 标记说明：🤖 = E2E/单测已自动化（人工只需真机抽验观感）；👤 = 仅人工可验。
 > 规则沿用 testing.md 第八节：全部 PASS 才收口；无法验证的项标 SKIP + 原因，
@@ -255,9 +258,9 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 
 ### 8.12 E2E 工具链抽查（runner 行为）
 
-- [ ] 👤 **B1 api 车道秒级反馈**：`--lane api` 数秒全绿，结束自动停自拉宿主
+- [ ] 👤 **B1 api 套件秒级反馈**：`--suite api` 数秒全绿，结束自动停自拉宿主
 - [ ] 👤 **B2 无孤儿进程**：跑完后端口无 LISTEN 残留
-- [ ] 🤖 **B3 ui 车道全套**：~1 分钟全绿
+- [ ] 🤖 **B3 ui 套件全套**：~1 分钟全绿
 - [ ] 👤 **B4 自动清扫**：runner 拉起宿主时日志出现 `fixture sweep ... removed N rows`
 - [ ] 👤 **B5 复用宿主不碰库**：`--no-host` 日志显示 `database is NOT touched`
 - [ ] 👤 **B6 探测超时可诊断**：宿主不在时报错含 probe budget 与 `YOLO_E2E_PROBE_MS` 提示

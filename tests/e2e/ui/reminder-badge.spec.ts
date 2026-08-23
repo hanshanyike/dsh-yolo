@@ -1,4 +1,4 @@
-// L2 · ui lane — reminder / badge closed loop (TB-3..TB-6), against the REAL
+// ui 套件 · 浏览器端到端测试 — reminder / badge closed loop (TB-3..TB-6), against the REAL
 // host. The loop is: an unhandled reminder → sidebar dot badge + kanban
 // notification card → 「知道了」handles it → card leaves the surface and the
 // badge returns to baseline.

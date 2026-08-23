@@ -1,4 +1,4 @@
-// L1 · api lane — cross-workspace aggregation contract (v0.3.0/v0.3.3) over
+// api 套件 · HTTP 接口测试（无浏览器）— cross-workspace aggregation contract (v0.3.0/v0.3.3) over
 // plain HTTP, no browser. GET /yolo/dashboard?scope=all must be accepted and
 // never 500 — it carries the board shape (todos/notifications arrays), and
 // when the aggregate view is active it tags scope=all with workspace info.
