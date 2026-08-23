@@ -83,7 +83,10 @@ function stripAnchorPrefix(text: string): string {
 export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPaneProps): JSX.Element {
   const anchoredScopeCwd = threadKey ? anchor?.scopeCwd : undefined
   const conversationKey = threadKey ? `${anchoredScopeCwd ?? ''}\u0000${threadKey}` : ''
-  const [state, setState] = useState<ChatState>({ loading: false, error: null, messages: [], pending: IDLE_PENDING_REPLY })
+  // Only the first request for a conversation is a blocking load. Background
+  // polling must leave the transcript mounted; otherwise an empty conversation
+  // briefly loses its welcome message every POLL_MS and visibly flashes.
+  const [state, setState] = useState<ChatState>({ loading: true, error: null, messages: [], pending: IDLE_PENDING_REPLY })
   const [draft, setDraft] = useState('')
   const anchorRef = useRef<ChatAnchor | null>(anchor)
   const sentWithContext = useRef(false)
@@ -131,16 +134,16 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   useEffect(() => {
     if (prevConversation.current !== conversationKey) {
       prevConversation.current = conversationKey
-      setState((s) => ({ ...s, messages: [], error: null, pending: reducePendingReply(s.pending, { type: 'reset' }) }))
+      setState((s) => ({ ...s, loading: true, messages: [], error: null, pending: reducePendingReply(s.pending, { type: 'reset' }) }))
     }
   }, [conversationKey])
 
-  const load = useCallback(async (): Promise<void> => {
+  const load = useCallback(async (showLoading = false): Promise<void> => {
     const keyForCall = conversationKey
     if (!mountedRef.current || conversationRef.current !== keyForCall) return
     const controller = new AbortController()
     controllersRef.current.add(controller)
-    setState((s) => ({ ...s, loading: true, error: null }))
+    if (showLoading) setState((s) => ({ ...s, loading: true, error: null }))
     try {
       const r = await fetch(chatMessagesUrl(threadKey, anchoredScopeCwd), {
         headers: { accept: 'application/json' },
@@ -264,7 +267,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       {state.error && (
         <div className="err-line" role="alert">
           <span>连接失败：{state.error}</span>
-          <button type="button" className="nact" onClick={() => { void load() }}>重试</button>
+          <button type="button" className="nact" onClick={() => { void load(true) }}>重试</button>
         </div>
       )}
       {!state.error && !state.loading && state.messages.length === 0 && (
