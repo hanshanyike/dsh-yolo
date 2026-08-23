@@ -100,12 +100,15 @@ interface Buckets {
   stale: YoloTodoRow[]
 }
 
-/** Bucket open rows by due date; stale rows always leave for their own bucket
- *  (mirrors the v2 board's section partition — undated rows ride with week). */
-function partitionRows(rows: readonly YoloTodoRow[]): Buckets {
+/** Bucket open rows by due date. By default stale rows leave for their own
+ *  bucket (the 即将 face's 滞留 section). The 今日 face opts OUT: a stale row
+ *  still has a due bucket, and hiding it there made the hero/胶囊 counts show
+ *  rows the list did not — an all-stale day rendered a blank board with no
+ *  empty state (v0.3.3 review fix; undated rows never reach this face). */
+function partitionRows(rows: readonly YoloTodoRow[], opts: { splitStale?: boolean } = {}): Buckets {
   const out: Buckets = { overdue: [], today: [], week: [], stale: [] }
   for (const t of rows) {
-    if (t.stale) { out.stale.push(t); continue }
+    if (opts.splitStale !== false && t.stale) { out.stale.push(t); continue }
     const b = dueBucket(t)
     if (b === 'overdue') out.overdue.push(t)
     else if (b === 'today') out.today.push(t)
@@ -336,7 +339,9 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   )
 
   const todaySections = useMemo<Section[]>(() => {
-    const p = partitionRows(focus)
+    // splitStale:false — the 今日 face buckets stale rows by their due date so
+    // the visible rows match the hero/胶囊 counts (stale keeps its「N 天未动」tag).
+    const p = partitionRows(focus, { splitStale: false })
     for (const t of retiringToShowToday) {
       if (t.stale) p.stale.push(t)
       else if (dueBucket(t) === 'overdue') p.overdue.push(t)
