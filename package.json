@@ -30,7 +30,7 @@
     "test:e2e": "node scripts/e2e.mjs"
   },
   "dependencies": {
-    "better-sqlite3": "^11.5.0"
+    "better-sqlite3": "^12.4.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*"
