@@ -47,6 +47,7 @@ function mockYolo(): Yolo {
     listPreferences: vi.fn(() => []),
     listSessionSummaries: vi.fn(() => []),
     listNotifications: vi.fn(() => []),
+    listUnhandledNotifications: vi.fn(() => []),
     listWorkspaceMeta: vi.fn(() => []),
   } as unknown as Yolo
 }
