@@ -101,6 +101,7 @@ const LEDGER_KIND_LABEL: Record<string, string> = {
   todo_postponed: '推迟',
   todo_updated: '更新',
   todo_remind_again: '再提醒',
+  todo_reopened: '重新打开',
   reminder_fired: '提醒',
   brief_generated: '简报',
   goal_progress: '目标',
@@ -109,6 +110,11 @@ const LEDGER_KIND_LABEL: Record<string, string> = {
   note: '记录',
   decision: '决策',
   milestone_reached: '里程碑',
+  attention_seen: '已查看',
+  attention_suppressed: '已忽略',
+  attention_feedback: '反馈',
+  action_denied: '未执行',
+  todo_consolidated: '合并',
 }
 
 interface Section {
@@ -470,6 +476,10 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
     }
     if (intent.type === 'expand_judgment') {
       setJudgmentExpanded(true)
+      return
+    }
+    if (intent.type === 'collapse_judgment') {
+      setJudgmentExpanded(false)
       return
     }
     if (intent.type === 'complete_todo') {
@@ -908,7 +918,9 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
                 <div style={{ marginTop: 8 }}>
                   {data.ledger.map((e) => (
                     <div key={e.id} className={`lg-row${e.kind === 'todo_completed' ? ' is-done' : ''}`}>
-                      {e.kind === 'todo_completed' && <IcCheck className="ic-ok" size={12} />}
+                      <span className="lg-status" aria-hidden="true">
+                        {e.kind === 'todo_completed' ? <IcCheck className="ic-ok" size={12} /> : null}
+                      </span>
                       <span className="lg-time">{fmtTime(e.occurred_at)}</span>
                       <span className="lg-type">{LEDGER_KIND_LABEL[e.kind] ?? e.kind}</span>
                       <span className="lg-sum" title={e.summary}>{e.summary}</span>
@@ -1096,13 +1108,19 @@ function TodoEditor({ draft, milestones, busy, confirming, onChange, onSave, onC
   return (
     <div className="row editing">
       <div className="edit-form" onKeyDown={onKey}>
-        <input
+        <textarea
           autoFocus
           className="ef-input ef-title"
           aria-label="任务标题"
+          rows={2}
           value={draft.title}
           onChange={(e) => { onChange({ ...draft, title: e.target.value }) }}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) onSave() }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+              e.preventDefault()
+              onSave()
+            }
+          }}
         />
         <input type="date" className="ef-input ef-date" aria-label="到期日" value={draft.due} onChange={(e) => { onChange({ ...draft, due: e.target.value }) }} />
         <select className="ef-sel" aria-label="优先级" value={draft.priority} onChange={(e) => { onChange({ ...draft, priority: e.target.value }) }}>
@@ -1211,7 +1229,7 @@ function MilestoneTrack({ milestones, renaming, busyKey, pop, onDot, onRenameSta
       <div className="goal-head">
         <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--y-text-3)' }}>里程碑</span>
       </div>
-      <div className="goal-track">
+      <div className={`goal-track${target && pop ? ' has-pop' : ''}`}>
         {milestones.map((m) => {
           const x = dotPos(m.target_date)
           return (
@@ -1228,7 +1246,7 @@ function MilestoneTrack({ milestones, renaming, busyKey, pop, onDot, onRenameSta
           )
         })}
         {target && pop && (
-          <div className="ms-pop" style={{ '--x': `${pop.x}%` } as React.CSSProperties}>
+          <div className="ms-pop" role="dialog" aria-label={`编辑里程碑：${target.title}`} style={{ '--x': `${pop.x}%` } as React.CSSProperties}>
             {renaming?.id === target.id ? (
               <input
                 autoFocus

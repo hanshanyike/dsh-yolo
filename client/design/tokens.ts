@@ -314,7 +314,7 @@ export const YOLO_CSS = `
 .yolo-scope .edit-form { flex: 1; display: flex; flex-wrap: wrap; gap: 7px; align-items: center; padding: 2px 0; }
 .yolo-scope .ef-input { height: 32px; padding: 0 10px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface); color: var(--y-text-1); font-size: 14px; outline: none; }
 .yolo-scope .ef-input:focus { border-color: var(--y-focus); }
-.yolo-scope .ef-title { flex: 1; min-width: 170px; }
+.yolo-scope .ef-title { flex: 1 0 100%; width: 100%; min-width: 0; height: auto; min-height: 58px; max-height: 160px; padding-block: 8px; line-height: 20px; resize: vertical; field-sizing: content; font-family: inherit; }
 .yolo-scope .ef-date { width: 116px; font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
 .yolo-scope .ef-sel { height: 32px; padding: 0 8px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface); color: var(--y-text-2); font-size: 12.5px; outline: none; cursor: pointer; }
 .yolo-scope .ef-btn { height: 28px; padding: 0 12px; font-size: 12.5px; }
@@ -341,6 +341,7 @@ export const YOLO_CSS = `
 .yolo-scope .goal-name-input { height: 30px; padding: 0 8px; border: 1px solid var(--y-focus); border-radius: var(--y-r-sm); background: var(--y-surface); color: var(--y-text-1); font-size: 14px; font-weight: 650; outline: none; width: 60%; }
 .yolo-scope .goal-pct { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 650; color: var(--y-accent-text); flex: none; }
 .yolo-scope .goal-track { position: relative; height: 4px; margin: 0 8px 46px; border-radius: 2px; background: var(--y-line-strong); }
+.yolo-scope .goal-track.has-pop { margin-bottom: 202px; }
 .yolo-scope .goal-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--y-accent); transition: width var(--y-dur-3) var(--y-ease-out); }
 .yolo-scope .ms-dot { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 9px; height: 9px; border-radius: 50%; background: var(--y-bg); border: 1.5px solid var(--y-line-strong); cursor: pointer; padding: 0; transition: transform var(--y-dur-1); }
 .yolo-scope .ms-dot:hover { transform: translate(-50%, -50%) scale(1.25); }
@@ -352,7 +353,7 @@ export const YOLO_CSS = `
 .yolo-scope .ms-dot:nth-child(even) .ms-label { top: 26px; }
 .yolo-scope .ms-label b { display: block; font-weight: 550; color: var(--y-text-2); max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
 .yolo-scope .ms-label i { font-style: normal; font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
-.yolo-scope .ms-pop { position: absolute; bottom: 16px; left: var(--x, 50%); transform: translateX(-50%); width: 188px; background: var(--y-surface); border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); box-shadow: var(--y-e1); padding: 8px; z-index: 10; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
+.yolo-scope .ms-pop { position: absolute; top: 50px; left: clamp(94px, var(--x, 50%), calc(100% - 94px)); transform: translateX(-50%); width: 188px; background: var(--y-surface); border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); box-shadow: var(--y-e1); padding: 8px; z-index: 10; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
 .yolo-scope .ms-pop input { width: 100%; height: 30px; padding: 0 9px; margin-bottom: 6px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface-2); color: var(--y-text-1); font-size: 12px; outline: none; }
 .yolo-scope .ms-pop input:focus { border-color: var(--y-focus); }
 .yolo-scope .ms-pop-row { display: flex; gap: 4px; }
@@ -361,17 +362,18 @@ export const YOLO_CSS = `
 .yolo-scope .ms-st.on { background: var(--y-accent-soft); color: var(--y-accent-text); }
 
 /* ledger */
-.yolo-scope .lg-row { display: flex; align-items: center; gap: 9px; height: 34px; border-bottom: 1px solid var(--y-line); font-size: 13.5px; }
+.yolo-scope .lg-row { display: grid; grid-template-areas: "status time type summary source"; grid-template-columns: 14px 46px 72px minmax(0, 1fr) minmax(0, 150px); align-items: center; column-gap: 9px; min-height: 34px; border-bottom: 1px solid var(--y-line); font-size: 13.5px; }
 .yolo-scope .lg-row:last-child { border-bottom: none; }
-.yolo-scope .lg-row .ic-ok { width: 13px; height: 13px; color: var(--y-ok); flex: none; }
-.yolo-scope .lg-time { width: 46px; flex: none; font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--y-text-3); }
-.yolo-scope .lg-type { width: 42px; flex: none; font-size: 12px; color: var(--y-text-2); }
-.yolo-scope .lg-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--y-text-1); }
+.yolo-scope .lg-status { grid-area: status; width: 14px; height: 14px; display: grid; place-items: center; }
+.yolo-scope .lg-row .ic-ok { width: 13px; height: 13px; color: var(--y-ok); }
+.yolo-scope .lg-time { grid-area: time; font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--y-text-3); }
+.yolo-scope .lg-type { grid-area: type; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--y-text-2); }
+.yolo-scope .lg-sum { grid-area: summary; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--y-text-1); }
 .yolo-scope .lg-row.is-done .lg-sum { color: var(--y-text-2); }
-.yolo-scope .lg-src { flex: none; display: flex; align-items: center; gap: 4px; max-width: 150px; font-size: 12px; color: var(--y-text-3); }
+.yolo-scope .lg-src { grid-area: source; min-width: 0; display: flex; align-items: center; gap: 4px; max-width: 150px; font-size: 12px; color: var(--y-text-3); }
 .yolo-scope .lg-src svg { width: 11px; height: 11px; flex: none; opacity: .7; }
 .yolo-scope .lg-src span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.yolo-scope .lg-src-btn { flex: none; display: inline-flex; align-items: center; gap: 3px; max-width: 150px; border: none; background: none; padding: 1px 4px; margin-right: -4px; border-radius: 4px; font-size: 12px; color: var(--y-text-3); cursor: pointer; transition: all var(--y-dur-1); }
+.yolo-scope .lg-src-btn { grid-area: source; min-width: 0; display: inline-flex; align-items: center; gap: 3px; max-width: 150px; border: none; background: none; padding: 1px 4px; margin-right: -4px; border-radius: 4px; font-size: 12px; color: var(--y-text-3); cursor: pointer; transition: all var(--y-dur-1); }
 .yolo-scope .lg-src-btn:hover { color: var(--y-accent); background: var(--y-accent-soft); }
 .yolo-scope .lg-src-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -579,6 +581,8 @@ export const YOLO_CSS = `
 .yolo-scope.compact .ytab { flex: 1 1 0; min-width: 0; justify-content: center; height: 44px; padding: 0 5px; gap: 5px; }
 .yolo-scope.compact .ytab.on::after { left: 8px; right: 8px; }
 .yolo-scope.compact .list-tools { padding-inline: 12px; }
+.yolo-scope.compact .lg-row { grid-template-areas: "status time type summary" ". . . source"; grid-template-columns: 12px 40px 64px minmax(0, 1fr); row-gap: 3px; padding: 7px 0; }
+.yolo-scope.compact .lg-src, .yolo-scope.compact .lg-src-btn { max-width: 100%; justify-self: start; }
 
 /* reduced motion — everything degrades to instant swaps (6.3);
    the ROOT element itself is included so the panel entrance also stops */

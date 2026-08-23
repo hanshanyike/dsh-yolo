@@ -23,7 +23,8 @@
 | V13 正式响应式形态 | `<480px` 仅今天/即将/已完成；辅助视图进 More；中等宽度单列对话；`>=960px` 可并列 340px 对话 | `client/panel/{YoloPanel,ViewTabs,MoreMenu}.tsx` · `client/design/tokens.ts` |
 | V14 跨工作区安全 | 每个动作显式携带行 `scope_cwd`；重复 todo id 不再通过全局 id map 猜作用域；锚定对话 GET/POST 同 scope 且服务端白名单校验 | `client/panel/{KanbanView,ChatPane}.tsx` · `src/ui/{actions,session,workspace-scope}.ts` |
 | V15 终态分离 | `cancelled` 不计入已完成；已完成/已取消二级切换；两类都可重新打开并恢复 FTS/审计 | `src/shared/filters.ts` · `src/storage/repository.ts` · `client/panel/KanbanView.tsx` |
-| V16 回归与真机门禁 | Node 22 check/unit/build；API/UI E2E；W1–W16；真实常驻对话创建并完成事项；通过后才推送 | `tests/**` · `docs/manual-validation-2026-08-23.md` |
+| V16 回归与真机门禁 | 系统 Node 24 check/unit/build；API/UI E2E；W1–W16；真实常驻对话创建并完成事项；通过后才推送 | `tests/**` · `docs/manual-validation-2026-08-23.md` |
+| V17 真机体验收敛 | 修复对话轮询闪烁、台账/里程碑编辑堆叠；即将事项长标题改为可换行编辑；助手依据可展开也可收起 | `client/panel/**` · `client/design/tokens.ts` · `tests/e2e/ui/**` |
 
 ## 二、明确说明
 

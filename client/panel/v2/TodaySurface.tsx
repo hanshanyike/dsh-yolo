@@ -17,6 +17,7 @@ export type TodaySurfaceIntent =
   | { type: 'mark_judgment_seen'; judgmentId: string; scopeCwd: string; reasonVersion: string; evidenceFingerprint: string }
   | { type: 'judgment_action'; action: JudgmentActionIntent; todo: YoloTodoRowV2; scopeCwd: string; reasonVersion: string; evidenceFingerprint: string }
   | { type: 'expand_judgment' }
+  | { type: 'collapse_judgment' }
   | { type: 'suppress_judgment'; judgmentId: string; scopeCwd: string; reasonVersion: string; evidenceFingerprint: string }
   | { type: 'feedback_judgment'; judgmentId: string; scopeCwd: string; reasonVersion: string; evidenceFingerprint: string }
   | { type: 'complete_todo'; todo: YoloTodoRowV2; scopeCwd: string }
@@ -167,6 +168,7 @@ export function TodaySurface({
             })
           }}
           onExpand={() => { onIntent({ type: 'expand_judgment' }) }}
+          onCollapse={judgmentExpanded ? () => { onIntent({ type: 'collapse_judgment' }) } : undefined}
           onIgnore={() => {
             onIntent({
               type: 'suppress_judgment', judgmentId: judgment.id, scopeCwd: judgmentScopeCwd,

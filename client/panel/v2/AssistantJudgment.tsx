@@ -11,6 +11,7 @@ export interface AssistantJudgmentProps {
   partialData?: boolean
   onIntent: (intent: JudgmentActionIntent) => void
   onExpand?: () => void
+  onCollapse?: () => void
   onIgnore?: () => void
   onFeedback?: (reason?: JudgmentFeedbackReason) => void
   onOpenSource?: (source: JudgmentSource) => void
@@ -44,6 +45,7 @@ export function AssistantJudgment({
   partialData = false,
   onIntent,
   onExpand,
+  onCollapse,
   onIgnore,
   onFeedback,
   onOpenSource,
@@ -103,6 +105,7 @@ export function AssistantJudgment({
 
       <div className="v2-judgment-secondary">
         {compact && onExpand ? <button type="button" onClick={onExpand}>展开依据</button> : null}
+        {!compact && onCollapse ? <button type="button" onClick={onCollapse}>收起依据</button> : null}
         {!compact && onIgnore ? <button type="button" disabled={busy} onClick={onIgnore}>暂时忽略</button> : null}
         {!compact && onFeedback ? <button type="button" disabled={busy} onClick={() => { onFeedback() }}>原因不对</button> : null}
       </div>

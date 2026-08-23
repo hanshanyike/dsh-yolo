@@ -130,6 +130,11 @@ test('W11: 助手判断首读为 full，复读 compact，依据变化后重新 f
   await expect(compact.getByRole('button', { name: '处理' })).toBeVisible()
   await expect(compact.getByRole('button', { name: '展开依据' })).toBeVisible()
   await expect(compact.getByRole('heading', { name: '为什么现在' })).toHaveCount(0)
+  await compact.getByRole('button', { name: '展开依据' }).click()
+  const expanded = page.locator('.v2-judgment--full')
+  await expect(expanded.getByRole('heading', { name: '为什么现在' })).toBeVisible()
+  await expanded.getByRole('button', { name: '收起依据' }).click()
+  await expect(page.locator('.v2-judgment--compact').getByRole('button', { name: '展开依据' })).toBeVisible()
 
   // Trust state is bound to the immutable evidence fingerprint. A schedule
   // change produces new evidence, so the user must receive the full judgment
@@ -178,6 +183,46 @@ test('已完成与已取消严格分离，两类终态事项都可以重新打�
     },
     { label: 'completed and cancelled fixtures to reopen' },
   )
+})
+
+test('即将事项支持长标题编辑，台账动作类型与摘要保持独立列', async ({ page }) => {
+  const title = uid('和研发确认新版助手看板的验收范围与交付时间')
+  const item = await fx.todo(title, { due: localDateOffset(3) })
+  await api.action({ action: 'complete', kind: 'todo', id: item.id })
+  await api.action({ action: 'reopen', kind: 'todo', id: item.id })
+
+  await openYoloPanel(page)
+  await page.getByRole('tab', { name: /即将/ }).click()
+  const row = page.getByRole('listitem', { name: `任务：${title}` })
+  await row.getByRole('button', { name: '编辑' }).click()
+
+  const editor = page.getByRole('textbox', { name: '任务标题' })
+  await expect(editor).toHaveJSProperty('tagName', 'TEXTAREA')
+  const longTitle = `${title}，同时补充灰度计划、回滚负责人、验收证据和最终同步渠道`
+  await editor.fill(longTitle)
+  const editorBox = await editor.boundingBox()
+  const formBox = await page.locator('.edit-form').boundingBox()
+  expect(editorBox).not.toBeNull()
+  expect(formBox).not.toBeNull()
+  expect(editorBox!.width).toBeGreaterThan(formBox!.width * 0.9)
+  expect(await editor.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+
+  await page.getByRole('tab', { name: /台账/ }).click()
+  const reopened = page.locator('.lg-row').filter({
+    has: page.locator('.lg-type', { hasText: '重新打开' }),
+    hasText: title,
+  }).first()
+  await expect(reopened).toBeVisible()
+  const columns = await reopened.evaluate((element) => {
+    const type = element.querySelector('.lg-type')!.getBoundingClientRect()
+    const summary = element.querySelector('.lg-sum')!.getBoundingClientRect()
+    return {
+      overlap: type.right > summary.left,
+      overflow: element.scrollWidth > element.clientWidth + 1,
+    }
+  })
+  expect(columns).toEqual({ overlap: false, overflow: false })
 })
 
 test('约 340px 紧凑模式保留三主视图、More 辅助入口和完整 ARIA 关系', async ({ page }) => {
