@@ -79,8 +79,7 @@ test('面板渲染：合并事件进入今日台账（真机表面）', async ({
   await api.action({ action: 'consolidate', kind: 'todo', id: source.id, into_id: target.id })
 
   await openYoloPanel(page)
-  const head = page.locator('.fold-head', { hasText: '今日台账' })
-  await head.click()
-  const fold = page.locator('.fold.open')
-  await expect(fold).toContainText('合并：')
+  // v5: the day ledger is its own face (台账 tab), not a bottom fold.
+  await page.locator('.y-tabs .ytab[title="今日台账"]').click()
+  await expect(page.locator('.yolo-scope')).toContainText('合并：')
 })

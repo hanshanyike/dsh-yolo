@@ -46,8 +46,9 @@ test('未处理提醒驱动角标与通知卡，处理后归零（TB-3~TB-6）',
   await expect(card).toContainText('到期提醒')
   await expect(card).toContainText(note)
 
-  // the sidebar badge follows to baseline+1 (5s poll while the panel is open)
-  await expect(page.locator(`[aria-label="${baseline + 1} 条未处理提醒"]`)).toBeVisible({ timeout: 12_000 })
+  // the sidebar badge follows to baseline+1. The badge polls on its own 30s
+  // cadence (v0.3.3 removed the extra 5s-while-open poll), so allow 45s.
+  await expect(page.locator(`[aria-label="${baseline + 1} 条未处理提醒"]`)).toBeVisible({ timeout: 45_000 })
 
   // 「知道了」dismisses the card and zeroes the badge back to baseline
   await card.locator('button', { hasText: '知道了' }).click()

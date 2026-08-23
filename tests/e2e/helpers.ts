@@ -55,11 +55,11 @@ export async function openYoloPanel(page: Page): Promise<void> {
   // re-drives that fetch — exactly what a real user does when the board looks
   // empty — so row assertions run against real data, not a stuck skeleton.
   const capture = page.locator('.capture .cap-input')
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 2; i++) {
     if (await capture.isVisible().catch(() => false)) break
     const refresh = page.locator('button[aria-label="立即刷新"]')
     if (await refresh.isVisible().catch(() => false)) await refresh.click()
-    await capture.waitFor({ state: 'visible', timeout: 8_000 }).catch(() => {})
+    await capture.waitFor({ state: 'visible', timeout: 6_000 }).catch(() => {})
   }
   await expect(capture).toBeVisible()
 }

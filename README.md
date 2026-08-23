@@ -38,16 +38,18 @@ cd dsh-yolo
 
 pnpm install          # 安装依赖（better-sqlite3 原生绑定已含）
 pnpm build            # 构建 host 插件 + browser client 到 dist/
-pnpm dsh plugin add . --profile web   # 一次性：把本插件链接进 dsh 的 web profile（含 bundle patch）
-pnpm dsh web --profile web --no-open --port 4080   # 启动 dsh web → http://127.0.0.1:4080
+node scripts/clean-test-data.mjs   # 开发前清理上轮 E2E 留下的 [E2E] 测试夹具（防载荷膨胀）
+pnpm dsh plugin add . --profile web   # 一次性：把本插件按 dsh 标准方式链接进 web profile
+pnpm dsh web --no-open --port 4080    # 启动 dsh 宿主 → http://127.0.0.1:4080
 ```
 
-`dsh plugin add .` 用的是 dsh 生态的标准安装方式（`--profile web` 把插件作为 bundle 挂进 web profile；
-`dsh.bundle.patch` 指向 `cordis.patch.yml` 自动注册全部 host 侧插件行）。改完代码重跑 `pnpm build`，
-刷新浏览器即可拿到新版本，无需重启宿主（bundle 按文件名静态服务）。
+`dsh plugin add .` 用 dsh 生态的标准安装方式（把插件作为 bundle 挂进 `web` profile，`dsh.bundle.patch`
+指向 `cordis.patch.yml` 自动注册全部 host 侧插件行）。`dsh web`（`web` 已隐含 `--profile web`）用**已安装的
+dsh** 直接启动，与宿主环境一致（默认端口 **3080**；本机被宿主占用，故开发时用 `--port 4080`）。
+改完代码重跑 `pnpm build`，刷新浏览器即可拿到新版本，无需重启宿主。
 
 打开 **http://127.0.0.1:4080**，选好工作区开始对话。YOLO 已经在看着了：提到截止时间、设定目标，或说「记住这个」——然后打开左侧边栏底部的 **YOLO 面板**，就能看到时间线、任务板与目标进度。
-> 插件更新（`cordis.patch.yml` 变更）后重跑 `pnpm dsh plugin add . --profile web` 以重新 reconcile bundle。
+> 插件更新（`cordis.patch.yml` 变更）后重跑 `pnpm dsh plugin add . --profile web` 重新 reconcile bundle。
 
 ### 十秒看懂它怎么工作
 

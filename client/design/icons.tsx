@@ -30,6 +30,8 @@ function shell(paths: string): (props: IconProps) => JSX.Element {
 
 export const IcCheck = shell('<path d="M3.5 8.5l3 3 6-7"/>')
 export const IcClock = shell('<circle cx="8" cy="8" r="5.5"/><path d="M8 5.5V8l2 1.5"/>')
+export const IcCalendar = shell('<rect x="2.5" y="3.5" width="11" height="10" rx="2"/><path d="M2.5 6.5h11M5.5 2.5v2M10.5 2.5v2"/>')
+export const IcLedger = shell('<path d="M4 2.5h8.5v11H4z"/><path d="M6 5.5h4.5M6 8h4.5M6 10.5h3"/>')
 export const IcPlusDay = shell('<path d="M8 3.5v9M3.5 8h9"/><circle cx="12.5" cy="3.5" r="1.5" fill="currentColor" stroke="none"/>')
 export const IcChat = shell('<rect x="3" y="4" width="10" height="7.5" rx="2"/><path d="M6 11.5L5 14l3-2.5"/>')
 export const IcDots = shell('<circle cx="4" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="8" r="1.2" fill="currentColor" stroke="none"/>')

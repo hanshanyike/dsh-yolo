@@ -196,7 +196,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
           </div>
         </div>
       </div>
-      <footer className="capture">
+      <footer className="capture capture--foot">
         {input}
         {hint}
       </footer>

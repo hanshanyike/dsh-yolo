@@ -41,9 +41,9 @@ dsh-yolo/
     ├── product-design.html 产品设计精装版：含可交互面板原型（单文件）
     ├── frontend-redesign.md 前端视觉重设计（Mono 设计系统）：规范 · 组件 · 动效 · 验收（中文）
     ├── frontend-redesign-v1-trackhall.md Mono 设计系统 · v1 trackhall 层（中文）
-    ├── frontend-redesign-v4-today.md 前端重设计 · v4「安静的一天」信息架构提案（中文，待评审）
+    ├── frontend-redesign-v5-native.md 前端重设计 · v5「宿主原生」提案：与 dsh 宿主 UI 协作（中文，待评审）
     ├── frontend-redesign-prototype.html Mono 设计系统可交互原型（单文件）
-    ├── frontend-redesign-v4-today.html v4「安静的一天」可交互原型（单文件，导航分面）
+    ├── frontend-redesign-v5-native.html v5「宿主原生」可交互原型（单文件，横向标签分面）
     ├── design-m8-organizer.md 有状态计划设计（M8 · 已交付）（中文）
     ├── design-m9-recall-quality.md 召回质量与机制加固设计（M9）（中文）
     ├── release.md         发布流程（英文）

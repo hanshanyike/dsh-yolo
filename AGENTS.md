@@ -39,11 +39,17 @@ pnpm install            # 安装依赖
 pnpm check              # tsc --noEmit 类型检查（改代码后必跑）
 pnpm test:run           # vitest 单测（不依赖 host）
 pnpm build              # 产物到 dist/（host 从 dist 加载插件）
-pnpm dsh plugin add . --profile web   # 一次性：把插件链接进 dsh web profile
-pnpm dsh web --profile web --no-open --port 4080   # 启动宿主（标准 dsh 方式）
+node scripts/clean-test-data.mjs   # 开发前清理 [E2E] 测试夹具（防脏数据拖慢 E2E）
+pnpm dsh plugin add . --profile web   # 一次性：把插件链接进 dsh web profile（标准 dsh 方式）
+pnpm dsh web --no-open --port 4080    # 启动宿主（标准 dsh；`web` 已隐含 --profile web，默认端口 3080，本机被占故用 4080）
 node scripts/e2e.mjs    # E2E：保证 host 起来后跑 Playwright 全套
 node scripts/e2e.mjs --spec panel   # 只跑某个 spec（tests/e2e/<spec>.spec.ts）
 ```
+
+> **启动与宿主保持一致**：用**已安装的 `dsh`**（全局 CLI）执行 `dsh plugin add . --profile web` + `dsh web`，
+> 不要自建 `dev.mjs` / 本地 host checkout（那会因本地 checkout 的宿主凭证格式与全局不一致而要求扁平化凭证）。
+> 开发时用 `--port 4080`（3080 被本机宿主占用），默认端口 3080。
+> **开发前先跑 `node scripts/clean-test-data.mjs`**，清掉上一轮 E2E 留下的 `[E2E]` 夹具，避免看板载荷膨胀拖慢测试。
 
 ## 记忆 / 提醒 / 看板的核心机制
 

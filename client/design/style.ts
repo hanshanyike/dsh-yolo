@@ -1,7 +1,9 @@
-// Mono design-system runtime (frontend-redesign.md 3.6 + ch.7) — injects the
+// YOLO design-system runtime (frontend-redesign-v5-native.md) — injects the
 // token stylesheet once per document and resolves the panel theme from the
-// host. Three-layer variable architecture: L1 host vars → L2 `.yolo-scope`
-// semantic tokens → L3 components consume only `var(--y-*)`.
+// host. The tokens themselves are bridged straight to the host `--dsw-*`
+// aliases (tokens.ts), so the theme flips automatically with the host; this
+// module only resolves the `data-y-theme` attribute used for native control
+// color-scheme (date inputs) and pinned by the E2E theme spec.
 
 import { YOLO_CSS } from './tokens.ts'
 
@@ -39,8 +41,12 @@ function luminance(color: string): number | null {
 }
 
 /**
- * Theme resolution (ch.7): read the host's `--background`; luminance < 0.5 →
- * dark. Falls back to prefers-color-scheme when the host var is absent.
+ * Theme resolution — three signals, most specific first:
+ * 1. the host `--background` variable's luminance (the contract pinned by the
+ *    E2E theme spec: the host's light/dark background drives the panel);
+ * 2. the v5 host-native marker `body[data-ds-dark-theme]` (ui-theme flips the
+ *    `--dsw-*` tokens with this attribute; the panel follows it);
+ * 3. `prefers-color-scheme` as the final fallback.
  */
 export function detectYoloTheme(): 'dark' | 'light' {
   try {
@@ -51,6 +57,11 @@ export function detectYoloTheme(): 'dark' | 'light' {
     }
   } catch {
     // non-browser — caller decides
+  }
+  try {
+    if (typeof document !== 'undefined' && document.body?.hasAttribute('data-ds-dark-theme')) return 'dark'
+  } catch {
+    // body not mounted yet — fall through
   }
   if (typeof window !== 'undefined' && window.matchMedia) {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'

@@ -1,9 +1,11 @@
-// YOLO kanban view — Mono design system v2.1 (frontend-redesign.md ch.4-5).
-// Sections follow 4.2 top-to-bottom: toolbar (presets · range chip · focus
-// capsules · filter menu) → notification cards → task sections (逾期/今日/
-// 未来7天/滞留, de-carded hairline rows) → folds (goals & milestones, day
-// ledger) → quick capture. All mutations go through POST /yolo/actions so a
-// click and a chat reply produce identical transitions + audit events.
+// YOLO kanban faces — v5「宿主原生」drawer (frontend-redesign-v5-native.md §四).
+// The panel is a drawer from the host sidebar's right edge; its face switching
+// is a horizontal tab bar owned by the shell (YoloPanel). This component
+// renders the ACTIVE face (今日 / 即将 / 已完成 / 目标 / 台账) inside one
+// independently-scrolling body. All filtering/bucketing stays in the shared
+// pure functions (src/shared/filters.ts); every mutation goes through
+// POST /yolo/actions so a click and a chat reply produce identical transitions
+// + audit events.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData, YoloMilestoneRow, YoloTodoRow } from '../../src/shared/dashboard.ts'
@@ -13,33 +15,36 @@ import {
   dueBucket,
   focusCounts,
   hasDetailFilter,
-  matchRangePreset,
-  rangeLabel,
-  rangeOfPreset,
-  sortForKanban,
   partitionFocusRows,
+  sortForKanban,
   type FocusBucket,
   type KanbanFilter,
-  type PresetTab,
-  type RangePresetKind,
 } from '../../src/shared/filters.ts'
-import { DEFAULT_FILTER } from '../../src/shared/filters.ts'
 import { localDateStr } from '../../src/shared/text.ts'
 import {
-  IcBell, IcChat, IcCheck, IcChevron, IcClose, IcDots, IcFlag, IcFilter, IcPin, IcPlusDay,
+  IcBell, IcChat, IcCheck, IcChevron, IcDots, IcFlag, IcPin, IcPlusDay,
 } from '../design/icons.tsx'
 import type { ChatAnchor } from './ChatPane.tsx'
-import { readPanelState, writePanelState } from './state.ts'
+import { CaptureBar } from './CaptureBar.tsx'
+import { DayHero } from './DayHero.tsx'
+import type { ViewKey } from './ViewTabs.tsx'
 
 export interface KanbanViewProps {
   data: YoloDashboardData
   refresh: () => Promise<void>
+  /** The persisted kanban filter (owned by the shell). */
+  filter: KanbanFilter
+  patchFilter: (patch: Partial<KanbanFilter>) => void
+  /** Active horizontal view tab. */
+  view: ViewKey
+  /** Switch the view (e.g. quick-add lands on 今日). */
+  onViewChange: (view: ViewKey) => void
   /** Open the side chat anchored to a card (聊一聊). */
   onOpenChat: (anchor: ChatAnchor) => void
   /** Jump to a dsh session (ledger source badges); optional. */
   openSession?: (sessionId: string) => void
-  /** Increments when polled data actually changed — replays the sweep line. */
-  sweepTick?: number
+  /** Increments when the header bell jumps to today's notification cards. */
+  notifFocusTick?: number
 }
 
 interface EditorDraft {
@@ -54,12 +59,6 @@ const DAY_MS = 86_400_000
 
 /** Notification cards preview before a 查看全部 inbox fold (5.3, P0-1). */
 const NOTIF_PREVIEW = 4
-
-const PRESETS: { key: PresetTab; label: string }[] = [
-  { key: 'today', label: '今日' },
-  { key: 'all', label: '全部' },
-  { key: 'done', label: '已完成' },
-]
 
 const FOCUS_LABEL: Record<FocusBucket, string> = {
   overdue: '逾期',
@@ -86,6 +85,35 @@ const LEDGER_KIND_LABEL: Record<string, string> = {
   milestone_reached: '里程碑',
 }
 
+interface Section {
+  key: string
+  label: string
+  danger: boolean
+  accent: boolean
+  rows: YoloTodoRow[]
+}
+
+interface Buckets {
+  overdue: YoloTodoRow[]
+  today: YoloTodoRow[]
+  week: YoloTodoRow[]
+  stale: YoloTodoRow[]
+}
+
+/** Bucket open rows by due date; stale rows always leave for their own bucket
+ *  (mirrors the v2 board's section partition — undated rows ride with week). */
+function partitionRows(rows: readonly YoloTodoRow[]): Buckets {
+  const out: Buckets = { overdue: [], today: [], week: [], stale: [] }
+  for (const t of rows) {
+    if (t.stale) { out.stale.push(t); continue }
+    const b = dueBucket(t)
+    if (b === 'overdue') out.overdue.push(t)
+    else if (b === 'today') out.today.push(t)
+    else out.week.push(t)
+  }
+  return out
+}
+
 function fmtTime(ms: number): string {
   if (!ms) return ''
   const d = new Date(ms)
@@ -93,8 +121,7 @@ function fmtTime(ms: number): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-/** Relative "due" label for a reminder card header (5.3): how overdue or
- *  how far out it is, instead of the card's creation time. */
+/** Relative "due" label for a reminder card header (5.3). */
 function dueMomentLabel(iso: string): string {
   const day = iso.slice(0, 10)
   const today = localDateStr()
@@ -171,39 +198,31 @@ function dotPos(target: string | null | undefined): number {
   return Math.max(4, Math.min(96, 50 + (diff / 90) * 46))
 }
 
-interface Section {
-  key: string
-  label: string
-  danger: boolean
-  rows: YoloTodoRow[]
+function notifTypeLabel(kind: string, title: string): string {
+  if (kind === 'reminder') return '到期提醒'
+  if (kind === 'brief') return title.startsWith('☀') ? '早报' : title.startsWith('🌙') ? '晚报' : '简报'
+  return '通知'
 }
 
-export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick = 0 }: KanbanViewProps): JSX.Element {
-  const initial = useMemo(() => readPanelState().filter, [])
-  const [filter, setFilter] = useState<KanbanFilter>(initial)
-  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
+const noop = (): void => {}
+
+export function KanbanView({ data, refresh, filter, patchFilter, view, onViewChange, onOpenChat, openSession, notifFocusTick = 0 }: KanbanViewProps): JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [completing, setCompleting] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<{ text: string; undo?: YoloTodoRow } | null>(null)
   const [editor, setEditor] = useState<EditorDraft | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const [quickAdd, setQuickAdd] = useState('')
   const [quickBusy, setQuickBusy] = useState(false)
-  const [planOpen, setPlanOpen] = useState(false)
-  const [ledgerOpen, setLedgerOpen] = useState(false)
+  const [notifShowAll, setNotifShowAll] = useState(false)
   const [foldedOpen, setFoldedOpen] = useState(false)
   const [renameDraft, setRenameDraft] = useState<{ kind: 'goal' | 'milestone'; id: string; title: string } | null>(null)
   const [msPop, setMsPop] = useState<{ id: string; x: number } | null>(null)
-  // v0.3.2: notification inbox — show the first N, a 查看全部 expands the rest.
-  const [notifShowAll, setNotifShowAll] = useState(false)
-  // v0.3.2: completion/处理 animations — rows/cards retire with a height
-  // collapse before being removed, so nothing "jumps" out of the board.
+  // v0.3.2: completion/处理 animations — rows retire with a height collapse
+  // before being removed, so nothing "jumps" out of the board.
   const [retiring, setRetiring] = useState<YoloTodoRow[]>([])
-  const fltBtnRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => { writePanelState({ filter }) }, [filter])
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const notifRef = useRef<HTMLDivElement>(null)
 
   // Toast auto-retire (5.1): 2.4s; completion toasts hold the 4s undo window (5.4).
   useEffect(() => {
@@ -211,6 +230,14 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
     const t = window.setTimeout(() => { setToast(null) }, toast.undo ? 4_000 : 2_400)
     return () => { window.clearTimeout(t) }
   }, [toast])
+
+  // Each face scrolls independently: switching tabs starts at the top.
+  useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }) }, [view])
+
+  // The header bell jumps to today's notification cards.
+  useEffect(() => {
+    if (notifFocusTick > 0 && view === 'today') notifRef.current?.scrollIntoView({ block: 'start' })
+  }, [notifFocusTick, view])
 
   // Map every board row to its owning workspace cwd so an action on an
   // all-workspaces row routes to that scope (the board is always scope=all).
@@ -256,7 +283,6 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
     const ok = await act(t.id, { action: 'complete', kind: 'todo', id: t.id })
     setCompleting((s) => { const n = new Set(s); n.delete(t.id); return n })
     if (ok) {
-      // keep a snapshot so the board can animate the collapse before it unmounts
       const snapshot = { ...t }
       setRetiring((r) => [...r, snapshot])
       window.setTimeout(() => { setRetiring((r) => r.filter((x) => x.id !== snapshot.id)) }, 520)
@@ -275,64 +301,74 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
   }, [act])
 
   const counts = useMemo(() => focusCounts(data.todos), [data.todos])
-  const visible = useMemo(() => sortForKanban(applyKanbanFilter(data.todos, filter)), [data.todos, filter])
-  // retired rows being animated out — keep them in their section while collapsing
-  const retiringToShow = useMemo(
-    () => retiring.filter((t) => !visible.some((v) => v.id === t.id)),
-    [retiring, visible],
-  )
-  // R9: cap the default view to the top-N focus rows; the rest fold away so a
-  // busy board opens quiet. Only applies to the unfiltered default view —
-  // engaging any detail filter (or the 'done' preset) shows everything.
-  const defaultFilterOnly = !hasDetailFilter(filter) && filter.preset !== 'done'
-  const { focus, folded } = useMemo(
-    () => (defaultFilterOnly ? partitionFocusRows(visible, data.focusDefaultCount ?? 0) : { focus: visible, folded: [] }),
-    [visible, defaultFilterOnly, data.focusDefaultCount],
-  )
   const milestoneTitles = useMemo(() => data.milestones.map((m) => m.title), [data.milestones])
+
+  // Per-face filtered sets — the shared filter functions stay the source of
+  // truth: the face only picks the preset the tab maps to.
+  const visibleToday = useMemo(
+    () => sortForKanban(applyKanbanFilter(data.todos, { ...filter, preset: 'today' })),
+    [data.todos, filter],
+  )
+  const visibleUpcoming = useMemo(
+    () => sortForKanban(applyKanbanFilter(data.todos, { ...filter, preset: 'all' })),
+    [data.todos, filter],
+  )
+  const visibleDone = useMemo(
+    () => sortForKanban(applyKanbanFilter(data.todos, { ...filter, preset: 'done' })),
+    [data.todos, filter],
+  )
+
+  // R9: cap the default today face to the top-N focus rows; the rest fold away
+  // so a busy board opens quiet. Only when no detail filter is engaged.
+  const defaultFilterOnly = view === 'today' && !hasDetailFilter(filter)
+  const { focus, folded } = useMemo(
+    () => (defaultFilterOnly ? partitionFocusRows(visibleToday, data.focusDefaultCount ?? 0) : { focus: visibleToday, folded: [] }),
+    [visibleToday, defaultFilterOnly, data.focusDefaultCount],
+  )
+
+  const retiringToShowToday = useMemo(
+    () => retiring.filter((t) => !visibleToday.some((v) => v.id === t.id)),
+    [retiring, visibleToday],
+  )
+  const retiringToShowUpcoming = useMemo(
+    () => retiring.filter((t) => !visibleUpcoming.some((v) => v.id === t.id)),
+    [retiring, visibleUpcoming],
+  )
+
+  const todaySections = useMemo<Section[]>(() => {
+    const p = partitionRows(focus)
+    for (const t of retiringToShowToday) {
+      if (t.stale) p.stale.push(t)
+      else if (dueBucket(t) === 'overdue') p.overdue.push(t)
+      else if (dueBucket(t) === 'today') p.today.push(t)
+      else p.week.push(t)
+    }
+    return [
+      { key: 'overdue', label: '已逾期', danger: true, accent: false, rows: p.overdue },
+      { key: 'today', label: '今天', danger: false, accent: true, rows: p.today },
+    ].filter((s) => s.rows.length > 0)
+  }, [focus, retiringToShowToday])
+
+  const upcomingSections = useMemo<Section[]>(() => {
+    const p = partitionRows(visibleUpcoming)
+    for (const t of retiringToShowUpcoming) {
+      if (t.stale) p.stale.push(t)
+      else if (dueBucket(t) === 'week') p.week.push(t)
+      else if (dueBucket(t) === 'overdue' || dueBucket(t) === 'today') { /* stays in today's face */ }
+      else p.week.push(t)
+    }
+    return [
+      { key: 'week', label: '未来 7 天', danger: false, accent: false, rows: p.week },
+      { key: 'stale', label: '滞留', danger: false, accent: false, rows: p.stale },
+    ].filter((s) => s.rows.length > 0)
+  }, [visibleUpcoming, retiringToShowUpcoming])
+
   const openNotifications = data.notifications.filter((n) => !n.handled)
   const activeGoals = data.goals.filter((g) => g.status === 'active')
   const openMilestones = data.milestones.filter((m) => m.status === 'planned' || m.status === 'active')
+  const avgGoalPct = Math.round(activeGoals.reduce((a, g) => a + g.progress, 0) / Math.max(activeGoals.length, 1))
 
-  // Task sections (4.2④): 逾期 → 今日 → 未来7天 → 滞留; stale rows leave the
-  // due sections for their own. Undated/far rows ride with 未来7天.
-  const sections = useMemo<Section[]>(() => {
-    if (filter.preset === 'done') {
-      return [{ key: 'done', label: '已完成', danger: false, rows: visible }]
-    }
-    const overdue: YoloTodoRow[] = []
-    const today: YoloTodoRow[] = []
-    const week: YoloTodoRow[] = []
-    const stale: YoloTodoRow[] = []
-    for (const t of focus) {
-      if (t.stale) { stale.push(t); continue }
-      const b = dueBucket(t)
-      if (b === 'overdue') overdue.push(t)
-      else if (b === 'today') today.push(t)
-      else week.push(t)
-    }
-    // v0.3.2: collapsing rows re-join their original section so the retire
-    // animation plays in place instead of the row vanishing out of the board.
-    for (const t of retiringToShow) {
-      if (t.stale) stale.push(t)
-      else {
-        const b = dueBucket(t)
-        if (b === 'overdue') overdue.push(t)
-        else if (b === 'today') today.push(t)
-        else week.push(t)
-      }
-    }
-    return [
-      { key: 'overdue', label: '逾期', danger: true, rows: overdue },
-      { key: 'today', label: '今日', danger: false, rows: today },
-      { key: 'week', label: '未来 7 天', danger: false, rows: week },
-      { key: 'stale', label: '滞留', danger: false, rows: stale },
-    ].filter((s) => s.rows.length > 0)
-  }, [focus, filter.preset, retiringToShow])
-
-  const patchFilter = (patch: Partial<KanbanFilter>): void => {
-    setFilter((f) => ({ ...f, ...patch }))
-  }
+  const patch = useCallback((p: Partial<KanbanFilter>) => { patchFilter(p) }, [patchFilter])
 
   const saveEditor = async (): Promise<void> => {
     if (!editor) return
@@ -348,137 +384,138 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
     if (ok) setEditor(null)
   }
 
-  const sendQuickAdd = async (): Promise<void> => {
-    const text = quickAdd.trim()
-    if (!text || quickBusy) return
+  const sendQuickAdd = useCallback(async (text: string): Promise<boolean> => {
+    if (quickBusy) return false
     setQuickBusy(true)
     const ok = await act('quick-add', { action: 'quick_add', kind: 'todo', title: text })
     if (ok) {
-      setQuickAdd('')
       setToast({ text: '已记下 · 今日到期' })
+      onViewChange('today')
     }
     setQuickBusy(false)
-  }
+    return ok
+  }, [act, quickBusy, onViewChange])
 
-  // Filter menu: outside-pointer + Esc close (Esc must not unwind the panel).
-  useEffect(() => {
-    if (!filterMenuOpen) return
-    const onPointer = (e: PointerEvent): void => {
-      const t = e.target as Node | null
-      if (!t) return
-      if (menuRef.current?.contains(t)) return
-      if (fltBtnRef.current?.contains(t)) return
-      setFilterMenuOpen(false)
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return
-      e.stopPropagation()
-      setFilterMenuOpen(false)
-    }
-    document.addEventListener('pointerdown', onPointer)
-    document.addEventListener('keydown', onKey, true)
-    return () => {
-      document.removeEventListener('pointerdown', onPointer)
-      document.removeEventListener('keydown', onKey, true)
-    }
-  }, [filterMenuOpen])
+  const rowActions = (t: YoloTodoRow): { onComplete: () => void; onAct: (action: string, extra?: { due_at?: string }) => void; onEdit: () => void; onChat: () => void } => ({
+    onComplete: () => { void completeTodo(t) },
+    onAct: (action, extra) => { void act(t.id, { action, kind: 'todo', id: t.id, ...extra }) },
+    onEdit: () => { setEditor({ id: t.id, title: t.title, due: dayOf(t.due_at), priority: t.priority ?? '', milestoneTitle: t.milestone_title ?? '' }) },
+    onChat: () => { onOpenChat({ title: t.title, detail: t.due_at ? `到期 ${t.due_at}` : null }) },
+  })
 
-  const rangeActive = filter.rangeFrom !== null || filter.rangeTo !== null
+  const renderRow = (t: YoloTodoRow, opts: { retiring?: boolean } = {}): JSX.Element => (
+    editor?.id === t.id ? (
+      <TodoEditor
+        key={t.id}
+        draft={editor}
+        milestones={milestoneTitles}
+        busy={busyKey === `edit-${t.id}`}
+        confirming={confirmDelete === t.id}
+        onChange={setEditor}
+        onSave={() => { void saveEditor() }}
+        onCancel={() => { setEditor(null); setConfirmDelete(null) }}
+        onDelete={() => { setConfirmDelete(t.id) }}
+        onConfirmDelete={async () => {
+          const id = t.id
+          setConfirmDelete(null)
+          setEditor(null)
+          await act(`del-${id}`, { action: 'cancel', kind: 'todo', id })
+        }}
+      />
+    ) : (
+      <TodoRowView
+        key={t.id}
+        t={t}
+        busy={busyKey === t.id}
+        completing={completing.has(t.id)}
+        retiring={opts.retiring}
+        {...rowActions(t)}
+      />
+    )
+  )
+
+  const renderSection = (s: Section, opts: { retiringIds: Set<string> }): JSX.Element => (
+    <section key={s.key} className={`sec${s.danger ? ' danger' : ''}${s.accent ? ' today' : ''}`} aria-label={`${s.label} ${s.rows.length}`}>
+      <div className="sec-head">
+        <span className="sec-name"><span className="dot" />{s.label}</span>
+        <span className={`sec-count${s.danger ? ' danger' : ''}`}>{s.rows.length}</span>
+        <span className="sec-rule" />
+      </div>
+      {s.rows.map((t) => renderRow(t, { retiring: opts.retiringIds.has(t.id) }))}
+    </section>
+  )
+
+  const caps = (
+    <div className="caps" role="group" aria-label="聚焦筛选">
+      {(Object.keys(FOCUS_LABEL) as FocusBucket[]).map((k) => (
+        <button
+          key={k}
+          type="button"
+          className={`cap${filter.focus === k ? ' on' : ''}`}
+          onClick={() => { patch({ focus: filter.focus === k ? null : k }) }}
+        >
+          {FOCUS_LABEL[k]} <span className="num">{counts[k]}</span>
+        </button>
+      ))}
+    </div>
+  )
+
+  const notifCards = (
+    <div ref={notifRef} style={{ marginTop: 12 }}>
+      {(notifShowAll ? openNotifications : openNotifications.slice(0, NOTIF_PREVIEW)).map((n) => {
+        const dueFor = n.kind === 'reminder' && n.todo_id ? data.todos.find((td) => td.id === n.todo_id) : undefined
+        const timeLabel = dueFor?.due_at ? dueMomentLabel(dueFor.due_at) : n.kind === 'brief' ? localDayLabel(n.created_at) : fmtTime(n.created_at)
+        return (
+          <div key={n.id} className={`notif${n.kind === 'reminder' ? ' reminder' : ''}`}>
+            <div className="notif-head">
+              <IcBell size={13} />
+              <span className="notif-type">{notifTypeLabel(n.kind, n.title)}</span>
+              <span className="notif-time mono">{timeLabel}</span>
+            </div>
+            <div className="notif-body">
+              <div style={{ fontWeight: 500 }}>{n.title.replace(/^[⏰☀🌙]\s*/, '')}</div>
+              {n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2 }}>{n.body.split('\n')[0]}</div>}
+            </div>
+            <div className="notif-acts">
+              {n.kind === 'reminder' && n.todo_id && (
+                <>
+                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'complete', kind: 'todo', id: n.todo_id }) }}>
+                    <IcCheck size={12} />完成
+                  </button>
+                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id, due_at: nextDayStr(null) }) }}>
+                    <IcPlusDay size={12} />+1d
+                  </button>
+                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'remind_again', kind: 'todo', id: n.todo_id }) }}>
+                    <IcBell size={12} />再提醒
+                  </button>
+                </>
+              )}
+              <button type="button" className="nact nact--chat" onClick={() => { onOpenChat({ title: n.title.replace(/^[⏰☀🌙]\s*/, ''), detail: n.body ?? null }) }}>
+                <IcChat size={12} />聊一聊
+              </button>
+              <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id }) }}>
+                知道了
+              </button>
+            </div>
+          </div>
+        )
+      })}
+      {openNotifications.length > NOTIF_PREVIEW && (
+        <button type="button" className="notif-more" onClick={() => { setNotifShowAll((v) => !v) }}>
+          {notifShowAll ? '收起' : `查看全部 ${openNotifications.length} 条`}
+          <IcChevron size={10} className={notifShowAll ? 'up' : ''} />
+        </button>
+      )}
+    </div>
+  )
+
+  const retiringToday = useMemo(() => new Set(retiringToShowToday.map((t) => t.id)), [retiringToShowToday])
+  const retiringUpcoming = useMemo(() => new Set(retiringToShowUpcoming.map((t) => t.id)), [retiringToShowUpcoming])
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      {/* ② toolbar 40px */}
-      <div className="p-toolbar">
-        <div className="seg" role="tablist">
-          {PRESETS.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              role="tab"
-              aria-selected={filter.preset === p.key}
-              className={`seg-btn${filter.preset === p.key ? ' on' : ''}`}
-              onClick={() => { patchFilter({ preset: p.key }) }}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <div className="tb-spacer" />
-        {rangeActive && (
-          <button type="button" className="range-chip" title="按时段筛选生效中，点击清除" onClick={() => { patchFilter({ rangeFrom: null, rangeTo: null }) }}>
-            <b>{rangeLabel(filter.rangeFrom, filter.rangeTo)}</b><IcClose size={10} />
-          </button>
-        )}
-        <div className="caps">
-          {(Object.keys(FOCUS_LABEL) as FocusBucket[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              className={`cap${filter.focus === k ? ' on' : ''}`}
-              onClick={() => {
-                patchFilter({ focus: filter.focus === k ? null : k, preset: filter.preset === 'done' ? 'today' : filter.preset })
-              }}
-            >
-              {FOCUS_LABEL[k]} <span className="num">{counts[k]}</span>
-            </button>
-          ))}
-        </div>
-        <div className="flt-wrap">
-          <button
-            ref={fltBtnRef}
-            type="button"
-            className={`flt${hasDetailFilter(filter) ? ' has-filters' : ''}`}
-            onClick={() => { setFilterMenuOpen((v) => !v) }}
-          >
-            <IcFilter size={12} />筛选<span className="chev"><IcChevron size={10} /></span><span className="flt-dot" />
-          </button>
-          <div ref={menuRef} className={`menu${filterMenuOpen ? ' open' : ''}`}>
-            <div className="menu-g">状态</div>
-            <FilterRow label="仅逾期" on={filter.overdueOnly} onToggle={() => { patchFilter({ overdueOnly: !filter.overdueOnly }) }} />
-            <FilterRow label="仅进行中" on={filter.inProgressOnly} onToggle={() => { patchFilter({ inProgressOnly: !filter.inProgressOnly }) }} />
-            <FilterRow label="仅滞留" on={filter.staleOnly} onToggle={() => { patchFilter({ staleOnly: !filter.staleOnly }) }} />
-            <div className="menu-g">时段（到期日）</div>
-            <select
-              className="msel"
-              value={matchRangePreset(filter.rangeFrom, filter.rangeTo) ?? ''}
-              onChange={(e) => {
-                const v = e.target.value
-                if (!v) patchFilter({ rangeFrom: null, rangeTo: null })
-                else if (v !== 'custom') patchFilter(rangeOfPreset(v as RangePresetKind))
-              }}
-            >
-              <option value="">不限</option>
-              <option value="today">今天</option>
-              <option value="thisWeek">本周</option>
-              <option value="thisMonth">本月</option>
-              {rangeActive && matchRangePreset(filter.rangeFrom, filter.rangeTo) === 'custom' && <option value="custom">自定义</option>}
-            </select>
-            <div className="range-inputs">
-              <input type="date" className="mdate" value={filter.rangeFrom ?? ''} title="起（含当天）" onChange={(e) => { patchFilter({ rangeFrom: e.target.value || null }) }} />
-              <span className="range-tilde">~</span>
-              <input type="date" className="mdate" value={filter.rangeTo ?? ''} title="止（含当天）" onChange={(e) => { patchFilter({ rangeTo: e.target.value || null }) }} />
-            </div>
-            <div className="menu-g">里程碑</div>
-            <select className="msel" value={filter.milestoneTitle ?? ''} onChange={(e) => { patchFilter({ milestoneTitle: e.target.value || null }) }}>
-              <option value="">全部</option>
-              {milestoneTitles.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-            <div className="menu-g">关键词</div>
-            <input className="minput" value={filter.keyword ?? ''} placeholder="标题包含…" onChange={(e) => { patchFilter({ keyword: e.target.value }) }} />
-            {hasDetailFilter(filter) && (
-              <div className="menu-clear">
-                <button type="button" className="btn btn-ghost" onClick={() => { setFilter({ ...DEFAULT_FILTER, preset: filter.preset }) }}>清除全部筛选</button>
-              </div>
-            )}
-          </div>
-        </div>
-        <span key={sweepTick} className={`sweep${sweepTick > 0 ? ' run' : ''}`} />
-      </div>
-
-      {/* ③-⑥ body */}
-      <div className="p-body">
+      <CaptureBar busy={quickBusy} onSubmit={sendQuickAdd} />
+      <div className="p-body" ref={bodyRef}>
         <main className="p-main">
           {actionError && (
             <div className="err-line">
@@ -487,209 +524,136 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
             </div>
           )}
 
-          {/* notification cards — the only surface above the canvas (5.3) */}
-          {openNotifications.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-              {(notifShowAll ? openNotifications : openNotifications.slice(0, NOTIF_PREVIEW)).map((n) => {
-                // 5.3: the header time should read the RELATIVE due moment for a
-                // reminder, not the creation time (which read as "when was this
-                // card made" and told nothing about how overdue it is).
-                const dueFor = n.kind === 'reminder' && n.todo_id ? data.todos.find((td) => td.id === n.todo_id) : undefined
-                const timeLabel = dueFor?.due_at ? dueMomentLabel(dueFor.due_at) : n.kind === 'brief' ? localDayLabel(n.created_at) : fmtTime(n.created_at)
-                return (
-                  <div key={n.id} className={`notif${n.kind === 'reminder' ? ' reminder' : ''}`}>
-                    <div className="notif-head">
-                      <IcBell size={13} />
-                      <span className="notif-type">{notifTypeLabel(n.kind, n.title)}</span>
-                      <span className="notif-time mono">{timeLabel}</span>
-                    </div>
-                    <div className="notif-body">
-                      <div style={{ fontWeight: 500 }}>{n.title.replace(/^[⏰☀🌙]\s*/, '')}</div>
-                      {n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2 }}>{n.body.split('\n')[0]}</div>}
-                    </div>
-                    <div className="notif-acts">
-                      {n.kind === 'reminder' && n.todo_id && (
-                        <>
-                          <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'complete', kind: 'todo', id: n.todo_id }) }}>
-                            <IcCheck size={12} />完成
-                          </button>
-                          <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id, due_at: nextDayStr(null) }) }}>
-                            <IcPlusDay size={12} />+1d
-                          </button>
-                          <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'remind_again', kind: 'todo', id: n.todo_id }) }}>
-                            <IcBell size={12} />再提醒
-                          </button>
-                        </>
-                      )}
-                      <button type="button" className="nact nact--chat" onClick={() => { onOpenChat({ title: n.title.replace(/^[⏰☀🌙]\s*/, ''), detail: n.body ?? null }) }}>
-                        <IcChat size={12} />聊一聊
-                      </button>
-                      <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id }) }}>
-                        知道了
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-              {openNotifications.length > NOTIF_PREVIEW && (
-                <button type="button" className="notif-more" onClick={() => { setNotifShowAll((v) => !v) }}>
-                  {notifShowAll ? '收起' : `查看全部 ${openNotifications.length} 条`}
-                  <IcChevron size={10} className={notifShowAll ? 'up' : ''} />
-                </button>
-              )}
-            </div>
-          )}
+          {view === 'today' && (
+            <>
+              <DayHero todayCount={counts.today} overdueCount={counts.overdue} />
+              {caps}
+              {openNotifications.length > 0 && notifCards}
+              {todaySections.map((s) => renderSection(s, { retiringIds: retiringToday }))}
 
-          {/* task sections (5.2) */}
-          {sections.map((s) => (
-            <section key={s.key} className="sec" aria-label={`${s.label} ${s.rows.length}`}>
-              <div className="sec-head">
-                <span className="sec-name">{s.label}</span>
-                <span className={`sec-count${s.danger ? ' danger' : ''}`}>{s.rows.length}</span>
-                <span className="sec-rule" />
-              </div>
-              {s.rows.map((t) =>
-                editor?.id === t.id ? (
-                  <TodoEditor
-                    key={t.id}
-                    draft={editor}
-                    milestones={milestoneTitles}
-                    busy={busyKey === `edit-${t.id}`}
-                    confirming={confirmDelete === t.id}
-                    onChange={setEditor}
-                    onSave={() => { void saveEditor() }}
-                    onCancel={() => { setEditor(null); setConfirmDelete(null) }}
-                    onDelete={() => { setConfirmDelete(t.id) }}
-                    onConfirmDelete={async () => {
-                      const id = t.id
-                      setConfirmDelete(null)
-                      setEditor(null)
-                      await act(`del-${id}`, { action: 'cancel', kind: 'todo', id })
-                    }}
-                  />
-                ) : (
-                  <TodoRowView
-                    key={t.id}
-                    t={t}
-                    busy={busyKey === t.id}
-                    completing={completing.has(t.id)}
-                    retiring={retiringToShow.some((r) => r.id === t.id)}
-                    onComplete={() => { void completeTodo(t) }}
-                    onAct={(action, extra) => { void act(t.id, { action, kind: 'todo', id: t.id, ...extra }) }}
-                    onEdit={() => { setEditor({ id: t.id, title: t.title, due: dayOf(t.due_at), priority: t.priority ?? '', milestoneTitle: t.milestone_title ?? '' }) }}
-                    onChat={() => { onOpenChat({ title: t.title, detail: t.due_at ? `到期 ${t.due_at}` : null }) }}
-                  />
-                ),
-              )}
-            </section>
-          ))}
-
-          {/* R9 folded remainder — surfaces when the default view is capped */}
-          {folded.length > 0 && (
-            <div className={`fold${foldedOpen ? ' open' : ''}`}>
-              <button type="button" className="fold-head" onClick={() => { setFoldedOpen((v) => !v) }} aria-expanded={foldedOpen}>
-                <IcChevron size={12} />
-                <span>其余 {folded.length} 条</span>
-                <span className="fold-stat">展开查看</span>
-              </button>
-              <div className="fold-body">
-                <div className="fold-inner">
-                  <div className="fold-pad">
-                    {folded.map((t) => (
-                      <TodoRowView
-                        key={t.id}
-                        t={t}
-                        busy={busyKey === t.id}
-                        completing={completing.has(t.id)}
-                        onComplete={() => { void completeTodo(t) }}
-                        onAct={(action, extra) => { void act(t.id, { action, kind: 'todo', id: t.id, ...extra }) }}
-                        onEdit={() => { setEditor({ id: t.id, title: t.title, due: dayOf(t.due_at), priority: t.priority ?? '', milestoneTitle: t.milestone_title ?? '' }) }}
-                        onChat={() => { onOpenChat({ title: t.title, detail: t.due_at ? `到期 ${t.due_at}` : null }) }}
-                      />
-                    ))}
+              {folded.length > 0 && (
+                <div className={`fold${foldedOpen ? ' open' : ''}`}>
+                  <button type="button" className="fold-head" onClick={() => { setFoldedOpen((v) => !v) }} aria-expanded={foldedOpen}>
+                    <IcChevron size={12} />
+                    <span>其余 {folded.length} 条</span>
+                    <span className="fold-stat">展开查看</span>
+                  </button>
+                  <div className="fold-body">
+                    <div className="fold-inner">
+                      <div className="fold-pad">
+                        {folded.map((t) => renderRow(t))}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              )}
+
+              {visibleToday.length === 0 && (
+                <div className="empty">
+                  <h4>今天没有挂起的事</h4>
+                  <p>说一句，我来记下</p>
+                </div>
+              )}
+            </>
           )}
 
-          {visible.length === 0 && (
-            <div className="empty">
-              <h4>当前筛选下没有任务</h4>
-              <p>说一句，我来记下</p>
-            </div>
+          {view === 'upcoming' && (
+            <>
+              <div className="heading"><h2>即将</h2><span className="hint">未来 7 天与更远</span></div>
+              {caps}
+              {upcomingSections.map((s) => renderSection(s, { retiringIds: retiringUpcoming }))}
+              {visibleUpcoming.length === 0 && (
+                <div className="empty">
+                  <h4>没有即将到来的事</h4>
+                  <p>未来 7 天这里会是空的。</p>
+                </div>
+              )}
+            </>
           )}
 
-          {/* ⑤ folds: goals & milestones / day ledger */}
-          <div className={`fold${planOpen ? ' open' : ''}`}>
-            <button type="button" className="fold-head" onClick={() => { setPlanOpen((v) => !v) }} aria-expanded={planOpen}>
-              <IcChevron size={12} />
-              <span>目标与里程碑</span>
-              <span className="fold-stat">{activeGoals.length + openMilestones.length}</span>
-            </button>
-            <div className="fold-body">
-              <div className="fold-inner">
-                <div className="fold-pad">
-                  {activeGoals.map((g) => (
-                    <GoalBlock
-                      key={g.id}
-                      goal={g}
-                      milestones={data.milestones.filter((m) => m.title === g.milestone_title)}
-                      renaming={renameDraft?.kind === 'goal' && renameDraft.id === g.id}
-                      renameValue={renameDraft?.kind === 'goal' && renameDraft.id === g.id ? renameDraft.title : ''}
-                      busy={busyKey === `goal-${g.id}`}
-                      onRenameStart={() => { setRenameDraft({ kind: 'goal', id: g.id, title: g.title }) }}
-                      onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
-                      onRenameSave={async () => {
-                        const d = renameDraft
-                        setRenameDraft(null)
-                        if (d && d.title.trim() && d.title !== g.title) await act(`goal-${g.id}`, { action: 'rename', kind: 'goal', id: g.id, title: d.title.trim() })
-                      }}
-                      onRenameCancel={() => { setRenameDraft(null) }}
-                      onAbandon={() => { void act(`goal-${g.id}`, { action: 'abandon', kind: 'goal', id: g.id }) }}
-                      onMsDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
-                      msPopId={msPop?.id ?? null}
-                    />
+          {view === 'done' && (
+            <>
+              <div className="heading"><h2>已完成</h2><span className="hint">{visibleDone.length} 件</span></div>
+              {visibleDone.length === 0 ? (
+                <div className="empty">
+                  <h4>还没有完成的事</h4>
+                  <p>完成的待办会出现在这里。</p>
+                </div>
+              ) : (
+                <div className="sec">
+                  {visibleDone.map((t) => (
+                    <TodoRowView key={t.id} t={t} busy={false} completing={false} onComplete={noop} onAct={noop} onEdit={noop} onChat={noop} />
                   ))}
-                  {openMilestones.length > 0 && (
-                    <MilestoneTrack
-                      milestones={openMilestones}
-                      renaming={renameDraft?.kind === 'milestone' ? renameDraft : null}
-                      busyKey={busyKey}
-                      pop={msPop}
-                      onDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
-                      onRenameStart={(m) => { setRenameDraft({ kind: 'milestone', id: m.id, title: m.title }) }}
-                      onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
-                      onRenameSave={async (m) => {
-                        const d = renameDraft
-                        setRenameDraft(null)
-                        if (d && d.title.trim() && d.title !== m.title) await act(`ms-${m.id}`, { action: 'rename', kind: 'milestone', id: m.id, title: d.title.trim() })
-                      }}
-                      onRenameCancel={() => { setRenameDraft(null) }}
-                      onStatus={(m, status) => { void act(`ms-${m.id}`, { action: 'set_status', kind: 'milestone', id: m.id, status }) }}
-                      onPopClose={() => { setMsPop(null) }}
-                    />
-                  )}
-                  {activeGoals.length === 0 && openMilestones.length === 0 && (
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--y-text-3)' }}>暂无进行中的目标与里程碑。</p>
-                  )}
                 </div>
-              </div>
-            </div>
-          </div>
+              )}
+            </>
+          )}
 
-          <div className={`fold${ledgerOpen ? ' open' : ''}`}>
-            <button type="button" className="fold-head" onClick={() => { setLedgerOpen((v) => !v) }} aria-expanded={ledgerOpen}>
-              <IcChevron size={12} />
-              <span>今日台账</span>
-              <span className="fold-stat" title="今天发生过对话、且产生了记录的去重会话数；点行末会话标签可跳回该对话">
-                {data.ledger.length} 条 · {data.ledgerSessions} 会话
-              </span>
-            </button>
-            <div className="fold-body">
-              <div className="fold-inner">
-                <div className="fold-pad">
-                  {data.ledger.length === 0 && <p style={{ margin: 0, fontSize: 12, color: 'var(--y-text-3)' }}>今天还没有记录。</p>}
+          {view === 'goals' && (
+            <>
+              <div className="heading"><h2>目标与里程碑</h2><span className="hint">{activeGoals.length} 目标 · 平均 {avgGoalPct}% · 进度只读</span></div>
+              {activeGoals.map((g) => (
+                <GoalBlock
+                  key={g.id}
+                  goal={g}
+                  milestones={data.milestones.filter((m) => m.title === g.milestone_title)}
+                  renaming={renameDraft?.kind === 'goal' && renameDraft.id === g.id}
+                  renameValue={renameDraft?.kind === 'goal' && renameDraft.id === g.id ? renameDraft.title : ''}
+                  busy={busyKey === `goal-${g.id}`}
+                  onRenameStart={() => { setRenameDraft({ kind: 'goal', id: g.id, title: g.title }) }}
+                  onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
+                  onRenameSave={async () => {
+                    const d = renameDraft
+                    setRenameDraft(null)
+                    if (d && d.title.trim() && d.title !== g.title) await act(`goal-${g.id}`, { action: 'rename', kind: 'goal', id: g.id, title: d.title.trim() })
+                  }}
+                  onRenameCancel={() => { setRenameDraft(null) }}
+                  onAbandon={() => { void act(`goal-${g.id}`, { action: 'abandon', kind: 'goal', id: g.id }) }}
+                  onMsDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
+                  msPopId={msPop?.id ?? null}
+                />
+              ))}
+              {openMilestones.length > 0 && (
+                <MilestoneTrack
+                  milestones={openMilestones}
+                  renaming={renameDraft?.kind === 'milestone' ? renameDraft : null}
+                  busyKey={busyKey}
+                  pop={msPop}
+                  onDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
+                  onRenameStart={(m) => { setRenameDraft({ kind: 'milestone', id: m.id, title: m.title }) }}
+                  onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
+                  onRenameSave={async (m) => {
+                    const d = renameDraft
+                    setRenameDraft(null)
+                    if (d && d.title.trim() && d.title !== m.title) await act(`ms-${m.id}`, { action: 'rename', kind: 'milestone', id: m.id, title: d.title.trim() })
+                  }}
+                  onRenameCancel={() => { setRenameDraft(null) }}
+                  onStatus={(m, status) => { void act(`ms-${m.id}`, { action: 'set_status', kind: 'milestone', id: m.id, status }) }}
+                  onPopClose={() => { setMsPop(null) }}
+                />
+              )}
+              {activeGoals.length === 0 && openMilestones.length === 0 && (
+                <div className="empty">
+                  <h4>暂无进行中的目标</h4>
+                  <p>目标与里程碑会出现在这里（进度只读）。</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {view === 'ledger' && (
+            <>
+              <div className="heading">
+                <h2>今日台账</h2>
+                <span className="hint">{data.ledger.length} 条 · {data.ledgerSessions} 会话 · 点会话标签跳回</span>
+              </div>
+              {data.ledger.length === 0 ? (
+                <div className="empty">
+                  <h4>今天还没有记录</h4>
+                  <p>所有动作都会写进台账。</p>
+                </div>
+              ) : (
+                <div style={{ marginTop: 8 }}>
                   {data.ledger.map((e) => (
                     <div key={e.id} className={`lg-row${e.kind === 'todo_completed' ? ' is-done' : ''}`}>
                       {e.kind === 'todo_completed' && <IcCheck className="ic-ok" size={12} />}
@@ -711,28 +675,11 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* v0.3.3: memory-health fold removed from the board. */}
+              )}
+            </>
+          )}
         </main>
       </div>
-
-      {/* ⑥ capture bar 52px */}
-      <footer className="capture">
-        <input
-          className="cap-input"
-          value={quickAdd}
-          placeholder={quickBusy ? '保存中…' : '+ 快速记一条，回车保存（默认今日到期）'}
-          disabled={quickBusy}
-          onChange={(e) => { setQuickAdd(e.target.value) }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) void sendQuickAdd()
-          }}
-        />
-        <span className={`enter-hint${quickAdd.trim() ? ' lit' : ''}`}>↵</span>
-      </footer>
 
       {/* toast (5.1); completion toast carries 撤销 (5.4) */}
       {toast && (
@@ -743,21 +690,6 @@ export function KanbanView({ data, refresh, onOpenChat, openSession, sweepTick =
           )}
         </div>
       )}
-    </div>
-  )
-}
-
-function notifTypeLabel(kind: string, title: string): string {
-  if (kind === 'reminder') return '到期提醒'
-  if (kind === 'brief') return title.startsWith('☀') ? '早报' : title.startsWith('🌙') ? '晚报' : '简报'
-  return '通知'
-}
-
-function FilterRow({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }): JSX.Element {
-  return (
-    <div className="mrow" onClick={onToggle} role="checkbox" aria-checked={on} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() } }}>
-      <span className={`ck${on ? ' on' : ''}`}><IcCheck size={10} /></span>
-      {label}
     </div>
   )
 }
@@ -823,7 +755,7 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
         </div>
         <div className="row-meta">
           <span className="due">{done && t.completed_at ? fmtDone(t.completed_at) : fmtDue(t.due_at)}</span>
-          {open && t.overdue && <span style={{ color: 'var(--y-danger-text)' }}>逾期</span>}
+          {open && t.overdue && <span style={{ color: 'var(--y-danger)' }}>逾期</span>}
           {open && t.stale && (
             <>
               <span className="sep">·</span>
