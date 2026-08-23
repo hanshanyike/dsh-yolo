@@ -1,6 +1,6 @@
 # WorkBuddy（dsh-yolo）开发计划
 
-> **当前批：v0.3.3**（2026-08-23）· 主题：**用户反馈收敛（对话能用 harness 自身会话能力 / 去掉 dev.mjs / 不区分工作区 / 去健康 / 去打开轮询 / 来源可跳）**。
+> **当前批：v0.3.3**（2026-08-23）· 主题：**用户反馈收敛 + 助手看板信息重构**。
 > 上一批（v0.3.2：真机反馈 + 记忆收窄 + 借鉴落地）已交付，保留在下方。
 > 红线不变：**管理而非代办；绝不打扰工作会话；本地优先；类型安全 + 真机验证。**
 
@@ -16,11 +16,20 @@
 | V4 不区分工作区 | 看板始终聚合所有已知工作区；每行带 `ws.cwd`，动作按 `scope_cwd` 路由 | `src/ui/{dashboard,actions}.ts` · `src/shared/dashboard.ts` · `client/panel/{YoloPanel,state,KanbanView}.tsx` |
 | V5 会话来源可跳 | 台帐来源徽标先关面板再 `ctx.sessions.open` 跳回 | `client/panel/YoloPanel.tsx` |
 | V7 打开不轮询 | 面板打开时去 30s poll；关闭时角标独立轮询 | `client/panel/YoloPanel.tsx` · `client/sidebar/YoloSidebarDashboard.tsx` |
+| V9 Today 信息架构 | 今日标题 → 快速记录 → 唯一助手判断 → 需要关注 → 今天 → 今日进展 → 收束；判断项不在列表重复 | `client/panel/v2/TodaySurface.tsx` · `today-surface-model.ts` |
+| V10 确定性判断 | 服务端评分、evidence、reason version/fingerprint；首次完整、seen 后紧凑；无候选不渲染空卡 | `src/attention/index.ts` · `src/ui/dashboard.ts` · `src/shared/dashboard.ts` |
+| V11 可信反馈闭环 | seen/suppress/feedback 持久化并绑定不可变证据；`client_action_id` 跨重启幂等；客户端只展示服务端学习回执与 undo | `src/shared/actions.ts` · `src/storage/{schema.sql,repository.ts}` · `client/panel/v2/{api,LearningReceipt}.tsx` |
+| V12 事项处理面板 | 依据与来源 → 快速处理 → 服务端回执 → 编辑 → 二次确认取消；支持焦点圈、Esc、焦点恢复 | `client/panel/v2/TaskActionPanel.tsx` · `client/panel/KanbanView.tsx` |
+| V13 正式响应式形态 | `<480px` 仅今天/即将/已完成；辅助视图进 More；中等宽度单列对话；`>=960px` 可并列 340px 对话 | `client/panel/{YoloPanel,ViewTabs,MoreMenu}.tsx` · `client/design/tokens.ts` |
+| V14 跨工作区安全 | 每个动作显式携带行 `scope_cwd`；重复 todo id 不再通过全局 id map 猜作用域；锚定对话 GET/POST 同 scope 且服务端白名单校验 | `client/panel/{KanbanView,ChatPane}.tsx` · `src/ui/{actions,session,workspace-scope}.ts` |
+| V15 终态分离 | `cancelled` 不计入已完成；已完成/已取消二级切换；两类都可重新打开并恢复 FTS/审计 | `src/shared/filters.ts` · `src/storage/repository.ts` · `client/panel/KanbanView.tsx` |
+| V16 回归与真机门禁 | Node 22 check/unit/build；API/UI E2E；W1–W16；真实常驻对话创建并完成事项；通过后才推送 | `tests/**` · `docs/manual-validation-2026-08-23.md` |
 
 ## 二、明确说明
 
 - **存储仍按工作区分库**（数据位置不变、不迁移、不丢）。「不区分工作区」指**看板视图**始终聚合；动作按行归属路由到对应库，因此跨工作区行也可操作（v0.3.0 的「跨工作区只读」限制随本次放开）。
 - `scripts/dev.mjs` 删除后，本地开发用标准 dsh 流程（见 README / AGENTS.md）；`scripts/e2e.mjs` 仍用于 E2E 自助拉起宿主。
+- V9–V16 的产品事实源为 `docs/prd-assistant-dashboard-rearchitecture.md`；版本仍留在 v0.3.3，本批不发布、不打 tag、不 bump package version。
 
 ---
 
