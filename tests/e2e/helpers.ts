@@ -40,7 +40,7 @@ export interface Api {
 }
 
 /** Open the sidebar YOLO panel and wait for the board body to render. */
-export async function openYoloPanel(page: Page): Promise<void> {
+export async function openYoloPanel(page: Page, opts: { refreshOnSlow?: boolean } = {}): Promise<void> {
   // domcontentloaded (not 'load'): the SPA may keep a long-lived resource open,
   // so waiting for full 'load' has budgeted out (60s) in this suite.
   await page.goto('/', { waitUntil: 'domcontentloaded' })
@@ -57,6 +57,13 @@ export async function openYoloPanel(page: Page): Promise<void> {
   // re-drives that fetch — exactly what a real user does when the board looks
   // empty — so row assertions run against real data, not a stuck skeleton.
   const capture = page.locator('.capture .cap-input')
+  if (opts.refreshOnSlow === false) {
+    // First-read presentation tests must observe the original GET: a rescue
+    // refresh after the automatic attention/seen write legitimately returns
+    // compact and would erase the state transition the test is asserting.
+    await expect(capture).toBeVisible({ timeout: 30_000 })
+    return
+  }
   for (let i = 0; i < 2; i++) {
     if (await capture.isVisible().catch(() => false)) break
     const more = page.getByRole('button', { name: '更多看板操作' })
@@ -107,9 +114,12 @@ export async function createTodo(api: Api, title: string, opts: { due?: string }
 export async function authorNotification(
   api: Api,
   title: string,
-  opts: { note?: string; notifKind?: 'reminder' | 'brief' } = {},
+  opts: { note?: string; notifKind?: 'reminder' | 'brief'; todoId?: string } = {},
 ): Promise<Record<string, any>> {
-  const res = await api.action({ action: 'author_notification', kind: 'notification', title, note: opts.note, notif_kind: opts.notifKind })
+  const res = await api.action({
+    action: 'author_notification', kind: 'notification', title,
+    note: opts.note, notif_kind: opts.notifKind, id: opts.todoId,
+  })
   return res.item as Record<string, any>
 }
 
@@ -138,7 +148,7 @@ export function createFixtures(api: Api) {
     /** Author a notification card through the real endpoint and track it. */
     async notification(
       title: string,
-      opts: { note?: string; notifKind?: 'reminder' | 'brief' } = {},
+      opts: { note?: string; notifKind?: 'reminder' | 'brief'; todoId?: string } = {},
     ): Promise<Record<string, any>> {
       const item = await authorNotification(api, title, opts)
       notificationIds.push(String(item.id))

@@ -1,4 +1,3 @@
-// Browser regressions discovered during the 2026-08-23 full-system review.
 // These regressions were discovered during the 2026-08-23 full-system review
 // and stay as positive real-host gates after their fixes.
 
@@ -22,19 +21,19 @@ test('W2: a closed filter menu removes its controls from visibility and keyboard
   await expect(page.getByRole('checkbox', { name: '仅逾期' })).toBeHidden({ timeout: 1_000 })
 })
 
-test('W3: inline todo editor exposes accessible names for every field', async ({ page }) => {
+test('W3: the todo handling panel exposes accessible names for every edit field', async ({ page }) => {
   const fx = createFixtures(api)
   const title = `[E2E] ${Date.now()} 核对客户访谈纪要的发送时间`
   await fx.todo(title, { due: todayStr() })
   try {
     await openYoloPanel(page)
-    const row = page.getByRole('listitem', { name: `任务：${title}` })
-    await row.getByRole('button', { name: '编辑' }).click()
+    const row = page.locator('.v2-today-row').filter({ hasText: title })
+    await row.getByRole('button', { name: '处理' }).click()
 
-    await expect(page.getByRole('textbox', { name: '任务标题' })).toBeVisible({ timeout: 1_000 })
-    await expect(page.getByRole('textbox', { name: '到期日' })).toBeVisible({ timeout: 1_000 })
+    await expect(page.getByRole('textbox', { name: '标题' })).toBeVisible({ timeout: 1_000 })
+    await expect(page.getByRole('textbox', { name: '截止日期与时间' })).toBeVisible({ timeout: 1_000 })
     await expect(page.getByRole('combobox', { name: '优先级' })).toBeVisible({ timeout: 1_000 })
-    await expect(page.getByRole('combobox', { name: '里程碑' })).toBeVisible({ timeout: 1_000 })
+    await expect(page.getByRole('textbox', { name: '里程碑' })).toBeVisible({ timeout: 1_000 })
   } finally {
     await fx.dispose()
   }
@@ -54,9 +53,10 @@ test('W5: sending remains visibly in progress until an assistant reply arrives',
   await input.fill('请提醒我明天下午把客户访谈纪要发给产品组')
   await input.press('Enter')
 
-  await expect(page.getByText('正在处理…', { exact: true })).toBeVisible({ timeout: 1_500 })
+  const pending = page.getByRole('log', { name: '对话记录' }).getByText(/正在处理/)
+  await expect(pending).toBeVisible({ timeout: 1_500 })
   await page.waitForTimeout(800)
-  await expect(page.getByText('正在处理…', { exact: true })).toBeVisible({ timeout: 1_500 })
+  await expect(pending).toBeVisible({ timeout: 1_500 })
 })
 
 test('notification cards preserve all user-authored body lines', async ({ page }) => {

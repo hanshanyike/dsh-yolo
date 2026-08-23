@@ -1,0 +1,200 @@
+// Dashboard v2 information architecture and action-panel regressions against
+// the real dsh host. All fixtures use realistic user commitments behind the
+// machine-only [E2E] marker and are disposed by their exact ids.
+
+import { test, expect, type Page } from '@playwright/test'
+import {
+  connectApi,
+  createFixtures,
+  openYoloPanel,
+  todayStr,
+  uid,
+  waitForDashboard,
+  type Api,
+} from '../helpers.ts'
+
+let api: Api
+let fx: ReturnType<typeof createFixtures>
+
+test.beforeAll(async () => {
+  api = await connectApi()
+})
+
+test.afterAll(async () => {
+  await api.close()
+})
+
+test.beforeEach(async () => {
+  fx = createFixtures(api)
+})
+
+test.afterEach(async () => {
+  await fx.dispose()
+})
+
+function localDateOffset(days: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  const part = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}`
+}
+
+async function seedPrimaryJudgment(label: string): Promise<{ id: string; title: string }> {
+  const title = uid(label)
+  const todo = await fx.todo(title, { due: localDateOffset(-100) })
+  const id = String(todo.id)
+
+  // Every fact is auditable through the shared action API. Together these
+  // facts give the fixture the deterministic maximum practical rank without
+  // mocking server judgment: urgent + old overdue + repeated postpone + reminder.
+  await api.action({ action: 'update', kind: 'todo', id, priority: 'urgent' })
+  await api.action({ action: 'postpone', kind: 'todo', id, due_at: localDateOffset(-99) })
+  await api.action({ action: 'postpone', kind: 'todo', id, due_at: localDateOffset(-98) })
+  await fx.notification(`${title} 的截止提醒`, {
+    note: '请确认客户演示材料已经交付，并记录需要继续跟进的事项。',
+    todoId: id,
+  })
+
+  const data = await waitForDashboard(
+    api,
+    (dashboard) => dashboard.attention?.[0]?.todo_id === id,
+    { label: `fixture ${id} to become the unique assistant judgment` },
+  )
+  expect(data.attention).toHaveLength(1)
+  expect(data.attention[0].todo_id).toBe(id)
+  return { id, title }
+}
+
+async function refreshBoard(page: Page): Promise<void> {
+  await page.getByRole('button', { name: '更多看板操作' }).click()
+  await page.getByRole('menuitem', { name: '刷新看板' }).click()
+}
+
+test('Today 保持固定阅读顺序、唯一判断，更多处理展示完整语义对话框', async ({ page }) => {
+  const primary = await seedPrimaryJudgment('确认客户演示材料的最终交付')
+  await fx.todo(uid('整理下周客户回访需要确认的问题'), { due: localDateOffset(-1) })
+
+  await openYoloPanel(page, { refreshOnSlow: false })
+  const surface = page.locator('.v2-today-surface')
+  const judgment = surface.locator('.v2-judgment')
+  await expect(judgment).toHaveCount(1)
+  await expect(judgment).toHaveClass(/v2-judgment--full/)
+  await expect(judgment.getByRole('heading', { name: primary.title })).toBeVisible()
+  await expect(judgment.getByRole('heading', { name: '为什么现在' })).toBeVisible()
+  await expect(surface.locator('.v2-today-row').filter({ hasText: primary.title })).toHaveCount(0)
+
+  const readingOrder = await surface.locator(
+    ':scope > header, :scope > section[aria-label="快速记录"], :scope > .v2-judgment, :scope > section[aria-labelledby="v2-attention-title"], :scope > section[aria-labelledby="v2-progress-title"]',
+  ).evaluateAll((elements) => elements.map((element) => {
+    if (element.matches('header')) return 'today-title'
+    if (element.matches('[aria-label="快速记录"]')) return 'quick-capture'
+    if (element.matches('.v2-judgment')) return 'judgment'
+    if (element.matches('[aria-labelledby="v2-attention-title"]')) return 'attention-list'
+    return 'today-progress'
+  }))
+  expect(readingOrder).toEqual(['today-title', 'quick-capture', 'judgment', 'attention-list', 'today-progress'])
+
+  await judgment.getByRole('button', { name: '更多处理' }).click()
+  const dialog = page.getByRole('dialog', { name: primary.title })
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toHaveAttribute('aria-modal', 'true')
+  const describedBy = await dialog.getAttribute('aria-describedby')
+  expect(describedBy).toBeTruthy()
+  await expect(page.locator(`#${describedBy!}`)).toBeVisible()
+
+  const dialogOrder = await dialog.locator(':scope > section, :scope > form').evaluateAll((elements) => elements.map((element) => {
+    if (element.tagName === 'FORM') return element.querySelector('legend')?.textContent?.trim()
+    return element.getAttribute('aria-label') ?? element.querySelector('h3')?.textContent?.trim()
+  }))
+  expect(dialogOrder).toEqual(['判断依据', '来源', '快速处理', '助手将记录的变化', '编辑事项', '危险操作'])
+  await expect(dialog.getByRole('button', { name: '标记完成' })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: /推迟到明天/ })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '保存编辑' })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '取消事项' })).toBeVisible()
+})
+
+test('助手判断首读为 full，服务端记录 seen 后刷新收为 compact', async ({ page }) => {
+  const primary = await seedPrimaryJudgment('核对发布前的客户验收结论')
+  await openYoloPanel(page, { refreshOnSlow: false })
+
+  await expect(page.locator('.v2-judgment--full')).toContainText(primary.title)
+  await waitForDashboard(
+    api,
+    (dashboard) => dashboard.attention?.[0]?.todo_id === primary.id && dashboard.attention[0].seen_at != null,
+    { label: `judgment ${primary.id} to persist seen state` },
+  )
+
+  await refreshBoard(page)
+  const compact = page.locator('.v2-judgment--compact')
+  await expect(compact).toContainText(primary.title)
+  await expect(compact.getByRole('button', { name: '处理' })).toBeVisible()
+  await expect(compact.getByRole('button', { name: '展开依据' })).toBeVisible()
+  await expect(compact.getByRole('heading', { name: '为什么现在' })).toHaveCount(0)
+})
+
+test('已完成与已取消严格分离，两类终态事项都可以重新打开', async ({ page }) => {
+  const completedTitle = uid('把采购确认结果同步给财务')
+  const cancelledTitle = uid('取消不再需要的供应商回访')
+  const completed = await fx.todo(completedTitle, { due: todayStr() })
+  const cancelled = await fx.todo(cancelledTitle, { due: todayStr() })
+  await api.action({ action: 'complete', kind: 'todo', id: completed.id })
+  await api.action({ action: 'cancel', kind: 'todo', id: cancelled.id })
+
+  await openYoloPanel(page)
+  await page.getByRole('tab', { name: /已完成/ }).click()
+  const terminalFilters = page.getByRole('group', { name: '终态事项筛选' })
+  await terminalFilters.getByRole('button', { name: /^已完成/ }).click()
+  const completedRow = page.getByRole('listitem', { name: `已完成：${completedTitle}` })
+  await expect(completedRow).toBeVisible()
+  await expect(page.getByRole('listitem', { name: `已取消：${cancelledTitle}` })).toHaveCount(0)
+  await completedRow.getByRole('button', { name: `重新打开：${completedTitle}` }).click()
+  await expect(completedRow).toHaveCount(0)
+
+  await terminalFilters.getByRole('button', { name: /^已取消/ }).click()
+  const cancelledRow = page.getByRole('listitem', { name: `已取消：${cancelledTitle}` })
+  await expect(cancelledRow).toBeVisible()
+  await expect(page.getByRole('listitem', { name: `已完成：${completedTitle}` })).toHaveCount(0)
+  await cancelledRow.getByRole('button', { name: `重新打开：${cancelledTitle}` }).click()
+  await expect(cancelledRow).toHaveCount(0)
+
+  await waitForDashboard(
+    api,
+    (dashboard) => {
+      const rows = dashboard.todos as Array<{ id: string; status: string }>
+      return rows.find((row) => row.id === completed.id)?.status === 'pending'
+        && rows.find((row) => row.id === cancelled.id)?.status === 'pending'
+    },
+    { label: 'completed and cancelled fixtures to reopen' },
+  )
+})
+
+test('约 340px 紧凑模式保留三主视图、More 辅助入口和完整 ARIA 关系', async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 800 })
+  await openYoloPanel(page)
+
+  const panel = page.locator('.yolo-scope')
+  await expect(panel).toHaveClass(/compact/)
+  const tabs = page.getByRole('tab')
+  await expect(tabs).toHaveCount(3)
+  const tabContracts = [
+    { name: /今天/, key: 'today' },
+    { name: /即将/, key: 'upcoming' },
+    { name: /已完成/, key: 'done' },
+  ]
+  for (const contract of tabContracts) {
+    await expect(page.getByRole('tab', { name: contract.name })).toHaveAttribute('aria-controls', `yolo-view-${contract.key}`)
+  }
+  await expect(page.locator('#yolo-view-today[role="tabpanel"]')).toBeVisible()
+
+  await page.getByRole('button', { name: '更多看板操作' }).click()
+  await expect(page.getByRole('menuitem', { name: '目标与里程碑' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '今日台账' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  for (const selector of ['.p-head', '.y-tabs', '.v2-today-surface']) {
+    expect(await page.locator(selector).evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  }
+  const panelWidth = await panel.evaluate((element) => element.getBoundingClientRect().width)
+  expect(panelWidth).toBeGreaterThanOrEqual(320)
+  expect(panelWidth).toBeLessThanOrEqual(400)
+})
