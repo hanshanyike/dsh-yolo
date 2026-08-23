@@ -88,10 +88,10 @@ YOLO 分四个阶段发展：**记得 → 组织 → 预判 → 陪伴**。当�
 - [使用文档](docs/usage.md) —— 安装、配置、功能、数据存储（中文）
 - [愿景](docs/VISION.md) —— 项目的愿景与愿景驱动的方向（中文）
 - [产品设计](docs/product-design.md) —— 面板 1.0 的全景蓝图（中文）
-- [架构总览](docs/architecture/overview.md) —— 数据流、插件接缝、设计决策（英文）
+- [架构总览](docs/architecture/overview.md) —— 数据流、插件接缝、设计决策（中文）
 - [模块索引](docs/architecture/modules.md) —— 按模块查找实现文档（中文）
 - [测试文档](docs/testing.md) —— 如何跑测试、怎么加、真机走查（中文）
-- [发布流程](docs/release.md) —— 如何发版到 npm（英文）
+- [发布流程](docs/release.md) —— 如何发版到 npm（中文）
 - [CHANGELOG](CHANGELOG.md) —— 版本历史
 
 ## 参与贡献

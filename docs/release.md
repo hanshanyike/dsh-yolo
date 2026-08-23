@@ -1,77 +1,69 @@
-# Release process
+# 发布流程
 
-How to cut a release of `dsh-plugin-yolo`. The whole flow is manual-but-scripted:
-one version bump, one publish, one tag.
+本文说明如何发布 `dsh-plugin-yolo`。整个流程由人工发起、脚本辅助：更新一次版本、发布一次、
+创建一个标签。
 
-## Prerequisites
+## 前置条件
 
-- npm account with publish rights to the `dsh-plugin-yolo` package
-  (first publish claims the name; `publishConfig.access` is already `public`).
-- `pnpm build` green and `pnpm check` / `pnpm test:run` green on main
-  (CI confirms this on both Linux and Windows).
-- For releases touching the UI: a live E2E walkthrough of the panel completed
-  on the current build ([testing.md §七](testing.md#七真机端到端验证)).
+- 拥有 `dsh-plugin-yolo` 包发布权限的 npm 账号（首次发布会占用包名；
+  `publishConfig.access` 已设为 `public`）。
+- main 分支上的 `pnpm build`、`pnpm check` 和 `pnpm test:run` 均通过；
+  CI 会在 Linux 和 Windows 上确认这些检查。
+- 如果发布内容涉及界面，必须基于当前构建完成一次面板真机端到端走查
+  （见 [testing.md 第七节](testing.md#七真机端到端验证)）。
 
-## Steps
+## 操作步骤
 
 ```bash
-# 1. make sure main is clean and CI is green
+# 1. 确认 main 工作区干净且 CI 通过
 git checkout main && git pull
 
-# 2. close the Unreleased section in CHANGELOG.md:
-#    rename "## [Unreleased]" -> "## [<new version>] — <today>"
-#    and add the compare links at the bottom
+# 2. 关闭 CHANGELOG.md 中的 Unreleased 小节：
+#    将“## [Unreleased]”改为“## [<新版本>] — <当天日期>”
+#    并在文末补充版本比较链接
 
-# 3. bump the version (updates package.json, commits, tags)
-npm version 0.2.0          # or: pnpm version 0.2.0
+# 3. 更新版本号（同时更新 package.json、提交并打标签）
+npm version 0.2.0          # 也可以使用：pnpm version 0.2.0
 
-# 4. build + sanity-check the artifact
+# 4. 构建并快速检查产物
 pnpm build
-npm pack --dry-run         # verify the file list (dist/, bundle yml, schema.sql, docs)
+npm pack --dry-run         # 核对文件清单（dist/、bundle yml、schema.sql、docs）
 
-# 5. publish
+# 5. 发布
 npm publish --access public
 
-# 6. push commits + tag
+# 6. 推送提交和标签
 git push --follow-tags
 ```
 
-After publishing, start a fresh `## [Unreleased]` section at the top of the
-CHANGELOG.
+发布完成后，在 CHANGELOG 顶部新建一个 `## [Unreleased]` 小节。
 
-## What gets published
+## 发布内容
 
-Controlled by the `files` whitelist in `package.json`:
+发布文件由 `package.json` 中的 `files` 白名单控制：
 
-- `dist/` — built host plugins (ESM) + wrapped client bundle (CJS) + `schema.sql`
-- `cordis.patch.yml` — the plugin bundle manifest the host reads (auto-applied by `dsh plugin add`)
-- `README.md`, `LICENSE`, `CHANGELOG.md`
+- `dist/`——构建后的宿主插件（ESM）+ 包装后的客户端包（CJS）+ `schema.sql`
+- `cordis.patch.yml`——宿主读取的插件包清单（由 `dsh plugin add` 自动应用）
+- `README.md`、`LICENSE`、`CHANGELOG.md`
 
-Not published: source, tests, docs/, scripts/ (consumers only need the
-runtime artifacts).
+不发布源码、测试、`docs/` 和 `scripts/`；使用者只需要运行时产物。
 
-## Installing a published plugin (for users)
+## 安装已发布插件（面向使用者）
 
-Once published, a deepseek-harness profile can resolve the plugin by package
-name instead of a repo checkout — the patch overlay entries already use
-package-name subpaths (`dsh-plugin-yolo/dist/src/storage`, …), so installing
-the tarball into the profile's `node_modules` is sufficient:
+发布后，deepseek-harness profile 可以按包名解析插件，不再依赖仓库检出。patch overlay 入口已经使用
+包名子路径（`dsh-plugin-yolo/dist/src/storage` 等），因此只需把 tarball 安装到 profile 的
+`node_modules`：
 
 ```bash
 mkdir -p ~/.dsh/profiles/web/node_modules
 npm install --prefix ~/.dsh/profiles/web dsh-plugin-yolo
 ```
 
-Then reference the same `cordis.dev.local.yml`-style entries (see
-[architecture.md](architecture/overview.md#design-decision-why-not-dynamic-cordis-plugins)
-for why YOLO uses the patch-overlay path, and
-[modules.md](architecture/modules.md#构建契约host-如何发现并加载-bundle) for the runtime patch
-format).
+随后引用与 `cordis.dev.local.yml` 相同风格的入口。YOLO 采用 patch-overlay 路径的原因与运行时
+格式见[运行与装配](architecture/runtime.md)，浏览器端装载条件见[客户端构建契约](architecture/client.md)。
 
-## Versioning policy
+## 版本策略
 
-- `0.x` — the dsh platform itself is `0.1.0-rc`; breaking changes are allowed
-  in minor bumps, note them in the CHANGELOG.
-- Patch bumps for fixes only; minor bumps for feature drops
-  (memory foundation → `0.2.0`, stateful plan + reply-to-act → `0.3.0`, …).
-- Peer dep on `@deepseek-ai/cordis` stays `*` — the host provides it.
+- `0.x`——dsh 平台本身仍是 `0.1.0-rc`；允许在次版本升级中引入破坏性变更，且必须记录在 CHANGELOG 中。
+- 修复只提升补丁版本；功能发布提升次版本（记忆基础 → `0.2.0`，有状态计划 + 回复即操作 → `0.3.0`，依此类推）。
+- `@deepseek-ai/cordis` 的 peer dependency 保持为 `*`，由宿主提供。

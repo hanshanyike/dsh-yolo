@@ -103,10 +103,10 @@ Start at the [docs index](docs/README.md) — it maps every document to its audi
 - [User guide](docs/usage.md) — install, config, features, data storage (Chinese)
 - [Vision](docs/VISION.md) — the project's vision & vision-driven direction (Chinese)
 - [Product design](docs/product-design.md) — the 1.0 dashboard blueprint (Chinese)
-- [Architecture overview](docs/architecture/overview.md) — data flows, plugin seams, decisions (English)
+- [Architecture overview](docs/architecture/overview.md) — data flows, plugin seams, decisions (Chinese)
 - [Module index](docs/architecture/modules.md) — implementation docs by module (Chinese)
 - [Testing](docs/testing.md) — how to run, what's covered, how to add, live walkthrough (Chinese)
-- [Release](docs/release.md) — how to cut a release & publish to npm (English)
+- [Release](docs/release.md) — how to cut a release & publish to npm (Chinese)
 - [CHANGELOG](CHANGELOG.md) — release history
 
 ## Contributing
