@@ -154,3 +154,41 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 | `client/**`, `src/ui/**`, dashboard/actions payload 形状 | L0 + `--lane ui` + 真机 W1–W10（docs/testing.md 第八节） |
 | `playwright.config.ts`, `tests/e2e/**`, `scripts/e2e.mjs` | 全套 E2E 自证 |
 | 版本发布（UI 相关） | 全量 E2E + 真机走查 |
+
+## 八、人工验证清单
+
+> 自动化覆盖契约与交互回归；以下是需要**人眼 / 真机**确认的项。
+> A/B 针对 2026-08 E2E 治理这批改动（scope key 缓存是产品级变更，必须真机复核）；
+> C 是常设的通用面板走查（W1–W10 细项见 [testing.md](testing.md) 第八节，此处不重复）。
+> 规则沿用：全部 PASS 才算收口；无法验证的项标 SKIP + 原因，连续两次 SKIP 的项排进下个版本补验。
+
+### A. 本轮改动专项（scope key 缓存 + runner 行为）
+
+| # | 验证项 | 步骤 | 通过标准 |
+|---|---|---|---|
+| A1 | 看板响应体感 | 打开看板、点「立即刷新」；DevTools Network 观察 `/yolo/dashboard` | 载荷到达无感知延迟（数百 ms 量级，不再有 ~3s 停顿） |
+| A2 | git 进程不再被轮询孵化 | 打开任务管理器/进程监视，停留 ≥1 个角标轮询周期（30s+），期间正常用看板 | 无 `git.exe` 周期性闪现（修复前每次轮询孵化一串） |
+| A3 | 分支隔离语义未被缓存破坏 | 在本仓库 `git switch -c tmp-verify`，等 ~6s，快速记一条待办；`git switch` 回原分支，等 ~6s 后刷新看板 | 刚才那条待办只出现在创建时所在分支的看板，不串分支 |
+| A4 | 提醒闭环（TB-3~6 真机复验） | 对话说「提醒我把演示稿发给研发」（或看板快速添加到期任务），等调度器/手动触发 | 角标出圆点 + 通知卡带「到期提醒」；点「知道了」后卡片退场、角标归零 |
+| A5 | 「聊一聊」锚定（W10） | 卡片「聊一聊」打开对话，发一句话 | 全新对话无历史泄漏；能收到回复且锚定上下文显示该任务 |
+| A6 | Esc 逐级退出 + 窄屏（W7/TA-6） | 全屏对话按 Esc 两次；再把窗口压到 <480px 重开面板 | 全屏→侧栏→关面板逐级退；窄屏对话直接全屏、无横向滚动 |
+| A7 | 主题解析（W6） | 宿主切暗色后重开面板，再切回亮色 | 深底浅字无亮色残留；亮色无暗色残留 |
+| A8 | 台账渲染（W8/P35） | 合并两条待办后打开「今日台账」 | 「合并：」条目在列，来源徽标渲染、hover 有跳转态样式 |
+
+### B. E2E 工具链（runner 行为抽查）
+
+| # | 验证项 | 步骤 | 通过标准 |
+|---|---|---|---|
+| B1 | api 车道秒级反馈 | `node scripts/e2e.mjs --lane api` | 数秒内全绿；结束时 runner 自动停掉自己拉起的宿主 |
+| B2 | 无孤儿进程残留 | B1 结束后立即 `Get-NetTCPConnection -LocalPort <port>` | 无 LISTEN（修复前 node 孙进程会存活占端口） |
+| B3 | ui 车道全套 | `node scripts/e2e.mjs --lane ui` | ~1 分钟全绿（本机基线 17 用例 55–98s，随机器负载浮动） |
+| B4 | 自动夹具清扫 | 制造一条 `[E2E]` 假数据后让 runner 拉起宿主（换个 `YOLO_E2E_PORT` 跑） | 日志出现 `fixture sweep ... removed N rows`；看板无该假数据 |
+| B5 | 复用宿主不碰库 | 宿主在跑时 `node scripts/e2e.mjs --lane api --no-host` | 日志显示 `its database is NOT touched`；宿主数据原样 |
+| B6 | 探测超时可诊断 | 停掉宿主后跑 `--no-host` | 报错含 `probe budget` 与 `YOLO_E2E_PROBE_MS` 提示，而非含糊的"没起来" |
+
+### C. 通用面板走查（常设）
+
+按改动触发范围执行 [testing.md](testing.md) 第八节 **W1–W10** 清单
+（骨架/控制台、工具条、任务行、捕获条、对话开合、主题、窄屏、台账、会话切换、锚定对话）。
+本批改动未触碰 `client/**` 与 payload 形状，C 项按「版本发布 / UI 相关变更」节奏走查即可；
+但 **A1–A3 属于本批引入的产品行为变化，本次必须人工过一遍**。
