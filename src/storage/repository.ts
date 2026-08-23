@@ -438,6 +438,14 @@ export function listUnhandledNotifications(db: DB, scopeKey: string): Notificati
     .all(scopeKey) as Notification[]
 }
 
+/** Count-only badge query; avoids materializing notification rows every poll. */
+export function countUnhandledNotifications(db: DB, scopeKey: string): number {
+  const row = db
+    .prepare('SELECT COUNT(*) AS count FROM notifications WHERE scope_key = ? AND handled_at IS NULL')
+    .get(scopeKey) as { count: number }
+  return row.count
+}
+
 export function markNotificationHandled(db: DB, id: string): void {
   db.prepare('UPDATE notifications SET handled_at = ? WHERE id = ? AND handled_at IS NULL').run(now(), id)
 }
@@ -921,6 +929,5 @@ export function countRecallStatusSince(db: DB, status: string, sinceMs: number):
   return row?.n ?? 0
 }
 export type { ExtractionLog }
-
 
 

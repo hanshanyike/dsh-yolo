@@ -65,6 +65,13 @@ describe('ui apply: config normalization (Bug 1 regression)', () => {
 })
 
 describe('ui apply: global dashboard endpoint', () => {
+  it('registers the lightweight badge endpoint exactly once', () => {
+    const { ctx } = makeCtx(mockYolo())
+    apply(ctx as never, undefined)
+    const calls = (ctx.webServer.register as ReturnType<typeof vi.fn>).mock.calls
+    expect(calls.filter(([opts]) => opts.path === '/yolo/badge')).toHaveLength(1)
+  })
+
   it('registers GET /yolo/dashboard exactly once', () => {
     const { ctx } = makeCtx(mockYolo())
     apply(ctx as never, undefined)

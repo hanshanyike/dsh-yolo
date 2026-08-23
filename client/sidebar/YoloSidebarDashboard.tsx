@@ -5,7 +5,7 @@
 // the badge follows reminders even while the panel is closed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { YoloDashboardData } from '../../src/shared/dashboard.ts'
+import type { YoloBadgeData } from '../../src/shared/badge.ts'
 import { YoloLogo } from '../YoloLogo.tsx'
 import { YoloPanel } from '../panel/YoloPanel.tsx'
 
@@ -46,13 +46,13 @@ export function YoloSidebarDashboard({ wide = true, openSession }: YoloSidebarDa
   const panelRef = useRef<HTMLDivElement>(null)
   const [anchorLeft, setAnchorLeft] = useState<number | undefined>()
 
-  // badge feed: light dashboard poll, always on (TB-3 — reminders arrive while
+  // badge feed: count-only poll, always on (TB-3 — reminders arrive while
   // the panel is closed and must surface on the badge).
   const loadBadge = useCallback(async (): Promise<void> => {
     try {
-      const r = await fetch('/yolo/dashboard', { headers: { accept: 'application/json' }, cache: 'no-store' })
+      const r = await fetch('/yolo/badge', { headers: { accept: 'application/json' }, cache: 'no-store' })
       if (!r.ok) return
-      const data = (await r.json()) as YoloDashboardData
+      const data = (await r.json()) as YoloBadgeData
       setUnhandled(data.unhandled ?? 0)
     } catch {
       // host not serving yet — keep the last badge, try again next tick

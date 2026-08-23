@@ -321,6 +321,10 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.listUnhandledNotifications(h.db, h.scopeKey)
   }
+  countUnhandledNotifications(cwd: string): number {
+    const h = this.resolve(cwd)
+    return repo.countUnhandledNotifications(h.db, h.scopeKey)
+  }
   markNotificationHandled(cwd: string, id: string): boolean {
     const h = this.resolve(cwd)
     const before = repo.listUnhandledNotifications(h.db, h.scopeKey).length
@@ -441,7 +445,6 @@ export default class Yolo extends Service {
 }
 
 export type { ExtractionLog }
-
 
 
 
