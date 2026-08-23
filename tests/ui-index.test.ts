@@ -98,6 +98,33 @@ describe('ui apply: global dashboard endpoint', () => {
     expect(body.cwd).toBe('/ws/alpha')
   })
 
+  // v0.3.3 review regression: YOLO threads own their workspace — a resident or
+  // anchored thread turn must NOT move the dashboard's fallback workspace.
+  it('a YOLO thread turn does not move the tracked workspace', () => {
+    const cwds: string[] = []
+    const yolo = {
+      ...mockYolo(),
+      resolve: (c: string) => {
+        cwds.push(c)
+        return { scopeKey: 'test/main', db: {}, dataDir: '' }
+      },
+    } as unknown as Yolo
+    const { ctx, handlers } = makeCtx(yolo)
+    apply(ctx as never)
+
+    handlers.get('agent/turn-stopping')!({ agent: { id: 'work-1', session: { header: { id: 's1', cwd: '/ws/alpha' } } } })
+    handlers.get('agent/turn-stopping')!({ agent: { id: 'yolo-w-abc123def456', session: { header: { id: 'y1', cwd: '/ws/beta' } } } })
+    handlers.get('agent/turn-stopping')!({ agent: { id: 'yolo-a-abc123def456', session: { header: { id: 'y2', cwd: '/ws/beta' } } } })
+
+    const register = (ctx.webServer.register as ReturnType<typeof vi.fn>).mock.calls
+      .find(([opts]) => opts.path === '/yolo/dashboard')![0] as { handler: (req: unknown, res: unknown) => Promise<void> }
+    const res = { writeHead: vi.fn(), end: vi.fn() }
+    void register.handler({}, res)
+
+    const body = JSON.parse(String(res.end.mock.calls[0]?.[0]))
+    expect(body.cwd).toBe('/ws/alpha')
+  })
+
   it('falls back to the process cwd before any session ran', () => {
     const cwds: string[] = []
     const yolo = {

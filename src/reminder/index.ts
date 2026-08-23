@@ -54,7 +54,10 @@ export function apply(ctx: Context): void {
   // turn-cadence snapshot: 'every_10_turns' writes a timestamped Markdown
   // snapshot every 10 finished turns (config read live via ctx.settings)
   let turnCount = 0
-  ctx.on('agent/turn-stopping', (payload: { agent?: { session?: unknown } }) => {
+  ctx.on('agent/turn-stopping', (payload: { agent?: { id?: string; session?: unknown } }) => {
+    // YOLO threads own their workspace: their turns neither move latestCwd nor
+    // count toward the WORK-space snapshot cadence (mirrors session-start).
+    if (isYoloSessionId((payload?.agent as { id?: string } | undefined)?.id)) return
     turnCount++
     try {
       trackCwd(payload?.agent)

@@ -86,6 +86,21 @@ describe('memory apply()', () => {
     expect(contexts[0].text()).toBe('')
   })
 
+  // v0.3.3 review regression: YOLO-owned threads (resident + anchored chat)
+  // own their scope — their user messages (reminder replies etc.) must not
+  // move the tracked workspace or trigger recall prewarm.
+  it('skips YOLO-thread sessions entirely (workspace tracker + recall)', () => {
+    const { ctx, handlers, contexts } = makeCtx()
+    apply(ctx as never)
+    const onEvent = handlers.get('session/event')!
+
+    yolo.addTodo(cwd, { title: '准备季度汇报材料', source: 'manual' })
+    const yoloThread = { header: { id: 'yolo-a-abc123def456', cwd } }
+    onEvent(yoloThread, { type: 'user/message', data: { content: [{ type: 'text', text: '季度汇报' }] } })
+
+    expect(contexts[0].text()).toBe('')
+  })
+
   // real-world regression: user messages containing FTS5 syntax characters
   // (angle brackets, quotes, operators) crashed the MATCH query and took the
   // whole turn down with "fts5: syntax error near ..."

@@ -52,7 +52,12 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
     const cwd = sessionCwd((payload.agent as { session?: unknown } | undefined)?.session)
     if (cwd) latestSessionCwd = cwd
   })
-  ctx.on('agent/turn-stopping', (payload: { agent?: { session?: unknown } }) => {
+  ctx.on('agent/turn-stopping', (payload: { agent?: { id?: string; session?: unknown } }) => {
+    // YOLO threads own their workspace: a resident/anchored thread turn must
+    // never move the shared "latest workspace" tracker — it would silently
+    // re-target quick actions, the dashboard fallback and snapshots to another
+    // scope (mirrors the session-start guard above).
+    if (isYoloSessionId((payload.agent as { id?: string } | undefined)?.id)) return
     const cwd = sessionCwd(payload.agent?.session)
     if (cwd) latestSessionCwd = cwd
   })

@@ -64,8 +64,12 @@ describe('reminder apply: workspace tracking (v0.3.0)', () => {
     const onStart = handlers.get('agent/session-start')!
     onStart({ agent: { id: 'yolo-w-abc123', session: { header: { id: 'y1', cwd: '/ws/yolo' } } } })
 
+    // v0.3.3 review regression: the turn-stopping path must skip YOLO threads
+    // too — a reminder reply turn carries the thread's session (with a cwd),
+    // and before the guard it moved latestCwd to the thread's workspace.
     const onTurn = handlers.get('agent/turn-stopping')!
-    for (let i = 0; i < 10; i++) onTurn()
+    const yoloTurn = { agent: { id: 'yolo-w-abc123', session: { header: { id: 'y1', cwd: '/ws/yolo' } } } }
+    for (let i = 0; i < 10; i++) onTurn(yoloTurn)
     expect(yolo.writeSnapshot).not.toHaveBeenCalledWith('/ws/yolo', expect.any(String))
   })
 })
