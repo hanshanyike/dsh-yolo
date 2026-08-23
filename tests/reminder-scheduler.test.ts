@@ -129,6 +129,64 @@ describe('startReminderScheduler: reminder config wiring (M9 P44)', () => {
   })
 })
 
+describe('startReminderScheduler: multi-workspace scan (v0.3.3 review fix)', () => {
+  it('scans every known workspace each tick, not just the latest cwd', async () => {
+    vi.useFakeTimers()
+    const yolo = mockYolo()
+    const cleanup = startReminderScheduler(mockCtx(), {
+      yolo,
+      cwd: () => '/ws/latest',
+      intervalMs: 1000,
+      workspaces: () => [{ cwd: '/ws/a' }, { cwd: '/ws/b' }],
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    const cwds = (yolo.listDueTodos as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])
+    expect(cwds).toContain('/ws/a')
+    expect(cwds).toContain('/ws/b')
+    cleanup()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect((yolo.listDueTodos as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === '/ws/a')).toHaveLength(1)
+  })
+
+  it('an empty workspaces list falls back to the single tracked cwd', async () => {
+    vi.useFakeTimers()
+    const yolo = mockYolo()
+    const cleanup = startReminderScheduler(mockCtx(), {
+      yolo,
+      cwd: () => '/ws/only',
+      intervalMs: 1000,
+      workspaces: () => [],
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(yolo.listDueTodos).toHaveBeenCalledWith('/ws/only', expect.any(String))
+    cleanup()
+  })
+
+  it('one broken workspace does not block the others in the same tick', async () => {
+    vi.useFakeTimers()
+    const ctx = mockCtx()
+    const yolo = mockYolo({
+      listDueTodos: vi.fn((cwd: string) => {
+        if (cwd === '/ws/bad') throw new Error('database locked')
+        return []
+      }),
+    })
+    const cleanup = startReminderScheduler(ctx, {
+      yolo,
+      cwd: () => '/ws/latest',
+      intervalMs: 1000,
+      workspaces: () => [{ cwd: '/ws/good' }, { cwd: '/ws/bad' }],
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(yolo.listDueTodos).toHaveBeenCalledWith('/ws/good', expect.any(String))
+    expect((ctx.logger.warn as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[1] === '/ws/bad')).toBe(true)
+    cleanup()
+  })
+})
+
 describe('inQuietWindow (v0.3.2 quiet-hours gate)', () => {
   it('surfaces no window when start/end are empty or equal', () => {
     expect(inQuietWindow('10:00', '', '18:00')).toBe(false)

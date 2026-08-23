@@ -96,6 +96,10 @@ export function apply(ctx: Context): void {
       yolo: yctx.yolo,
       cwd: () => latestCwd ?? process.cwd(),
       deliver,
+      // v0.3.3 review fix: scan EVERY known workspace each tick — the board
+      // aggregates all of them, and scanning only latestCwd silently dropped
+      // due todos in every other workspace.
+      workspaces: () => yctx.yolo.listWorkspaceMeta(),
       // interval cannot re-arm a live timer, so it is fixed at startup;
       // ahead/enabled/quiet are read per tick so Settings edits apply without reload
       intervalMs: resolveReminderRuntime(reminderCfg()).intervalMs,
