@@ -170,13 +170,13 @@ export async function runBriefTick(deps: {
       : fallback
     deps.yolo.addNotification(cwd, {
       kind: 'brief',
-      title: kind === 'morning' ? `☀ 早报 · ${today}` : `🌙 晚报 · ${today}`,
+      title: kind === 'morning' ? `早报 · ${today}` : `晚报 · ${today}`,
       body,
       scope_cwd: cwd,
     })
     deps.yolo.addEvent(cwd, {
       kind: 'brief_generated',
-      summary: kind === 'morning' ? `☀ 生成早报（${today}）` : `🌙 生成晚报（${today}）`,
+      summary: kind === 'morning' ? `生成早报（${today}）` : `生成晚报（${today}）`,
       source: 'tool',
     })
     deps.yolo.setBriefStamp(cwd, kind, today)

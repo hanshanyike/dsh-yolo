@@ -51,7 +51,7 @@ describe('runBriefTick timing (TD-1)', () => {
     expect(yolo.addNotification).toHaveBeenCalledTimes(1)
     expect(yolo.addNotification).toHaveBeenCalledWith(
       CWD,
-      expect.objectContaining({ kind: 'brief', title: '☀ 早报 · 2026-08-22' }),
+      expect.objectContaining({ kind: 'brief', title: '早报 · 2026-08-22' }),
     )
   })
 
@@ -79,7 +79,7 @@ describe('brief body fallback (TD-6)', () => {
     })
     await runBriefTick({ yolo, cwd: () => CWD, config: CONFIG, now: at('10:00') })
     const call = (yolo.addNotification as ReturnType<typeof vi.fn>).mock.calls[0]
-    expect(call[1].body).toContain('☀ 早报 · 2026-08-22')
+    expect(call[1].body).toContain('早报 · 2026-08-22')
     expect(call[1].body).toContain('今日到期 1 件：写周报')
   })
 
@@ -89,8 +89,8 @@ describe('brief body fallback (TD-6)', () => {
     await runBriefTick({ yolo, cwd: () => CWD, config: CONFIG, llm: brokenLlm, now: at('19:00') })
     // 19:00 已过两个时段：call[0] 早报、call[1] 晚报，正文都应是回退 markdown
     const calls = (yolo.addNotification as ReturnType<typeof vi.fn>).mock.calls
-    expect(calls[0][1].body).toContain('☀ 早报 · 2026-08-22')
-    expect(calls[1][1].body).toContain('🌙 晚报 · 2026-08-22')
+    expect(calls[0][1].body).toContain('早报 · 2026-08-22')
+    expect(calls[1][1].body).toContain('晚报 · 2026-08-22')
   })
 })
 
@@ -124,6 +124,6 @@ describe('fact collectors', () => {
 
   it('renderBriefMarkdown formats head + bullet lines', () => {
     const md = renderBriefMarkdown('morning', ['今日到期：无', '逾期：无'], '2026-08-22')
-    expect(md.split('\n')).toEqual(['☀ 早报 · 2026-08-22', '', '- 今日到期：无', '- 逾期：无'])
+    expect(md.split('\n')).toEqual(['早报 · 2026-08-22', '', '- 今日到期：无', '- 逾期：无'])
   })
 })

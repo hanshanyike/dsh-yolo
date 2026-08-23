@@ -66,7 +66,7 @@ export function collectEveningFacts(yolo: Yolo, cwd: string, today: string): str
 
 /** Plain markdown fallback — always renderable, no model needed (TD-6). */
 export function renderBriefMarkdown(kind: BriefKind, facts: readonly string[], today: string): string {
-  const head = kind === 'morning' ? `☀ 早报 · ${today}` : `🌙 晚报 · ${today}`
+  const head = kind === 'morning' ? `早报 · ${today}` : `晚报 · ${today}`
   return [head, '', ...facts.map((f) => `- ${f}`)].join('\n')
 }
 

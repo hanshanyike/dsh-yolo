@@ -241,8 +241,14 @@ function dotPos(target: string | null | undefined): number {
 
 function notifTypeLabel(kind: string, title: string): string {
   if (kind === 'reminder') return '到期提醒'
-  if (kind === 'brief') return title.startsWith('☀') ? '早报' : title.startsWith('🌙') ? '晚报' : '简报'
+  if (kind === 'brief') return title.includes('早报') ? '早报' : title.includes('晚报') ? '晚报' : '简报'
   return '通知'
+}
+
+/** Legacy brief/reminder rows may contain emoji or a replacement glyph from
+ * old Windows encoding. Icons belong to the component chrome, not user text. */
+function cleanNotificationText(value: string): string {
+  return value.replace(/^[\uFFFD⏰☀🌙]\s*/u, '')
 }
 
 const noop = (): void => {}
@@ -715,8 +721,8 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
               <span className="notif-time mono">{timeLabel}</span>
             </div>
             <div className="notif-body">
-              <div style={{ fontWeight: 500 }}>{n.title.replace(/^[⏰☀🌙]\s*/, '')}</div>
-              {n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2, whiteSpace: 'pre-wrap' }}>{n.body}</div>}
+              <div style={{ fontWeight: 500 }}>{cleanNotificationText(n.title)}</div>
+              {n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2, whiteSpace: 'pre-wrap' }}>{cleanNotificationText(n.body)}</div>}
             </div>
             <div className="notif-acts">
               {n.kind === 'reminder' && n.todo_id && (
@@ -734,7 +740,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
               )}
               <button type="button" className="nact nact--chat" onClick={() => {
                 onOpenChat({
-                  title: n.title.replace(/^[⏰☀🌙]\s*/, ''),
+                  title: cleanNotificationText(n.title),
                   detail: n.body ?? null,
                   todoId: n.todo_id ?? undefined,
                   scopeCwd: n.scope_cwd ?? n.ws?.cwd,
