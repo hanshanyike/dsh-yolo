@@ -4,220 +4,97 @@
 
 # YOLO
 
-**Say it once. Keep it on track.**
+**说一遍，它帮你把这件事沿着轨道稳稳推进。**
 
-*A personal assistant for deepseek-harness that watches your conversations, manages your work & life, and reminds you what's due — across every session.*
+*为 deepseek-harness 打造的个人 AI 助手 —— 看着你的对话，管理你的工作与生活，跨会话提醒那些到期的事。*
 
-[![CI](https://github.com/hanshanyike/dsh-yolo/actions/workflows/ci.yml/badge.svg)](https://github.com/hanshanyike/dsh-yolo/actions/workflows/ci.yml)
+[English](README.en.md) · [文档中心](docs/README.md)
+
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](package.json)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.19-339933?logo=node.js&logoColor=white)](package.json)
-[![Tests](https://img.shields.io/badge/tests-207%20passing-brightgreen)](tests/)
-[![Coverage](https://img.shields.io/badge/coverage-74%25%20stmts%20%7C%2086%25%20branches-green)](vitest.config.ts)
-[![Built on](https://img.shields.io/badge/built%20on-deepseek--harness-1E90FF)](https://github.com/deepseek-ai/deepseek-harness)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 </div>
 
 ---
 
-Every session you have, you also *lose* — the goals, deadlines, decisions and
-preferences you just discussed evaporate when the window closes. **YOLO** is the
-assistant that keeps your work and life on track, for
-[deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) users:
+每一段对话，你都在*失去*一些东西：刚说好的目标、定下的截止、做过的决定、偏好的方式——窗口一关就归零。**YOLO** 是一个不会忘记的助手：它把你在对话里交代过的事接住，整理成一份跨会话、可回看、会被提醒的计划。
 
-- It **watches every conversation** and figures out what matters — your
-  **todos**, **milestones**, **goals**, **preferences** and timeline **events**.
-- It **manages them across sessions** in a workspace-scoped, searchable store that
-  stays with you no matter how many windows you open.
-- It **keeps the plan alive**: say "做完了 / 进行中 / 推迟到周五 / 写了一半" in any
-  later session and task status, goal progress and due dates update themselves —
-  every change audited on the timeline.
-- It **reminds you when things are due** — proactively, even if the host was
-  offline when the deadline passed — and the reminder is *reply-able*: answer
-  「推迟到明天 / 已完成 / 再提醒一次」 and it just happens.
-- It **shows your day at a glance** in a global dashboard right in the dsh sidebar
-  — timeline, task board, goal progress, milestones & preferences — and lets you
-  complete / postpone / cancel todos without leaving it.
+它替你记，但不替你干：
 
-YOLO doesn't just *remember* — it *understands*. At every turn end, an LLM
-semantic pass (the same pattern as [Mem0](https://github.com/mem0ai/mem0) or
-Claude Code's auto-memory) reads the whole exchange, extracts only the durable
-asks, and deduplicates them against what's already stored — so your plan stays
-accurate without spamming your tokens.
+- 它**看着每一段对话**，听懂哪些值得留下——待办、里程碑、目标、偏好与日程事件。
+- 它把这些**跨会话**整理进一个按工作区隔离、可搜索的库，无论你开多少窗口都跟着你。
+- 它**让计划活起来**：之后任意会话里说一句「做完了 / 进行中 / 推迟到周五 / 写了一半」，任务状态、目标进度和截止日自己就更新了，每次变动都留在时间线上。
+- 它**在到期时主动提醒**——即使宿主设备离线错过截止，下次也会补上——而且提醒*可回复*：你回一句「推迟到明天 / 已完成 / 再提醒一次」，它就照做。
+- 它**把一天摊开给你看**：dsh 侧栏里的全局看板——时间线、任务板、目标进度、里程碑与偏好——不用离开就能完成 / 推迟 / 取消待办。
 
-## ✨ Features
+YOLO 不只是*记住*，它*理解*：每轮对话结束时，它用大模型做一次语义提取（与 [Mem0](https://github.com/mem0ai/mem0)、Claude Code 的自动记忆同一思路），只留下真正值得长期记住的东西，并与已存记忆去重——计划始终准确，又不浪费你的 token。
 
-| | |
-|---|---|
-| 🧠 **LLM semantic extraction** | One structured pull at every turn end: the model reads the whole exchange and returns todos / milestones / goals / preferences / events **plus state-change `updates[]`** — deduplicated against a known-memories digest that carries status, progress and due dates |
-| 🗄️ **Layered storage** | SQLite (WAL + FTS5 trigram, CJK-aware) as the fast store; human-readable **Markdown snapshots** — your memory is versionable & diffable |
-| 📈 **Stateful plan with event audit** | Todos flow `pending → in_progress → done/cancelled` (+ postpone / start / remind-again), goals track 0–100 progress, milestones carry status — one set of domain actions serves extraction, chat replies and the dashboard, and every transition lands on the timeline |
-| 🔎 **Model-visible tools** | `memory_search` / `memory_write` / `memory_forget` / `yolo_query` / `yolo_action` — the agent reads, manages *and advances* your plan itself |
-| 📝 **Automatic recall** | Preferences ride along in every system prompt; related memories are FTS-recalled against your latest message — no "remember that?" needed |
-| 🔔 **Reply-able reminders** | Time-triggered `agent.followup` wake-ups carrying the todo id + routing instructions — answer「已完成 / 推迟到明天 / 再提醒一次」and the agent applies it via `yolo_action`; queue-and-replay on session start so nothing is lost while the host is offline |
-| 📊 **Actionable sidebar dashboard** | A global YOLO panel in the dsh sidebar footer: timeline, task board, goal progress, milestones & preferences — session-independent, live-polled, and open todos carry ✓ 完成 / +1d / ✕ buttons that act in place |
-| 🧩 **Everything is a plugin** | 5 cooperating plugins over Cordis capability seams; each piece swappable, HMR-friendly |
+## 快速开始
 
-## 🏗️ Architecture
-
-```
-        ┌──────────────────────────────────────────────────────────┐
-        │                   deepseek-harness host                   │
-        │   (Cordis microkernel · "everything is a plugin")         │
-        └──────────────────────────────────────────────────────────┘
-                                  ▲
-        ┌─────────────────────────┴─────────────────────────┐
-        │                    yolo bundle                     │
-        │                                                    │
-        │  dsh-yolo-storage   Service `ctx.yolo`             │
-        │    └─ SQLite + FTS5 + Markdown snapshot + scopes   │
-        │       + domain actions w/ event audit            │
-        │  dsh-yolo-extract   turn-end LLM semantic pull     │
-        │    └─ new items + state-change updates[]           │
-        │  dsh-yolo-memory    memory_* + yolo_action tools   │
-        │  dsh-yolo-reminder  scheduler + reply-able wake-ups│
-        │  dsh-yolo-ui        settings + dashboard/actions   │
-        └────────────────────────────────────────────────────┘
-```
-
-| plugin | role |
-|---|---|
-| `dsh-yolo-storage` | **Service** (`ctx.yolo`): SQLite + FTS5 + Markdown snapshots, workspace-scoped; domain actions (`applyTodoAction` / `applyGoalProgress` / `applyMilestoneStatus`) with event audit + fuzzy title finders |
-| `dsh-yolo-extract` | LLM semantic extraction at turn end (todos / milestones / goals / preferences / events + state-change `updates[]`), dedup + throttle + milestone linking |
-| `dsh-yolo-memory` | model-visible `memory_search/write/forget` + `yolo_query` / `yolo_action` tools, persistent preamble + dynamic recall |
-| `dsh-yolo-reminder` | time-triggered reply-able reminders (`agent.followup(msg)` + `session-start` replay) |
-| `dsh-yolo-ui` | settings section + `GET /yolo/dashboard` / `POST /yolo/actions` JSON APIs feeding the global sidebar dashboard |
-
-## 🚀 Quick Start
-
-> **Prerequisites**: Node ≥ 22.19, pnpm ≥ 11.
-> On Windows, run commands from **PowerShell** (Git Bash breaks pnpm's safe-delete).
+> **前置要求**：Node ≥ 22.19，pnpm ≥ 11。Windows 上用 **PowerShell** 运行命令（Git Bash 会破坏 pnpm 的安全删除）。
 
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
 
-pnpm install          # YOLO's own deps (better-sqlite3 native binding included)
-pnpm dev:web:setup    # one-time: clones & builds the host, links the profile,
-                      #          generates the runtime patch overlay
-pnpm dev:web          # boots dsh web → http://127.0.0.1:3080
+pnpm install          # 安装依赖（better-sqlite3 原生绑定已含）
+pnpm dev:web:setup    # 一次性：克隆并构建宿主、建立 profile 链接、生成运行时 patch
+pnpm dev:web          # 启动 dsh web → http://127.0.0.1:3080
 ```
 
-`dev.mjs` is idempotent — re-run `pnpm dev:web` any time; use
-`pnpm dev:web:update` to pull the latest host first. It also clones
-[deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) into
-`host/deepseek-harness` on first setup, so nothing is installed globally.
+`dev.mjs` 是幂等的——随时可重跑 `pnpm dev:web`；`pnpm dev:web:update` 会先拉取最新宿主。首次安装会把 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 克隆进 `host/deepseek-harness`，不污染全局。
 
-Open **http://127.0.0.1:3080**, pick your workspace, and start talking.
-YOLO is already watching: mention a deadline, set a goal, or say *"remember this"* —
-then open the **YOLO panel** at the bottom of the left sidebar to see your
-timeline, task board, and goal progress.
+打开 **http://127.0.0.1:3080**，选好工作区开始对话。YOLO 已经在看着了：提到截止时间、设定目标，或说「记住这个」——然后打开左侧边栏底部的 **YOLO 面板**，就能看到时间线、任务板与目标进度。
 
-### How it works — a 10-second demo
+### 十秒看懂它怎么工作
 
 ```
-you:  帮我下周完成季度报告，然后记得周二开会前提醒我
-yolo:  [extract] +todo "季度报告" due=2026-08-27 priority=high
-       [extract] +todo "周二会议" due=2026-08-25
-       [remind] ⏰ scheduler armed — will wake the agent before the meeting
-you:  (next morning, new session)
-yolo:  ⏰ "周二会议" is due today — reply to postpone or mark it done.
-you:  推迟到明天，报告已经写了一半
-yolo:  [yolo_action] postpone "周二会议" → due 2026-08-26 ✓
-       [extract] updates: "季度报告" → in_progress, goal 进度 50%
-      (recalled automatically: prefs say you prefer Chinese summaries)
+你:  帮我下周完成季度报告，然后记得周二开会前提醒我
+yolo: [extract] +todo "季度报告" 截止=2026-08-27 优先级=高
+      [extract] +todo "周二会议" 截止=2026-08-25
+      [remind] ⏰ 已设好到点提醒
+你:  (第二天，新会话)
+yolo: ⏰ "周二会议" 今天到期——回复「推迟到明天」或「已完成」即可
+你:  推迟到明天，报告已经写了一半
+yolo: [yolo_action] 推迟 "周二会议" → 截止 2026-08-26 ✓
+      [extract] 更新："季度报告" → 进行中，目标进度 50%
 ```
 
-## 💾 Where your memory lives
+## 记忆在哪里
 
 ```
 data/
-├── yolo-<scope>.db            # SQLite (WAL + FTS5 trigram) — the fast store
-└── snapshots/                 # Markdown — human-readable, committed to git
-    └── 2026-08-20.md          #   your memory, versioned and diffable
+├── yolo-<scope>.db            # SQLite（WAL + FTS5）——快速读写
+└── snapshots/                 # Markdown——人类可读、可版本化
+    └── 2026-08-20.md          #   你的记忆，可 diff、可提交
 ```
 
-Memory is **workspace-scoped** (`sha1(cwd)/<git-branch>`), so two projects never
-bleed into each other. The DB is a rebuildable cache; the Markdown snapshots are
-the durable, reviewable record — you can restore the DB from a snapshot at any
-time.
+记忆按**工作区 + git 分支**隔离（两个项目互不串）。数据库是可重建的缓存，**Markdown 快照是可回看的真相源**——随时可以从快照重建。
 
-## 🧭 Roadmap
+## 路线图
 
-One idea, delivered step by step — [docs/VISION.md](docs/VISION.md): *remember what you say,
-keep it on track*. The core mechanic is deliberately simple: **every record carries a target
-time, and YOLO fires when it's due** — you reply to act, no ceremony.
+YOLO 的旅程分四步：**记得 → 组织 → 预见 → 陪伴**。前两步已经落地——它记得你说过的，并把它们整理成有状态的计划。第三步「预见」很朴素：每条记录都带着目标时间，到点就触发，你回复一句就完成操作；不该出声时它就安静。终点「陪伴」，是理解你的节奏、与你的 agent 协作——那是远期的事。完整愿景见[愿景文档](docs/VISION.md)。
 
-**✅ Shipped**
+## 文档
 
-- Memory foundation — LLM semantic extraction (todos / milestones / goals / preferences /
-  events), SQLite + FTS5 storage, Markdown snapshots, automatic recall
-- Proactive reminders — due records wake the agent; queued & replayed while offline
-- Global sidebar dashboard — timeline, task board, goals, milestones, preferences
-- Stateful plan — task status, goal progress, milestone transitions, every change audited
-- Reply-to-act — answer 「已完成 / 推迟到明天 / 再提醒一次」 and it just happens; the
-  dashboard carries the same in-place actions
-- Release engineering — CI, npm package claimed ([`0.2.0-alpha.1`](https://www.npmjs.com/package/dsh-plugin-yolo))
+从[文档中心](docs/README.md)开始——它把每篇文档归到对应读者：
 
-**🔜 Next**
+- [使用文档](docs/usage.md) —— 安装、配置、功能、数据存储（中文）
+- [愿景](docs/VISION.md) —— 项目的愿景与愿景驱动的方向（中文）
+- [产品设计](docs/product-design.md) —— 面板 1.0 的全景蓝图（中文）
+- [架构总览](docs/architecture/overview.md) —— 数据流、插件接缝、设计决策（英文）
+- [架构参考](docs/architecture/modules.md) —— 逐模块文件、类型、公开 API、坑（中文）
+- [测试文档](docs/testing.md) —— 如何跑测试、怎么加、真机走查（中文）
+- [发布流程](docs/release.md) —— 如何发版到 npm（英文）
+- [CHANGELOG](CHANGELOG.md) —— 版本历史
 
-- Semantic recall — host-LLM query expansion + rerank stacked on the hybrid FTS
-  recall (search 「季度总结」 → hit “Q3 report”); budgeted + deterministic-degrade,
-  no embedding dep
-- Cross-workspace aggregation — a read-only, opt-in union of every workspace's
-  due items (`?scope=all`), rows tagged with their owning workspace; actions stay
-  current-scope
-- Memory-health entry — duplicate/recall-health metrics surfaced from `recall_log`
-- Stable `v0.3.0` release
+## 参与贡献
 
-**🌱 Future**
+欢迎来[贡献](CONTRIBUTING.md)：有 bug 或想法就开 issue；动手前先保持 `pnpm check` 干净、`pnpm test` 全绿。UI 改动额外需要跑一遍真机走查（见[测试文档·真机端到端验证](docs/testing.md#七真机端到端验证)）。
 
-- Pair with your coding agent, plan your day, grow deeply personal — the Jarvis endgame
-
-> **North star:** YOLO delivers through *its own conversation* — a record fires when due, and
-> you reply to act (postpone / mark done / reschedule). It does **not** shovel memory into
-> every session; per-session injection is optional and off by default — agents ask via
-> `memory_search` / `yolo_query` when they need context. Full rationale in
-> [docs/VISION.md](docs/VISION.md).
-
-Current quality bar: **207 tests passing**, `tsc --noEmit` clean, and a live
-E2E walkthrough of the panel (see [docs/testing.md §七](docs/testing.md)) for
-every change touching the UI.
-
-## 📚 Docs
-
-Start at the [docs index](docs/README.md) — it maps every document to its audience:
-
-- [`docs/VISION.md`](docs/VISION.md) — the project's vision & the vision-driven roadmap (start here)
-- [`docs/architecture/overview.md`](docs/architecture/overview.md) — data flow, plugin seams, design decisions
-- [`docs/architecture/modules.md`](docs/architecture/modules.md) — per-module reference: files, key types, public APIs, gotchas (改代码前先查这里)
-- [`docs/usage.md`](docs/usage.md) — user guide: install, config, features, data storage
-- [`docs/testing.md`](docs/testing.md) — test suite: how to run, what's covered, how to add tests
-- [`docs/release.md`](docs/release.md) — how to cut a release & publish to npm
-- [`CHANGELOG.md`](CHANGELOG.md) — release history
-- [`src/storage/schema.sql`](src/storage/schema.sql) — the full SQLite schema
-
-## 🤝 Contributing
-
-- Found a bug or have an idea? Open an **issue** — architecture/ADR-style discussions welcome.
-- Want to help? Pick a "Next" item from the roadmap — semantic recall is the current front.
-- Keep `pnpm check` clean and `pnpm test` green before opening a PR.
-- **UI changes additionally require a live E2E walkthrough** (`pnpm build && pnpm dev:web`,
-  then work through the W1–W8 checklist in [docs/testing.md §七](docs/testing.md#七真机端到端验证)).
-
-```bash
-pnpm check   # tsc --noEmit
-pnpm test    # vitest (tests/ only — the config excludes the dev host)
-```
-
-## 📄 License
+## 许可证
 
 [MIT](LICENSE) © dsh-yolo contributors
 
 ---
 
-<p align="center"><sub>Made with 🧠 for deepseek-harness — <i>"Say it once. Keep it on track."</i></sub></p>
-
-
-
+<p align="center"><sub>为 deepseek-harness 而做 —— <i>「说一遍，它帮你把这件事沿着轨道稳稳推进。」</i></sub></p>

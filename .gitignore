@@ -52,9 +52,14 @@ coverage/
 # Playwright browser E2E artifacts (tests/e2e/*.spec.ts)
 test-results/
 playwright-report/
+.playwright-cli/
 
 # throwaway local UI-verification scaffolding (not part of the repo)
 .tmp-e2e/
+
+# throwaway local UI/UX review artifacts (internal analysis, not part of the repo)
+docs/uiux-real-review.md
+docs/uiux-review-*.png
 
 # lockfile IS committed (registry deps) — CI installs with --frozen-lockfile
 

@@ -17,13 +17,14 @@
 | 查两个已定位待修的问题（时间线归属 / 提醒不可见） | [问题定位：时间线会话归属](issue-timeline-session-attribution.md) · [问题定位：提醒不可见](issue-reminder-visibility.md)（中文） |
 | 发版流程 | [发布流程](release.md)（英文） |
 | 版本历史 | [CHANGELOG](../CHANGELOG.md) |
-| 项目总览与快速开始 | [README](../README.md) |
+| 项目总览与快速开始 | [README](../README.md)（中文，默认）· [README.en](../README.en.md)（英文） |
 
 ## 文档地图
 
 ```
 dsh-yolo/
-├── README.md               项目总览 · 快速开始 · Roadmap（英文）
+├── README.md               项目总览 · 快速开始 · 路线图（中文，默认）
+├── README.en.md            项目总览 · 快速开始 · Roadmap（英文）
 ├── CONTRIBUTING.md         贡献指南（英文）
 ├── CHANGELOG.md            版本历史（英文）
 └── docs/
