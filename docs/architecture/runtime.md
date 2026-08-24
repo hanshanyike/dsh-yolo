@@ -39,7 +39,7 @@ YOLO 是 5 个宿主插件加 1 个浏览器 bundle：
 | `scripts/wrap-client.mjs` | 包装浏览器 bundle |
 | `scripts/copy-assets.mjs` | 复制 schema 运行时资源 |
 
-标准本地路径是先执行 `pnpm dsh plugin add . --profile web`，再执行
+标准本地路径是先执行 `dsh plugin --profile web add .`，再执行
 `pnpm dsh web --no-open --port 4080`。不要为本项目另造 host checkout 或 dev launcher；本机开发
 端口 3080 已被其他宿主占用时使用 4080。
 
@@ -92,7 +92,7 @@ YOLO 是 5 个宿主插件加 1 个浏览器 bundle：
 | `Cannot find package 'better-sqlite3'` | 运行 `pnpm install`，检查 workspace allowBuilds |
 | `Could not locate the bindings file` | native binding 未编译，重新确认 allowBuilds 后安装 |
 | `duplicate loader entry id: yolo` | 不要同时叠加已安装 bundle 和额外 runtime patch |
-| `Cannot find package 'dsh-plugin-yolo'` | 重新执行 `pnpm dsh plugin add . --profile web` |
+| `Cannot find package 'dsh-plugin-yolo'` | 重新执行 `dsh plugin --profile web add .` |
 | `loaded without registering` | 检查 client 是否为 CJS 且已运行 wrapper |
 | `process is not defined` | 检查 wrapper 的 process shim |
 | `Cannot find module '../package.json'` | 检查 host 构建是否把 `@deepseek-ai/*` 保持 external |

@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> The user-feedback drop — maps to the `0.3.3` line per `docs/release.md`.
+## [0.3.0-rc.1] — 2026-08-24
+
+First release candidate for the stateful assistant dashboard, cross-session plan tracking,
+semantic recall, low-interruption reminders, and cross-workspace aggregation.
 
 ### Added — E2E 测试治理（test/e2e-standardization）
 
@@ -28,9 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **文档**：新增 docs/testing-e2e.md（场景×用例矩阵、根因记录、agent 运行手册）；
   testing.md 单测清单修正为 29 文件/324 用例；README/usage/CONTRIBUTING/architecture
   中残留的 `dev:web*`/`dev.mjs` 死引用全部改指标准 dsh 流程。
-### Fixed — v0.3.3 评审收敛（工作区归属 / 聚合看板 / 交互细节）
 
-> 全量发现与证据见 `docs/code-review-v033.md`；版本号保持 `0.3.3` 不变。
+### Fixed — 评审收敛（工作区归属 / 聚合看板 / 交互细节）
+
+> 全量发现与证据见 `docs/code-review-v033.md`。
 
 - **YOLO 线程拥有自己的工作区。** `agent/turn-stopping`（ui、reminder）与 memory 的
   `session/event` 现在跳过 `yolo-w-*`/`yolo-a-*` 会话（对齐 session-start 已有守卫）：
@@ -57,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **杂项。** 通知卡「+1d」按实际到期日推迟；铃铛 0 条不再显示数字 0；删除确认期间按钮正确禁用；
   「知道了」重复点击返回幂等成功（不再弹「操作失败」）。
 
-### Added — v0.3.3 用户反馈收敛
+### Added — 用户反馈收敛
 
 - **对话用 harness 自身会话能力（V1）。** Agent 创建/恢复时传入
   `agentDefaultModel.currentSelection()` 并在 `setup` 里
@@ -73,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **面板打开时不轮询（V7）。** 移除打开时的 30s 刷新；动作 / 手动「立即刷新」才重新拉取；
   侧栏角标在关闭时仍独立轮询。
 
-### Added — v0.3.2 真机反馈收敛 + 记忆收窄 + 借鉴落地
+### Added — 真机反馈收敛 + 记忆收窄 + 借鉴落地
 
 - **看板打开时侧边栏会话可点 / 自动收起（R18）。** 面板描边改为从侧栏右缘
   （`left: anchorLeft`）开始，不再整屏拦截点击；点侧栏其它会话会话切到前台、看板自动让位。
@@ -154,7 +158,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edit/filters), R13 (semantic recall), R16 (section/context dual-track + session
   dedup), R17 (per-workspace resident thread with panel chat + reply-to-act).
 
-### Added — M9 recall quality & mechanism hardening (v0.4.0 line, per `docs/design-m9-recall-quality.md`)
+### Added — recall quality & mechanism hardening
 
 - **Hybrid multi-query recall (`ftsRecallSearch`).** The old single-phrase FTS
   match almost never hit real user messages; recall now merges the whole-phrase
@@ -247,19 +251,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Checkpoint commits required.** CONTRIBUTING now pins the rule: commit at
   logical checkpoints (fix + tests + docs together), never batch unrelated
   changes into one mega-commit — history, bisect and reverts depend on it.
-- **Complete-flow undo (v0.3.3, design spec 5.4).** Completing a task now ends
+- **Complete-flow undo (design spec 5.4).** Completing a task now ends
   in a toast carrying a 撤销 button (4s window); undo POSTs the new `reopen`
   action through `POST /yolo/actions` — the row returns to pending,
   `completed_at` clears, the FTS entry is restored, and a `todo_reopened`
   audit event lands in the ledger. Done rows show their completion time
   (「完成 HH:MM」) in the due slot; `completed_at` joins the dashboard payload.
   Verified live (W3 walkthrough, 2026-08-22).
-- **Live E2E verification in the dev process (v0.3.3).** `docs/testing.md` §七
+- **Live E2E verification in the dev process.** `docs/testing.md` §七
   pins the real-machine walkthrough: trigger scope (any `client/**` /
   design-system / API-shape change), run instructions, the W1–W8 checklist
   and pass/skip rules. `CONTRIBUTING.md` gates UI changes on the walkthrough
   and `docs/release.md` gates UI releases; the README quality bar states it.
-- **Detail polish (v0.3.1, per user review).** Four pass-quality fixes:
+- **Detail polish from user review.** Four pass-quality fixes:
   (1) copy no longer leaks implementation details — the quick-add placeholder
   reads `+ 快速记一条，回车保存（默认今日到期）` and the panel footer just says
   看板每 30 秒自动刷新 (no "不经大模型" / no LLM-extraction mention);
@@ -275,7 +279,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from/to date inputs; the active range shows as a removable chip
   (`rangeOfPreset` / `matchRangePreset` / `rangeLabel` in
   `src/shared/filters.ts`, all test-pinned).
-- **Mono design system (v0.3.2, per `docs/frontend-redesign.md`).** Full
+- **Mono design system.** Full
   visual redesign of the panel's expression layer, zero functional change:
   a scoped design-token stylesheet (`client/design/tokens.ts`, injected once
   per document, every selector under `.yolo-scope`) with light/dark parity —
@@ -427,7 +431,8 @@ First working milestone set: the full memory loop (capture → store → recall 
 - **M5 — hardening.** Snapshot cadence (daily + every 10 turns), scheduler hardening, release build, test coverage push.
 - One-command dev setup: `scripts/dev.mjs` (clone → install → build → patch → boot), CJS client-bundle build contract with `__ModuleLoader__` wrapping and browser `process` shim.
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.2.0-alpha.1...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.1...HEAD
+[0.3.0-rc.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.2.0-alpha.1...v0.3.0-rc.1
 [0.2.0-alpha.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.1.0...v0.2.0-alpha.1
 [0.1.0]: https://github.com/hanshanyike/dsh-yolo/releases/tag/v0.1.0
 

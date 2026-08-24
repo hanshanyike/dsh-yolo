@@ -41,7 +41,7 @@ item is a self-contained deliverable. Semantic recall is the current front;
 ## Development setup
 
 See the **Quick Start** in the [README](README.md#快速开始) —
-`pnpm dsh plugin add . --profile web` registers this plugin as a bundle in the
+`npx @deepseek-ai/dsh plugin --profile web add .` registers this plugin as a bundle in the
 dsh web profile (one-time), and `pnpm dsh web` boots it with the **installed**
 dsh CLI.
 

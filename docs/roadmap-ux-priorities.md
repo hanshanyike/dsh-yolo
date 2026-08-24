@@ -55,7 +55,7 @@
 | # | 需求 | 状态 |
 |---|---|---|
 | V1 对话用 harness 自身会话能力 | ✅ agent 创建/恢复时传 `agentDefaultModel.currentSelection()` + `installModelSelection`，`{{model}}` 绑定，常驻+锚定都能真回复 |
-| V2 去掉 dev.mjs，标准启动 | ✅ 删除 `scripts/dev.mjs`；改为 `pnpm dsh plugin add . --profile web` + `pnpm dsh web --profile web`（标准 dsh 方式） |
+| V2 去掉 dev.mjs，标准启动 | ✅ 删除 `scripts/dev.mjs`；改为 `dsh plugin --profile web add .` + `dsh web`（标准 dsh 方式） |
 | V3 看板不显示「记忆健康」 | ✅ 移除 KanbanView 健康折叠 + footer 健康文本 |
 | V4 不区分工作区（总是全部） | ✅ 看板始终聚合所有已知工作区（移除「当前/全部」切换）；每行带 `ws.cwd`，动作按 `scope_cwd` 路由到对应工作区（不再只读） |
 | V5 会话来源 + 点击回得去 | ✅ 聚合行带归属；点台帐来源徽标先关面板再 `ctx.sessions.open` 跳回 |

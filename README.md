@@ -30,9 +30,38 @@ YOLO 使用大模型做语义提取，而不是依赖关键词匹配。它只保
 
 ## 快速开始
 
-YOLO 是 dsh 插件。下面的命令会从源码构建插件、把它加入 dsh 的 `web` profile，然后启动 Web UI。
+YOLO 是 dsh 插件。发布版本已经包含构建产物，推荐直接从 npm 安装到 dsh 的 `web` profile。
 
 > **前置要求**：系统已安装 Node.js ≥ 22.19 和 pnpm ≥ 11。Windows 请使用 PowerShell。
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@rc
+npx @deepseek-ai/dsh web
+```
+
+`@rc` 安装当前候选版本；如需固定本次版本，改用 `dsh-plugin-yolo@0.3.0-rc.1`。
+
+首次安装时，pnpm 可能会阻止原生依赖 `better-sqlite3` 的安装脚本。终端出现
+`ERR_PNPM_IGNORED_BUILDS` 时，执行下面的命令，按空格选择 `better-sqlite3` 并确认，然后重新执行安装：
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web approve-builds
+```
+
+也可以直接安装固定的 GitHub 标签：
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.3.0-rc.1
+npx @deepseek-ai/dsh web
+```
+
+GitHub 安装会从源码构建。pnpm ≥10 首次会按安全策略阻止构建脚本；运行同一个
+`approve-builds` 命令并选择 `dsh-plugin-yolo` 与 `better-sqlite3`，确认后重新执行安装。
+推荐 npm 方式，因为它只需构建原生依赖，不需要在本机编译 YOLO 源码。
+
+### 从源码开发
+
+需要修改 YOLO 时，再克隆仓库并链接本地 checkout：
 
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
@@ -40,7 +69,7 @@ cd dsh-yolo
 
 pnpm install
 pnpm build
-npx @deepseek-ai/dsh plugin add . --profile web
+npx @deepseek-ai/dsh plugin --profile web add .
 npx @deepseek-ai/dsh web
 ```
 
@@ -52,7 +81,7 @@ npx @deepseek-ai/dsh web --no-open
 
 如果 3080 端口已被占用，可以追加 `--port 4080`，然后打开 [http://127.0.0.1:4080](http://127.0.0.1:4080)。进入页面后选择工作区并开始对话；左侧边栏底部的 **YOLO** 按钮用于打开助手看板。
 
-日常修改代码后，只需重新运行 `pnpm build` 并刷新浏览器。只有插件清单发生变化时，才需要再次运行 `plugin add`。测试数据清理、E2E 参数等开发命令见[测试文档](docs/testing-e2e.md)。
+源码开发时，修改代码后重新运行 `pnpm build` 并刷新浏览器。只有插件清单发生变化时，才需要再次运行 `plugin add`。测试数据清理、E2E 参数等开发命令见[测试文档](docs/testing-e2e.md)。
 
 ### 一个典型流程
 

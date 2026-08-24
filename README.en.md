@@ -40,8 +40,43 @@ generic knowledge, and unrelated personal profiling.
 
 ## Quick Start
 
+Published releases include prebuilt artifacts. Installing the npm package into
+the dsh `web` profile is the recommended path.
+
 > **Prerequisites**: Node.js ≥ 22.19 and pnpm ≥ 11 installed on your system.
 > On Windows, run commands from **PowerShell** (Git Bash breaks pnpm's safe-delete).
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@rc
+npx @deepseek-ai/dsh web
+```
+
+`@rc` installs the current release candidate. Use
+`dsh-plugin-yolo@0.3.0-rc.1` to pin this exact version.
+
+On first install, pnpm may block the native `better-sqlite3` install script. If
+you see `ERR_PNPM_IGNORED_BUILDS`, run the command below, select
+`better-sqlite3` with Space, approve it, and rerun the install:
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web approve-builds
+```
+
+A pinned GitHub tag is also supported:
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.3.0-rc.1
+npx @deepseek-ai/dsh web
+```
+
+GitHub installs build from source. With pnpm ≥10, run the same `approve-builds`
+command and select both `dsh-plugin-yolo` and `better-sqlite3`, then rerun the
+install. The npm package is recommended because only its native dependency needs
+building; YOLO itself is prebuilt.
+
+### Develop from source
+
+Clone and link a local checkout only when modifying YOLO:
 
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
@@ -49,7 +84,7 @@ cd dsh-yolo
 
 pnpm install
 pnpm build
-npx @deepseek-ai/dsh plugin add . --profile web
+npx @deepseek-ai/dsh plugin --profile web add .
 npx @deepseek-ai/dsh web
 ```
 
@@ -58,7 +93,7 @@ tries to open the page in your default browser. Pass `--no-open` to suppress the
 browser launch. If port 3080 is occupied, append `--port 4080` and open
 [http://127.0.0.1:4080](http://127.0.0.1:4080).
 
-After changing code, run `pnpm build` again and refresh the browser. You only need
+During source development, run `pnpm build` again after changing code and refresh the browser. You only need
 to rerun `plugin add` when the plugin manifest changes. Development-only commands,
 including E2E fixture cleanup, are documented in
 [the testing guide](docs/testing-e2e.md).

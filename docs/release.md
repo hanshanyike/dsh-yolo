@@ -23,14 +23,14 @@ git checkout main && git pull
 #    并在文末补充版本比较链接
 
 # 3. 更新版本号（同时更新 package.json、提交并打标签）
-npm version 0.2.0          # 也可以使用：pnpm version 0.2.0
+npm version 0.3.0-rc.1     # 也可以使用：pnpm version 0.3.0-rc.1
 
 # 4. 构建并快速检查产物
 pnpm build
 npm pack --dry-run         # 核对文件清单（dist/、bundle yml、schema.sql、docs）
 
 # 5. 发布
-npm publish --access public
+npm publish --access public --tag rc   # 候选版；稳定版发布时省略 --tag rc
 
 # 6. 推送提交和标签
 git push --follow-tags
@@ -50,17 +50,24 @@ git push --follow-tags
 
 ## 安装已发布插件（面向使用者）
 
-发布后，deepseek-harness profile 可以按包名解析插件，不再依赖仓库检出。patch overlay 入口已经使用
-包名子路径（`dsh-plugin-yolo/dist/src/storage` 等），因此只需把 tarball 安装到 profile 的
-`node_modules`：
+发布后，deepseek-harness profile 可以按包名解析插件，不再依赖仓库检出。使用 dsh 官方插件管理
+命令安装后，CLI 会同时维护 profile 依赖与 Bundle 列表：
 
 ```bash
-mkdir -p ~/.dsh/profiles/web/node_modules
-npm install --prefix ~/.dsh/profiles/web dsh-plugin-yolo
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@rc
+npx @deepseek-ai/dsh web
 ```
 
-随后引用与 `cordis.dev.local.yml` 相同风格的入口。YOLO 采用 patch-overlay 路径的原因与运行时
-格式见[运行与装配](architecture/runtime.md)，浏览器端装载条件见[客户端构建契约](architecture/client.md)。
+也可以安装固定 GitHub 标签：
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.3.0-rc.1
+```
+
+GitHub 安装依赖 `prepare` 从源码构建，pnpm ≥10 要求使用方先把 `dsh-plugin-yolo` 加入该 profile
+的 `allowBuilds`。npm 包和 tarball 已含 YOLO 构建产物，但原生运行时依赖 `better-sqlite3`
+仍需通过 `dsh plugin --profile web approve-builds` 批准安装脚本。YOLO 的 patch-overlay 格式见
+[运行与装配](architecture/runtime.md)，浏览器端装载条件见[客户端构建契约](architecture/client.md)。
 
 ## 版本策略
 

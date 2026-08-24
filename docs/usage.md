@@ -19,10 +19,37 @@
 
 ## 一、安装与启动
 
-YOLO 是 dsh 插件。以下步骤从源码构建插件、加入 dsh 的 `web` profile，并启动 Web UI。
+YOLO 是 dsh 插件。发布版本已经包含构建产物，推荐直接从 npm 安装。
 
 > **前置要求**：系统已安装 Node.js ≥ 22.19 和 pnpm ≥ 11。Windows 请使用
 > PowerShell。
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@rc
+npx @deepseek-ai/dsh web
+```
+
+`@rc` 指向最新候选版；固定当前版本可使用 `dsh-plugin-yolo@0.3.0-rc.1`。
+
+首次安装若出现 `ERR_PNPM_IGNORED_BUILDS`，运行下列命令，按空格选择 `better-sqlite3`
+并确认，再重新执行安装：
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web approve-builds
+```
+
+也支持固定 GitHub 标签安装：
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.3.0-rc.1
+npx @deepseek-ai/dsh web
+```
+
+GitHub 安装需要运行仓库的 `prepare` 构建脚本。pnpm ≥10 下，运行同一个 `approve-builds`
+命令并选择 `dsh-plugin-yolo` 与 `better-sqlite3`，确认后重试。npm 包不需要编译 YOLO 源码，
+因此作为推荐方式。
+
+### 从源码开发
 
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
@@ -30,7 +57,7 @@ cd dsh-yolo
 
 pnpm install
 pnpm build
-npx @deepseek-ai/dsh plugin add . --profile web
+npx @deepseek-ai/dsh plugin --profile web add .
 npx @deepseek-ai/dsh web
 ```
 
@@ -41,7 +68,7 @@ npx @deepseek-ai/dsh web
 启动后选择工作区并开始对话。YOLO 会在对话结束后整理明确的待办、目标和时间安排；
 左侧边栏底部的 **YOLO** 按钮用于打开助手看板。
 
-日常修改代码后，重新运行 `pnpm build` 并刷新浏览器即可。只有插件清单发生变化时，
+源码开发时，修改代码后重新运行 `pnpm build` 并刷新浏览器即可。只有插件清单发生变化时，
 才需要再次运行 `plugin add`。E2E 和测试数据清理命令见 [testing-e2e.md](testing-e2e.md)。
 
 ---
@@ -180,7 +207,7 @@ YOLO 向模型暴露 5 个工具，agent 可以自己读写并推进计划：
 
 | 问题 | 说明 |
 |---|---|
-| 看板显示"加载失败" | 插件未加载或服务未启动；确认 `npx @deepseek-ai/dsh web` 宿主在运行，且 `npx @deepseek-ai/dsh plugin add . --profile web` 做过一次 |
+| 看板显示"加载失败" | 插件未加载或服务未启动；确认 `npx @deepseek-ai/dsh web` 宿主在运行，且已经执行 `npx @deepseek-ai/dsh plugin --profile web add <包名或路径>` |
 | 看板一直为空 | 完成一轮对话后 YOLO 才会提取；确认配置里"启用 LLM 提取"为开 |
 | 提醒没触发 | 检查"启用提醒"与"扫描间隔"；离线期间的提醒会在下次会话开始回放 |
 | 回复"已完成"没生效 | 确认回复发生在提醒所在会话；若任务标题与提醒不一致，agent 会按标题模糊匹配，匹配不到会提示 |

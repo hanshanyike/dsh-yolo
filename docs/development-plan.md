@@ -11,7 +11,7 @@
 | 项 | 改动 | 落点 |
 |---|---|---|
 | V1 对话用 harness 会话能力 | agent 创建/恢复时传 `agentDefaultModel.currentSelection()` + `installModelSelection`（headless 同款），`{{model}}` 绑定，常驻/锚定进程真回复 | `src/ui/session.ts` · `src/ui/index.ts` · `src/reminder/index.ts` · `package.json` |
-| V2 去掉 dev.mjs | 删除 `scripts/dev.mjs`；改用标准 `pnpm dsh plugin add . --profile web` + `pnpm dsh web --profile web` | `package.json` · `README.md` · `AGENTS.md` |
+| V2 去掉 dev.mjs | 删除 `scripts/dev.mjs`；改用标准 `dsh plugin --profile web add .` + `dsh web` | `package.json` · `README.md` · `AGENTS.md` |
 | V3 去「记忆健康」 | 移除看板健康折叠 + footer | `client/panel/KanbanView.tsx` · `YoloPanel.tsx` |
 | V4 不区分工作区 | 看板始终聚合所有已知工作区；每行带 `ws.cwd`，动作按 `scope_cwd` 路由 | `src/ui/{dashboard,actions}.ts` · `src/shared/dashboard.ts` · `client/panel/{YoloPanel,state,KanbanView}.tsx` |
 | V5 会话来源可跳 | 台帐来源徽标先关面板再 `ctx.sessions.open` 跳回 | `client/panel/YoloPanel.tsx` |

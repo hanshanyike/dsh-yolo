@@ -358,7 +358,7 @@ data/
 YOLO 有意**不使用**动态插件机制（`cordis_define` + `cordis_run`）：动态插件的 `code.host` 是纯 JS
 函数体，不支持模块解析、`fs` 或 `better-sqlite3` 原生绑定，无法承载 TypeScript + SQLite 项目。
 标准本地运行路径是使用已安装的 `dsh` CLI 与 web profile
-（`pnpm dsh plugin add . --profile web` + `pnpm dsh web`）。
+（`dsh plugin --profile web add .` + `dsh web`）。
 
 ## 修改某项能力时从哪里入手
 
