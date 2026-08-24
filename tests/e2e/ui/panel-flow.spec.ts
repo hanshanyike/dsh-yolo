@@ -172,12 +172,12 @@ test('卡片「聊一聊」打开侧栏对话并锚定该任务（TA-5）', asyn
   await expect(page.locator('.dock-ctx')).toHaveText(title)
   const transcript = page.getByRole('log', { name: '对话记录' })
   await expect(transcript.locator('.msg.me')).toHaveCount(0)
-  await expect(transcript.locator('.msg.ai').first()).toContainText('全新对话')
+  await expect(transcript.locator('.msg.ai').first()).toContainText(`我们来讨论「${title}」。现在进展怎么样，接下来需要调整什么？`)
   // Background sync runs every four seconds. An empty anchored conversation
   // must stay mounted instead of flashing blank at each polling boundary.
   await expect(transcript.locator('.msg.ai').first()).toBeVisible({ timeout: 5_500 })
   await page.waitForTimeout(4_500)
-  await expect(transcript.locator('.msg.ai').first()).toContainText('全新对话')
+  await expect(transcript.locator('.msg.ai').first()).toContainText(`我们来讨论「${title}」。现在进展怎么样，接下来需要调整什么？`)
 })
 
 test('Esc 逐级退出：全屏对话→侧栏→关闭面板（TA-6）', async ({ page }) => {

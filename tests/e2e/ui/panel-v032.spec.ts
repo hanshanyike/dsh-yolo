@@ -55,7 +55,7 @@ test('W10:「聊一聊」打开的全新锚定对话不含常驻会话历史', a
 
   // fresh: no user bubbles (no old history), and the YOLO welcome line is shown
   await expect(page.locator('.dock-msgs .msg.me')).toHaveCount(0)
-  await expect(page.locator('.dock-msgs .msg.ai').first()).toContainText('全新对话')
+  await expect(page.locator('.dock-msgs .msg.ai').first()).toContainText(`我们来讨论「${title}」。现在进展怎么样，接下来需要调整什么？`)
 })
 
 test('W9:看板描边从侧栏开始，侧栏区点击可让面板让位', async ({ page }) => {

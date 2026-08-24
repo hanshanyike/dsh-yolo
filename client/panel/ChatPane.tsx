@@ -337,7 +337,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
         <div className="msg ai">
           <div className="who">YOLO</div>
           {anchor
-            ? `这是关于「${anchor.title}」的全新对话——就它追问、改计划、做安排。工作会话与常驻会话都不受影响。`
+            ? `我们来讨论「${anchor.title}」。现在进展怎么样，接下来需要调整什么？`
             : '这是 YOLO 的常驻会话——可以问「我这周干了什么」、随手记事、改计划、解读简报。工作会话不受影响。'}
         </div>
       )}
