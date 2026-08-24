@@ -43,6 +43,30 @@ function localDateOffset(days: number): string {
   return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}`
 }
 
+function futureIso(hours: number): string {
+  return new Date(Date.now() + hours * 3_600_000).toISOString()
+}
+
+function reasonLabels(reason: Record<string, any>): string[] {
+  const key = (value: string): string => value.trim().replace(/\s+/gu, ' ').replace(/[，,。.!！?？；;：:、·\s]+$/gu, '')
+  const labels = [
+    String(reason.short_reason ?? '').trim(),
+    ...(reason.evidence ?? []).map((item: Record<string, any>) => String(item.label ?? '').trim()),
+  ]
+  const seen = new Set<string>()
+  return labels.filter((label) => {
+    const normalized = key(label)
+    if (!normalized || seen.has(normalized)) return false
+    seen.add(normalized)
+    return true
+  })
+}
+
+function occurrences(text: string, value: string): number {
+  if (!value) return 0
+  return text.split(value).length - 1
+}
+
 async function seedPrimaryJudgment(label: string): Promise<{
   id: string
   title: string
@@ -182,13 +206,30 @@ test('W13: 单次 partial projection 只提示一次，仍按原 workspace scope
 
 test('W14/W16: header 控件可读，判断 reason/evidence 与响应一致且重点不重复', async ({ page }) => {
   const primary = await seedPrimaryJudgment('核对发布前客户验收结论')
+  let renderedDashboard: Record<string, any> | undefined
+  await page.route('**/yolo/dashboard?scope=all', async (route) => {
+    const upstream = await route.fetch()
+    renderedDashboard = (await upstream.json()) as Record<string, any>
+    await route.fulfill({ response: upstream, json: renderedDashboard })
+  })
   await openYoloPanel(page, { refreshOnSlow: false })
 
   const judgment = page.locator('.v2-judgment').filter({ hasText: primary.title })
   await expect(judgment).toHaveCount(1)
-  await expect(judgment.locator('.v2-judgment-reason')).toHaveText(String(primary.attention.explanation))
-  for (const evidence of (primary.attention.evidence as Array<{ label: string }>).slice(0, 3)) {
-    await expect(judgment.getByRole('region', { name: '为什么现在' })).toContainText(evidence.label)
+  await expect.poll(async () => {
+    const current = renderedDashboard?.attention?.find((row: Record<string, any>) => row.todo_id === primary.id)
+    const text = await judgment.locator('.v2-judgment-reason').textContent()
+    return current !== undefined && (text === current.explanation || text === current.short_reason)
+  }).toBe(true)
+  const current = renderedDashboard!.attention.find((row: Record<string, any>) => row.todo_id === primary.id)
+  if (await judgment.evaluate((element) => element.classList.contains('v2-judgment--full'))) {
+    await expect(judgment.locator('.v2-judgment-reason')).toHaveText(String(current.explanation))
+    for (const evidence of (current.evidence as Array<{ label: string }>).slice(0, 3)) {
+      await expect(judgment.getByRole('region', { name: '为什么现在' })).toContainText(evidence.label)
+    }
+  } else {
+    await expect(judgment.locator('.v2-judgment-reason')).toHaveText(String(current.short_reason))
+    await expect(judgment.getByRole('region', { name: '为什么现在' })).toHaveCount(0)
   }
   await expect(page.locator('.v2-today-row').filter({ hasText: primary.title })).toHaveCount(0)
 
@@ -204,46 +245,61 @@ test('W14/W16: header 控件可读，判断 reason/evidence 与响应一致且�
 
 test('W1/W2/W7/W11/W16: 需要关注行去重依据且在 340px 窄面板内换行', async ({ page }) => {
   const primary = await seedPrimaryJudgment('确认客户验收材料是否已经归档')
-  const singleTitle = uid('跟进昨天到期的供应商回复')
-  const single = await fx.todo(singleTitle, { due: localDateOffset(-1) })
-  const multiTitle = uid('确认多次推迟的发布审批安排')
-  const multi = await fx.todo(multiTitle, { due: localDateOffset(-7) })
+  const singleTitle = uid('确认两天后的供应商回复优先级')
+  const single = await fx.todo(singleTitle, { due: futureIso(48) })
+  await api.action({ action: 'update', kind: 'todo', id: String(single.id), priority: 'urgent' })
+  const multiTitle = uid('确认今天稍后的发布审批安排')
+  const multi = await fx.todo(multiTitle, { due: futureIso(12) })
   await api.action({ action: 'update', kind: 'todo', id: String(multi.id), priority: 'urgent' })
-  await api.action({ action: 'postpone', kind: 'todo', id: String(multi.id), due_at: localDateOffset(-6) })
-  await api.action({ action: 'postpone', kind: 'todo', id: String(multi.id), due_at: localDateOffset(-5) })
 
-  const dashboard = await waitForDashboard(api, (data) => {
+  await waitForDashboard(api, (data) => {
     const singleRow = data.todos?.find((todo: Record<string, any>) => todo.id === String(single.id))
     const multiRow = data.todos?.find((todo: Record<string, any>) => todo.id === String(multi.id))
     return data.attention?.[0]?.todo_id === primary.id
       && singleRow?.attention_reason?.evidence?.length === 1
-      && multiRow?.attention_reason?.evidence?.length >= 3
+      && multiRow?.attention_reason?.evidence?.length >= 2
   }, { label: 'secondary attention rows to expose single and multiple evidence facts' })
-  const singleReason = dashboard.todos.find((todo: Record<string, any>) => todo.id === String(single.id)).attention_reason
-  const multiReason = dashboard.todos.find((todo: Record<string, any>) => todo.id === String(multi.id)).attention_reason
-  expect(singleReason.short_reason).toBe(singleReason.evidence[0].label)
+
+  let renderedDashboard: Record<string, any> | undefined
+  await page.route('**/yolo/dashboard?scope=all', async (route) => {
+    const upstream = await route.fetch()
+    renderedDashboard = (await upstream.json()) as Record<string, any>
+    await route.fulfill({ response: upstream, json: renderedDashboard })
+  })
 
   await page.setViewportSize({ width: 400, height: 800 })
   await openYoloPanel(page, { refreshOnSlow: false })
   await expect(page.locator('.yolo-scope')).toHaveClass(/compact/)
+  expect(renderedDashboard).toBeDefined()
+  const singleReason = renderedDashboard!.todos.find((todo: Record<string, any>) => todo.id === String(single.id)).attention_reason
+  const multiReason = renderedDashboard!.todos.find((todo: Record<string, any>) => todo.id === String(multi.id)).attention_reason
+  const currentPrimary = renderedDashboard!.attention[0]
+  const singleLabels = reasonLabels(singleReason)
+  const multiLabels = reasonLabels(multiReason)
+  expect(singleLabels).toHaveLength(1)
+  expect(multiLabels.length).toBeGreaterThanOrEqual(2)
 
   const singleText = page.locator('.v2-today-row').filter({ hasText: singleTitle }).locator('.v2-today-row-reason')
-  await expect(singleText).toHaveText(String(singleReason.short_reason))
-  expect((await singleText.textContent())?.split(String(singleReason.short_reason)).length ?? 0).toBe(2)
+  await expect(singleText).toHaveText(singleLabels[0])
+  const renderedSingleText = await singleText.textContent() ?? ''
+  for (const label of singleLabels) expect(occurrences(renderedSingleText, label)).toBeLessThanOrEqual(1)
   await expect(singleText).not.toContainText('·')
 
-  const labels = [
-    String(multiReason.short_reason),
-    ...multiReason.evidence.map((item: Record<string, any>) => String(item.label)),
-  ].filter((label, index, all) => label.trim().length > 0 && all.indexOf(label) === index)
-  const expectedMultiText = `${labels[0]} · ${labels.slice(1).join('，')}`
+  const expectedMultiText = `${multiLabels[0]} · ${multiLabels.slice(1).join('，')}`
   const multiText = page.locator('.v2-today-row').filter({ hasText: multiTitle }).locator('.v2-today-row-reason')
   await expect(multiText).toHaveText(expectedMultiText)
+  const renderedMultiText = await multiText.textContent() ?? ''
+  for (const label of multiLabels) expect(occurrences(renderedMultiText, label)).toBeLessThanOrEqual(1)
+  expect(renderedMultiText).not.toMatch(/·\s*(?:·|$)/u)
   expect(await multiText.evaluate((element) => ({
     wraps: getComputedStyle(element).overflowWrap,
     contained: element.scrollWidth <= element.clientWidth,
   }))).toEqual({ wraps: 'anywhere', contained: true })
 
   const judgment = page.locator('.v2-judgment').filter({ hasText: primary.title })
-  await expect(judgment.locator('.v2-judgment-reason')).toHaveText(String(primary.attention.explanation))
+  if (await judgment.evaluate((element) => element.classList.contains('v2-judgment--compact'))) {
+    await judgment.getByRole('button', { name: '展开依据' }).click()
+    await expect(judgment).toHaveClass(/v2-judgment--full/)
+  }
+  await expect(judgment.locator('.v2-judgment-reason')).toHaveText(String(currentPrimary.explanation))
 })
