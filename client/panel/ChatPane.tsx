@@ -6,7 +6,7 @@
 // v0.3.2: when a `threadKey` is present the pane is a FRESH ephemeral
 // conversation — it starts empty, never loads the resident thread's history.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   IDLE_PENDING_REPLY,
   isReplyPending,
@@ -16,6 +16,7 @@ import {
   type ChatMessage,
   type PendingReplyState,
 } from './chat/pending.ts'
+import { decideChatScroll, isNearChatBottom } from './chat/scroll.ts'
 
 export type { ChatMessage } from './chat/pending.ts'
 
@@ -88,9 +89,14 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   // briefly loses its welcome message every POLL_MS and visibly flashes.
   const [state, setState] = useState<ChatState>({ loading: true, error: null, messages: [], pending: IDLE_PENDING_REPLY })
   const [draft, setDraft] = useState('')
+  const [newerAvailable, setNewerAvailable] = useState(false)
   const anchorRef = useRef<ChatAnchor | null>(anchor)
   const sentWithContext = useRef(false)
-  const listRef = useRef<HTMLDivElement>(null)
+  const scrollOwnerRef = useRef<HTMLDivElement>(null)
+  const nearBottomRef = useRef(true)
+  const layoutConversationRef = useRef<string | null>(null)
+  const transcriptSignatureRef = useRef('')
+  const suppressNextScrollDecisionRef = useRef(false)
   const prevConversation = useRef(conversationKey)
   const mountedRef = useRef(false)
   const sendLockedRef = useRef(false)
@@ -120,6 +126,8 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   useEffect(() => {
     conversationRef.current = conversationKey
     sendLockedRef.current = false
+    nearBottomRef.current = true
+    setNewerAvailable(false)
     if (replyRefreshTimerRef.current !== null) {
       window.clearTimeout(replyRefreshTimerRef.current)
       replyRefreshTimerRef.current = null
@@ -178,11 +186,41 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     return () => { window.clearInterval(timer) }
   }, [load])
 
-  // keep the newest line visible when messages arrive
-  useEffect(() => {
-    const el = listRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [state.messages.length, state.pending])
+  const transcriptSignature = `${state.messages.map((message) => `${message.role}\u0000${message.text}`).join('\u0001')}\u0002${isReplyPending(state.pending) ? 'pending' : 'idle'}`
+
+  const scrollToLatest = useCallback((): void => {
+    const owner = scrollOwnerRef.current
+    if (!owner) return
+    owner.scrollTop = owner.scrollHeight
+    nearBottomRef.current = true
+    setNewerAvailable(false)
+  }, [])
+
+  const observeScroll = useCallback((): void => {
+    const owner = scrollOwnerRef.current
+    if (!owner) return
+    const nearBottom = isNearChatBottom(owner)
+    nearBottomRef.current = nearBottom
+    if (nearBottom) setNewerAvailable(false)
+  }, [])
+
+  // First paint starts at the latest line. Later semantic additions follow
+  // only while the user was already near the bottom; polling the same content
+  // never changes scroll position.
+  useLayoutEffect(() => {
+    if (state.loading) return
+    const initial = layoutConversationRef.current !== conversationKey
+    const contentChanged = transcriptSignatureRef.current !== transcriptSignature
+    layoutConversationRef.current = conversationKey
+    transcriptSignatureRef.current = transcriptSignature
+    const suppressed = suppressNextScrollDecisionRef.current
+    suppressNextScrollDecisionRef.current = false
+    const decision = suppressed
+      ? 'none'
+      : decideChatScroll({ initial, contentChanged, wasNearBottom: nearBottomRef.current })
+    if (decision === 'follow') scrollToLatest()
+    else if (decision === 'notify') setNewerAvailable(true)
+  }, [conversationKey, scrollToLatest, state.loading, transcriptSignature])
 
   const send = useCallback(async (): Promise<void> => {
     const text = draft.trim()
@@ -233,6 +271,8 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       // the input so the user can retry instead of losing it.
       if (mountedRef.current && conversationRef.current === keyForCall && !controller.signal.aborted) {
         sendLockedRef.current = false
+        suppressNextScrollDecisionRef.current = true
+        setNewerAvailable(false)
         setState((current) => ({
           ...current,
           pending: reducePendingReply(current.pending, { type: 'failed' }),
@@ -260,6 +300,16 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     />
   )
   const hint = <span className={`enter-hint mono${draft.trim() ? ' lit' : ''}`}>↵</span>
+  const newestControl = newerAvailable ? (
+    <button
+      type="button"
+      className={`chat-newest chat-newest--${variant}`}
+      aria-label="有新消息，回到最新"
+      onClick={scrollToLatest}
+    >
+      有新消息 · 回到最新
+    </button>
+  ) : null
 
   // shared message stream: assistant = plain prose, user = surface-2 bubble
   const stream = (
@@ -299,10 +349,11 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
 
   if (variant === 'side') {
     return (
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div className="msgs dock-msgs" ref={listRef} role="log" aria-live="polite" aria-label="对话记录">
+      <div className="chat-pane-shell chat-pane-shell--side" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div className="msgs dock-msgs" ref={scrollOwnerRef} onScroll={observeScroll} role="log" aria-live="polite" aria-label="对话记录">
           {stream}
         </div>
+        {newestControl}
         <div className="dock-input">
           {input}
           {hint}
@@ -312,19 +363,20 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   }
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <div className="p-body">
+    <div className="chat-pane-shell chat-pane-shell--full" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className="p-body" ref={scrollOwnerRef} onScroll={observeScroll}>
         <div className="p-main p-main--chat">
           {anchor && (
             <div className="fs-anchor" title={anchor.detail ? `${anchor.title} · ${anchor.detail}` : anchor.title}>
               锚定 · {anchor.title}
             </div>
           )}
-          <div className="msgs" ref={listRef} role="log" aria-live="polite" aria-label="对话记录">
+          <div className="msgs" role="log" aria-live="polite" aria-label="对话记录">
             {stream}
           </div>
         </div>
       </div>
+      {newestControl}
       <footer className="capture capture--foot">
         {input}
         {hint}

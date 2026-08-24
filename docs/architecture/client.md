@@ -16,7 +16,7 @@
 | `panel/YoloPanel.tsx` | 340px/全屏 shell、数据加载、主题、导航与通知聚焦 |
 | `panel/KanbanView.tsx` | 看板视图、筛选、动作编排和 anchored chat 入口 |
 | `panel/ChatPane.tsx` | resident/anchored 共用对话视图与请求构造 |
-| `panel/chat/pending.ts` | 发送中/等待回复状态机和远端消息合并 |
+| `panel/chat/pending.ts` / `scroll.ts` | 发送等待状态、远端消息合并和 near-bottom 滚动策略 |
 | `panel/CaptureBar.tsx` | 快速新增输入 |
 | `panel/ViewTabs.tsx` / `MoreMenu.tsx` | 主导航与低频入口 |
 | `panel/state.ts` | 面板 UI 状态的本地读写 |
@@ -48,6 +48,8 @@ evidence；完整 explanation 只保留给主助手判断，避免同一事实�
 无 anchor 的对话访问该工作区 resident thread；卡片“聊一聊”生成独立 thread key，并附带卡片
 所属 `scope_cwd` 访问 anchored thread。`pending.ts` 保留发送前消息、合并轮询结果并区分
 posting/awaiting_reply，避免请求完成但模型尚未回复时闪回空闲态或重复消息。
+侧栏使用 `.dock-msgs`、全屏使用 `.p-body` 作为各自真实 scroll owner；首载与 near-bottom 状态下
+的发送/回复自动跟随，用户主动上翻后保留位置，只显示不抢焦点的“有新消息 · 回到最新”。
 
 ## Mono 设计约束
 

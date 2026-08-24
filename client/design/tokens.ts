@@ -396,6 +396,9 @@ export const YOLO_CSS = `
 .yolo-scope .msg.ai { align-self: flex-start; color: var(--y-text-1); white-space: pre-wrap; word-break: break-word; }
 .yolo-scope .msg.me { align-self: flex-end; background: var(--y-surface-2); border-radius: var(--y-r-md); padding: 8px 11px; white-space: pre-wrap; word-break: break-word; }
 .yolo-scope .msg .who { font-size: 10px; color: var(--y-text-3); margin-bottom: 3px; }
+.yolo-scope .chat-pane-shell { position: relative; }
+.yolo-scope .chat-newest { position: absolute; z-index: 3; right: 18px; bottom: 62px; min-height: 32px; padding: 0 11px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-pill); background: var(--y-surface); color: var(--y-accent-text); box-shadow: var(--y-e1); font-size: 12px; }
+.yolo-scope .chat-newest--full { right: max(18px, calc((100% - 760px) / 2 + 28px)); }
 
 /* side chat dock — surface, hairline left, NO shadow (docked ≠ floating) */
 .yolo-scope .dock { flex: none; width: min(340px, 45%); background: var(--y-surface); border-left: 1px solid var(--y-line); display: flex; flex-direction: column; min-width: 0; animation: yolo-dock-in var(--y-dur-3) var(--y-ease-out); }
