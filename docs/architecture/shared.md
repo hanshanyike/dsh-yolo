@@ -12,6 +12,7 @@
 |---|---|
 | `constants.ts` | namespace、service 名、UI slot、prompt 顺序和代码默认值 |
 | `dashboard.ts` | Dashboard v2 跨边界载荷、工作区标签、健康度和 todo 判定函数 |
+| `due.ts` | date-only / datetime 的统一解析、到期、逾期、本地日期和排序事实 |
 | `badge.ts` | 轻量角标载荷 `YoloBadgeData` |
 | `actions.ts` | `YoloActionRequest`、结果/回执/撤销类型与 `applyYoloAction` |
 | `filters.ts` | 看板日期范围、focus 分组、过滤、排序和分区纯函数 |
@@ -46,6 +47,8 @@ capabilities、workspaces、workspaceErrors 和 memory health。聚合行携带 
 
 - `sessionCwd()` 读取 `session.header.cwd`，不要恢复不存在的 `session.meta.cwd`。
 - 日期逻辑使用 `localDateStr()` / `dayBounds()`，不能用 UTC 日期切片代替本地日历日。
+- `due_at` 只通过 `due.ts` 解释：date-only 表示本地当日结束，带时区 datetime 按绝对时刻，
+  无时区 datetime 按本地精确时刻；看板、判断、筛选、摘要与提醒不得再自行切字符串比较。
 - `filters.ts` 定义的是产品语义，客户端只消费结果；修改时必须同步单测。
 - `shouldDropExtracted` 会拒绝确认词、裸元命令、空/单字标题和空偏好值，避免错误记忆触发错误提醒。
 - `DEFAULTS` 当前包含 extraction、reminder、brief、recall、semantic 和 ui 默认值；完整用户配置

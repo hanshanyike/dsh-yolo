@@ -75,6 +75,13 @@ describe('deterministic attention domain', () => {
     }), NOW)).toBeNull()
   })
 
+  it('uses the shared exact-instant overdue fact on the same local day', () => {
+    const past = scoreAttentionCandidate(todo('past', { due_at: '2026-08-23T09:59:59' }), NOW)
+    const future = scoreAttentionCandidate(todo('future', { due_at: '2026-08-23T10:00:01' }), NOW)
+    expect(past).toMatchObject({ reason_code: 'overdue', short_reason: '已超过截止时间' })
+    expect(future).toMatchObject({ reason_code: 'due_soon' })
+  })
+
   it('keeps ordering and fingerprints stable, then changes the fingerprint with evidence facts', () => {
     const later = todo('later', { due_at: '2026-08-23T13:00:00' })
     const earlier = todo('earlier', { due_at: '2026-08-23T12:00:00' })

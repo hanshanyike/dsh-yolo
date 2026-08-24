@@ -35,14 +35,15 @@ describe('partitionTodayTodos', () => {
     expect(Object.values(result).flat().some((row) => row.id === 'focus')).toBe(false)
   })
 
-  it('uses the date portion of a datetime and preserves server order', () => {
+  it('uses exact local datetime instants instead of treating the whole day as current', () => {
     const rows = [
-      todo('first', { due_at: '2026-08-23T23:30:00+08:00' }),
-      todo('second', { due_at: '2026-08-23T08:00:00+08:00' }),
+      todo('first', { due_at: '2026-08-23T23:30:00' }),
+      todo('second', { due_at: '2026-08-23T08:00:00' }),
     ]
 
-    expect(partitionTodayTodos(rows, null, new Date(2026, 7, 23, 9)).today.map((row) => row.id))
-      .toEqual(['first', 'second'])
+    const result = partitionTodayTodos(rows, null, new Date(2026, 7, 23, 9))
+    expect(result.today.map((row) => row.id)).toEqual(['first'])
+    expect(result.attention.map((row) => row.id)).toEqual(['second'])
   })
 })
 

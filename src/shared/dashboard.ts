@@ -2,8 +2,8 @@
 // (ui plugin) at GET /yolo/dashboard and consumed by the browser bundle to
 // render the sidebar dashboard. Shared so both halves stay in sync.
 
-import { localDateStr } from './text.ts'
 import type { DuplicateTodoPair } from '../storage/types.ts'
+export { isTodoOverdue } from './due.ts'
 
 /** A workspace tag attached to aggregated rows (cross-workspace view, v0.3.0). */
 export interface WorkspaceTag {
@@ -93,7 +93,7 @@ export interface YoloTodoRow {
   updated_at?: number
   /** Epoch ms when the todo was completed — powers the「完成 HH:MM」due-slot (5.4). */
   completed_at?: number | null
-  /** due_at is before today and the todo is still open. */
+  /** The shared due instant has passed and the todo is still open. */
   overdue?: boolean
   /** Still open but untouched for more than 7 days. */
   stale?: boolean
@@ -258,13 +258,6 @@ const DAY_MS = 86_400_000
 /** A todo counts as open unless it reached a terminal status. */
 export function isTodoOpen(status: string): boolean {
   return status !== 'done' && status !== 'completed' && status !== 'cancelled'
-}
-
-/** Overdue = open todo whose due date (date part) is before today (local time). */
-export function isTodoOverdue(dueAt: string | null | undefined, status: string, now = new Date()): boolean {
-  if (!dueAt || !isTodoOpen(status)) return false
-  const due = dueAt.length > 10 ? dueAt.slice(0, 10) : dueAt
-  return due < localDateStr(now)
 }
 
 /** Stale = open todo untouched for more than `staleDays` days (default 7). */

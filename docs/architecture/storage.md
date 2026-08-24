@@ -82,3 +82,5 @@ FTS5 使用 trigram tokenizer。`ftsRecallSearch` 合并整句查询、最多若
 | snapshot | `renderSnapshot`、`writeSnapshot`、snapshot date meta |
 
 所有面向业务的公开方法都显式接收 `cwd`，调用方不得自行持有 DB 连接。
+`listDueTodos` 先从 SQLite 取 open、未提醒候选，再使用共享 `due.ts` predicate 按实际时刻过滤和排序；
+SQLite 不直接比较混合格式的 `due_at` 文本。

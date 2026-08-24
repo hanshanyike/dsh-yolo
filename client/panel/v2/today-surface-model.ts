@@ -9,6 +9,7 @@ import type {
   JudgmentSource,
   YoloTodoRowV2,
 } from './model.ts'
+import { dueAtLocalDate, isTodoOverdue } from '../../../src/shared/due.ts'
 
 export interface TodayTaskReason {
   label: string
@@ -169,7 +170,7 @@ function buildJudgment(
   }
 }
 
-function fallbackSummary(data: YoloDashboardData, today: string): {
+function fallbackSummary(data: YoloDashboardData, today: string, now: Date): {
   open: number
   overdue: number
   dueToday: number
@@ -183,8 +184,8 @@ function fallbackSummary(data: YoloDashboardData, today: string): {
   }).length
   return {
     open: openRows.length,
-    overdue: openRows.filter((todo) => todo.overdue || ((todo.due_at?.slice(0, 10) ?? today) < today)).length,
-    dueToday: openRows.filter((todo) => todo.due_at?.slice(0, 10) === today).length,
+    overdue: openRows.filter((todo) => todo.overdue ?? isTodoOverdue(todo.due_at, todo.status, now)).length,
+    dueToday: openRows.filter((todo) => dueAtLocalDate(todo.due_at) === today).length,
     completedToday,
     changesToday: data.ledger.length,
   }
@@ -196,7 +197,7 @@ export function buildTodaySurfaceModel(
 ): TodaySurfaceModel {
   const now = options.now ?? new Date(data.at)
   const today = localDate(now)
-  const fallback = fallbackSummary(data, today)
+  const fallback = fallbackSummary(data, today, now)
   const serverSummary = data.summary
   // A cancelled row is never allowed to inflate completed, even if a stale
   // server summary counted terminal states together.
@@ -227,7 +228,7 @@ export function buildTodaySurfaceModel(
     }
     const fact = todo.attention_reason ? buildTodayTaskReason(todo.attention_reason) : undefined
     if (fact) attentionRows.push({ ...row, reason: fact })
-    else if (todo.due_at?.slice(0, 10) === today) todayRows.push(row)
+    else if (dueAtLocalDate(todo.due_at) === today) todayRows.push(row)
   }
 
   const partial = serverSummary?.partial === true || (data.workspaceErrors?.length ?? 0) > 0

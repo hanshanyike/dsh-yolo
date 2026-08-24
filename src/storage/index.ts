@@ -165,9 +165,9 @@ export default class Yolo extends Service {
     if (ref.id) return repo.listTodos(h.db, h.scopeKey).find((todo) => todo.id === ref.id) ?? null
     return ref.title ? repo.findTodoByTitle(h.db, h.scopeKey, ref.title) ?? null : null
   }
-  listDueTodos(cwd: string, beforeIso: string): Todo[] {
+  listDueTodos(cwd: string, before: string | number | Date): Todo[] {
     const h = this.resolve(cwd)
-    return repo.listDueTodos(h.db, h.scopeKey, beforeIso)
+    return repo.listDueTodos(h.db, h.scopeKey, before)
   }
   setTodoReminded(cwd: string, id: string, ts?: number): void {
     repo.setTodoReminded(this.resolve(cwd).db, id, ts)

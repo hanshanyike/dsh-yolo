@@ -11,6 +11,8 @@ import type { LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type Yolo from '../storage/index.ts'
 import { DEFAULTS } from '../shared/constants.ts'
 import { localDateStr, localHm } from '../shared/text.ts'
+import { compareDueAt, isDueAtReached } from '../shared/due.ts'
+import { isTodoOpen } from '../shared/dashboard.ts'
 import { collectMorningFacts, collectEveningFacts, polishBrief, renderBriefMarkdown, type BriefKind } from './brief.ts'
 
 /**
@@ -18,12 +20,6 @@ import { collectMorningFacts, collectEveningFacts, polishBrief, renderBriefMarkd
  * guaranteed surface, the followup only enriches the chat view).
  */
 export type YoloDeliver = (cwd: string, text: string) => Promise<void>
-
-/** Format a Date as local-time "YYYY-MM-DDTHH:mm:ss" (no timezone suffix). */
-function localIso(d: Date): string {
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-}
 
 /**
  * Reminder text delivered into the YOLO thread. Human-readable ONLY — this
@@ -82,21 +78,21 @@ export function runReminderTick(deps: {
   yolo: Yolo
   cwd: () => string
   aheadMs: number
+  now?: () => Date
   quiet?: QuietHours
   deliver?: YoloDeliver
 }): TickResult {
   const cwd = deps.cwd()
-  // due_at is stored either as a local date (YYYY-MM-DD, from rule capture) or a
-  // full ISO datetime. Compare in LOCAL time so a date-only due date fires from
-  // local midnight — toISOString() would lag by the UTC offset (up to 8h in UTC+8).
-  const aheadIso = localIso(new Date(Date.now() + deps.aheadMs))
-  const due = deps.yolo.listDueTodos(cwd, aheadIso)
+  const now = deps.now?.() ?? new Date()
+  const due = deps.yolo.listTodos(cwd)
+    .filter((todo) => isTodoOpen(todo.status) && todo.last_reminded_at == null && isDueAtReached(todo.due_at, now, deps.aheadMs))
+    .sort((a, b) => compareDueAt(a.due_at, b.due_at))
 
   // Outside the user's active hours, hold the reminder (do NOT mark it
   // reminded) so it fires on the first tick after the window — the promise
   // "到点就提醒" is kept without ever pinging at an inappropriate time.
   const q = deps.quiet
-  const quietNow = deps.quiet ? localHm(q!.now?.() ?? new Date()) : ''
+  const quietNow = deps.quiet ? localHm(q!.now?.() ?? now) : ''
   const hold = !!q?.enabled && inQuietWindow(quietNow, q!.start, q!.end)
 
   let notified = 0
@@ -163,7 +159,7 @@ export async function runBriefTick(deps: {
     const cwd = deps.cwd()
     if (deps.yolo.getBriefStamp(cwd, kind) === today) continue
     const facts =
-      kind === 'morning' ? collectMorningFacts(deps.yolo, cwd, today) : collectEveningFacts(deps.yolo, cwd, today)
+      kind === 'morning' ? collectMorningFacts(deps.yolo, cwd, today, now) : collectEveningFacts(deps.yolo, cwd, today)
     const fallback = renderBriefMarkdown(kind, facts, today)
     const body = deps.llm
       ? await polishBrief(deps.llm, deps.provider ?? 'deepseek', deps.config.model, kind, facts, fallback)

@@ -12,6 +12,7 @@ import type {
   YoloTodoRow,
 } from '../shared/dashboard.ts'
 import { isTodoOpen } from '../shared/dashboard.ts'
+import { dueAtLocalDate, dueAtTimestamp, isTodoOverdue, parseDueAt } from '../shared/due.ts'
 import { localDateStr } from '../shared/text.ts'
 
 export const ATTENTION_REASON_VERSION = 'attention-v1'
@@ -34,29 +35,18 @@ export interface AttentionFeedbackState {
   feedback_reason?: string | null
 }
 
-function dateOnly(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value)
-}
-
-/** Parse a due value without turning a local YYYY-MM-DD into UTC. */
-function dueMs(value: string | null | undefined): number | undefined {
-  if (!value) return undefined
-  const parsed = new Date(dateOnly(value) ? `${value}T23:59:59.999` : value).getTime()
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
 function localMidnightMs(value: Date): number {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
 }
 
 function overdueDays(value: string, now: Date): number {
-  if (dateOnly(value)) {
-    const dueDay = new Date(`${value}T00:00:00`)
+  const due = parseDueAt(value)
+  if (!due || due.timestamp >= now.getTime()) return 0
+  if (due.kind === 'date') {
+    const dueDay = new Date(`${due.localDate}T00:00:00`)
     return Math.max(0, Math.round((localMidnightMs(now) - localMidnightMs(dueDay)) / DAY_MS))
   }
-  const parsed = dueMs(value)
-  if (parsed === undefined || parsed >= now.getTime()) return 0
-  return Math.max(0, Math.floor((now.getTime() - parsed) / DAY_MS))
+  return Math.max(0, Math.floor((now.getTime() - due.timestamp) / DAY_MS))
 }
 
 function fingerprint(parts: readonly unknown[]): string {
@@ -79,10 +69,9 @@ function priorityRank(priority: string | null | undefined): number {
 function evidenceFor(row: YoloTodoRow, now: Date): ScoredEvidence[] {
   const evidence: ScoredEvidence[] = []
   const nowMs = now.getTime()
-  const parsedDue = dueMs(row.due_at)
+  const parsedDue = dueAtTimestamp(row.due_at)
   const dueInHours = parsedDue === undefined ? undefined : (parsedDue - nowMs) / HOUR_MS
-  const precisePastDue = parsedDue !== undefined && parsedDue < nowMs
-  const datePastDue = !!row.due_at && row.due_at.slice(0, 10) < localDateStr(now)
+  const pastDue = row.overdue ?? isTodoOverdue(row.due_at, row.status, now)
 
   if (row.reminder?.unhandled) {
     const count = Math.max(1, row.reminder.unhandled_count ?? 1)
@@ -96,7 +85,7 @@ function evidenceFor(row: YoloTodoRow, now: Date): ScoredEvidence[] {
     })
   }
 
-  if (row.due_at && (datePastDue || precisePastDue)) {
+  if (row.due_at && pastDue) {
     const days = overdueDays(row.due_at, now)
     evidence.push({
       reason: 'overdue',
@@ -251,8 +240,8 @@ function compareCandidates(a: YoloAttentionRow, b: YoloAttentionRow, todoByKey: 
   if (a.score !== b.score) return b.score - a.score
   const todoA = todoByKey.get(`${a.ws.slug}|${a.todo_id}`)
   const todoB = todoByKey.get(`${b.ws.slug}|${b.todo_id}`)
-  const dueA = dueMs(todoA?.due_at) ?? Number.POSITIVE_INFINITY
-  const dueB = dueMs(todoB?.due_at) ?? Number.POSITIVE_INFINITY
+  const dueA = dueAtTimestamp(todoA?.due_at) ?? Number.POSITIVE_INFINITY
+  const dueB = dueAtTimestamp(todoB?.due_at) ?? Number.POSITIVE_INFINITY
   if (dueA !== dueB) return dueA - dueB
   const priority = priorityRank(todoB?.priority) - priorityRank(todoA?.priority)
   if (priority !== 0) return priority
@@ -305,7 +294,7 @@ export function buildDashboardSummary(
   return {
     open: rows.filter((row) => isTodoOpen(row.status)).length,
     overdue: rows.filter((row) => row.overdue && isTodoOpen(row.status)).length,
-    dueToday: rows.filter((row) => isTodoOpen(row.status) && row.due_at?.slice(0, 10) === day).length,
+    dueToday: rows.filter((row) => isTodoOpen(row.status) && dueAtLocalDate(row.due_at) === day).length,
     completedToday: rows.filter((row) =>
       (row.status === 'done' || row.status === 'completed')
       && row.completed_at != null

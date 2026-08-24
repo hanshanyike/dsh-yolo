@@ -43,10 +43,10 @@ describe('isTodoOverdue (M8)', () => {
     expect(isTodoOverdue('2000-01-01', 'done')).toBe(false)
     expect(isTodoOverdue('2000-01-01', 'cancelled')).toBe(false)
   })
-  it('compares only the date part of datetime strings', () => {
-    const yesterday = new Date(Date.now() - 86_400_000)
-    const y = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`
-    expect(isTodoOverdue(`${y}T23:59:59`, 'pending')).toBe(true)
+  it('compares datetime strings at their exact local instant', () => {
+    const now = new Date(2026, 7, 25, 10)
+    expect(isTodoOverdue('2026-08-25T09:59:59', 'pending', now)).toBe(true)
+    expect(isTodoOverdue('2026-08-25T10:00:01', 'pending', now)).toBe(false)
   })
 })
 

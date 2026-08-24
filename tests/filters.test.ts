@@ -20,6 +20,7 @@ import {
 } from '../src/shared/filters.ts'
 
 const TODAY = '2026-08-22'
+const NOW = new Date(2026, 7, 22, 12, 0, 0)
 
 const row = (id: string, over: Partial<YoloTodoRow> = {}): YoloTodoRow => ({
   id,
@@ -76,6 +77,21 @@ describe('focus buckets & pills (TE-2)', () => {
     expect(dueBucket(row('w', { due_at: '2026-08-29' }), TODAY)).toBe('week')
     expect(dueBucket(row('n', { due_at: '2026-12-01' }), TODAY)).toBe('none')
     expect(dueBucket(row('u'), TODAY)).toBe('none')
+  })
+
+  it('classifies same-day datetimes by exact time while date-only today stays today', () => {
+    expect(dueBucket(row('past-time', { due_at: '2026-08-22T11:59:59' }), TODAY, NOW)).toBe('overdue')
+    expect(dueBucket(row('future-time', { due_at: '2026-08-22T12:00:01' }), TODAY, NOW)).toBe('today')
+    expect(dueBucket(row('date-only', { due_at: TODAY }), TODAY, NOW)).toBe('today')
+    expect(applyKanbanFilter(
+      [
+        row('past-time', { due_at: '2026-08-22T11:59:59' }),
+        row('future-time', { due_at: '2026-08-22T12:00:01' }),
+      ],
+      filter({ overdueOnly: true }),
+      TODAY,
+      NOW,
+    ).map((item) => item.id)).toEqual(['past-time'])
   })
 
   it('counts pills over ALL todos; stale double-counts with its due bucket', () => {

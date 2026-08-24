@@ -91,6 +91,17 @@ describe('todos', () => {
     repo.upsertTodo(db, { title: 'future', due_at: '2099-01-01', scope_key: SCOPE })
     expect(repo.listDueTodos(db, SCOPE, '2026-08-20')).toHaveLength(1)
   })
+
+  it('filters mixed due formats by parsed instants instead of SQLite text order', () => {
+    const cutoff = new Date(2026, 7, 25, 10)
+    repo.upsertTodo(db, { title: 'date today', due_at: '2026-08-25', scope_key: SCOPE })
+    repo.upsertTodo(db, { title: 'local past', due_at: '2026-08-25T09:59:59', scope_key: SCOPE })
+    repo.upsertTodo(db, { title: 'z past', due_at: new Date(cutoff.getTime() - 2 * 3_600_000).toISOString(), scope_key: SCOPE })
+    repo.upsertTodo(db, { title: 'offset future', due_at: new Date(cutoff.getTime() + 1_000).toISOString(), scope_key: SCOPE })
+
+    expect(repo.listDueTodos(db, SCOPE, cutoff).map((todo) => todo.title))
+      .toEqual(['z past', 'local past'])
+  })
 })
 
 describe('milestones & goals', () => {

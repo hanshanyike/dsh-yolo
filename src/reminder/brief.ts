@@ -8,22 +8,25 @@ import { BlockAssembler, type LlmRuntime, type Message } from '@deepseek-ai/dsh-
 import type Yolo from '../storage/index.ts'
 import type { Todo, TimelineEvent } from '../storage/types.ts'
 import { contentBlocksToText, dayBounds } from '../shared/text.ts'
+import { compareDueAt, dueAtLocalDate, isTodoOverdue } from '../shared/due.ts'
 
 export type BriefKind = 'morning' | 'evening'
 
 const DAY_MS = 86_400_000
 
 const isOpen = (t: Todo): boolean => t.status === 'pending' || t.status === 'in_progress'
-const dayOf = (iso: string | null | undefined): string => (iso ? iso.slice(0, 10) : '')
-
+const nowForDay = (today: string): Date => {
+  const now = new Date()
+  return dueAtLocalDate(now.toISOString()) === today ? now : new Date(`${today}T12:00:00`)
+}
 /** Morning brief facts (4.4): due today + overdue + yesterday leftovers + goal moves. */
-export function collectMorningFacts(yolo: Yolo, cwd: string, today: string): string[] {
+export function collectMorningFacts(yolo: Yolo, cwd: string, today: string, now = nowForDay(today)): string[] {
   const todos = yolo.listTodos(cwd).filter(isOpen)
-  const dueToday = todos.filter((t) => dayOf(t.due_at) === today)
-  const overdue = todos.filter((t) => t.due_at && dayOf(t.due_at) < today)
+  const dueToday = todos.filter((t) => dueAtLocalDate(t.due_at) === today)
+  const overdue = todos.filter((t) => isTodoOverdue(t.due_at, t.status, now))
   const yStart = dayBounds(today).from - DAY_MS
   const leftovers = todos.filter(
-    (t) => t.created_at >= yStart && t.created_at < yStart + DAY_MS && dayOf(t.due_at) !== today,
+    (t) => t.created_at >= yStart && t.created_at < yStart + DAY_MS && dueAtLocalDate(t.due_at) !== today,
   )
   const goalMoves = yolo
     .listEventsBetween(cwd, yStart, yStart + DAY_MS)
@@ -50,7 +53,7 @@ export function collectEveningFacts(yolo: Yolo, cwd: string, today: string): str
   const open = yolo.listTodos(cwd).filter(isOpen)
   const next = open
     .filter((t) => t.due_at)
-    .sort((a, b) => (a.due_at! < b.due_at! ? -1 : 1))
+    .sort((a, b) => compareDueAt(a.due_at, b.due_at))
     .slice(0, 3)
 
   const facts: string[] = []
@@ -58,7 +61,7 @@ export function collectEveningFacts(yolo: Yolo, cwd: string, today: string): str
   facts.push(added.length ? `新增记录 ${added.length} 件：${added.map((e) => e.summary.replace(/^＋ (记录新待办|快速记一条)/, '')).join('、')}` : '新增记录：无')
   facts.push(
     open.length
-      ? `还挂着 ${open.length} 件` + (next.length ? `，最近的：${next.map((t) => `${t.title}（${dayOf(t.due_at)}）`).join('、')}` : '')
+      ? `还挂着 ${open.length} 件` + (next.length ? `，最近的：${next.map((t) => `${t.title}（${dueAtLocalDate(t.due_at) ?? t.due_at}）`).join('、')}` : '')
       : '没有挂着的事',
   )
   return facts

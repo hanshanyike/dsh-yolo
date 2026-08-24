@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { normalizeTitle as normalize } from '../shared/text.ts'
+import { compareDueAt, isDueAtReached, parseDueAt } from '../shared/due.ts'
 import type { DB } from './db.ts'
 import type {
   ExtractionLog,
@@ -206,12 +207,24 @@ export function listTodos(db: DB, scopeKey: string, status?: TodoStatus): Todo[]
   return db.prepare(`SELECT * FROM todos ${where} ORDER BY due_at IS NULL, due_at ASC, created_at DESC`).all(...params) as Todo[]
 }
 
-export function listDueTodos(db: DB, scopeKey: string, beforeIso: string): Todo[] {
-  return db
+export function listDueTodos(db: DB, scopeKey: string, before: string | number | Date): Todo[] {
+  const cutoff = before instanceof Date
+    ? before
+    : typeof before === 'number'
+      ? new Date(before)
+      : new Date(parseDueAt(before)?.timestamp ?? Number.NaN)
+  if (!Number.isFinite(cutoff.getTime())) return []
+  // Mixed date-only/local/offset values cannot be ordered correctly by SQLite
+  // TEXT comparison, so SQL only narrows status/stamp and shared due semantics
+  // own the actual instant cutoff below.
+  const candidates = db
     .prepare(
-      `SELECT * FROM todos WHERE scope_key = ? AND due_at IS NOT NULL AND due_at <= ? AND status IN ('pending','in_progress') AND last_reminded_at IS NULL ORDER BY due_at ASC`,
+      `SELECT * FROM todos WHERE scope_key = ? AND due_at IS NOT NULL AND status IN ('pending','in_progress') AND last_reminded_at IS NULL`,
     )
-    .all(scopeKey, beforeIso) as Todo[]
+    .all(scopeKey) as Todo[]
+  return candidates
+    .filter((todo) => isDueAtReached(todo.due_at, cutoff))
+    .sort((a, b) => compareDueAt(a.due_at, b.due_at))
 }
 
 /** Stamp a todo as reminded so the scheduler does not re-fire it. */

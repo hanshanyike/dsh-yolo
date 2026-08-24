@@ -44,6 +44,11 @@ function todayRowFor(page: Page, title: string) {
   return page.locator('.v2-today-row').filter({ hasText: title })
 }
 
+function localDateTime(date: Date): string {
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 async function openTaskHandling(page: Page, title: string): Promise<void> {
   const row = todayRowFor(page, title)
   if (await row.count()) {
@@ -126,6 +131,18 @@ test('逾期事项进入 v2 关注判断并保留可核验处理依据（TA-4）
   const dialog = page.getByRole('dialog', { name: overdueTitle })
   await expect(dialog.getByRole('heading', { name: '判断依据' })).toBeVisible()
   await expect(dialog).toContainText('逾期')
+})
+
+test('W2/W11/W16: 同日精确 datetime 到时后进入逾期事实与摘要', async ({ page }) => {
+  const title = uid('跟进刚超过截止时间的客户确认')
+  await fx.todo(title, { due: localDateTime(new Date(Date.now() - 60_000)) })
+  const futureTitle = uid('稍后确认研发联调结果')
+  await fx.todo(futureTitle, { due: localDateTime(new Date(Date.now() + 3_600_000)) })
+
+  await openYoloPanel(page)
+  await expect(taskFor(page, title)).toContainText(/逾期|已超过截止时间/)
+  await expect(taskFor(page, futureTitle)).not.toContainText(/逾期|已超过截止时间/)
+  await expect(page.locator('.v2-today-surface > header')).toContainText(/\d+ 件逾期/)
 })
 
 test('捕获条快速记一条并落入看板（TA-2 快捷入口）', async ({ page }) => {

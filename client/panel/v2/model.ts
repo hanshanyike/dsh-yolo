@@ -1,5 +1,6 @@
 import type { WorkspaceTag, YoloTodoRow } from '../../../src/shared/dashboard.ts'
 import type { AttentionFeedbackReason } from '../../../src/shared/actions.ts'
+import { dueAtLocalDate, isTodoOverdue } from '../../../src/shared/due.ts'
 
 export type JudgmentPresentation = 'full' | 'compact'
 
@@ -119,8 +120,7 @@ export function tomorrowLocalDate(now = new Date()): string {
 }
 
 function dueDate(row: YoloTodoRowV2): string | null {
-  if (!row.due_at) return null
-  return row.due_at.slice(0, 10)
+  return dueAtLocalDate(row.due_at) ?? null
 }
 
 /**
@@ -153,7 +153,7 @@ export function partitionTodayTodos(
     if (row.id === highlightedTodoId) continue
 
     const due = dueDate(row)
-    if (row.overdue === true || row.stale === true || (due !== null && due < today)) {
+    if ((row.overdue ?? isTodoOverdue(row.due_at, row.status, now)) || row.stale === true) {
       result.attention.push(row)
     } else if (due === today) {
       result.today.push(row)

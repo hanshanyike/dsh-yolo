@@ -28,6 +28,7 @@
 | spec · 用例 | 场景 | 验收来源 |
 |---|---|---|
 | `api/dashboard-scope.spec.ts` | `GET /yolo/dashboard?scope=all` 返回 200 与合法看板形状（todos/notifications 数组、无 error、聚合标记带 workspace 信息） | v0.3.0/v0.3.3 聚合 |
+| `api/due-semantics.spec.ts` | date-only、精确 datetime 与终态的 overdue/attention/summary 事实一致，快速记录不会立即生成提醒 | rc.3 到期语义 |
 | `api/actions-consolidate.spec.ts` · P35 | 合并两条待办：保留方继承字段、被并方退场、台账留 `todo_consolidated` | product-design P35 |
 | `api/actions-consolidate.spec.ts` · P34 | 非法动作 400 且落 `action_denied` 审计——拒绝绝不静默 | product-design P34 |
 
@@ -38,6 +39,7 @@
 | `ui/panel-flow.spec.ts` · TA-1/TA-2 | 打开助手看板按真实任务渲染今日行（到期槽读「今天」） | TA-1/TA-2, 5.2 |
 | `ui/panel-flow.spec.ts` · TA-3 | 完成 → retire → toast 带 4 秒「撤销」→ 撤销恢复原位 | TA-3, 5.4 |
 | `ui/panel-flow.spec.ts` · TA-4 | 逾期聚焦胶囊过滤：只留逾期行 | TA-4 |
+| `ui/panel-flow.spec.ts` · W2/W11/W16 | 同日精确 datetime 到时后进入逾期事实与摘要，未来时刻不误报 | rc.3 到期语义 |
 | `ui/panel-flow.spec.ts` · TA-2′ | 捕获条回车快速记一条并落入看板 | TA-2 快捷入口 |
 | `ui/panel-flow.spec.ts` · TA-5 | 卡片「聊一聊」打开侧栏对话并锚定该任务 | TA-5 |
 | `ui/panel-flow.spec.ts` · TA-6 | Esc 逐级退出：全屏对话 → 侧栏 → 关面板 | TA-6 |

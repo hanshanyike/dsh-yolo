@@ -103,4 +103,19 @@ describe('dashboard v2 projection', () => {
     expect(data.attention?.[0].ws.slug).toBe('a/main')
     expect(data.summary).toMatchObject({ open: 2, partial: true })
   })
+
+  it('projects an earlier same-day datetime as overdue across row, attention and summary', () => {
+    vi.useFakeTimers({ now: NOW })
+    const row: Todo = {
+      id: 'same-day', title: '确认上午到期的交付', status: 'pending', due_at: '2026-08-23T09:59:59',
+      scope_key: 'same/main', created_at: NOW.getTime(), updated_at: NOW.getTime(),
+    }
+
+    const data = buildDashboardData(yoloFor('same/main', row), 'D:\\Code\\same', '2026-08-23')
+
+    expect(data.todos[0]).toMatchObject({ id: 'same-day', overdue: true })
+    expect(data.todos[0].attention_reason).toMatchObject({ code: 'overdue' })
+    expect(data.attention?.[0]).toMatchObject({ todo_id: 'same-day', reason_code: 'overdue' })
+    expect(data.summary).toMatchObject({ overdue: 1, dueToday: 1 })
+  })
 })

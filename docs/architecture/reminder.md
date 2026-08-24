@@ -19,7 +19,8 @@
 scheduler tick
   → listWorkspaceMeta() 遍历全部已知工作区
   → 按 cwd 解析该工作区当前 scope
-  → listDueTodos(cwd, local ahead time)
+  → listTodos(cwd) 读取 open + 未提醒候选
+  → shared/due 按精确到期时刻和 ahead window 过滤
   → 安静时段：保留未提醒状态，离开窗口后再触发
   → addNotification + reminder_fired event + setTodoReminded
   → 最佳努力 followup 到该工作区 yolo-w-* 常驻线程
@@ -30,8 +31,9 @@ scheduler tick
 `yolo-instructions`，用户在面板对话里可以自然回复完成、推迟或再次提醒，由模型按标题调用统一
 `yolo_action`。
 
-到期比较使用无时区后缀的本地 `YYYY-MM-DDTHH:mm:ss`，避免 UTC 偏移让 date-only todo 晚触发。
-`last_reminded_at` 防止重复；`reminder.aheadMin` 当前默认 0，即到点触发，不是旧文档中的 60。
+到期比较不交给 SQLite 文本排序：date-only todo 在本地当日结束时到期，无时区 datetime 使用本地
+精确时刻，带 `Z`/offset 的 datetime 使用其绝对时刻。`last_reminded_at` 防止重复；
+`reminder.aheadMin` 当前默认 0，即到点触发，不是旧文档中的 60。
 
 ## 简报
 

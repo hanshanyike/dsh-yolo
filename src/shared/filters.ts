@@ -4,7 +4,7 @@
 // TE-1..TE-3 semantics are pinned by tests instead of by UI code.
 
 import type { YoloTodoRow } from './dashboard.ts'
-import { isTodoOverdue } from './dashboard.ts'
+import { compareDueAt, dueAtLocalDate, isTodoOverdue } from './due.ts'
 import { localDateStr } from './text.ts'
 
 const DAY_MS = 86_400_000
@@ -102,24 +102,27 @@ export function hasDetailFilter(f: KanbanFilter): boolean {
 }
 
 const isOpen = (t: YoloTodoRow): boolean => t.status !== 'done' && t.status !== 'completed' && t.status !== 'cancelled'
-const dayOf = (iso: string | null | undefined): string => (iso ? iso.slice(0, 10) : '')
-
+const nowForDay = (today: string): Date => {
+  const now = new Date()
+  return localDateStr(now) === today ? now : new Date(`${today}T12:00:00`)
+}
 /** Due bucket of one open todo: 逾期 / 今日 / 未来7天 / none. */
-export function dueBucket(t: YoloTodoRow, today = localDateStr()): 'overdue' | 'today' | 'week' | 'none' {
+export function dueBucket(t: YoloTodoRow, today = localDateStr(), now = nowForDay(today)): 'overdue' | 'today' | 'week' | 'none' {
   if (!isOpen(t) || !t.due_at) return 'none'
-  const due = dayOf(t.due_at)
-  if (due < today) return 'overdue'
+  const due = dueAtLocalDate(t.due_at)
+  if (!due) return 'none'
+  if (t.overdue ?? isTodoOverdue(t.due_at, t.status, now)) return 'overdue'
   if (due === today) return 'today'
   if (new Date(`${due}T00:00:00`).getTime() <= new Date(`${today}T00:00:00`).getTime() + 7 * DAY_MS) return 'week'
   return 'none'
 }
 
 /** Focus pill counts over ALL todos (not the filtered list). */
-export function focusCounts(todos: readonly YoloTodoRow[], today = localDateStr()): Record<FocusBucket, number> {
+export function focusCounts(todos: readonly YoloTodoRow[], today = localDateStr(), now = nowForDay(today)): Record<FocusBucket, number> {
   const c: Record<FocusBucket, number> = { overdue: 0, today: 0, week: 0, stale: 0 }
   for (const t of todos) {
     if (!isOpen(t)) continue
-    const b = dueBucket(t, today)
+    const b = dueBucket(t, today, now)
     if (b !== 'none') c[b]++
     if (t.stale) c.stale++
   }
@@ -132,6 +135,7 @@ export function applyKanbanFilter(
   todos: readonly YoloTodoRow[],
   f: KanbanFilter,
   today = localDateStr(),
+  now = nowForDay(today),
 ): YoloTodoRow[] {
   const kw = f.keyword?.trim().toLowerCase() ?? ''
   return todos.filter((t) => {
@@ -141,7 +145,7 @@ export function applyKanbanFilter(
     } else {
       if (!isOpen(t)) return false
       if (f.preset === 'today') {
-        const b = dueBucket(t, today)
+        const b = dueBucket(t, today, now)
         if (b !== 'overdue' && b !== 'today') return false
       }
     }
@@ -149,15 +153,15 @@ export function applyKanbanFilter(
       if (!isOpen(t)) return false
       if (f.focus === 'stale') {
         if (!t.stale) return false
-      } else if (dueBucket(t, today) !== f.focus) return false
+      } else if (dueBucket(t, today, now) !== f.focus) return false
     }
     if (f.inProgressOnly && t.status !== 'in_progress') return false
-    if (f.overdueOnly && !isTodoOverdue(t.due_at, t.status, new Date(`${today}T00:00:00`))) return false
+    if (f.overdueOnly && !(t.overdue ?? isTodoOverdue(t.due_at, t.status, now))) return false
     if (f.staleOnly && !t.stale) return false
     if (f.milestoneTitle !== null && (t.milestone_title ?? '') !== f.milestoneTitle) return false
     if (kw && !t.title.toLowerCase().includes(kw)) return false
     if (f.rangeFrom !== null || f.rangeTo !== null) {
-      const due = dayOf(t.due_at)
+      const due = dueAtLocalDate(t.due_at) ?? ''
       if (!due) return false
       if (f.rangeFrom !== null && due < f.rangeFrom) return false
       if (f.rangeTo !== null && due > f.rangeTo) return false
@@ -167,16 +171,16 @@ export function applyKanbanFilter(
 }
 
 /** Default kanban ordering: overdue first, then by due date, undated last. */
-export function sortForKanban(todos: readonly YoloTodoRow[]): YoloTodoRow[] {
+export function sortForKanban(todos: readonly YoloTodoRow[], now = new Date()): YoloTodoRow[] {
   const rank = (t: YoloTodoRow): number => {
     if (!isOpen(t)) return 3
-    if (isTodoOverdue(t.due_at, t.status)) return 0
+    if (t.overdue ?? isTodoOverdue(t.due_at, t.status, now)) return 0
     return t.due_at ? 1 : 2
   }
   return [...todos].sort((a, b) => {
     const r = rank(a) - rank(b)
     if (r !== 0) return r
-    if (a.due_at && b.due_at) return a.due_at < b.due_at ? -1 : a.due_at > b.due_at ? 1 : 0
+    if (a.due_at && b.due_at) return compareDueAt(a.due_at, b.due_at)
     if (a.due_at) return -1
     if (b.due_at) return 1
     return 0
@@ -194,13 +198,14 @@ export function partitionFocusRows(
   todos: readonly YoloTodoRow[],
   defaultCount: number,
   today = localDateStr(),
+  now = nowForDay(today),
 ): { focus: YoloTodoRow[]; folded: YoloTodoRow[] } {
   if (defaultCount <= 0 || todos.length <= defaultCount) return { focus: [...todos], folded: [] }
   const open = todos.filter((t) => isOpen(t))
   const priorityRank = (t: YoloTodoRow): number => (t.priority === 'urgent' ? 0 : t.priority === 'high' ? 1 : 2)
   const sorted = [...open].sort((a, b) => {
-    const ba = dueBucket(a, today)
-    const bb = dueBucket(b, today)
+    const ba = dueBucket(a, today, now)
+    const bb = dueBucket(b, today, now)
     const rankOf = (bkt: 'overdue' | 'today' | 'week' | 'none'): number => (bkt === 'overdue' ? 0 : bkt === 'today' ? 1 : bkt === 'week' ? 2 : 3)
     const ra = rankOf(ba)
     const rb = rankOf(bb)

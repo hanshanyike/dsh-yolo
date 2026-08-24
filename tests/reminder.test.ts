@@ -21,7 +21,7 @@ function todo(id: string, title: string, dueAt?: string): Todo {
 
 function mockYolo(todos: Todo[]) {
   return {
-    listDueTodos: vi.fn(() => todos),
+    listTodos: vi.fn(() => todos),
     addNotification: vi.fn(),
     addEvent: vi.fn(),
     setTodoReminded: vi.fn(),
@@ -61,19 +61,27 @@ describe('runReminderTick', () => {
   })
 
   it('TB-1: the card is the guaranteed surface — no deliver still notifies, nothing is queued for work sessions', () => {
-    const yolo = mockYolo([todo('t1', '交报告'), todo('t2', '回复邮件')])
+    const yolo = mockYolo([todo('t1', '交报告', '2020-01-01'), todo('t2', '回复邮件', '2020-01-01T09:00:00')])
     const r = runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 60000 })
     expect(r.notified).toBe(2)
     expect(yolo.addNotification).toHaveBeenCalledTimes(2)
     expect(yolo.setTodoReminded).toHaveBeenCalledTimes(2)
   })
 
-  it('calls listDueTodos with a future-bound ISO timestamp', () => {
-    const yolo = mockYolo([])
-    runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 60000 })
-    const [cwd, iso] = (yolo.listDueTodos as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string]
-    expect(cwd).toBe('/tmp')
-    expect(new Date(iso).getTime()).toBeGreaterThan(Date.now() - 1000)
+  it('keeps date-only today out while an earlier exact datetime is due', () => {
+    const yolo = mockYolo([
+      todo('quick', '快速记录', '2026-08-25'),
+      todo('exact', '上午截止', '2026-08-25T09:59:59'),
+    ])
+    const result = runReminderTick({
+      yolo,
+      cwd: () => '/tmp',
+      aheadMs: 0,
+      now: () => new Date(2026, 7, 25, 10),
+    })
+    expect(result.notified).toBe(1)
+    expect(yolo.listTodos).toHaveBeenCalledWith('/tmp')
+    expect(yolo.setTodoReminded).toHaveBeenCalledWith('/tmp', 'exact')
   })
 })
 

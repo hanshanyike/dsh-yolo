@@ -31,6 +31,9 @@
 - 证据变化会生成新 fingerprint，旧反馈不会错误套用；
 - 客户端回传旧绑定时，统一动作入口拒绝为 `stale_attention`。
 
+到期证据复用 `src/shared/due.ts` 的领域事实：date-only 到本地日末才逾期，datetime 按精确时刻；
+因此 row.overdue、判断依据、摘要和客户端筛选不会各自解释同一个 `due_at`。
+
 ## 依赖关系
 
 - 输入类型来自 `src/shared/dashboard.ts`。
