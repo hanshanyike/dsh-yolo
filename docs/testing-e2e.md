@@ -53,6 +53,7 @@
 | `ui/board-scope.spec.ts` | 面板头部保留工作区切换开关时可用 | v0.3.3 |
 | `ui/accessibility-feedback.spec.ts` | 关闭筛选菜单不可聚焦、行内编辑字段可读名、对话发送状态持续到回复、通知正文多行保真 | W2/W3/W5 |
 | `ui/settings-card.spec.ts` · W14 | 设置页修改 YOLO 提醒配置、保存并刷新回读；卡片无内部里程碑或错误入口说明 | rc.3 XP-06/W14 |
+| `ui/today-tab-count.spec.ts` · W2/W7/W11/W16 | Today tab 按默认表面开放事项做 workspace+todo 去重；与自然日 dueToday 可不同，partial 明示只计已加载 | rc.3 XP-07 |
 
 ### 已知覆盖缺口（真机走查兜底）
 

@@ -84,6 +84,55 @@ describe('buildTodaySurfaceModel', () => {
     expect(model.judgmentScopeCwd).toBe(WS_A.cwd)
     expect(model.attentionRows).toHaveLength(0)
     expect(model.todayRows.map((row) => row.todo.ws?.label)).toEqual(['内部工具'])
+    expect(model.openItemCount).toBe(2)
+  })
+
+  it('counts the deduplicated open-item union carried by Today', () => {
+    const primary = todo('primary', { due_at: '2026-08-23T10:00:00', overdue: true })
+    const secondary = todo('secondary', { attention_reason: secondaryReason() })
+    const today = todo('today', { due_at: '2026-08-23' })
+    const remindedFuture = todo('future-reminder', { due_at: '2026-08-30' })
+    const terminal = todo('done-reminder', { status: 'done' })
+    const data = dashboard({
+      todos: [primary, secondary, today, remindedFuture, terminal],
+      attention: [attention(primary.id)],
+      notifications: [
+        { id: 'n-primary', kind: 'reminder', title: '主判断提醒', todo_id: primary.id, created_at: 1, handled: false, scope_cwd: WS_A.cwd },
+        { id: 'n-primary-copy', kind: 'reminder', title: '主判断重复提醒', todo_id: primary.id, created_at: 2, handled: false, scope_cwd: WS_A.cwd },
+        { id: 'n-future', kind: 'reminder', title: '未来事项提醒', todo_id: remindedFuture.id, created_at: 3, handled: false, scope_cwd: WS_A.cwd },
+        { id: 'n-done', kind: 'reminder', title: '终态旧提醒', todo_id: terminal.id, created_at: 4, handled: false, scope_cwd: WS_A.cwd },
+        { id: 'n-brief', kind: 'brief', title: '早报', created_at: 5, handled: false, scope_cwd: WS_A.cwd },
+      ],
+    })
+
+    const model = buildTodaySurfaceModel(data, { now: NOW })
+
+    expect(model.judgment?.todo.id).toBe(primary.id)
+    expect(model.attentionRows.map((row) => row.todo.id)).toEqual([secondary.id])
+    expect(model.todayRows.map((row) => row.todo.id)).toEqual([today.id])
+    expect(model.openItemCount).toBe(4)
+  })
+
+  it('keeps same todo ids from different workspaces distinct', () => {
+    const data = dashboard({
+      todos: [
+        todo('same', { due_at: '2026-08-23' }),
+        todo('same', { due_at: '2026-08-23', scope_cwd: WS_B.cwd, ws: WS_B }),
+      ],
+    })
+
+    expect(buildTodaySurfaceModel(data, { now: NOW }).openItemCount).toBe(2)
+  })
+
+  it('keeps the tab surface count independent from natural-day dueToday facts', () => {
+    const data = dashboard({
+      todos: [todo('overdue', { due_at: '2026-08-22', overdue: true, attention_reason: secondaryReason({ code: 'overdue' }) })],
+      summary: { open: 1, overdue: 1, dueToday: 0, completedToday: 0, changesToday: 0, partial: false },
+    })
+    const model = buildTodaySurfaceModel(data, { now: NOW })
+
+    expect(model.openItemCount).toBe(1)
+    expect(model.description).toContain('0 件今天到期')
   })
 
   it('shows an explicit partial-data message with failed workspace details', () => {
@@ -94,6 +143,8 @@ describe('buildTodaySurfaceModel', () => {
 
     expect(buildTodaySurfaceModel(data, { now: NOW }).partialMessage)
       .toBe('部分工作区暂不可用：归档项目: database locked。当前内容可能不完整。')
+    expect(buildTodaySurfaceModel(data, { now: NOW }).partial).toBe(true)
+    expect(buildTodaySurfaceModel(data, { now: NOW }).openItemCount).toBe(0)
   })
 
   it('counts done rows but never cancelled rows as completed progress', () => {

@@ -28,6 +28,7 @@ import { KanbanView } from './KanbanView.tsx'
 import { MoreMenu } from './MoreMenu.tsx'
 import { ViewTabs, type ViewKey } from './ViewTabs.tsx'
 import { readPanelState, writePanelState } from './state.ts'
+import { buildTodaySurfaceModel } from './v2/today-surface-model.ts'
 
 export interface YoloPanelProps {
   /** Panel left edge (the sidebar's right edge) — spans to the viewport right. */
@@ -242,16 +243,21 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   const chatShowingFull = chatFullscreen || (sideChatOpen && medium)
   const showSideDock = sideChatOpen && !chatFullscreen && !medium
 
-  // Tab counts — the board's live signals at a glance (raw bucket counts).
-  const counts = useMemo(() => {
+  // Tab counts — Today is the deduplicated set its default surface actually
+  // carries; other tabs keep their domain-specific live counts.
+  const countState = useMemo(() => {
     const openCounts = state.data ? focusCounts(state.data.todos) : { overdue: 0, today: 0, week: 0, stale: 0 }
     const done = state.data ? state.data.todos.filter((t) => t.status === 'done' || t.status === 'completed').length : 0
+    const todayModel = state.data ? buildTodaySurfaceModel(state.data) : undefined
     return {
-      today: openCounts.today,
-      upcoming: openCounts.week,
-      done,
-      goals: state.data?.goals.length ?? 0,
-      ledger: state.data?.ledger.length ?? 0,
+      counts: {
+        today: todayModel?.openItemCount ?? 0,
+        upcoming: openCounts.week,
+        done,
+        goals: state.data?.goals.length ?? 0,
+        ledger: state.data?.ledger.length ?? 0,
+      },
+      todayPartial: todayModel?.partial ?? false,
     }
   }, [state.data])
 
@@ -428,7 +434,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
       </header>
 
       {/* ② horizontal view tabs — the face switcher (vertical nav is the host's) */}
-      <ViewTabs view={view} counts={counts} onChange={setView} compact={compact} />
+      <ViewTabs view={view} counts={countState.counts} onChange={setView} compact={compact} todayPartial={countState.todayPartial} />
       {!chatShowingFull && listTools}
 
       {/* ③ body: full-screen chat takes over the panel while the board stays

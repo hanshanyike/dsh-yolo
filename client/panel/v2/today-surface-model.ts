@@ -38,6 +38,10 @@ export interface TodaySurfaceModel {
   judgmentScopeCwd?: string
   attentionRows: TodayTaskRowView[]
   todayRows: TodayTaskRowView[]
+  /** Deduplicated open todo owners actually carried by the default Today face. */
+  openItemCount: number
+  /** True when the count and rows cover only the successfully loaded workspaces. */
+  partial: boolean
   progress: TodayProgressView
   showClosure: boolean
 }
@@ -111,7 +115,14 @@ function mapTodo(
 
 function findJudgmentTodo(data: YoloDashboardData, attention: YoloAttentionRow): YoloTodoRow | undefined {
   return data.todos.find((todo) => todo.id === attention.todo_id && scopeOf(todo, data) === attention.scope_cwd)
-    ?? data.todos.find((todo) => todo.id === attention.todo_id)
+}
+
+function findNotificationTodo(data: YoloDashboardData, todoId: string, scopeCwd?: string): YoloTodoRow | undefined {
+  const matches = data.todos.filter((todo) => todo.id === todoId)
+  if (scopeCwd) return matches.find((todo) => scopeOf(todo, data) === scopeCwd)
+  // Legacy single-workspace notifications may have no explicit cwd. Never
+  // guess when the same todo id exists in more than one loaded workspace.
+  return matches.length === 1 ? matches[0] : undefined
 }
 
 function reasonLabelKey(value: string): string {
@@ -216,6 +227,8 @@ export function buildTodaySurfaceModel(
   const primary = buildJudgment(data, data.attention?.[0])
   const attentionRows: TodayTaskRowView[] = []
   const todayRows: TodayTaskRowView[] = []
+  const openItemKeys = new Set<string>()
+  if (primary) openItemKeys.add(primary.todoKey)
 
   for (const todo of data.todos) {
     if (!isOpen(todo.status) || scopedTodoKey(todo, data) === primary?.todoKey) continue
@@ -227,8 +240,23 @@ export function buildTodaySurfaceModel(
       source: mapSource(todo.source, todo),
     }
     const fact = todo.attention_reason ? buildTodayTaskReason(todo.attention_reason) : undefined
-    if (fact) attentionRows.push({ ...row, reason: fact })
-    else if (dueAtLocalDate(todo.due_at) === today) todayRows.push(row)
+    if (fact) {
+      attentionRows.push({ ...row, reason: fact })
+      openItemKeys.add(row.key)
+    } else if (dueAtLocalDate(todo.due_at) === today) {
+      todayRows.push(row)
+      openItemKeys.add(row.key)
+    }
+  }
+
+  // Reminder cards render on Today after the task lists. A future/open todo
+  // with an unhandled reminder must therefore contribute to the tab count,
+  // while duplicate cards and todos already carried above remain one item.
+  for (const notification of data.notifications) {
+    if (notification.handled || notification.kind !== 'reminder' || !notification.todo_id) continue
+    const notificationScope = notification.scope_cwd ?? notification.ws?.cwd
+    const todo = findNotificationTodo(data, notification.todo_id, notificationScope)
+    if (todo && isOpen(todo.status)) openItemKeys.add(scopedTodoKey(todo, data))
   }
 
   const partial = serverSummary?.partial === true || (data.workspaceErrors?.length ?? 0) > 0
@@ -255,6 +283,8 @@ export function buildTodaySurfaceModel(
     judgmentScopeCwd: primary?.scopeCwd,
     attentionRows,
     todayRows,
+    openItemCount: openItemKeys.size,
+    partial,
     progress,
     showClosure,
   }
