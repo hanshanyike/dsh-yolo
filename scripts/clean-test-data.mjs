@@ -10,10 +10,10 @@
 // with other titles are left alone. Run the host first so its DB handle is not
 // open; close the host (or run with it stopped) to avoid a locked DB.
 
-import Database from 'better-sqlite3'
 import { readdirSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 
 const ROOT = resolve(import.meta.dirname, '..')
 const DIRS = [
@@ -28,7 +28,7 @@ for (const dir of DIRS) {
     const path = join(dir, file)
     let db
     try {
-      db = new Database(path, { readonly: false })
+      db = new DatabaseSync(path)
     } catch {
       console.log(`[clean-test-data] skip (locked) ${path}`)
       continue

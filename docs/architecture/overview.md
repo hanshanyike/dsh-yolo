@@ -9,7 +9,7 @@ YOLO 不是单个插件，而是**由五个相互协作的 Cordis 插件和一�
 
 ## 设计目标
 
-1. **零外部服务。** 记忆能力无需服务器、嵌入 API 或账号即可工作；SQLite 是唯一随包提供的原生依赖。
+1. **零外部服务。** 记忆能力无需服务器、嵌入 API 或账号即可工作；存储使用 Node.js 内置 SQLite。
 2. **Agent 拥有自己的记忆。** 记忆以模型可见工具和提示词上下文的形式暴露，而不只是后台日志。
 3. **持久记录可由人审阅。** SQLite 是运行事实源，系统同时生成可读、可 diff 的 Markdown 快照作为审阅投影。
 4. **工作区隔离。** 两个项目（或同一项目的两个分支）之间绝不会串入彼此的记忆。
@@ -338,12 +338,12 @@ data/
 | **插件包 patch 必须包含裸包入口。** 除各子路径行外，`cordis.patch.yml` 还需要一行 `{ id, name: 'dsh-plugin-yolo' }`。注册表会把每个入口的 *name* 解析为 `<name>/package.json`；子路径入口（`dsh-plugin-yolo/dist/src/storage`）只能解析到没有 package.json 的子路径，因此**不是**客户端行。只有裸包名能解析到包根目录，并由其中的 `dsh.client` 声明 Web 包；所以仅含子路径行的 patch 虽能挂载宿主插件，却不会在普通 `dsh web` 中显示侧栏按钮/面板。`cordis.dev.yml` 包含裸入口（因此 patch-local 宿主能渲染），`cordis.patch.yml` 原本没有，导致通过 `dsh plugin add` 安装的包能访问 `/yolo/dashboard` 却没有面板。 |
 | 客户端包以经典 `<script>` 提供 | 必须是 CJS（`module.exports`）；ESM `export {}` 会留下空 factory，导致 `loaded without registering`；也不能裸用 Node 全局变量（`process is not defined`） |
 
-### 存储与原生依赖
+### 存储与运行时
 
 | 事实 | 影响 |
 |---|---|
-| FTS5 trigram（better-sqlite3 11.10.0、Win/x64 + Node 22） | 对不少于 3 个字符的查询有良好的 CJK 召回；M9 的 `ftsRecallSearch` 增加 token-OR 多查询和 `title LIKE` 降级路径，使 2 字 CJK 词也能命中 |
-| pnpm 默认忽略原生构建脚本 | `pnpm-workspace.yaml` 需要 `allowBuilds: { better-sqlite3: true, esbuild: true }` + `nodeLinker: hoisted`；hoisted 还能避开曾导致 tsdown 损坏的空目录虚拟存储 bug |
+| Node.js 内置 SQLite 的 FTS5 trigram | 对不少于 3 个字符的查询有良好的 CJK 召回；M9 的 `ftsRecallSearch` 增加 token-OR 多查询和 `title LIKE` 降级路径，使 2 字 CJK 词也能命中 |
+| 开发工具仍有构建脚本 | `pnpm-workspace.yaml` 只需允许 `esbuild`，并保持 `nodeLinker: hoisted`；发布包运行时不需要安装原生依赖 |
 | SQLite 不支持 `ADD COLUMN IF NOT EXISTS` | `openDb()` 会对旧数据库检查 `PRAGMA table_info(...)` 并执行 `ALTER TABLE` |
 
 ### Windows 环境
@@ -356,7 +356,7 @@ data/
 ### 设计决策：为何不使用动态 Cordis 插件
 
 YOLO 有意**不使用**动态插件机制（`cordis_define` + `cordis_run`）：动态插件的 `code.host` 是纯 JS
-函数体，不支持模块解析、`fs` 或 `better-sqlite3` 原生绑定，无法承载 TypeScript + SQLite 项目。
+函数体，不支持模块解析、`fs` 或 `node:sqlite` 导入，无法承载 TypeScript + SQLite 项目。
 标准本地运行路径是使用已安装的 `dsh` CLI 与 web profile
 （`dsh plugin --profile web add .` + `dsh web`）。
 

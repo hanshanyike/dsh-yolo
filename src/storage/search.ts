@@ -1,8 +1,8 @@
 // YOLO FTS5 search — full-text recall across todos/milestones/goals/preferences/events.
 //
-// Chinese tokenization: schema.sql uses `tokenize = 'trigram'` (verified on
-// better-sqlite3 11.10.0 / Win x64 / Node 22), which gives good CJK recall for
-// queries >= 3 chars. 2-char CJK queries fall back to a substring scan and may miss.
+// Chinese tokenization: schema.sql uses `tokenize = 'trigram'`, verified with
+// Node's built-in SQLite on the supported Node 22/24 runtimes. It gives good
+// CJK recall for queries >= 3 chars; 2-char queries use the LIKE fallback.
 
 import type { DB } from './db.ts'
 import type { RowType, SearchHit } from './types.ts'

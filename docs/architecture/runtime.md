@@ -76,8 +76,8 @@ YOLO 是 5 个宿主插件加 1 个浏览器 bundle：
 
 ### SQLite 与 Windows
 
-- 当前 Windows/Node 环境的 better-sqlite3 支持 FTS5 trigram。
-- pnpm workspace 必须允许 `better-sqlite3` 与 `esbuild` 的构建脚本，并保持当前 hoisted 配置。
+- 存储使用 Node.js 内置的 `node:sqlite`；受支持的 Node 22/24 运行时均提供 FTS5 trigram。
+- pnpm workspace 只需允许开发工具 `esbuild` 的构建脚本，并保持当前 hoisted 配置。
 - SQLite 迁移不能使用 `ADD COLUMN IF NOT EXISTS`。
 - Windows 工作区若无 `WRITE_DAC`，dsh 可能在 ACL grant 阶段失败；按项目约定以管理员预处理
   ACL，或把工作区放在当前用户拥有的目录。
@@ -89,8 +89,7 @@ YOLO 是 5 个宿主插件加 1 个浏览器 bundle：
 |---|---|
 | `EADDRINUSE` | 用 PowerShell 检查并停止占用目标端口的残留 dsh 进程，或改用 4080 |
 | `frontend dist not built` | 先完成宿主要求的构建，再启动 `dsh web` |
-| `Cannot find package 'better-sqlite3'` | 运行 `pnpm install`，检查 workspace allowBuilds |
-| `Could not locate the bindings file` | native binding 未编译，重新确认 allowBuilds 后安装 |
+| `No such built-in module: node:sqlite` | 升级到 Node.js 22.19+ 或受支持的 Node.js 24 版本 |
 | `duplicate loader entry id: yolo` | 不要同时叠加已安装 bundle 和额外 runtime patch |
 | `Cannot find package 'dsh-plugin-yolo'` | 重新执行 `dsh plugin --profile web add .` |
 | `loaded without registering` | 检查 client 是否为 CJS 且已运行 wrapper |
@@ -102,5 +101,5 @@ YOLO 是 5 个宿主插件加 1 个浏览器 bundle：
 ## 为什么不用动态 Cordis 插件
 
 `cordis_define` / `cordis_run` 的动态插件 `code.host` 是纯 JavaScript 函数体，不提供常规模块
-解析、文件系统与 better-sqlite3 native binding，无法承载本项目的 TypeScript + SQLite 插件。
+解析、文件系统或 `node:sqlite` 模块导入，无法承载本项目的 TypeScript + SQLite 插件。
 因此项目使用已安装 dsh CLI、标准 profile 和包级 patch。

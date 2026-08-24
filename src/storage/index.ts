@@ -10,7 +10,7 @@ import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { getMeta, openDb, setMeta, type DB } from './db.ts'
+import { getMeta, openDb, setMeta, withTransaction, type DB } from './db.ts'
 import { computeScopeKey, resolveDataDir, dbFileName } from './scope.ts'
 import * as repo from './repository.ts'
 import { ftsRecallSearch } from './search.ts'
@@ -379,7 +379,7 @@ export default class Yolo extends Service {
     | { status: 'fresh' | 'replay'; outcome_json: string }
     | { status: 'conflict' } {
     const h = this.resolve(cwd)
-    return h.db.transaction(() => {
+    return withTransaction(h.db, () => {
       const existing = repo.getClientAction(h.db, h.scopeKey, clientActionId)
       if (existing) {
         return existing.request_hash === requestHash
@@ -394,7 +394,7 @@ export default class Yolo extends Service {
         outcome_json: outcomeJson,
       })
       return { status: 'fresh' as const, outcome_json: outcomeJson }
-    })()
+    })
   }
 
   // ---- brief day-stamps (v0.3.0 D: fire each brief once per local day) ----

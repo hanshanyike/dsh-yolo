@@ -2,16 +2,74 @@
 // Schema is read from schema.sql next to this file (dev: src/storage/;
 // built: dist/src/storage/ — scripts/copy-assets.mjs copies it there).
 
-import Database from 'better-sqlite3'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import {
+  DatabaseSync,
+  type SQLInputValue,
+  type StatementResultingChanges,
+} from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const SCHEMA_PATH = join(here, 'schema.sql')
 
-/** better-sqlite3 instance type. */
-export type DB = Database.Database
+type BindValue = SQLInputValue | undefined
+
+/** The small statement surface used by YOLO's repository layer. */
+export interface DBStatement {
+  all(...params: BindValue[]): unknown[]
+  get(...params: BindValue[]): unknown
+  run(...params: BindValue[]): StatementResultingChanges
+}
+
+/** Synchronous SQLite surface used by the storage and repository modules. */
+export interface DB {
+  readonly isOpen: boolean
+  readonly isTransaction: boolean
+  close(): void
+  exec(sql: string): void
+  prepare(sql: string): DBStatement
+}
+
+function normalizeParams(params: readonly BindValue[]): SQLInputValue[] {
+  // Preserve the previous driver's contract: optional fields bind as SQL NULL.
+  // node:sqlite deliberately rejects JavaScript undefined values.
+  return params.map((value) => value ?? null)
+}
+
+class YoloDatabase implements DB {
+  readonly #database: DatabaseSync
+
+  constructor(path: string) {
+    this.#database = new DatabaseSync(path)
+  }
+
+  get isOpen(): boolean {
+    return this.#database.isOpen
+  }
+
+  get isTransaction(): boolean {
+    return this.#database.isTransaction
+  }
+
+  close(): void {
+    this.#database.close()
+  }
+
+  exec(sql: string): void {
+    this.#database.exec(sql)
+  }
+
+  prepare(sql: string): DBStatement {
+    const statement = this.#database.prepare(sql)
+    return {
+      all: (...params) => statement.all(...normalizeParams(params)),
+      get: (...params) => statement.get(...normalizeParams(params)),
+      run: (...params) => statement.run(...normalizeParams(params)),
+    }
+  }
+}
 
 let cachedSchema: string | undefined
 
@@ -23,13 +81,48 @@ function loadSchema(): string {
 
 /** Open (or create) a YOLO database and ensure all tables/indexes/FTS exist. */
 export function openDb(dbPath: string): DB {
-  const db = new Database(dbPath)
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
-  db.pragma('synchronous = NORMAL')
+  const db = new YoloDatabase(dbPath)
+  db.exec('PRAGMA journal_mode = WAL')
+  db.exec('PRAGMA foreign_keys = ON')
+  db.exec('PRAGMA synchronous = NORMAL')
   db.exec(loadSchema())
   migrate(db)
   return db
+}
+
+let savepointSequence = 0
+
+/**
+ * Execute a synchronous callback atomically.
+ *
+ * Node's built-in SQLite API intentionally exposes SQL transaction primitives
+ * instead of a callback helper. Use a savepoint when the caller is already in
+ * a transaction so repository operations remain safely composable.
+ */
+export function withTransaction<T>(db: DB, callback: () => T): T {
+  if (db.isTransaction) {
+    const savepoint = `yolo_nested_${++savepointSequence}`
+    db.exec(`SAVEPOINT ${savepoint}`)
+    try {
+      const result = callback()
+      db.exec(`RELEASE SAVEPOINT ${savepoint}`)
+      return result
+    } catch (error) {
+      db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`)
+      db.exec(`RELEASE SAVEPOINT ${savepoint}`)
+      throw error
+    }
+  }
+
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const result = callback()
+    db.exec('COMMIT')
+    return result
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK')
+    throw error
+  }
 }
 
 /**

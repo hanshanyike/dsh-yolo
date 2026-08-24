@@ -35,20 +35,13 @@ YOLO 会理解对话里的计划信息，而不是要求你使用固定关键词
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.0-rc.1
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.0-rc.2
 npx @deepseek-ai/dsh web
 ```
 
 这会安装 YOLO 并启动 dsh。页面默认在
 [http://127.0.0.1:3080](http://127.0.0.1:3080) 打开。进入页面后选择工作区并开始对话；
 左侧边栏底部的 **YOLO** 按钮用于打开助手看板。
-
-首次安装时，pnpm 可能会阻止原生依赖 `better-sqlite3` 的安装脚本。终端出现
-`ERR_PNPM_IGNORED_BUILDS` 时，执行下面的命令，按空格选择 `better-sqlite3` 并确认，然后重新执行安装：
-
-```bash
-npx @deepseek-ai/dsh plugin --profile web approve-builds
-```
 
 如果不希望自动打开浏览器，使用：
 

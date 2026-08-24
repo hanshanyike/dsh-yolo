@@ -1,9 +1,8 @@
 # pnpm settings (pnpm 11+ reads settings here, NOT the package.json "pnpm" field).
-# Allow native build scripts so better-sqlite3's C++ binding and esbuild compile.
+# Allow development build scripts required by the frontend toolchain.
 allowBuilds:
-  better-sqlite3: true
   esbuild: true
-minimumReleaseAge: 0  # rc deps: skip pnpm's new-package cool-down
+minimumReleaseAge: 0 # rc deps: skip pnpm's new-package cool-down
 # hoisted linker: flat npm-style layout (deterministic for CI; avoids the
 # .pnpm virtual store empty-dir quirk seen with linked host packages).
 nodeLinker: hoisted

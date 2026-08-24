@@ -2,7 +2,7 @@
 // functions against an in-memory SQLite DB (no Cordis host needed).
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { openDb, type DB } from '../src/storage/db.ts'
+import { openDb, withTransaction, type DB } from '../src/storage/db.ts'
 import * as repo from '../src/storage/repository.ts'
 import { ftsSearch, toFtsPhrase } from '../src/storage/search.ts'
 import { renderSnapshot } from '../src/storage/snapshot.ts'
@@ -24,6 +24,24 @@ describe('db + schema', () => {
     for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'goals', 'preferences', 'preference_history', 'events', 'extraction_log', 'pending_reminders', 'yolo_fts']) {
       expect(tableNames).toContain(t)
     }
+  })
+
+  it('commits successful transactions and rolls back failed ones', () => {
+    withTransaction(db, () => {
+      repo.upsertTodo(db, { title: '保留外层写入', scope_key: SCOPE })
+      expect(() => withTransaction(db, () => {
+        repo.upsertTodo(db, { title: '回滚内层写入', scope_key: SCOPE })
+        throw new Error('rollback nested savepoint')
+      })).toThrow('rollback nested savepoint')
+    })
+
+    expect(repo.listTodos(db, SCOPE).map((todo) => todo.title)).toEqual(['保留外层写入'])
+
+    expect(() => withTransaction(db, () => {
+      repo.upsertTodo(db, { title: '回滚整个事务', scope_key: SCOPE })
+      throw new Error('rollback transaction')
+    })).toThrow('rollback transaction')
+    expect(repo.listTodos(db, SCOPE).map((todo) => todo.title)).toEqual(['保留外层写入'])
   })
 })
 

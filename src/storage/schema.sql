@@ -223,7 +223,7 @@ CREATE INDEX IF NOT EXISTS idx_recall_time ON recall_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_recall_scope ON recall_log(scope_key);
 CREATE INDEX IF NOT EXISTS idx_recall_session ON recall_log(session_id) WHERE session_id IS NOT NULL;
 -- FTS5 full-text index covering searchable text rows.
--- M1 verified: better-sqlite3 11.10.0 on Win/x64 + Node 22 ships trigram (SQLite >= 3.34).
+-- Verified on the supported Node 22/24 built-in SQLite runtimes (SQLite >= 3.34).
 -- trigram gives good CJK recall for queries >= 3 chars. For 2-char queries trigram
 -- falls back to substring scan (slower, may miss). M5 may switch to index-side bigram
 -- if 2-char recall becomes a problem in practice.

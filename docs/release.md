@@ -66,9 +66,9 @@ npx @deepseek-ai/dsh web
 npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#<tag>
 ```
 
-GitHub 安装依赖 `prepare` 从源码构建，pnpm ≥10 要求使用方先把 `dsh-plugin-yolo` 加入该 profile
-的 `allowBuilds`。npm 包和 tarball 已含 YOLO 构建产物，但原生运行时依赖 `better-sqlite3`
-仍需通过 `dsh plugin --profile web approve-builds` 批准安装脚本。YOLO 的 patch-overlay 格式见
+GitHub 安装依赖 `prepare` 从源码构建，pnpm ≥10 可能要求使用方先把 `dsh-plugin-yolo` 加入该 profile
+的 `allowBuilds`。npm 包和 tarball 已含 YOLO 构建产物；运行时使用 Node.js 内置 SQLite，
+没有需要审批的原生依赖安装脚本。YOLO 的 patch-overlay 格式见
 [运行与装配](architecture/runtime.md)，浏览器端装载条件见[客户端构建契约](architecture/client.md)。
 
 ## 版本策略

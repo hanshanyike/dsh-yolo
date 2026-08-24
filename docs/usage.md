@@ -9,31 +9,23 @@ YOLO 会把对话中需要继续跟进的事项整理成计划，并在到期时
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.0-rc.1
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.0-rc.2
 npx @deepseek-ai/dsh web
 ```
 
 页面默认在 [http://127.0.0.1:3080](http://127.0.0.1:3080) 打开。若不希望自动打开浏览器，
 在第二条命令后添加 `--no-open`；若 3080 端口已被占用，可添加 `--port 4080`。
 
-首次安装时，如果终端提示 `ERR_PNPM_IGNORED_BUILDS`，运行：
-
-```bash
-npx @deepseek-ai/dsh plugin --profile web approve-builds
-```
-
-按空格选择 `better-sqlite3`，确认后重新执行安装命令。
-
 也可以从固定的 GitHub 标签安装：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.3.0-rc.1
+npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.3.0-rc.2
 npx @deepseek-ai/dsh web
 ```
 
-GitHub 安装会在本机完成构建。如果安装过程要求批准构建脚本，请运行同一个
-`approve-builds` 命令，选择 `dsh-plugin-yolo` 和 `better-sqlite3` 后重试。日常使用推荐 npm
-安装，步骤更少。
+GitHub 安装会在本机完成构建。如果安装过程要求批准构建脚本，请运行
+`npx @deepseek-ai/dsh plugin --profile web approve-builds` 命令，选择 `dsh-plugin-yolo` 后重试。
+日常使用推荐 npm 安装，步骤更少。
 
 ## 二、第一次使用
 

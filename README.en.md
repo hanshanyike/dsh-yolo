@@ -45,7 +45,7 @@ line) or Node.js 24, and make sure `pnpm` is available. If needed, run
 `corepack enable` first. Then run:
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.0-rc.1
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.0-rc.2
 npx @deepseek-ai/dsh web
 ```
 
@@ -53,14 +53,6 @@ This installs YOLO and starts dsh. The page opens at
 [http://127.0.0.1:3080](http://127.0.0.1:3080) by default. Select a workspace,
 start a conversation, and use the **YOLO** button at the bottom of the sidebar
 to open the dashboard.
-
-On first install, pnpm may block the native `better-sqlite3` install script. If
-you see `ERR_PNPM_IGNORED_BUILDS`, run the command below, select
-`better-sqlite3` with Space, approve it, and rerun the install:
-
-```bash
-npx @deepseek-ai/dsh plugin --profile web approve-builds
-```
 
 Pass `--no-open` to start without opening a browser. If port 3080 is occupied,
 append `--port 4080` and open

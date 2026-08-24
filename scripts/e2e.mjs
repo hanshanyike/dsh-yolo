@@ -39,7 +39,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readlinkSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { createRequire } from 'node:module'
+import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { resolveE2ESelection } from './e2e-selection.mjs'
 
@@ -121,21 +121,13 @@ function run(cmd, argsList, opts = {}) {
 function sweepE2EFixtures() {
   const dirs = [join(ROOT, '.dsh', 'yolo'), join(homedir(), '.dsh', 'yolo')]
   let total = 0
-  let Database
-  try {
-    // resolved from ROOT/node_modules — the same better-sqlite3 the plugin ships
-    Database = createRequire(join(ROOT, 'package.json'))('better-sqlite3')
-  } catch (e) {
-    console.log(`[e2e] fixture sweep skipped (better-sqlite3 unavailable: ${e.message})`)
-    return
-  }
   for (const dir of dirs) {
     if (!existsSync(dir)) continue
     for (const file of readdirSync(dir).filter((f) => f.startsWith('yolo-') && f.endsWith('.db'))) {
       const path = join(dir, file)
       let db
       try {
-        db = new Database(path, { readonly: false })
+        db = new DatabaseSync(path)
       } catch {
         console.log(`[e2e] fixture sweep: skip (locked) ${path}`)
         continue

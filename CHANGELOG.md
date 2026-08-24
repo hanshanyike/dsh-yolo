@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+## [0.3.0-rc.2] — 2026-08-25
+
+### Changed
+
+- SQLite 存储迁移到 Node.js 内置的 `node:sqlite`，与 dsh 官方 SQLite 实现保持一致。
+
+### Fixed
+
+- npm 安装不再依赖 `better-sqlite3` 的原生构建脚本，无需手动运行 `approve-builds`。
+
 ## [0.3.0-rc.1] — 2026-08-24
 
 首个助手看板候选版本，重点是跨会话计划管理、低打扰提醒和更稳定的日常交互。
@@ -63,7 +73,8 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.1...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.2...HEAD
+[0.3.0-rc.2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.1...v0.3.0-rc.2
 [0.3.0-rc.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.2.0-alpha.1...v0.3.0-rc.1
 [0.2.0-alpha.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.1.0...v0.2.0-alpha.1
 [0.1.0]: https://github.com/hanshanyike/dsh-yolo/releases/tag/v0.1.0

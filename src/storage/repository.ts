@@ -982,7 +982,7 @@ export function listRecentRecall(db: DB, scopeKey: string, limit = 50): RecallLo
 export function pruneRecallLog(db: DB, retentionDays: number): number {
   const cutoff = now() - retentionDays * 24 * 60 * 60 * 1000
   const info = db.prepare('DELETE FROM recall_log WHERE created_at < ?').run(cutoff)
-  return info.changes
+  return Number(info.changes)
 }
 
 // ---------- memory health (v0.3.0) ----------

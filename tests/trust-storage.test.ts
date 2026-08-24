@@ -13,7 +13,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  if (db.open) db.close()
+  if (db.isOpen) db.close()
 })
 
 describe('attention trust storage', () => {
