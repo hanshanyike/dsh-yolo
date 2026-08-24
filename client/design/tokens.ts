@@ -421,6 +421,22 @@ export const YOLO_CSS = `
 .yolo-scope .toast.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
 .yolo-scope .toast button { border: none; background: none; color: inherit; font-size: 13px; font-weight: 650; cursor: pointer; padding: 0; text-decoration: underline; }
 
+/* app-level reminder popup — one non-modal card independent of panel state */
+.yolo-scope.yolo-reminder-popup { position: fixed; right: 24px; bottom: 24px; z-index: 10001; width: min(360px, calc(100vw - 32px)); min-height: 92px; overflow: hidden; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-lg); background: var(--y-surface); color: var(--y-text-1); box-shadow: 0 12px 34px rgba(0,0,0,.17); animation: yolo-reminder-popup-in var(--y-dur-3) var(--y-ease-out); }
+@keyframes yolo-reminder-popup-in { from { opacity: 0; transform: translateY(8px); } }
+.yolo-scope .yolo-reminder-popup__body { display: grid; grid-template-columns: 30px minmax(0,1fr) auto; align-items: start; gap: 10px; width: 100%; min-height: 92px; padding: 15px 42px 14px 15px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.yolo-scope .yolo-reminder-popup__body:hover { background: var(--y-hover); }
+.yolo-scope .yolo-reminder-popup__icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 999px; background: var(--y-accent-soft); color: var(--y-accent-text); }
+.yolo-scope .yolo-reminder-popup__content { display: grid; gap: 3px; min-width: 0; }
+.yolo-scope .yolo-reminder-popup__kind { color: var(--y-text-3); font-size: 11px; font-weight: 650; letter-spacing: .04em; }
+.yolo-scope .yolo-reminder-popup__content strong { overflow: hidden; font-size: 13px; font-weight: 700; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+.yolo-scope .yolo-reminder-popup__detail { display: -webkit-box; overflow: hidden; color: var(--y-text-2); font-size: 12px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.yolo-scope .yolo-reminder-popup__more { color: var(--y-accent-text); font-size: 11px; font-weight: 650; }
+.yolo-scope .yolo-reminder-popup__open { align-self: center; color: var(--y-accent-text); font-size: 12px; font-weight: 700; }
+.yolo-scope .yolo-reminder-popup__close { position: absolute; top: 9px; right: 9px; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--y-r-sm); background: transparent; color: var(--y-text-3); cursor: pointer; }
+.yolo-scope .yolo-reminder-popup__close:hover { background: var(--y-hover); color: var(--y-text-1); }
+@media (max-width: 520px) { .yolo-scope.yolo-reminder-popup { right: 16px; bottom: 16px; } }
+
 /* ===== dashboard v2 surfaces =====
    Judgment and task management stay structurally neutral. The host business
    color is reserved for focus, the current recommendation and primary intent. */

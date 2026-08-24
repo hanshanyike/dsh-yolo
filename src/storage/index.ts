@@ -328,6 +328,10 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.listUnhandledNotifications(h.db, h.scopeKey)
   }
+  listRecentUnhandledReminders(cwd: string, limit = 5): Notification[] {
+    const h = this.resolve(cwd)
+    return repo.listRecentUnhandledReminders(h.db, h.scopeKey, limit)
+  }
   countUnhandledNotifications(cwd: string): number {
     const h = this.resolve(cwd)
     return repo.countUnhandledNotifications(h.db, h.scopeKey)

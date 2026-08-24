@@ -455,6 +455,13 @@ export function listUnhandledNotifications(db: DB, scopeKey: string): Notificati
     .all(scopeKey) as Notification[]
 }
 
+/** Bounded newest open reminders for the lightweight badge/popup feed. */
+export function listRecentUnhandledReminders(db: DB, scopeKey: string, limit = 5): Notification[] {
+  return db
+    .prepare("SELECT * FROM notifications WHERE scope_key = ? AND kind = 'reminder' AND handled_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT ?")
+    .all(scopeKey, limit) as Notification[]
+}
+
 /** Count-only badge query; avoids materializing notification rows every poll. */
 export function countUnhandledNotifications(db: DB, scopeKey: string): number {
   const row = db

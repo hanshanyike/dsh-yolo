@@ -27,6 +27,18 @@ describe('db + schema', () => {
   })
 })
 
+describe('notification popup feed', () => {
+  it('returns only the bounded newest open reminders', () => {
+    const older = repo.addNotification(db, { kind: 'reminder', title: '把演示稿发给研发', scope_key: SCOPE })
+    repo.addNotification(db, { kind: 'brief', title: '今日简报', scope_key: SCOPE })
+    const newer = repo.addNotification(db, { kind: 'reminder', title: '核对发布清单', scope_key: SCOPE })
+
+    expect(repo.listRecentUnhandledReminders(db, SCOPE, 1).map((row) => row.id)).toEqual([newer.id])
+    repo.markNotificationHandled(db, newer.id)
+    expect(repo.listRecentUnhandledReminders(db, SCOPE, 5).map((row) => row.id)).toEqual([older.id])
+  })
+})
+
 describe('todos', () => {
   it('dedupes by normalized title and merges due_at', () => {
     repo.upsertTodo(db, { title: '完成报告', scope_key: SCOPE })

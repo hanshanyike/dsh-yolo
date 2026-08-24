@@ -8,6 +8,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { YoloBadgeData } from '../../src/shared/badge.ts'
 import { YoloLogo } from '../YoloLogo.tsx'
 import { YoloPanel } from '../panel/YoloPanel.tsx'
+import { ReminderPopup } from './ReminderPopup.tsx'
+import {
+  INITIAL_REMINDER_OBSERVATION,
+  observeReminderBadge,
+  type ReminderObservationState,
+  type ReminderPopupCandidate,
+} from './reminder-popup.ts'
 
 interface YoloSidebarDashboardProps {
   /** True when the sidebar is expanded (wide) — show the label; collapsed shows icon only. */
@@ -18,7 +25,7 @@ interface YoloSidebarDashboardProps {
   setTheme?: (theme: 'dark' | 'light') => void
 }
 
-const POLL_MS = 30_000
+const POLL_MS = 5_000
 
 /** Dismiss the panel on clicks/touches outside the button and panel. */
 function useDismissOnOutsidePointer(
@@ -34,6 +41,7 @@ function useDismissOnOutsidePointer(
       if (!target) return
       if (buttonRef.current?.contains(target)) return
       if (panelRef.current?.contains(target)) return
+      if (target instanceof Element && target.closest('.yolo-reminder-popup')) return
       onClose()
     }
     document.addEventListener('pointerdown', listener)
@@ -44,28 +52,74 @@ function useDismissOnOutsidePointer(
 export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: YoloSidebarDashboardProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [unhandled, setUnhandled] = useState(0)
+  const [popup, setPopup] = useState<ReminderPopupCandidate | null>(null)
+  const [notificationFocusRequest, setNotificationFocusRequest] = useState(0)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const openRef = useRef(open)
+  const observationRef = useRef<ReminderObservationState>(INITIAL_REMINDER_OBSERVATION)
+  const badgeRequestRef = useRef<Promise<void> | null>(null)
   const [anchorLeft, setAnchorLeft] = useState<number | undefined>()
+  openRef.current = open
 
-  // badge feed: count-only poll, always on (TB-3 — reminders arrive while
-  // the panel is closed and must surface on the badge).
+  // Lightweight badge/reminder feed, always on: reminders can arrive while
+  // the panel is closed, without forcing a full dashboard projection.
   const loadBadge = useCallback(async (): Promise<void> => {
     try {
       const r = await fetch('/yolo/badge', { headers: { accept: 'application/json' }, cache: 'no-store' })
       if (!r.ok) return
       const data = (await r.json()) as YoloBadgeData
       setUnhandled(data.unhandled ?? 0)
+      const observation = observeReminderBadge(observationRef.current, data)
+      observationRef.current = observation.state
+      if (observation.popup) {
+        if (openRef.current) {
+          setNotificationFocusRequest((value) => value + 1)
+        } else {
+          setPopup(observation.popup)
+        }
+      }
     } catch {
       // host not serving yet — keep the last badge, try again next tick
     }
   }, [])
 
-  useEffect(() => {
-    void loadBadge()
-    const timer = window.setInterval(() => { void loadBadge() }, POLL_MS)
-    return () => { window.clearInterval(timer) }
+  const refreshBadge = useCallback((): Promise<void> => {
+    if (badgeRequestRef.current) return badgeRequestRef.current
+    const request = loadBadge().finally(() => {
+      if (badgeRequestRef.current === request) badgeRequestRef.current = null
+    })
+    badgeRequestRef.current = request
+    return request
   }, [loadBadge])
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: number | undefined
+    const tick = async (): Promise<void> => {
+      await refreshBadge()
+      if (!cancelled) timer = window.setTimeout(() => { void tick() }, POLL_MS)
+    }
+    void tick()
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [refreshBadge])
+
+  // A foregrounded window should not wait for the next poll. refreshBadge is
+  // serialized, so focus + visibility events cannot overlap or land out of order.
+  useEffect(() => {
+    const refreshWhenVisible = (): void => {
+      if (!document.hidden) void refreshBadge()
+    }
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [refreshBadge])
 
   // Anchor the panel to the sidebar's right edge (the button spans the column).
   useEffect(() => {
@@ -83,7 +137,16 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
     return () => { window.removeEventListener('resize', place) }
   }, [open])
 
-  const close = useCallback(() => { setOpen(false) }, [])
+  const close = useCallback(() => {
+    setOpen(false)
+    setNotificationFocusRequest(0)
+  }, [])
+  const dismissPopup = useCallback(() => { setPopup(null) }, [])
+  const openPopupReminder = useCallback(() => {
+    setPopup(null)
+    setOpen(true)
+    setNotificationFocusRequest((value) => value + 1)
+  }, [])
   useDismissOnOutsidePointer(buttonRef, panelRef, open, close)
 
   return (
@@ -91,7 +154,13 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => { setOpen((v) => !v) }}
+        onClick={() => {
+          if (open) close()
+          else {
+            setPopup(null)
+            setOpen(true)
+          }
+        }}
         title={unhandled > 0 ? `YOLO 助手看板 · ${unhandled} 条未处理提醒` : 'YOLO 助手看板'}
         style={{
           display: 'flex',
@@ -132,6 +201,15 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
         {wide && <span>YOLO</span>}
       </button>
 
+      {popup && (
+        <ReminderPopup
+          key={popup.notification.id}
+          popup={popup}
+          onOpen={openPopupReminder}
+          onDismiss={dismissPopup}
+        />
+      )}
+
       {open && anchorLeft !== undefined && (
         // The overlay must START at the sidebar's right edge (anchorLeft), not
         // cover the whole viewport: a full-viewport pointer-events layer would
@@ -142,7 +220,13 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
         // session switch lands and the panel steps aside in one gesture.
         <div ref={panelRef} style={{ position: 'fixed', left: anchorLeft, top: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 10000 }}>
           <div style={{ pointerEvents: 'auto', position: 'absolute', inset: 0 }}>
-            <YoloPanel left={anchorLeft} onClose={close} openSession={openSession} themeControl={setTheme ? { set: setTheme } : undefined} />
+            <YoloPanel
+              left={anchorLeft}
+              onClose={close}
+              openSession={openSession}
+              notificationFocusRequest={notificationFocusRequest}
+              themeControl={setTheme ? { set: setTheme } : undefined}
+            />
           </div>
         </div>
       )}

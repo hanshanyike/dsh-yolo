@@ -35,6 +35,8 @@ export interface YoloPanelProps {
   onClose: () => void
   /** Jump to a dsh session (ledger source badges); no-op when unavailable. */
   openSession?: (sessionId: string) => void
+  /** Increments when an external reminder signal asks to refresh and focus notifications. */
+  notificationFocusRequest?: number
   /** Host-owned durable theme preference. Optional only for isolated renders. */
   themeControl?: { set: (theme: 'dark' | 'light') => void }
 }
@@ -78,7 +80,7 @@ const VIEW_LABELS: Record<ViewKey, string> = {
   ledger: '今日台账',
 }
 
-export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPanelProps): JSX.Element {
+export function YoloPanel({ left, onClose, openSession, notificationFocusRequest = 0, themeControl }: YoloPanelProps): JSX.Element {
   ensureYoloStyle()
   const [theme, setTheme] = useState<'dark' | 'light'>(() => detectYoloTheme())
 
@@ -97,6 +99,7 @@ export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPane
   const [chatThread, setChatThread] = useState<string | undefined>(undefined)
   const [sweepTick, setSweepTick] = useState(0)
   const lastSig = useRef<string | null>(null)
+  const previousNotificationFocusRequest = useRef<number | null>(null)
   const fltBtnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -144,9 +147,6 @@ export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPane
     }
   }, [])
 
-  // v0.3.3: load once on open + on demand; a manual refresh / action re-fetches.
-  useEffect(() => { void load() }, [load])
-
   // Persist view state so reopening keeps the filter and side chat (TA-6).
   useEffect(() => { writePanelState({ filter }) }, [filter])
   useEffect(() => { writePanelState({ sideChatOpen }) }, [sideChatOpen])
@@ -160,6 +160,19 @@ export function YoloPanel({ left, onClose, openSession, themeControl }: YoloPane
     const preset = presetForView(v)
     setFilter((f) => (f.preset === preset ? f : { ...f, preset }))
   }, [])
+
+  // One request owns both refresh and focus. Waiting for load prevents a tick
+  // against an old board whose notification section has not mounted yet.
+  useEffect(() => {
+    const shouldFocus = notificationFocusRequest > 0 && previousNotificationFocusRequest.current !== notificationFocusRequest
+    previousNotificationFocusRequest.current = notificationFocusRequest
+    if (shouldFocus) setView('today')
+    let active = true
+    void load().then(() => {
+      if (active && shouldFocus) setNotifFocusTick((tick) => tick + 1)
+    })
+    return () => { active = false }
+  }, [load, notificationFocusRequest, setView])
 
   // A ledger source jump should land the user back in that session: close the
   // panel so it is actually in view (the overlay otherwise stays covering it).
