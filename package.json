@@ -3,6 +3,9 @@
   "version": "0.3.0-rc.1",
   "description": "Personal assistant plugin for deepseek-harness that organizes commitments from conversations, tracks plans across sessions, and delivers low-interruption reminders.",
   "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
   "license": "MIT",
   "main": "./dist/src/index.mjs",
   "exports": {
@@ -35,7 +38,8 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*"
-  },  "repository": {
+  },
+  "repository": {
     "type": "git",
     "url": "git+https://github.com/hanshanyike/dsh-yolo.git"
   },

@@ -7,10 +7,12 @@
 
 - 拥有 `dsh-plugin-yolo` 包发布权限的 npm 账号（首次发布会占用包名；
   `publishConfig.access` 已设为 `public`）。
+- 发布凭据通过环境变量注入 npm Access Token；不得把 token 写进仓库、脚本参数或提交记录。
+  环境中没有可用凭据时停止发布并向维护者确认。
 - main 分支上的 `pnpm build`、`pnpm check` 和 `pnpm test:run` 均通过；
   CI 会在 Linux 和 Windows 上确认这些检查。
 - 如果发布内容涉及界面，必须基于当前构建完成一次面板真机端到端走查
-  （见 [testing.md 第七节](testing.md#七真机端到端验证)）。
+  （见 [testing.md 第八节](testing.md#八真机端到端验证)）。
 
 ## 操作步骤
 
@@ -23,11 +25,11 @@ git checkout main && git pull
 #    并在文末补充版本比较链接
 
 # 3. 更新版本号（同时更新 package.json、提交并打标签）
-npm version 0.3.0-rc.1     # 也可以使用：pnpm version 0.3.0-rc.1
+npm version <new-version>  # 也可以使用：pnpm version <new-version>
 
 # 4. 构建并快速检查产物
 pnpm build
-npm pack --dry-run         # 核对文件清单（dist/、bundle yml、schema.sql、docs）
+npm pack --dry-run         # 核对文件清单（dist/、bundle yml、schema.sql、README/许可/版本记录）
 
 # 5. 发布
 npm publish --access public --tag rc   # 候选版；稳定版发布时省略 --tag rc
@@ -61,7 +63,7 @@ npx @deepseek-ai/dsh web
 也可以安装固定 GitHub 标签：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.3.0-rc.1
+npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#<tag>
 ```
 
 GitHub 安装依赖 `prepare` 从源码构建，pnpm ≥10 要求使用方先把 `dsh-plugin-yolo` 加入该 profile
