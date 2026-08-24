@@ -93,11 +93,11 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   const [notifFocusTick, setNotifFocusTick] = useState(0)
   const [sideChatOpen, setSideChatOpen] = useState(initial.sideChatOpen)
   const [chatFullscreen, setChatFullscreen] = useState(false)
-  const [anchor, setAnchor] = useState<ChatAnchor | null>(null)
+  const [anchor, setAnchor] = useState<ChatAnchor | null>(() => initial.activeChat?.anchor ?? null)
   // v0.3.2 聊一聊: a FRESH ephemeral thread per anchored chat. A new key per
   // anchored episode, reset on close/switch, so the pane never inherits the
   // resident thread's history; the unanchored 对话 keeps the resident thread.
-  const [chatThread, setChatThread] = useState<string | undefined>(undefined)
+  const [chatThread, setChatThread] = useState<string | undefined>(() => initial.activeChat?.threadKey)
   const [sweepTick, setSweepTick] = useState(0)
   const lastSig = useRef<string | null>(null)
   const previousNotificationFocusRequest = useRef<number | null>(null)
@@ -151,6 +151,9 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   // Persist view state so reopening keeps the filter and side chat (TA-6).
   useEffect(() => { writePanelState({ filter }) }, [filter])
   useEffect(() => { writePanelState({ sideChatOpen }) }, [sideChatOpen])
+  useEffect(() => {
+    writePanelState({ activeChat: anchor && chatThread ? { anchor, threadKey: chatThread } : null })
+  }, [anchor, chatThread])
 
   const patchFilter = useCallback((patch: Partial<KanbanFilter>): void => {
     setFilter((f) => ({ ...f, ...patch }))

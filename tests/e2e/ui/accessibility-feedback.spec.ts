@@ -53,7 +53,7 @@ test('W5: sending remains visibly in progress until an assistant reply arrives',
   await input.fill('请提醒我明天下午把客户访谈纪要发给产品组')
   await input.press('Enter')
 
-  const pending = page.getByRole('log', { name: '对话记录' }).getByText(/正在处理/)
+  const pending = page.getByRole('log', { name: '对话记录' }).getByText(/正在提交|已提交，等待助手回复|等待时间较长/)
   await expect(pending).toBeVisible({ timeout: 1_500 })
   await page.waitForTimeout(800)
   await expect(pending).toBeVisible({ timeout: 1_500 })

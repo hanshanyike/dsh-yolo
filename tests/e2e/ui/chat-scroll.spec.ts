@@ -1,5 +1,6 @@
 import { test, expect, type Locator } from '@playwright/test'
 import { openYoloPanel } from '../helpers.ts'
+import type { ChatRequestSnapshot } from '../../../src/shared/chat.ts'
 
 interface ChatMessage {
   role: 'user' | 'ai'
@@ -28,19 +29,28 @@ test('W5/W7/W10: 长历史在 side/full 各自 owner 跟随最新且不抢用户
   const sideArrival = '侧栏上翻后到达的新消息'
   const reply = '已收到，我会按新的安排继续跟进。'
   const fullArrival = '全屏上翻后到达的新消息'
+  let request: ChatRequestSnapshot | null = null
+  let revision = 0
 
   await page.route('**/yolo/session/messages**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ ok: true, messages }),
+      body: JSON.stringify({ ok: true, messages, request, revision }),
     })
   })
   await page.route('**/yolo/session/send', async (route) => {
-    const body = route.request().postDataJSON() as { text: string }
+    const body = route.request().postDataJSON() as { text: string; client_request_id: string }
     messages.push({ role: 'user', text: body.text })
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
-    setTimeout(() => { messages.push({ role: 'ai', text: reply }) }, 400)
+    request = {
+      request_id: 'req-scroll', client_request_id: body.client_request_id, status: 'accepted', text: body.text,
+      accepted_at: Date.now(), updated_at: Date.now(), revision: ++revision,
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, request, revision }) })
+    setTimeout(() => {
+      messages.push({ role: 'ai', text: reply })
+      request = { ...request!, status: 'completed', updated_at: Date.now(), revision: ++revision }
+    }, 400)
   })
 
   await page.setViewportSize({ width: 1440, height: 760 })
@@ -66,7 +76,7 @@ test('W5/W7/W10: 长历史在 side/full 各自 owner 跟随最新且不抢用户
 
   await input.fill('请把刚才的安排继续往下跟进')
   await input.press('Enter')
-  await expect(sideOwner.getByText('正在处理…')).toBeVisible()
+  await expect(sideOwner.getByText('已提交，等待助手回复')).toBeVisible()
   await expectAtBottom(sideOwner)
   await expect(sideOwner.getByText(reply)).toBeVisible({ timeout: 6_000 })
   await expectAtBottom(sideOwner)

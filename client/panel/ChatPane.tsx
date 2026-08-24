@@ -8,17 +8,15 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  IDLE_PENDING_REPLY,
-  isReplyPending,
-  mergeRemoteMessages,
-  messagesBeforePendingReply,
-  reducePendingReply,
-  type ChatMessage,
-  type PendingReplyState,
-} from './chat/pending.ts'
+  chatConversationController,
+  chatWaitingText,
+  isChatWaiting,
+  type ChatConversationSnapshot,
+} from './chat/controller.ts'
+import type { ChatMessagesPayload, ChatRequestSnapshot } from '../../src/shared/chat.ts'
 import { decideChatScroll, isNearChatBottom } from './chat/scroll.ts'
 
-export type { ChatMessage } from './chat/pending.ts'
+export type { ChatMessage } from '../../src/shared/chat.ts'
 
 /** What a card's 聊一聊 anchors the conversation to. */
 export interface ChatAnchor {
@@ -44,11 +42,8 @@ export interface ChatPaneProps {
 
 const POLL_MS = 4_000
 
-interface ChatState {
+interface ChatState extends ChatConversationSnapshot {
   loading: boolean
-  error: string | null
-  messages: ChatMessage[]
-  pending: PendingReplyState
 }
 
 /** Build the read URL for one chat surface. Anchored threads carry their
@@ -63,15 +58,17 @@ export function chatMessagesUrl(threadKey?: string, scopeCwd?: string): string {
 
 /** POST body paired with chatMessagesUrl(). Keeping this pure makes the
  * GET/POST workspace identity an executable client contract. */
-export function chatSendBody(text: string, threadKey?: string, scopeCwd?: string): {
+export function chatSendBody(text: string, threadKey?: string, scopeCwd?: string, clientRequestId?: string): {
   text: string
   thread?: string
   cwd?: string
+  client_request_id?: string
 } {
   return {
     text,
     ...(threadKey ? { thread: threadKey } : {}),
     ...(threadKey && scopeCwd ? { cwd: scopeCwd } : {}),
+    ...(clientRequestId ? { client_request_id: clientRequestId } : {}),
   }
 }
 
@@ -87,7 +84,10 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   // Only the first request for a conversation is a blocking load. Background
   // polling must leave the transcript mounted; otherwise an empty conversation
   // briefly loses its welcome message every POLL_MS and visibly flashes.
-  const [state, setState] = useState<ChatState>({ loading: true, error: null, messages: [], pending: IDLE_PENDING_REPLY })
+  const [state, setState] = useState<ChatState>(() => ({
+    loading: true,
+    ...chatConversationController.get(conversationKey),
+  }))
   const [draft, setDraft] = useState('')
   const [newerAvailable, setNewerAvailable] = useState(false)
   const anchorRef = useRef<ChatAnchor | null>(anchor)
@@ -111,7 +111,6 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      sendLockedRef.current = false
       if (replyRefreshTimerRef.current !== null) window.clearTimeout(replyRefreshTimerRef.current)
       for (const controller of controllersRef.current) controller.abort()
       controllersRef.current.clear()
@@ -125,7 +124,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
 
   useEffect(() => {
     conversationRef.current = conversationKey
-    sendLockedRef.current = false
+    sendLockedRef.current = isChatWaiting(chatConversationController.get(conversationKey))
     nearBottomRef.current = true
     setNewerAvailable(false)
     if (replyRefreshTimerRef.current !== null) {
@@ -134,6 +133,8 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     }
     for (const controller of controllersRef.current) controller.abort()
     controllersRef.current.clear()
+    const cached = chatConversationController.get(conversationKey)
+    setState({ ...cached, loading: cached.messages.length === 0 })
   }, [conversationKey])
 
   // A new thread (or a jump between resident and anchored) must clear the
@@ -142,7 +143,8 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   useEffect(() => {
     if (prevConversation.current !== conversationKey) {
       prevConversation.current = conversationKey
-      setState((s) => ({ ...s, loading: true, messages: [], error: null, pending: reducePendingReply(s.pending, { type: 'reset' }) }))
+      const cached = chatConversationController.get(conversationKey)
+      setState({ ...cached, loading: cached.messages.length === 0 })
     }
   }, [conversationKey])
 
@@ -158,20 +160,19 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
         cache: 'no-store',
         signal: controller.signal,
       })
-      const body = (await r.json()) as { ok?: boolean; messages?: ChatMessage[]; error?: string }
+      const body = (await r.json()) as Partial<ChatMessagesPayload>
       if (!mountedRef.current || conversationRef.current !== keyForCall) return // user switched threads/scopes or unmounted mid-flight
       if (!r.ok || !body.ok) throw new Error(body.error ?? `HTTP ${r.status}`)
-      const remote = body.messages ?? []
-      setState((current) => {
-        const pending = reducePendingReply(current.pending, { type: 'messages_observed', messages: remote })
-        if (!isReplyPending(pending)) sendLockedRef.current = false
-        return {
-          loading: false,
-          error: null,
-          messages: mergeRemoteMessages(remote, current.pending),
-          pending,
-        }
+      const snapshot = chatConversationController.applyMessages(keyForCall, {
+        ok: true,
+        messages: body.messages ?? [],
+        request: body.request ?? null,
+        revision: typeof body.revision === 'number'
+          ? body.revision
+          : chatConversationController.get(keyForCall).revision,
       })
+      sendLockedRef.current = isChatWaiting(snapshot)
+      setState({ ...snapshot, loading: false })
     } catch (e) {
       if (!mountedRef.current || conversationRef.current !== keyForCall || controller.signal.aborted) return
       setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
@@ -186,7 +187,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     return () => { window.clearInterval(timer) }
   }, [load])
 
-  const transcriptSignature = `${state.messages.map((message) => `${message.role}\u0000${message.text}`).join('\u0001')}\u0002${isReplyPending(state.pending) ? 'pending' : 'idle'}`
+  const transcriptSignature = `${state.messages.map((message) => `${message.role}\u0000${message.text}`).join('\u0001')}\u0002${isChatWaiting(state) ? 'pending' : 'idle'}`
 
   const scrollToLatest = useCallback((): void => {
     const owner = scrollOwnerRef.current
@@ -224,7 +225,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
 
   const send = useCallback(async (): Promise<void> => {
     const text = draft.trim()
-    if (!text || sendLockedRef.current || isReplyPending(state.pending)) return
+    if (!text || sendLockedRef.current || isChatWaiting(state)) return
     let payload = text
     const a = anchorRef.current
     if (a && !sentWithContext.current) {
@@ -232,31 +233,38 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       sentWithContext.current = true
     }
     const keyForCall = conversationKey
+    const started = chatConversationController.begin(keyForCall, text, payload)
+    if (!started?.local) return
+    const clientRequestId = started.local.clientRequestId
     sendLockedRef.current = true
     setDraft('')
-    setState((current) => ({
-      ...current,
-      error: null,
-      pending: reducePendingReply(current.pending, { type: 'send_started', messages: current.messages, userText: text }),
-      messages: [...current.messages, { role: 'user', text }],
-    }))
-    const controller = new AbortController()
-    controllersRef.current.add(controller)
+    setState({ ...started, loading: false })
     try {
+      // Deliberately not tied to component AbortControllers: Esc/side↔full may
+      // unmount this pane after the Host accepted the body. The controller owns
+      // settlement and the remounted pane hydrates from GET; it never POSTs again.
       const r = await fetch('/yolo/session/send', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(chatSendBody(payload, threadKey, anchoredScopeCwd)),
-        signal: controller.signal,
+        body: JSON.stringify(chatSendBody(payload, threadKey, anchoredScopeCwd, clientRequestId)),
       })
-      const body = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null
-      if (!r.ok || !body?.ok) throw new Error(body?.error ?? `HTTP ${r.status}`)
-      if (!mountedRef.current || conversationRef.current !== keyForCall) return
-      setState((current) => ({
-        ...current,
-        pending: reducePendingReply(current.pending, { type: 'post_succeeded' }),
-      }))
-      await load()
+      const body = (await r.json().catch(() => null)) as {
+        ok?: boolean
+        error?: string
+        revision?: number
+        request?: ChatRequestSnapshot | null
+      } | null
+      const settled = chatConversationController.applyPost(keyForCall, body ?? { error: `HTTP ${r.status}` })
+      if (mountedRef.current && conversationRef.current === keyForCall) {
+        sendLockedRef.current = isChatWaiting(settled)
+        setState({ ...settled, loading: false })
+        if (body?.request?.status === 'failed') setDraft(text)
+      }
+      if (!r.ok || !body?.ok) {
+        if (body?.request) return // reliable Host status already rendered; never auto-resend
+        throw new Error(body?.error ?? `HTTP ${r.status}`)
+      }
+      if (mountedRef.current && conversationRef.current === keyForCall) await load()
       // the reply streams server-side; catch it on the next poll
       if (mountedRef.current && conversationRef.current === keyForCall) {
         if (replyRefreshTimerRef.current !== null) window.clearTimeout(replyRefreshTimerRef.current)
@@ -266,25 +274,20 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
         }, 2_500)
       }
     } catch (e) {
-      // v0.3.3 review fix: a failed send must not leave a phantom「已发出」
-      // bubble — restore the pre-send transcript and hand the text back to
-      // the input so the user can retry instead of losing it.
-      if (mountedRef.current && conversationRef.current === keyForCall && !controller.signal.aborted) {
-        sendLockedRef.current = false
-        suppressNextScrollDecisionRef.current = true
-        setNewerAvailable(false)
-        setState((current) => ({
-          ...current,
-          pending: reducePendingReply(current.pending, { type: 'failed' }),
-          error: e instanceof Error ? e.message : String(e),
-          messages: messagesBeforePendingReply(current.pending) ?? current.messages,
-        }))
-        setDraft(text)
+      // A network error cannot tell us whether the Host accepted the request.
+      // Keep the original bubble and lock out automatic/manual duplicate POSTs;
+      // the next GET may still hydrate the authoritative accepted request.
+      const uncertain = chatConversationController.markUncertain(
+        keyForCall,
+        clientRequestId,
+        e instanceof Error ? e.message : String(e),
+      )
+      if (mountedRef.current && conversationRef.current === keyForCall) {
+        sendLockedRef.current = true
+        setState({ ...uncertain, loading: false })
       }
-    } finally {
-      controllersRef.current.delete(controller)
     }
-  }, [anchoredScopeCwd, conversationKey, draft, load, state.pending, threadKey])
+  }, [anchoredScopeCwd, conversationKey, draft, load, state, threadKey])
 
   const input = (
     <input
@@ -293,6 +296,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       placeholder={anchor ? `就「${anchor.title}」追问…` : '和 YOLO 说…（Enter 发送）'}
       autoFocus
       aria-label="对 YOLO 说"
+      disabled={isChatWaiting(state)}
       onChange={(e) => { setDraft(e.target.value) }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) void send()
@@ -300,6 +304,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     />
   )
   const hint = <span className={`enter-hint mono${draft.trim() ? ' lit' : ''}`}>↵</span>
+  const waitingText = chatWaitingText(state)
   const newestControl = newerAvailable ? (
     <button
       type="button"
@@ -316,7 +321,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     <>
       {state.error && (
         <div className="err-line" role="alert">
-          <span>连接失败：{state.error}</span>
+          <span>{state.error}</span>
           <button type="button" className="nact" onClick={() => { void load(true) }}>重试</button>
         </div>
       )}
@@ -338,10 +343,10 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
           <div key={i} className="msg me">{stripAnchorPrefix(m.text)}</div>
         ),
       )}
-      {isReplyPending(state.pending) && (
+      {waitingText && (
         <div className="msg ai">
           <div className="who">YOLO</div>
-          正在处理…
+          {waitingText}
         </div>
       )}
     </>

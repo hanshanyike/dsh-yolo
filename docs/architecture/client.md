@@ -11,15 +11,15 @@
 | 路径 | 职责 |
 |---|---|
 | `index.ts` | 注册 `settings.plugin.item` 与 `sidebar.footer.action` 两个 slot |
-| `settings/SettingsCard.tsx` | 设置页说明卡 |
+| `settings/SettingsCard.tsx` / `model.ts` | 设置表单、校验、宿主持久化与回读 |
 | `sidebar/YoloSidebarDashboard.tsx` | 侧栏入口、轻量 badge 轮询和面板挂载 |
 | `panel/YoloPanel.tsx` | 340px/全屏 shell、数据加载、主题、导航与通知聚焦 |
 | `panel/KanbanView.tsx` | 看板视图、筛选、动作编排和 anchored chat 入口 |
 | `panel/ChatPane.tsx` | resident/anchored 共用对话视图与请求构造 |
-| `panel/chat/pending.ts` / `scroll.ts` | 发送等待状态、远端消息合并和 near-bottom 滚动策略 |
+| `panel/chat/controller.ts` / `scroll.ts` | 跨组件重挂载请求控制器、单调状态水合和 near-bottom 滚动策略 |
 | `panel/CaptureBar.tsx` | 快速新增输入 |
 | `panel/ViewTabs.tsx` / `MoreMenu.tsx` | 主导航与低频入口 |
-| `panel/state.ts` | 面板 UI 状态的本地读写 |
+| `panel/state.ts` | 面板 UI 状态及当前 anchored thread 身份的模块级读写 |
 | `panel/v2/` | Today 投影模型、助手判断、任务动作、学习回执、撤销和 API client |
 | `design/` | Mono tokens、全局样式注入和单色图标 |
 | `YoloLogo.tsx` | 产品标识组件 |
@@ -46,8 +46,9 @@ evidence；完整 explanation 只保留给主助手判断，避免同一事实�
 ## 对话
 
 无 anchor 的对话访问该工作区 resident thread；卡片“聊一聊”生成独立 thread key，并附带卡片
-所属 `scope_cwd` 访问 anchored thread。`pending.ts` 保留发送前消息、合并轮询结果并区分
-posting/awaiting_reply，避免请求完成但模型尚未回复时闪回空闲态或重复消息。
+所属 `scope_cwd` 访问 anchored thread。模块级 `ChatConversationController` 按 conversation 保存
+optimistic 用户行与 `client_request_id`；side/full 切换或面板重挂载先从宿主 GET 水合，不会重放
+POST。只接受不小于当前 revision 的结果，避免旧 poll 把 completed 回退为 accepted。
 侧栏使用 `.dock-msgs`、全屏使用 `.p-body` 作为各自真实 scroll owner；首载与 near-bottom 状态下
 的发送/回复自动跟随，用户主动上翻后保留位置，只显示不抢焦点的“有新消息 · 回到最新”。
 

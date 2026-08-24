@@ -5,7 +5,7 @@
 // Created lazily on first use; resumed across host restarts when the session
 // store still holds the log (TB-5), created fresh otherwise.
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { SessionId, type SessionId as SessionIdType } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -15,6 +15,9 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 // created agent errors with `prompt variable "{{model}}" has no value`.
 import { installModelSelection, type ModelSelectionRef, type ModelSelection } from '@deepseek-ai/dsh-agent'
 import { contentBlocksToText, localClockGuidance } from '../shared/text.ts'
+import type { ChatMessage } from '../shared/chat.ts'
+import { isActiveChatRequest } from '../shared/chat.ts'
+import { ChatRequestConflictError, ChatRequestRegistry, chatConversationKey } from './chat-requests.ts'
 import { findKnownWorkspaceScope, type WorkspaceScopeMeta } from './workspace-scope.ts'
 
 /** Minimal structural view of a dsh Agent (avoids linking the agent package). */
@@ -64,11 +67,7 @@ export function isYoloSessionId(id: string | undefined): boolean {
   return !!id && (id.startsWith('yolo-w-') || id.startsWith('yolo-a-'))
 }
 
-/** One chat line for the panel's conversation view. */
-export interface ChatMessage {
-  role: 'user' | 'ai'
-  text: string
-}
+export type { ChatMessage } from '../shared/chat.ts'
 
 const YOLO_CLOCK_CONTEXT_END = '</yolo-current-clock>'
 
@@ -271,6 +270,7 @@ export function registerSessionEndpoints(
   threads: YoloChatThreads | undefined,
   defaultCwd: () => string,
   listWorkspaceMeta: () => readonly WorkspaceScopeMeta[],
+  requests = new ChatRequestRegistry(),
 ): void {
   const readBody = (req: { on(event: 'data', cb: (c: Buffer) => void): unknown; on(event: 'end', cb: () => void): unknown }): Promise<unknown> =>
     new Promise((resolveBody, reject) => {
@@ -308,11 +308,25 @@ export function registerSessionEndpoints(
           // anchored chat: the thread is created lazily on first SEND; a GET
           // before that returns [] so a freshly-opened 聊一聊 starts empty.
           const agent = threads?.get(cwd, thread)
-          send(res, 200, { ok: true, cwd, thread, messages: agent ? chatMessagesOf(agent) : [] })
+          const messages = agent ? chatMessagesOf(agent) : []
+          const request = requests.observe(chatConversationKey(cwd, thread), messages)
+          send(res, 200, {
+            ok: true, cwd, thread,
+            messages: requests.mergeMessages(messages, request),
+            request,
+            revision: requests.revision,
+          })
           return
         }
         const agent = await sessions.ensure(cwd)
-        send(res, 200, { ok: true, cwd, messages: agent ? chatMessagesOf(agent) : [] })
+        const messages = agent ? chatMessagesOf(agent) : []
+        const request = requests.observe(chatConversationKey(cwd), messages)
+        send(res, 200, {
+          ok: true, cwd,
+          messages: requests.mergeMessages(messages, request),
+          request,
+          revision: requests.revision,
+        })
       } catch (e) {
         send(res, 500, { ok: false, error: e instanceof Error ? e.message : String(e) })
       }
@@ -329,7 +343,7 @@ export function registerSessionEndpoints(
         return
       }
       try {
-        const body = (await readBody(r as never)) as { cwd?: unknown; text?: string; thread?: string }
+        const body = (await readBody(r as never)) as { cwd?: unknown; text?: string; thread?: string; client_request_id?: unknown }
         const text = typeof body.text === 'string' ? body.text.trim() : ''
         if (!text) {
           send(res, 400, { ok: false, error: 'text required' })
@@ -345,6 +359,29 @@ export function registerSessionEndpoints(
         }
         const cwd = workspace?.cwd ?? defaultCwd()
         const thread = typeof body.thread === 'string' && body.thread ? body.thread : undefined
+        const suppliedClientRequestId = typeof body.client_request_id === 'string' ? body.client_request_id.trim() : ''
+        if (suppliedClientRequestId && !/^[A-Za-z0-9._:-]{8,128}$/u.test(suppliedClientRequestId)) {
+          send(res, 400, { ok: false, error: 'invalid client_request_id', code: 'invalid_client_request_id' })
+          return
+        }
+        const clientRequestId = suppliedClientRequestId || `legacy-${randomUUID()}`
+        const conversation = chatConversationKey(cwd, thread)
+        const duplicate = requests.find(conversation, clientRequestId)
+        if (duplicate) {
+          send(res, 200, { ok: true, sent: text.length, thread: thread ?? null, request: duplicate, revision: requests.revision })
+          return
+        }
+        const active = requests.latest(conversation)
+        if (isActiveChatRequest(active)) {
+          send(res, 409, {
+            ok: false,
+            error: 'conversation already has a pending request',
+            code: 'active_request_exists',
+            request: active,
+            revision: requests.revision,
+          })
+          return
+        }
         const agent = thread
           ? await threads?.ensure(cwd, thread)
           : await sessions.ensure(cwd)
@@ -352,10 +389,35 @@ export function registerSessionEndpoints(
           send(res, 503, { ok: false, error: 'YOLO session unavailable (agents service missing?)' })
           return
         }
-        agent.followup(
-          createUserMessage({ content: [{ type: 'text', text: yoloUserPrompt(text) }], source: { kind: 'user' } }),
-        )
-        send(res, 200, { ok: true, sent: text.length, thread: thread ?? null })
+        let request
+        try {
+          request = requests.accept({
+            conversation,
+            clientRequestId,
+            text,
+            baselineMessages: chatMessagesOf(agent),
+          })
+        } catch (error) {
+          if (error instanceof ChatRequestConflictError) {
+            send(res, 409, {
+              ok: false, error: error.message, code: 'active_request_exists',
+              request: error.active, revision: requests.revision,
+            })
+            return
+          }
+          throw error
+        }
+        try {
+          agent.followup(
+            createUserMessage({ content: [{ type: 'text', text: yoloUserPrompt(text) }], source: { kind: 'user' } }),
+          )
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          const failed = requests.fail(conversation, clientRequestId, message)
+          send(res, 500, { ok: false, error: message, code: 'followup_failed', request: failed, revision: requests.revision })
+          return
+        }
+        send(res, 200, { ok: true, sent: text.length, thread: thread ?? null, request, revision: requests.revision })
       } catch (e) {
         send(res, 400, { ok: false, error: e instanceof Error ? e.message : String(e) })
       }

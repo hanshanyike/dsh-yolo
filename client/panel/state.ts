@@ -8,22 +8,41 @@
 
 import type { KanbanFilter } from '../../src/shared/filters.ts'
 import { DEFAULT_FILTER } from '../../src/shared/filters.ts'
+import type { ChatAnchor } from './ChatPane.tsx'
+
+export interface ActivePanelChat {
+  anchor: ChatAnchor
+  threadKey: string
+}
 
 export interface PanelUiState {
   filter: KanbanFilter
   sideChatOpen: boolean
+  activeChat: ActivePanelChat | null
 }
 
 const state: PanelUiState = {
   filter: { ...DEFAULT_FILTER },
   sideChatOpen: false,
+  activeChat: null,
 }
 
 export function readPanelState(): PanelUiState {
-  return { filter: { ...state.filter }, sideChatOpen: state.sideChatOpen }
+  return {
+    filter: { ...state.filter },
+    sideChatOpen: state.sideChatOpen,
+    activeChat: state.activeChat
+      ? { threadKey: state.activeChat.threadKey, anchor: { ...state.activeChat.anchor, source: state.activeChat.anchor.source ? { ...state.activeChat.anchor.source } : undefined } }
+      : null,
+  }
 }
 
 export function writePanelState(patch: Partial<PanelUiState>): void {
   if (patch.filter !== undefined) state.filter = { ...patch.filter }
   if (patch.sideChatOpen !== undefined) state.sideChatOpen = patch.sideChatOpen
+  if (patch.activeChat !== undefined) {
+    state.activeChat = patch.activeChat
+      ? { threadKey: patch.activeChat.threadKey, anchor: { ...patch.activeChat.anchor, source: patch.activeChat.anchor.source ? { ...patch.activeChat.anchor.source } : undefined } }
+      : null
+  }
 }

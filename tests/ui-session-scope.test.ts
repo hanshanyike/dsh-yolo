@@ -1,6 +1,7 @@
 import { join, resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { chatMessagesOf, registerSessionEndpoints, yoloUserPrompt, type WebServerLike } from '../src/ui/session.ts'
+import { ChatRequestRegistry } from '../src/ui/chat-requests.ts'
 
 type EndpointHandler = (req: unknown, res: unknown) => Promise<void>
 
@@ -32,21 +33,25 @@ function outcome(res: ReturnType<typeof response>): { status: number; body: Reco
 
 function setup(workspaces: Array<{ cwd: string; scopeKey: string }>) {
   const handlers = new Map<string, EndpointHandler>()
-  const residentAgent = { id: 'resident', followup: vi.fn(), session: { deriveMessages: () => [] } }
-  const anchoredAgent = { id: 'anchored', followup: vi.fn(), session: { deriveMessages: () => [] } }
+  const residentMessages: any[] = []
+  const anchoredMessages: any[] = []
+  const residentAgent = { id: 'resident', followup: vi.fn(), session: { deriveMessages: () => residentMessages } }
+  const anchoredAgent = { id: 'anchored', followup: vi.fn(), session: { deriveMessages: () => anchoredMessages } }
   const sessions = { ensure: vi.fn(async () => residentAgent) }
   const threads = {
     get: vi.fn(() => anchoredAgent),
     ensure: vi.fn(async () => anchoredAgent),
   }
+  const requests = new ChatRequestRegistry()
   registerSessionEndpoints(
     { webServer: { register: (opts: Parameters<WebServerLike['register']>[0]) => { handlers.set(opts.path, opts.handler as EndpointHandler) } } } as never,
     sessions as never,
     threads as never,
     () => resolve('/ws/default'),
     () => workspaces,
+    requests,
   )
-  return { handlers, sessions, threads, residentAgent, anchoredAgent }
+  return { handlers, sessions, threads, residentAgent, anchoredAgent, residentMessages, anchoredMessages, requests }
 }
 
 describe('session endpoint workspace scopes', () => {
@@ -146,5 +151,66 @@ describe('session endpoint workspace scopes', () => {
       },
     })
     expect(visible).toEqual([{ role: 'user', text: '明天下午提醒我' }])
+  })
+
+  it('deduplicates repeated client request ids and exposes accepted/completed status through messages', async () => {
+    const defaultCwd = resolve('/ws/default')
+    const { handlers, residentAgent, residentMessages } = setup([])
+    const send = handlers.get('/yolo/session/send')!
+    const body = { text: '确认明天的客户回访安排', client_request_id: 'client-request-0001' }
+
+    const first = response()
+    await send(requestBody(body), first)
+    const firstOutcome = outcome(first)
+    expect(firstOutcome).toMatchObject({ status: 200, body: { ok: true, request: { status: 'accepted', client_request_id: body.client_request_id } } })
+
+    const duplicate = response()
+    await send(requestBody(body), duplicate)
+    expect(outcome(duplicate).body.request).toEqual(firstOutcome.body.request)
+    expect(residentAgent.followup).toHaveBeenCalledTimes(1)
+
+    const pendingRead = response()
+    await handlers.get('/yolo/session/messages')!({ method: 'GET', url: '/yolo/session/messages' }, pendingRead)
+    expect(outcome(pendingRead)).toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        cwd: defaultCwd,
+        request: { status: 'accepted' },
+        messages: [{ role: 'user', text: body.text }],
+      },
+    })
+
+    residentMessages.push(
+      { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: yoloUserPrompt(body.text) }] },
+      { role: 'assistant', source: { kind: 'model' }, content: [{ type: 'text', text: '已经安排好了。' }] },
+    )
+    const completedRead = response()
+    await handlers.get('/yolo/session/messages')!({ method: 'GET', url: '/yolo/session/messages' }, completedRead)
+    expect(outcome(completedRead)).toMatchObject({
+      status: 200,
+      body: { request: { status: 'completed' }, messages: [{ role: 'user', text: body.text }, { role: 'ai', text: '已经安排好了。' }] },
+    })
+  })
+
+  it('marks only a synchronous followup rejection failed and preserves the original text', async () => {
+    const { handlers, residentAgent } = setup([])
+    residentAgent.followup.mockImplementationOnce(() => { throw new Error('agent rejected followup') })
+    const sent = response()
+    await handlers.get('/yolo/session/send')!(requestBody({
+      text: '保留这条没有送达的安排',
+      client_request_id: 'client-request-failed',
+    }), sent)
+    expect(outcome(sent)).toMatchObject({
+      status: 500,
+      body: { ok: false, code: 'followup_failed', request: { status: 'failed', text: '保留这条没有送达的安排' } },
+    })
+
+    const read = response()
+    await handlers.get('/yolo/session/messages')!({ method: 'GET', url: '/yolo/session/messages' }, read)
+    expect(outcome(read)).toMatchObject({
+      status: 200,
+      body: { request: { status: 'failed' }, messages: [{ role: 'user', text: '保留这条没有送达的安排' }] },
+    })
   })
 })

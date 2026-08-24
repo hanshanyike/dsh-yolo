@@ -16,6 +16,7 @@
 | `badge.ts` | 不构建完整 dashboard 的轻量未处理数聚合 |
 | `actions.ts` | 工作区白名单、scope pin 和 `POST /yolo/actions` |
 | `session.ts` | `YoloSessions`、`YoloChatThreads` 与 messages/send 端点 |
+| `chat-requests.ts` | 宿主生命周期内的对话请求幂等、状态、TTL/cap 与 optimistic 合并 |
 | `workspace-scope.ts` | cwd 规范化和 registry 查找 |
 
 ## 配置归一化
@@ -71,6 +72,13 @@ Dashboard v2 是同一个存储上的聚合读投影，没有 v1/v2 双写。每
 | `POST /yolo/actions` | 经白名单与 scope pin 后调用 `applyYoloAction` |
 | `GET /yolo/session/messages` | 读取 resident 或 anchored 对话 |
 | `POST /yolo/session/send` | 发送并推进对应 YOLO agent |
+
+对话发送携带 `client_request_id`。宿主按规范化 cwd + thread + client request 建幂等键，每个
+conversation 同时只保留一个 active request；重复 POST 返回同一 `request_id/status`，不会再次
+调用 `followup`。`GET messages` 返回单调 revision 和 accepted/stale/completed/failed 状态，并在
+agent transcript 尚未出现用户行时合并一条 optimistic 行。completed 只由发送前 assistant 基线后的
+新 assistant 行触发；无可靠信号不声称 running/failed。registry 有 TTL/cap，属于宿主生命周期状态，
+不是跨宿主重启的持久化账本。
 
 无 `thread` 时使用每工作区持久的 `yolo-w-*` resident thread；有 `thread` 时使用延迟创建、
 LRU 限额的 `yolo-a-*` anchored 临时线程。两类内部 id 都不会移动 latest workspace。

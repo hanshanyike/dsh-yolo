@@ -20,4 +20,11 @@ describe('anchored chat request scope contract', () => {
     expect(chatMessagesUrl()).toBe('/yolo/session/messages')
     expect(chatSendBody('总结今天的进展')).toEqual({ text: '总结今天的进展' })
   })
+
+  it('adds the controller-owned id without changing the conversation scope', () => {
+    expect(chatSendBody('继续跟进', undefined, undefined, 'client-request-0001')).toEqual({
+      text: '继续跟进',
+      client_request_id: 'client-request-0001',
+    })
+  })
 })
