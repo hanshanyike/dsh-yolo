@@ -12,6 +12,12 @@ describe('buildExtractionPrompt', () => {
     expect(prompt).toContain('preferences')
   })
 
+  it('uses the host local date instead of the UTC calendar date', () => {
+    const localEarlyMorning = new Date(2026, 7, 24, 0, 30)
+    const prompt = buildExtractionPrompt(localEarlyMorning)
+    expect(prompt).toContain('Current date: 2026-08-24')
+  })
+
   it('demands JSON-only output and dedup against known memories', () => {
     const prompt = buildExtractionPrompt(new Date())
     expect(prompt).toContain('Return ONLY JSON')

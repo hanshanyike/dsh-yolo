@@ -62,7 +62,7 @@ export function registerYoloTools(ctx: YoloContext): void {
         kind: { type: 'string', required: true, description: 'todo|milestone|goal|preference|event' },
         title: { type: 'string', required: true, description: 'Item title / summary text.' },
         detail: { type: 'string', description: 'Optional detail (todos/milestones/goals/events).' },
-        due_at: { type: 'string', description: 'ISO8601 due datetime for todos.' },
+        due_at: { type: 'string', description: 'ISO8601 due datetime for todos. Resolve relative dates from the authoritative current local clock in the YOLO system instructions, never from old conversation history.' },
         target_date: { type: 'string', description: 'YYYY-MM-DD target date for milestones.' },
         priority: { type: 'string', description: 'low|medium|high|urgent for todos.' },
         key: { type: 'string', description: 'Preference key: a tracking rule slug (e.g. reminder-ahead, working-hours).' },

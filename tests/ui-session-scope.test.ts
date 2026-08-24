@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { registerSessionEndpoints, type WebServerLike } from '../src/ui/session.ts'
+import { chatMessagesOf, registerSessionEndpoints, yoloUserPrompt, type WebServerLike } from '../src/ui/session.ts'
 
 type EndpointHandler = (req: unknown, res: unknown) => Promise<void>
 
@@ -116,7 +116,7 @@ describe('session endpoint workspace scopes', () => {
 
   it('does not require registry membership for the resident default thread', async () => {
     const defaultCwd = resolve('/ws/default')
-    const { handlers, sessions } = setup([])
+    const { handlers, sessions, residentAgent } = setup([])
 
     const read = response()
     await handlers.get('/yolo/session/messages')!({ method: 'GET', url: '/yolo/session/messages' }, read)
@@ -127,5 +127,24 @@ describe('session endpoint workspace scopes', () => {
     expect(outcome(sent).status).toBe(200)
     expect(sessions.ensure).toHaveBeenNthCalledWith(1, defaultCwd)
     expect(sessions.ensure).toHaveBeenNthCalledWith(2, defaultCwd)
+    const delivered = residentAgent.followup.mock.calls[0]?.[0] as { content?: Array<{ text?: string }> }
+    expect(delivered.content?.[0]?.text).toContain('today=')
+    expect(delivered.content?.[0]?.text).toContain('tomorrow=')
+    expect(delivered.content?.[0]?.text?.endsWith('总结今天的进展')).toBe(true)
+  })
+
+  it('keeps the clock context hidden from the visible conversation', () => {
+    const visible = chatMessagesOf({
+      id: 'resident',
+      followup: vi.fn(),
+      session: {
+        deriveMessages: () => [{
+          role: 'user',
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: yoloUserPrompt('明天下午提醒我', new Date(2026, 7, 24, 22, 25)) }],
+        }],
+      },
+    })
+    expect(visible).toEqual([{ role: 'user', text: '明天下午提醒我' }])
   })
 })

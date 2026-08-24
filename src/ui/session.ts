@@ -14,7 +14,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 // bound and the agent can actually run a turn — without it, a programmatically
 // created agent errors with `prompt variable "{{model}}" has no value`.
 import { installModelSelection, type ModelSelectionRef, type ModelSelection } from '@deepseek-ai/dsh-agent'
-import { contentBlocksToText } from '../shared/text.ts'
+import { contentBlocksToText, localClockGuidance } from '../shared/text.ts'
 import { findKnownWorkspaceScope, type WorkspaceScopeMeta } from './workspace-scope.ts'
 
 /** Minimal structural view of a dsh Agent (avoids linking the agent package). */
@@ -70,6 +70,19 @@ export interface ChatMessage {
   text: string
 }
 
+const YOLO_CLOCK_CONTEXT_END = '</yolo-current-clock>'
+
+/** Model-facing prompt with a fresh clock; the visible chat projection strips it. */
+export function yoloUserPrompt(text: string, now = new Date()): string {
+  return `<yolo-current-clock>\n${localClockGuidance(now)}\n${YOLO_CLOCK_CONTEXT_END}\n${text}`
+}
+
+function visibleYoloUserText(text: string): string {
+  if (!text.startsWith('<yolo-current-clock>\n')) return text
+  const end = text.indexOf(`${YOLO_CLOCK_CONTEXT_END}\n`)
+  return end === -1 ? text : text.slice(end + YOLO_CLOCK_CONTEXT_END.length + 1)
+}
+
 /** Project a live session's messages into visible chat lines (tool/context noise dropped). */
 export function chatMessagesOf(agent: AgentLike): ChatMessage[] {
   const out: ChatMessage[] = []
@@ -77,7 +90,7 @@ export function chatMessagesOf(agent: AgentLike): ChatMessage[] {
     const text = contentBlocksToText(m.content)
     if (!text) continue
     if (m.role === 'assistant' && m.source?.kind === 'model') out.push({ role: 'ai', text })
-    else if (m.role === 'user' && m.source?.kind === 'user') out.push({ role: 'user', text })
+    else if (m.role === 'user' && m.source?.kind === 'user') out.push({ role: 'user', text: visibleYoloUserText(text) })
   }
   return out
 }
@@ -340,7 +353,7 @@ export function registerSessionEndpoints(
           return
         }
         agent.followup(
-          createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }),
+          createUserMessage({ content: [{ type: 'text', text: yoloUserPrompt(text) }], source: { kind: 'user' } }),
         )
         send(res, 200, { ok: true, sent: text.length, thread: thread ?? null })
       } catch (e) {

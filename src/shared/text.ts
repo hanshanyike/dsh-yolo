@@ -31,6 +31,17 @@ export function localDateStr(d = new Date()): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+/** Authoritative local clock context for relative dates in long-lived sessions. */
+export function localClockGuidance(now = new Date()): string {
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  const offsetMinutes = -now.getTimezoneOffset()
+  const sign = offsetMinutes >= 0 ? '+' : '-'
+  const absoluteOffset = Math.abs(offsetMinutes)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  const offset = `${sign}${pad(Math.floor(absoluteOffset / 60))}:${pad(absoluteOffset % 60)}`
+  return `Current local time: ${localDateStr(now)} ${pad(now.getHours())}:${pad(now.getMinutes())} UTC${offset}; today=${localDateStr(now)}; tomorrow=${localDateStr(tomorrow)}. This clock is authoritative: resolve relative dates from it, never from conversation history or stored reminders.`
+}
+
 const DAY_MS = 86_400_000
 
 /** Local-day bounds [from, to) in epoch ms for a "YYYY-MM-DD" string (ledger, briefs). */

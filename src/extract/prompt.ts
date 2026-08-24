@@ -10,8 +10,10 @@
 // "updates" array: state changes of KNOWN items (todo finished / started /
 // cancelled, goal progress, due moves, milestone transitions).
 
+import { localDateStr } from '../shared/text.ts'
+
 export function buildExtractionPrompt(now: Date): string {
-  const today = now.toISOString().slice(0, 10)
+  const today = localDateStr(now)
   return `You are the semantic memory extractor of a managing assistant (like a project manager who tracks commitments and deadlines). Your job: read one finished conversation turn between the user and the AI agent, and extract ONLY what helps this assistant MANAGE the user's commitments and plans across future sessions.
 
 SCOPE DISCIPLINE (critical): this is NOT a general memory or personal-knowledge engine. A fact is only worth storing if it directly shapes how the assistant should TRACK, REMIND, or MANAGE a commitment/plan — otherwise it must be left out. Do not turn the user's life into a diary.

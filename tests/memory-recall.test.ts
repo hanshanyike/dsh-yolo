@@ -4,6 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { registerYoloPrompt, type YoloPromptDeps } from '../src/memory/recall.ts'
+import { localClockGuidance } from '../src/shared/text.ts'
 import type Yolo from '../src/storage/index.ts'
 import type { Preference, SearchHit } from '../src/storage/types.ts'
 
@@ -61,6 +62,15 @@ describe('registerYoloPrompt', () => {
     const { ctx, sections } = makeCtx()
     registerYoloPrompt(ctx as never, deps())
     expect(sections[0].text()).toContain('YOLO (the management plugin) is active')
+  })
+
+  it('refreshes authoritative local dates for long-lived conversations', () => {
+    const now = new Date(2026, 7, 24, 22, 25)
+    const guidance = localClockGuidance(now)
+    expect(guidance).toContain('today=2026-08-24')
+    expect(guidance).toContain('tomorrow=2026-08-25')
+    expect(guidance).toMatch(/UTC[+-]\d{2}:\d{2}/)
+    expect(guidance).toContain('never from conversation history')
   })
 
   it('prefs section renders preferences or empty', () => {
