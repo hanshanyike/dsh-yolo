@@ -88,7 +88,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     loading: true,
     ...chatConversationController.get(conversationKey),
   }))
-  const [draft, setDraft] = useState('')
+  const [draft, setDraftState] = useState(() => chatConversationController.get(conversationKey).draft)
   const [newerAvailable, setNewerAvailable] = useState(false)
   const anchorRef = useRef<ChatAnchor | null>(anchor)
   const sentWithContext = useRef(false)
@@ -135,6 +135,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     controllersRef.current.clear()
     const cached = chatConversationController.get(conversationKey)
     setState({ ...cached, loading: cached.messages.length === 0 })
+    setDraftState(cached.draft)
   }, [conversationKey])
 
   // A new thread (or a jump between resident and anchored) must clear the
@@ -145,6 +146,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       prevConversation.current = conversationKey
       const cached = chatConversationController.get(conversationKey)
       setState({ ...cached, loading: cached.messages.length === 0 })
+      setDraftState(cached.draft)
     }
   }, [conversationKey])
 
@@ -237,7 +239,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     if (!started?.local) return
     const clientRequestId = started.local.clientRequestId
     sendLockedRef.current = true
-    setDraft('')
+    setDraftState('')
     setState({ ...started, loading: false })
     try {
       // Deliberately not tied to component AbortControllers: Esc/side↔full may
@@ -258,7 +260,10 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       if (mountedRef.current && conversationRef.current === keyForCall) {
         sendLockedRef.current = isChatWaiting(settled)
         setState({ ...settled, loading: false })
-        if (body?.request?.status === 'failed') setDraft(text)
+        if (body?.request?.status === 'failed') {
+          setDraftState(text)
+          chatConversationController.setDraft(keyForCall, text)
+        }
       }
       if (!r.ok || !body?.ok) {
         if (body?.request) return // reliable Host status already rendered; never auto-resend
@@ -297,7 +302,10 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       autoFocus
       aria-label="对 YOLO 说"
       disabled={isChatWaiting(state)}
-      onChange={(e) => { setDraft(e.target.value) }}
+      onChange={(e) => {
+        setDraftState(e.target.value)
+        chatConversationController.setDraft(conversationKey, e.target.value)
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) void send()
       }}

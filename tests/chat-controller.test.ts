@@ -18,6 +18,13 @@ describe('ChatConversationController', () => {
     expect(controller.begin('scope-a\0thread-a', '重复发送', '重复发送', 'client-request-0002')).toBeNull()
   })
 
+  it('retains an unsent draft across side/full component remounts and isolates it by conversation', () => {
+    const controller = new ChatConversationController()
+    controller.setDraft('scope-a\0thread-a', '还没发送的补充说明')
+    expect(controller.get('scope-a\0thread-a').draft).toBe('还没发送的补充说明')
+    expect(controller.get('scope-a\0thread-b').draft).toBe('')
+  })
+
   it('hydrates accepted, stale and completed host states with conservative wording', () => {
     const controller = new ChatConversationController()
     controller.begin('resident', '确认发布安排', '确认发布安排', 'client-request-0001')

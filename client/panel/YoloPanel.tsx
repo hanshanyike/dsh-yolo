@@ -29,6 +29,7 @@ import { MoreMenu } from './MoreMenu.tsx'
 import { ViewTabs, type ViewKey } from './ViewTabs.tsx'
 import { readPanelState, writePanelState } from './state.ts'
 import { buildTodaySurfaceModel } from './v2/today-surface-model.ts'
+import { chatEscapeAction, fullChatHeaderAction, isMediumChatLayout } from './chat/layout.ts'
 
 export interface YoloPanelProps {
   /** Panel left edge (the sidebar's right edge) — spans to the viewport right. */
@@ -103,6 +104,9 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   const previousNotificationFocusRequest = useRef<number | null>(null)
   const fltBtnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const chatToggleRef = useRef<HTMLButtonElement>(null)
+  const chatOpenerRef = useRef<HTMLElement | null>(null)
+  const chatReturnTodoIdRef = useRef<string | undefined>(anchor?.todoId)
 
   // Panel width → Compact gear (<480px: chat opens full-screen).
   const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 1000 : Math.max(0, window.innerWidth - left)))
@@ -112,7 +116,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     return () => { window.removeEventListener('resize', on) }
   }, [left])
   const compact = width < yoloTokens.compactBreakpoint
-  const medium = width < 960
+  const medium = isMediumChatLayout(width)
 
   // Follow host theme changes while the panel is mounted. The More menu uses
   // the same body attribute contract as the host theme presenter, so the
@@ -185,23 +189,57 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     onClose()
   }, [openSession, onClose])
 
-  // Esc unwinds the chat surface: fullscreen → side chat → closed panel.
+  const focusChatOpener = useCallback((): void => {
+    window.setTimeout(() => {
+      const original = chatOpenerRef.current
+      if (original?.isConnected) {
+        original.focus()
+        return
+      }
+      const todoId = chatReturnTodoIdRef.current
+      if (todoId) {
+        const row = Array.from(document.querySelectorAll<HTMLElement>('[data-yolo-todo-id]'))
+          .find((element) => element.dataset.yoloTodoId === todoId)
+        if (row) {
+          row.focus()
+          return
+        }
+      }
+      chatToggleRef.current?.focus()
+    }, 0)
+  }, [])
+
+  // Explicit side close ends an anchored episode. Responsive "返回看板"
+  // below only hides the surface and preserves its thread/pending/draft.
   const closeSideChat = useCallback(() => {
     setSideChatOpen(false)
     setChatFullscreen(false)
     setAnchor(null)
     setChatThread(undefined)
+    focusChatOpener()
+  }, [focusChatOpener])
+
+  const returnChatToBoard = useCallback(() => {
+    setSideChatOpen(false)
+    setChatFullscreen(false)
+    focusChatOpener()
+  }, [focusChatOpener])
+
+  const showChatAsSide = useCallback(() => {
+    setChatFullscreen(false)
   }, [])
+
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      if (chatFullscreen) setChatFullscreen(false)
-      else if (sideChatOpen) closeSideChat()
+      const action = chatEscapeAction({ availableWidth: width, sideChatOpen, chatFullscreen })
+      if (action === 'show_side') showChatAsSide()
+      else if (action === 'show_board') returnChatToBoard()
       else onClose()
     }
     document.addEventListener('keydown', listener)
     return () => { document.removeEventListener('keydown', listener) }
-  }, [chatFullscreen, sideChatOpen, closeSideChat, onClose])
+  }, [chatFullscreen, onClose, returnChatToBoard, showChatAsSide, sideChatOpen, width])
 
   // Filter menu: outside-pointer + Esc close (Esc must not unwind the panel).
   useEffect(() => {
@@ -231,20 +269,33 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   }, [filterMenuOpen])
 
   const openAnchoredChat = useCallback((a: ChatAnchor) => {
+    chatOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    chatReturnTodoIdRef.current = a.todoId
+    if (chatThread && anchor?.todoId && a.todoId === anchor.todoId && a.scopeCwd === anchor.scopeCwd) {
+      setSideChatOpen(true)
+      return
+    }
     setAnchor(a)
     setChatThread(`a-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`)
     setSideChatOpen(true)
-  }, [])
+  }, [anchor, chatThread])
 
   const toggleSideChat = useCallback(() => {
+    chatOpenerRef.current = chatToggleRef.current
+    chatReturnTodoIdRef.current = undefined
+    if (sideChatOpen) {
+      closeSideChat()
+      return
+    }
     setAnchor(null)
     setChatThread(undefined)
-    setSideChatOpen((v) => !v)
-  }, [])
+    setSideChatOpen(true)
+  }, [closeSideChat, sideChatOpen])
 
   // One chat surface, two sizes; on compact panels the side pane IS fullscreen.
   const chatShowingFull = chatFullscreen || (sideChatOpen && medium)
   const showSideDock = sideChatOpen && !chatFullscreen && !medium
+  const fullChatAction = fullChatHeaderAction({ availableWidth: width, sideChatOpen, chatFullscreen })
 
   // Tab counts — Today is the deduplicated set its default surface actually
   // carries; other tabs keep their domain-specific live counts.
@@ -399,13 +450,18 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
         </div>
         <div className="p-head-acts">
           {!chatShowingFull && (
-            <button type="button" className={`ctoggle head-primary${sideChatOpen ? ' on' : ''}`} onClick={toggleSideChat} title={sideChatOpen ? '收起对话 (Esc)' : '打开对话'}>
+            <button ref={chatToggleRef} type="button" className={`ctoggle head-primary${sideChatOpen ? ' on' : ''}`} onClick={toggleSideChat} title={sideChatOpen ? '收起对话' : '打开对话'}>
               <IcChat size={14} /><span>对话</span>
             </button>
           )}
           {chatShowingFull && (
-            <button type="button" className="ctoggle head-primary" onClick={() => { setChatFullscreen(false) }} title="收起为侧栏 (Esc)">
-              <IcShrink size={14} /><span>侧栏</span>
+            <button
+              type="button"
+              className="ctoggle head-primary"
+              onClick={fullChatAction.action === 'show_side' ? showChatAsSide : returnChatToBoard}
+              title={fullChatAction.title}
+            >
+              <IcShrink size={14} /><span>{fullChatAction.label}</span>
             </button>
           )}
           <button
@@ -463,7 +519,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
                 <button type="button" className="dact" onClick={() => { setChatFullscreen(true) }} title="展开为全屏">
                   <span className="tico"><IcExpand size={11} /></span>全屏
                 </button>
-                <button type="button" className="hbtn" onClick={closeSideChat} title="收起 (Esc)" aria-label="收起侧栏对话">
+                <button type="button" className="hbtn" onClick={closeSideChat} title="关闭对话" aria-label="收起侧栏对话">
                   <IcClose size={14} />
                 </button>
               </div>

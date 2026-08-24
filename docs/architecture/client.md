@@ -51,6 +51,9 @@ optimistic 用户行与 `client_request_id`；side/full 切换或面板重挂载
 POST。只接受不小于当前 revision 的结果，避免旧 poll 把 completed 回退为 accepted。
 侧栏使用 `.dock-msgs`、全屏使用 `.p-body` 作为各自真实 scroll owner；首载与 near-bottom 状态下
 的发送/回复自动跟随，用户主动上翻后保留位置，只显示不抢焦点的“有新消息 · 回到最新”。
+`chat/layout.ts` 以 available width 960px 为唯一 side 能力边界：wide full 的“侧栏”回并列 side，
+medium/compact full 的“返回看板”只隐藏 chat；两者的 Esc 逐级动作与按钮承诺使用同一纯 action
+model。draft 与 pending 同属 conversation controller，形态切换不会因组件重挂载而丢失。
 
 ## Mono 设计约束
 

@@ -55,7 +55,12 @@ export function AssistantJudgment({
   const evidence = judgment.evidence.slice(0, 3)
 
   return (
-    <article className={`v2-judgment v2-judgment--${judgment.presentation}`} aria-labelledby={titleId}>
+    <article
+      className={`v2-judgment v2-judgment--${judgment.presentation}`}
+      aria-labelledby={titleId}
+      data-yolo-todo-id={judgment.todo.id}
+      tabIndex={-1}
+    >
       <header className="v2-judgment-header">
         <span>助手判断</span>
         {!compact ? <span>需要你回应</span> : null}

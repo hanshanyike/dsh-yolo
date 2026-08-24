@@ -14,6 +14,7 @@ export interface ChatConversationSnapshot {
   request: ChatRequestSnapshot | null
   local: LocalChatRequest | null
   error: string | null
+  draft: string
 }
 
 function hasUser(messages: readonly ChatMessage[], text: string): boolean {
@@ -41,7 +42,7 @@ export function chatWaitingText(snapshot: ChatConversationSnapshot): string | nu
 }
 
 function empty(): ChatConversationSnapshot {
-  return { revision: 0, messages: [], request: null, local: null, error: null }
+  return { revision: 0, messages: [], request: null, local: null, error: null, draft: '' }
 }
 
 export class ChatConversationController {
@@ -57,7 +58,11 @@ export class ChatConversationController {
     const current = this.get(key)
     if (isChatWaiting(current)) return null
     const local: LocalChatRequest = { clientRequestId, userText, payloadText, phase: 'posting' }
-    return this.publish(key, { ...current, messages: withOptimistic(current.messages, local), local, error: null })
+    return this.publish(key, { ...current, messages: withOptimistic(current.messages, local), local, error: null, draft: '' })
+  }
+
+  setDraft(key: string, draft: string): ChatConversationSnapshot {
+    return this.publish(key, { ...this.get(key), draft })
   }
 
   applyMessages(key: string, payload: ChatMessagesPayload): ChatConversationSnapshot {
@@ -76,6 +81,7 @@ export class ChatConversationController {
       request: payload.request,
       local,
       error,
+      draft: current.draft,
     })
   }
 

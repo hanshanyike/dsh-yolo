@@ -49,6 +49,7 @@
 | `ui/panel-v032.spec.ts` · W10 | 「聊一聊」全新锚定对话，无常驻历史泄漏 | R19/W10 |
 | `ui/chat-scroll.spec.ts` · W5/W7/W10 | 长历史 side/full 使用真实滚动 owner；首载、发送、回复贴底跟随，上翻后只提示新消息，形态切换可继续 | rc.3 对话滚动 |
 | `ui/chat-request-lifecycle.spec.ts` · W5/W7/W10 | 慢回复在 side/full、Esc 与面板重挂载后保持 accepted/stale，回复后完成且不二次 POST | rc.3 XP-08 |
+| `ui/chat-responsive-actions.spec.ts` · W5/W7/W10 | 1029×742 medium、959/960 边界、wide side/full 双向、返回 Today 焦点与 draft 保留 | rc.3 XP-09 |
 | `ui/panel-v032.spec.ts` · W9 | 看板描边从侧栏开始；侧栏区点击让面板让位 | R18/W9 |
 | `ui/ledger-panel.spec.ts` | 合并事件进入今日台账并在台账 tab 渲染 | v5 台账面 |
 | `ui/board-scope.spec.ts` | 面板头部保留工作区切换开关时可用 | v0.3.3 |

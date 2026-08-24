@@ -53,6 +53,7 @@ function TodayTaskRow({ row, busy, onIntent }: {
   return (
     <li
       className="v2-today-row"
+      data-yolo-todo-id={row.todo.id}
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.key === 'Enter' && event.target === event.currentTarget) {

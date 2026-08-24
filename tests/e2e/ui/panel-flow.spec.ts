@@ -192,10 +192,7 @@ test('Esc 逐级退出：全屏对话→侧栏→关闭面板（TA-6）', async 
   // Esc 1: fullscreen → side dock (still open)
   await page.keyboard.press('Escape')
   await expect(page.locator('.dock')).toBeVisible()
-  // Esc 2: side dock → closed
-  await page.keyboard.press('Escape')
-  await expect(page.locator('.dock')).toHaveCount(0)
-  // Esc 3: panel closed
+  // Esc 2: a wide side dock closes the panel directly.
   await page.keyboard.press('Escape')
   await expect(page.locator('.yolo-scope')).toHaveCount(0)
 })

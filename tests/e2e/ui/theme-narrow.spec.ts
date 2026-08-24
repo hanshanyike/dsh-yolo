@@ -45,7 +45,7 @@ test('窄屏面板为紧凑态，对话直接全屏展开（W7）', async ({ pag
   expect(await page.locator('.p-head').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   expect(await page.locator('.y-tabs').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   await page.locator('.p-head .ctoggle').filter({ hasText: '对话' }).click()
-  await expect(page.locator('.p-head .ctoggle').filter({ hasText: '侧栏' })).toBeVisible()
+  await expect(page.locator('.p-head .ctoggle').filter({ hasText: '返回看板' })).toBeVisible()
   await expect(page.locator('.dock')).toHaveCount(0)
 
   // Esc back to the kanban, then close the panel
