@@ -43,6 +43,11 @@ loader 可能在 bundle 没有 config 段时传入 `undefined`，所以 `apply()
 `aggregateAcrossWorkspaces` 是兼容字段；当前 `GET /yolo/dashboard` 按产品约束始终聚合所有已登记
 工作区，端点不再根据该值退回单工作区。`focusDefaultCount` 仍进入返回载荷。
 
+浏览器端在 `settings.plugin.item` 中绑定 `settingsScope.bind({ namespace: 'yolo' })`。卡片对
+extraction、reminder、brief 与 storage 快照节奏采用暂存后显式保存，宿主按 revision 持久化并
+回读确认；失败必须保留输入并显示错误，不能只在静态说明中承诺配置。扫描 interval 在调度器
+启动时固定，所以卡片明确标注“重启宿主后生效”。
+
 配置 schema 与运行接线并不完全等价：`semantic.*` 会在每条用户消息预热前实时读取；
 `storage.scope` 以及 `recall.maxTokens/topK` 目前尚未接入对应主链路，修改这些值不会改变实际
 存储作用域或动态召回。各模块文档必须如实标注这种差异。

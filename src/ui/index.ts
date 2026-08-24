@@ -33,13 +33,15 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   // normalize: fill schemastery defaults even when the loader passed nothing
   // (runtime accepts partial input and fills defaults; the cast states that)
   const entry = Config((config ?? {}) as ConfigSchema) as ConfigSchema
+  let configSource = (): ConfigSchema => entry
 
   installSettingsSection(ctx, YOLO_NS, Config, entry, {
-    setSource: (current) => {
-      void current
-    },
+    // Settings owns the live source after registration. Keep the normalized
+    // loader entry as a defensive fallback while the service is starting or
+    // when a lightweight test/memory provider has no accepted document yet.
+    setSource: (current) => { configSource = () => current() ?? entry },
     onChange: () => {
-      // no live reaction needed in rc.8; next turn reads the new config
+      // Consumers read configSource lazily; no restart callback is needed here.
     },
   })
 
@@ -64,8 +66,8 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   })
 
   registerDashboardEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd(), {
-    allowAggregate: () => entry.ui.aggregateAcrossWorkspaces,
-    focusDefaultCount: () => entry.ui.focusDefaultCount,
+    allowAggregate: () => configSource().ui.aggregateAcrossWorkspaces,
+    focusDefaultCount: () => configSource().ui.focusDefaultCount,
   })
   registerBadgeEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
   // M8: in-place dashboard operations (complete/postpone/cancel + goal/milestone)

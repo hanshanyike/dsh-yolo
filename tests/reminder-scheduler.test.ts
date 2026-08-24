@@ -127,6 +127,25 @@ describe('startReminderScheduler: reminder config wiring (M9 P44)', () => {
     expect(yolo.writeSnapshot).toHaveBeenCalledTimes(1)
     cleanup()
   })
+
+  it('every-10-turn cadence disables the independent daily snapshot tick', async () => {
+    vi.useFakeTimers()
+    const yolo = mockYolo({ lastSnapshotDate: vi.fn(() => undefined) })
+    let daily = false
+    const cleanup = startReminderScheduler(mockCtx(), {
+      yolo,
+      cwd: () => '/tmp',
+      intervalMs: 1000,
+      dailySnapshotsEnabled: () => daily,
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(yolo.writeSnapshot).not.toHaveBeenCalled()
+    daily = true
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(yolo.writeSnapshot).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
 })
 
 describe('startReminderScheduler: multi-workspace scan (v0.3.3 review fix)', () => {

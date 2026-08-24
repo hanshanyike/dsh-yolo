@@ -45,6 +45,7 @@ scheduler tick
 
 - `storage.snapshotInterval = daily`：调度器每天写一次日期快照并记录 meta stamp。
 - `every_10_turns`：每 10 个真实工作会话 turn 写时间戳快照。
+- 两种节奏互斥；选择 `every_10_turns` 时每日调度器不会另写日期快照。
 - YOLO resident/anchored thread 的 turn 不计入工作会话快照节奏，也不会改变 latest cwd。
 
 ## 配置
@@ -69,5 +70,6 @@ scheduler tick
 2. 只向 `yolo-w-*` 常驻线程投递，绝不向普通工作会话或 anchored 临时对话投递。
 3. 安静时段内不能设置 `last_reminded_at`，否则离开窗口后会丢提醒。
 4. 投递失败不影响通知卡、审计事件和去重盖章。
-5. 当前 scheduler 只按 registry 中的 cwd 扫描，并未用其中的 scope key 调用 `runInScope`；分支在
+5. `reminder.enabled=false` 只停止到期待办扫描；简报与所选快照节奏保持独立运行。
+6. 当前 scheduler 只按 registry 中的 cwd 扫描，并未用其中的 scope key 调用 `runInScope`；分支在
    登记后、扫描前发生切换时会按当前分支重新解析，这是现行限制。

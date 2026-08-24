@@ -105,6 +105,7 @@ export function apply(ctx: Context): void {
       intervalMs: resolveReminderRuntime(reminderCfg()).intervalMs,
       aheadMs: () => resolveReminderRuntime(reminderCfg()).aheadMs,
       reminderEnabled: () => resolveReminderRuntime(reminderCfg()).enabled,
+      dailySnapshotsEnabled: () => settings?.get(YOLO_NS)?.storage?.snapshotInterval !== 'every_10_turns',
       quiet: () => {
         const r = settings?.get(YOLO_NS)?.reminder
         return {

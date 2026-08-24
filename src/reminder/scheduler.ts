@@ -221,6 +221,8 @@ export interface SchedulerDeps {
   aheadMs?: () => number
   /** Reminder kill-switch (default true) — false idles only the due scan. */
   reminderEnabled?: () => boolean
+  /** Daily snapshot cadence gate, read fresh each tick. */
+  dailySnapshotsEnabled?: () => boolean
   /** Quiet-hours gate: read fresh each tick so edits apply without a reload. */
   quiet?: () => QuietHours
   /** Every known workspace to scan each tick (v0.3.3 review fix). The board
@@ -261,7 +263,7 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
             deliver: deps.deliver,
           })
         }
-        maybeWriteDailySnapshot(deps.yolo, () => t.cwd)
+        if (deps.dailySnapshotsEnabled?.() ?? true) maybeWriteDailySnapshot(deps.yolo, () => t.cwd)
       } catch (e) {
         ctx.logger?.warn?.('[yolo-reminder] tick failed (%s): %s', t.cwd, e instanceof Error ? e.message : String(e))
       }

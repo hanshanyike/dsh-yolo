@@ -52,6 +52,7 @@
 | `ui/ledger-panel.spec.ts` | 合并事件进入今日台账并在台账 tab 渲染 | v5 台账面 |
 | `ui/board-scope.spec.ts` | 面板头部保留工作区切换开关时可用 | v0.3.3 |
 | `ui/accessibility-feedback.spec.ts` | 关闭筛选菜单不可聚焦、行内编辑字段可读名、对话发送状态持续到回复、通知正文多行保真 | W2/W3/W5 |
+| `ui/settings-card.spec.ts` · W14 | 设置页修改 YOLO 提醒配置、保存并刷新回读；卡片无内部里程碑或错误入口说明 | rc.3 XP-06/W14 |
 
 ### 已知覆盖缺口（真机走查兜底）
 

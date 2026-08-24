@@ -1,0 +1,56 @@
+import { test, expect, type Page, type Locator } from '@playwright/test'
+
+async function openYoloSettings(page: Page): Promise<Locator> {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: '设置' }).click()
+  const dialog = page.getByRole('dialog', { name: '设置' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: '插件' }).click()
+  const card = dialog.locator('.yolo-settings-card')
+  await expect(card.getByRole('heading', { name: 'YOLO — 管理工作与生活的助手' })).toBeVisible()
+  return card
+}
+
+test('YOLO 设置可保存并在刷新后回读，且关闭提醒进入真实运行配置（W14）', async ({ page }) => {
+  let card = await openYoloSettings(page)
+  const reminder = card.getByRole('checkbox', { name: /启用到期提醒/ })
+  const ahead = card.getByRole('textbox', { name: /^提前提醒（分钟）/ })
+  const originalEnabled = await reminder.isChecked()
+  const originalAhead = await ahead.inputValue()
+  const alternateAhead = originalAhead === '7' ? '0' : '7'
+  let changed = false
+
+  await expect(card.getByRole('checkbox', { name: /启用 LLM 提取/ })).toBeVisible()
+  await expect(card.getByRole('textbox', { name: /^提取模型/ })).toBeVisible()
+  await expect(card.getByRole('textbox', { name: /^扫描间隔（秒）/ })).toBeVisible()
+  await expect(card.getByRole('checkbox', { name: /启用安静时段/ })).toBeVisible()
+  await expect(card.getByRole('checkbox', { name: /启用早晚报/ })).toBeVisible()
+  await expect(card.getByRole('textbox', { name: /^早报时间/ })).toBeVisible()
+  await expect(card.getByRole('combobox', { name: /^快照节奏/ })).toBeVisible()
+  await expect(card).not.toContainText('M4b')
+  await expect(card).not.toContainText('位于设置项上方')
+
+  try {
+    await reminder.setChecked(false)
+    await ahead.fill(alternateAhead)
+    await card.getByRole('button', { name: '保存设置' }).click()
+    await expect(card.getByRole('status')).toContainText('设置已保存')
+    changed = true
+
+    card = await openYoloSettings(page)
+    await expect(card.getByRole('checkbox', { name: /启用到期提醒/ })).not.toBeChecked()
+    await expect(card.getByRole('textbox', { name: /^提前提醒（分钟）/ })).toHaveValue(alternateAhead)
+  } finally {
+    if (changed) {
+      card = await openYoloSettings(page)
+      await card.getByRole('checkbox', { name: /启用到期提醒/ }).setChecked(originalEnabled)
+      await card.getByRole('textbox', { name: /^提前提醒（分钟）/ }).fill(originalAhead)
+      await card.getByRole('button', { name: '保存设置' }).click()
+      await expect(card.getByRole('status')).toContainText('设置已保存')
+
+      card = await openYoloSettings(page)
+      await expect(card.getByRole('checkbox', { name: /启用到期提醒/ })).toBeChecked({ checked: originalEnabled })
+      await expect(card.getByRole('textbox', { name: /^提前提醒（分钟）/ })).toHaveValue(originalAhead)
+    }
+  }
+})

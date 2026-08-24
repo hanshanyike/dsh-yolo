@@ -32,7 +32,7 @@ export interface Config {
   }
   storage: {
     scope: string
-    snapshotInterval: string
+    snapshotInterval: 'daily' | 'every_10_turns'
   }
   recall: {
     maxTokens: number
@@ -68,18 +68,18 @@ export const Config: z<Config> = z.object({
     checkIntervalSec: z.number().default(300).min(60),
     aheadMin: z.number().default(0).min(0),
     quietHoursEnabled: z.boolean().default(false),
-    quietStart: z.string().default('22:00'),
-    quietEnd: z.string().default('08:00'),
+    quietStart: z.string().default('22:00').pattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u),
+    quietEnd: z.string().default('08:00').pattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u),
   }),
   brief: z.object({
     enabled: z.boolean().default(true),
-    morningTime: z.string().default('09:00'),
-    eveningTime: z.string().default('21:00'),
+    morningTime: z.string().default('09:00').pattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u),
+    eveningTime: z.string().default('21:00').pattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u),
     model: z.string().default('deepseek-chat'),
   }),
   storage: z.object({
     scope: z.string().default('workspace'),
-    snapshotInterval: z.string().default('daily'),
+    snapshotInterval: z.union(['daily', 'every_10_turns']).default('daily'),
   }),
   recall: z.object({
     maxTokens: z.number().default(512).min(64),

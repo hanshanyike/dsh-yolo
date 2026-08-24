@@ -27,4 +27,10 @@ describe('YOLO Config schema', () => {
     expect(() => Config({ extraction: { minIntervalSec: 1 } } as never)).toThrow(/minIntervalSec/)
     expect(() => Config({ recall: { topK: 99 } } as never)).toThrow(/topK/)
   })
+
+  it('rejects invalid clocks and unsupported snapshot cadences', () => {
+    expect(() => Config({ reminder: { quietStart: '24:00' } } as never)).toThrow(/quietStart/)
+    expect(() => Config({ brief: { morningTime: '9:00' } } as never)).toThrow(/morningTime/)
+    expect(() => Config({ storage: { snapshotInterval: 'weekly' } } as never)).toThrow(/snapshotInterval/)
+  })
 })
