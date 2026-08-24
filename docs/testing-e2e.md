@@ -42,18 +42,27 @@
 | `ui/panel-flow.spec.ts` · TA-5 | 卡片「聊一聊」打开侧栏对话并锚定该任务 | TA-5 |
 | `ui/panel-flow.spec.ts` · TA-6 | Esc 逐级退出：全屏对话 → 侧栏 → 关面板 | TA-6 |
 | `ui/reminder-badge.spec.ts` · TB-3~6 | 未处理提醒驱动角标+通知卡；「知道了」后归零 | TB-3~TB-6 |
-| `ui/theme-narrow.spec.ts` · W6 | 亮/暗宿主下 `--background` 解析为 light/dark | frontend-redesign W6 |
+| `ui/theme-narrow.spec.ts` · W6 | 亮/暗宿主下 `--background` 解析为 light/dark | W6 |
 | `ui/theme-narrow.spec.ts` · W7 | 窄面板(<480px)紧凑态、对话直接全屏、Esc 退回 | W7 |
 | `ui/panel-v032.spec.ts` · W10 | 「聊一聊」全新锚定对话，无常驻历史泄漏 | R19/W10 |
 | `ui/panel-v032.spec.ts` · W9 | 看板描边从侧栏开始；侧栏区点击让面板让位 | R18/W9 |
 | `ui/ledger-panel.spec.ts` | 合并事件进入今日台账并在台账 tab 渲染 | v5 台账面 |
 | `ui/board-scope.spec.ts` | 面板头部保留工作区切换开关时可用 | v0.3.3 |
+| `ui/accessibility-feedback.spec.ts` | 关闭筛选菜单不可聚焦、行内编辑字段可读名、对话发送状态持续到回复、通知正文多行保真 | W2/W3/W5 |
 
 ### 已知覆盖缺口（真机走查兜底）
 
-W1 控制台零报错未断言 · W2 工具条筛选交互仅单测 · W3 行内编辑表单 ·
-W4 中文 IME 组合态回车（Playwright 无法模拟组合态）· W8 台账数字精确性 ·
+W1 控制台零报错未断言 · W4 中文 IME 组合态回车（Playwright 无法模拟组合态）· W8 台账数字精确性 ·
 reduced-motion / 特定 DPI。
+
+### 真实语义对话手工回归（RM-DIALOG-01）
+
+1. 在全新 dsh 宿主打开 YOLO →「对话」，发送“请记住：明天下午三点提醒我把客户访谈纪要发给产品组”。
+2. 断言用户气泡立即出现，且回复到达前持续显示明确的处理中状态。
+3. 等待助手回复，断言看板出现“把客户访谈纪要发给产品组”，到期时间为本地次日 15:00。
+4. 继续发送“把刚才的「把客户访谈纪要发给产品组」标记完成”。
+5. 断言助手确认完成、任务进入「已完成」、不再出现在待办/即将列表。
+6. 记录两轮端到端时延及 console error/warn。用例数据需加 `[E2E]` 前缀，并在验证后清理。
 
 ## 三、如何运行
 
@@ -61,7 +70,7 @@ reduced-motion / 特定 DPI。
 node scripts/e2e.mjs                 # 全部套件（拉起或复用宿主）
 node scripts/e2e.mjs --suite api     # 仅 api 套件（秒级反馈，改 src/** 后首选）
 node scripts/e2e.mjs --suite ui      # 仅 ui 套件
-node scripts/e2e.mjs --spec panel-flow   # 单个 spec（--spec= 同价）
+pnpm exec playwright test tests/e2e/ui/panel-flow.spec.ts  # 单个 spec 的当前可靠方式
 node scripts/e2e.mjs --no-host       # 复用已在跑的宿主（绝不碰它的数据库）
 node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
 ```
@@ -69,6 +78,10 @@ node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
 环境变量：`YOLO_E2E_PORT`(默认 3080) · `YOLO_E2E_HOST` ·
 `YOLO_E2E_PROBE_MS`(健康探测预算，默认 15000) ·
 `YOLO_E2E_REPORT=<path>`(额外产出机器可读 JSON 报告)。
+
+> 已知 runner 缺陷：`node scripts/e2e.mjs --spec panel-flow` 目前错误映射到
+> `tests/e2e/panel-flow.spec.ts`，会报 `No tests found`；修复 `scripts/e2e.mjs` 的
+> suite 目录映射前，请使用上面的 Playwright 精确路径命令。
 
 宿主注入两条路径：
 
@@ -165,8 +178,8 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 > 标记说明：🤖 = E2E/单测已自动化（人工只需真机抽验观感）；👤 = 仅人工可验。
 > 规则沿用 testing.md 第八节：全部 PASS 才收口；无法验证的项标 SKIP + 原因，
 > 连续两次 SKIP 的项排进下个版本补验；走查结论记入提交说明。
-> 来源：testing.md §八 W1–W10 · product-design.md §八 TA/TB/TC/TD/TE ·
-> frontend-redesign.md §8.6 VA-1~VA-8 · v0.3.x 交付项（R/P/V 系列）。
+> 来源：testing.md §八 W1–W16 · product-design.md §八 TA/TB/TC/TD/TE ·
+> v0.3.x 交付项（R/P/V 系列）。
 
 ### 8.1 面板骨架与工具条
 

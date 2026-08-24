@@ -53,6 +53,11 @@ coverage/
 test-results/
 playwright-report/
 .playwright-cli/
+output/
+
+# dated local validation notes are evidence for the current workstation, not releases
+docs/manual-validation-*.md
+docs/test-report-*.md
 
 # throwaway local UI-verification scaffolding (not part of the repo)
 .tmp-e2e/
