@@ -137,9 +137,12 @@ describe('buildDashboardData ws tagging', () => {
 })
 
 describe('workspaceLabel', () => {
-  it('falls back to the basename of the cwd', () => {
+  it('extracts a basename independently of the runner platform', () => {
     expect(workspaceLabel('C:\\work\\my-project', 'x/main')).toBe('my-project')
+    expect(workspaceLabel('C:\\work\\my-project\\', 'x/main')).toBe('my-project')
+    expect(workspaceLabel('/work/my-project', 'x/main')).toBe('my-project')
     expect(workspaceLabel('C:\\', 'x/main')).toBe('x/main')
+    expect(workspaceLabel('/', 'x/main')).toBe('x/main')
   })
 })
 
@@ -228,5 +231,4 @@ describe('registerDashboardEndpoint scope handling', () => {
     expect(data?.workspaceErrors?.[0]).toContain('database locked')
   })
 })
-
 

@@ -10,7 +10,6 @@
 // v0.3.0 cross-workspace: `?scope=all` unions every known workspace (opt-in,
 // read-only) and tags each row with its owning workspace.
 
-import { basename } from 'node:path'
 import type Yolo from '../storage/index.ts'
 import type { Notification, TimelineEvent, Todo } from '../storage/types.ts'
 import type {
@@ -54,8 +53,8 @@ function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
 
 /** Build a human workspace label from a cwd (basename; fall back to the scope slug). */
 export function workspaceLabel(cwd: string, scopeKey: string): string {
-  const name = basename(cwd.replace(/[\\/]+$/, ''))
-  return name || scopeKey
+  const name = cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop()
+  return name && !/^[A-Za-z]:$/.test(name) ? name : scopeKey
 }
 
 function workspaceTag(cwd: string, scopeKey: string, supplied?: WorkspaceTag): WorkspaceTag {
