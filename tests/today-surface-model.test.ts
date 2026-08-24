@@ -5,7 +5,11 @@ import type {
   YoloDashboardData,
   YoloTodoRow,
 } from '../src/shared/dashboard.ts'
-import { buildTodaySurfaceModel } from '../client/panel/v2/today-surface-model.ts'
+import {
+  buildTodaySurfaceModel,
+  buildTodayTaskReason,
+} from '../client/panel/v2/today-surface-model.ts'
+import { todayTaskReasonText } from '../client/panel/v2/TodaySurface.tsx'
 
 const NOW = new Date(2026, 7, 23, 12)
 const WS_A: WorkspaceTag = { slug: 'a/main', label: '客户项目', cwd: 'D:/work/a' }
@@ -49,6 +53,18 @@ function dashboard(over: Partial<YoloDashboardData> = {}): YoloDashboardData {
     ledgerSessions: 0,
     notifications: [],
     unhandled: 0,
+    ...over,
+  }
+}
+
+function secondaryReason(over: Partial<NonNullable<YoloTodoRow['attention_reason']>> = {}): NonNullable<YoloTodoRow['attention_reason']> {
+  return {
+    code: 'high_priority',
+    short_reason: '优先级为紧急',
+    explanation: '优先级为紧急。',
+    evidence: [{ code: 'priority', label: '优先级为紧急', value: 'urgent' }],
+    reason_version: 'attention-v1',
+    evidence_fingerprint: 'secondary-fp',
     ...over,
   }
 }
@@ -118,5 +134,47 @@ describe('buildTodaySurfaceModel', () => {
 
     expect(buildTodaySurfaceModel(unseen, { now: NOW }).judgment).toMatchObject({ presentation: 'full', reason: '原定昨天完成，目前仍未处理。' })
     expect(buildTodaySurfaceModel(seen, { now: NOW }).judgment).toMatchObject({ presentation: 'compact', reason: '已经逾期' })
+  })
+
+  it('presents one structured fact once without an empty separator', () => {
+    const reason = buildTodayTaskReason(secondaryReason())
+
+    expect(reason).toEqual({ label: '优先级为紧急', evidence: [] })
+    expect(todayTaskReasonText(reason)).toBe('优先级为紧急')
+    expect(todayTaskReasonText(reason)).not.toContain('·')
+  })
+
+  it('keeps the primary label first and appends only the remaining server evidence', () => {
+    const reason = buildTodayTaskReason(secondaryReason({
+      short_reason: '已逾期 2 天',
+      explanation: '已逾期 2 天，优先级为高，已推迟 3 次。',
+      evidence: [
+        { code: 'overdue', label: '已逾期 2 天', value: 2 },
+        { code: 'priority', label: '优先级为高', value: 'high' },
+        { code: 'postpone_count', label: '已推迟 3 次', value: 3 },
+      ],
+    }))
+
+    expect(reason).toEqual({ label: '已逾期 2 天', evidence: ['优先级为高', '已推迟 3 次'] })
+    expect(todayTaskReasonText(reason)).toBe('已逾期 2 天 · 优先级为高，已推迟 3 次')
+  })
+
+  it('defends against repeated and blank evidence without consuming explanation prose', () => {
+    const reason = buildTodayTaskReason(secondaryReason({
+      short_reason: '紧急。',
+      explanation: '紧急。紧急。请立即处理。',
+      evidence: [
+        { code: 'primary', label: '紧急' },
+        { code: 'primary-copy', label: '紧急。' },
+        { code: 'blank', label: '  ' },
+        { code: 'postpone_count', label: '已推迟 2 次', value: 2 },
+        { code: 'postpone-copy', label: '已推迟 2 次。', value: 2 },
+      ],
+    }))
+
+    expect(reason).toEqual({ label: '紧急。', evidence: ['已推迟 2 次'] })
+    expect(todayTaskReasonText(reason)).toBe('紧急。 · 已推迟 2 次')
+    expect(todayTaskReasonText(reason)).not.toContain('请立即处理')
+    expect(todayTaskReasonText(reason)).not.toMatch(/·\s*(?:·|$)/u)
   })
 })

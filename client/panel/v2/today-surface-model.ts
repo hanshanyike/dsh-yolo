@@ -12,7 +12,7 @@ import type {
 
 export interface TodayTaskReason {
   label: string
-  explanation: string
+  evidence: string[]
 }
 
 export interface TodayTaskRowView {
@@ -113,6 +113,35 @@ function findJudgmentTodo(data: YoloDashboardData, attention: YoloAttentionRow):
     ?? data.todos.find((todo) => todo.id === attention.todo_id)
 }
 
+function reasonLabelKey(value: string): string {
+  return value.trim().replace(/\s+/gu, ' ').replace(/[，,。.!！?？；;：:、·\s]+$/gu, '')
+}
+
+/**
+ * Project one secondary attention reason without repeating the primary fact.
+ * The row uses only server-authored structured evidence; the full free-text
+ * explanation remains reserved for the primary assistant judgment.
+ */
+export function buildTodayTaskReason(
+  reason: NonNullable<YoloTodoRow['attention_reason']>,
+): TodayTaskReason | undefined {
+  const candidates = (reason.evidence ?? [])
+    .map((item) => item.label.trim())
+    .filter((label) => reasonLabelKey(label).length > 0)
+  const label = reason.short_reason.trim() || candidates[0]
+  if (!label) return undefined
+
+  const seen = new Set<string>([reasonLabelKey(label)])
+  const evidence: string[] = []
+  for (const candidate of candidates) {
+    const key = reasonLabelKey(candidate)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    evidence.push(candidate)
+  }
+  return { label, evidence }
+}
+
 function buildJudgment(
   data: YoloDashboardData,
   attention: YoloAttentionRow | undefined,
@@ -196,9 +225,7 @@ export function buildTodaySurfaceModel(
       scopeCwd: scopeOf(todo, data),
       source: mapSource(todo.source, todo),
     }
-    const fact = todo.attention_reason
-      ? { label: todo.attention_reason.short_reason, explanation: todo.attention_reason.explanation }
-      : null
+    const fact = todo.attention_reason ? buildTodayTaskReason(todo.attention_reason) : undefined
     if (fact) attentionRows.push({ ...row, reason: fact })
     else if (todo.due_at?.slice(0, 10) === today) todayRows.push(row)
   }

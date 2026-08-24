@@ -27,6 +27,7 @@ describe('dashboard v2 Mono style contract', () => {
       '.v2-judgment-impact',
       '.v2-today-row',
       '.v2-today-row-body',
+      '.v2-today-row-reason',
       '.v2-today-row-meta',
       '[aria-labelledby="v2-progress-title"]',
       '[aria-labelledby="v2-closure-title"]',
@@ -67,6 +68,7 @@ describe('dashboard v2 Mono style contract', () => {
     expect(css).toContain('@media (min-width: 480px)')
     expect(css).toContain('@media (min-width: 960px)')
     expect(css).toContain('overflow-x: clip')
+    expect(css).toMatch(/\.v2-today-row-reason[^}]*overflow-wrap:\s*anywhere/u)
     expect(css).toContain('minmax(0, 1fr)')
   })
 

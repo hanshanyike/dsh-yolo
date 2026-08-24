@@ -35,6 +35,13 @@ export interface TodaySurfaceProps extends BuildTodaySurfaceOptions {
   onIntent: (intent: TodaySurfaceIntent) => void
 }
 
+export function todayTaskReasonText(reason: TodayTaskRowView['reason']): string {
+  if (!reason) return ''
+  return reason.evidence.length > 0
+    ? `${reason.label} · ${reason.evidence.join('，')}`
+    : reason.label
+}
+
 function TodayTaskRow({ row, busy, onIntent }: {
   row: TodayTaskRowView
   busy: boolean
@@ -42,6 +49,7 @@ function TodayTaskRow({ row, busy, onIntent }: {
 }): JSX.Element {
   const openTask = (): void => { onIntent({ type: 'open_task', todo: row.todo, scopeCwd: row.scopeCwd }) }
   const source = row.source
+  const reasonText = todayTaskReasonText(row.reason)
   return (
     <li
       className="v2-today-row"
@@ -63,7 +71,10 @@ function TodayTaskRow({ row, busy, onIntent }: {
       <div className="v2-today-row-body">
         <strong>{row.todo.title}</strong>
         {row.reason ? (
-          <p><span>{row.reason.label}</span> · {row.reason.explanation}</p>
+          <p className="v2-today-row-reason" aria-label={reasonText}>
+            <span>{row.reason.label}</span>
+            {row.reason.evidence.length > 0 ? <> · {row.reason.evidence.join('，')}</> : null}
+          </p>
         ) : null}
         <div className="v2-today-row-meta">
           {source.sessionId ? (

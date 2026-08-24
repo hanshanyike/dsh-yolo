@@ -507,6 +507,7 @@ export const YOLO_CSS = `
 .yolo-scope .v2-today-row-body { min-width: 0; }
 .yolo-scope .v2-today-row-body > strong { display: block; color: var(--y-text-1); font-size: 14px; line-height: 1.45; }
 .yolo-scope .v2-today-row-body > p { margin: 4px 0 0; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .v2-today-row-reason { min-width: 0; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
 .yolo-scope .v2-today-row-body > p span { color: var(--y-text-1); font-weight: 650; }
 .yolo-scope .v2-today-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; min-width: 0; margin-top: 6px; color: var(--y-text-3); font-size: 13px; }
 .yolo-scope .v2-today-row-meta button { min-height: 32px; padding: 0 6px; border-color: transparent; background: none; color: var(--y-text-2); text-align: left; }
