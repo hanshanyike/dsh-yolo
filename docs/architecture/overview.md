@@ -7,6 +7,13 @@ YOLO 不是单个插件，而是**由五个相互协作的 Cordis 插件和一�
 > 类型和公开 API 见 [modules.md](modules.md)；使用方法见 [usage.md](../usage.md)；
 > 测试方法见 [testing.md](../testing.md)。
 
+## 文档事实源边界
+
+- 本目录描述**当前实现**：模块职责、数据流、宿主接缝、配置和稳定工程决策。
+- `src/storage/schema.sql` 是持久化 schema 的事实源；架构文档只解释其语义，不复制另一份定义。
+- `docs/testing.md` 与 `docs/testing-e2e.md` 描述当前验证契约，`CHANGELOG.md` 记录已经交付的版本变化。
+- `docs/VISION.md` 只定义长期产品边界。阶段计划、代码评审、验证报告、重构 PRD 和交互原型不作为远端长期事实源；其中形成的稳定结论必须回写本目录相应模块文档。
+
 ## 设计目标
 
 1. **零外部服务。** 记忆能力无需服务器、嵌入 API 或账号即可工作；存储使用 Node.js 内置 SQLite。

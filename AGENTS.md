@@ -4,8 +4,9 @@
 
 > 一句话：**从对话中整理计划，在合适的时候提醒，并持续跟进。**
 >
-> 规划与排期的**单一事实源**是 [`docs/roadmap-ux-priorities.md`](docs/roadmap-ux-priorities.md)
-> 与 [`docs/development-plan.md`](docs/development-plan.md)（当前批）。本文件只讲"怎么干活"，不讲"做什么、为什么"。
+> 当前实现与工程契约以 [`docs/architecture/`](docs/architecture/) 和
+> [`docs/testing.md`](docs/testing.md) 为事实源；长期产品边界见 [`docs/VISION.md`](docs/VISION.md)，
+> 已交付变化见 [`CHANGELOG.md`](CHANGELOG.md)。阶段计划、评审稿和交互原型不作为远端长期文档维护。
 
 ## 这个项目是什么
 
@@ -42,7 +43,7 @@ pnpm build              # 产物到 dist/（host 从 dist 加载插件）
 node scripts/clean-test-data.mjs   # 手动清理 [E2E] 测试夹具（e2e runner 拉起宿主前会自动做）
 npx @deepseek-ai/dsh plugin --profile web add .   # 一次性：把插件链接进 dsh web profile
 pnpm dsh web --no-open --port 4080    # 启动宿主（标准 dsh；`web` 已隐含 --profile web，默认端口 3080，本机被占故用 4080）
-node scripts/e2e.mjs                 # E2E：拉起/复用宿主后跑全套（~1 分钟，17 用例）
+node scripts/e2e.mjs                 # E2E：拉起/复用宿主后跑全套（当前 45 用例，约 5 分钟）
 node scripts/e2e.mjs --suite api     # 仅 api 套件（HTTP 接口测试，无浏览器，秒级反馈；改 src/** 后首选）
 node scripts/e2e.mjs --suite ui      # 仅 ui 套件（浏览器端到端测试）
 node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/<spec>.spec.ts）
@@ -58,7 +59,8 @@ node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/
 
 ## 记忆 / 提醒 / 看板的核心机制
 
-- **记忆抽取**：每轮对话结束时用 **LLM 语义抽取**（不是正则）写入，带去重与节流。
+- **记忆抽取**：`agent/pre-step` 捕获本轮直接用户输入，`turn-stopping` 只排队；待 durable
+  `turn/end` 与 agent 空闲后，由独立后台任务执行 **LLM 语义抽取**（不是正则），不依赖主 agent 主动写入。
 - **动作统一**：看板上每个操作（完成/推迟/取消/撤销/新增/改筛选…）都走
   `POST /yolo/actions` → `applyYoloAction`，与模型工具 `yolo_action` 同一条路径，
   保证状态迁移 + 审计事件一致。
@@ -102,13 +104,12 @@ node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/
    - E2E / W1–W16 按触发范围执行。
 4. 夹具措辞符合「用语真实」约束。
 5. UI 变更按 `docs/testing.md` W1–W16 清单通过。
-6. 功能更动若有"用户可感知"变化 → 同步 `docs/development-plan.md`（或 roadmap），避免计划过期。
+6. 用户可感知变化同步 `README.md` / `docs/usage.md`；架构或契约变化同步对应
+   `docs/architecture/*.md` / `docs/testing*.md`，并在发布时写入 `CHANGELOG.md`。
 
 ## 文档索引
 
-- **规划 / 排期（单一事实源）**：`docs/roadmap-ux-priorities.md` · `docs/development-plan.md`
 - **愿景**：`docs/VISION.md`（四阶段：Keeper → Organizer → Manager → Companion）
-- **产品定义**：`docs/product-design.md` · `docs/prd-assistant-dashboard-rearchitecture.md`
 - **调研 / 参考**：`docs/research/`（00–18 · 18 为借鉴落地结论，作为"得数"入口；其余为逐库素材）
 - **架构**：`docs/architecture/overview.md`（跨模块数据流与决策）· `docs/architecture/modules.md`（按模块拆分的中文架构索引，改代码前先查）
 - **测试**：`docs/testing.md`（含真机 W1–W16 清单）· `docs/testing-e2e.md`

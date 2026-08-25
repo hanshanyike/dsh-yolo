@@ -32,8 +32,9 @@ Thanks for considering contributing! YOLO is a small, opinionated plugin bundle 
 
 ## Work worth picking up
 
-See the [product roadmap](docs/roadmap-ux-priorities.md) for current direction and
-[CHANGELOG](CHANGELOG.md) for delivery history.
+See the [product vision](docs/VISION.md) for the long-term boundary, open issues for proposed work,
+and [CHANGELOG](CHANGELOG.md) for delivery history. The repository intentionally does not keep
+temporary roadmaps, review reports, or implementation plans as permanent documentation.
 
 ## Development setup
 

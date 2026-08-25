@@ -185,8 +185,7 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 > 标记说明：🤖 = E2E/单测已自动化（人工只需真机抽验观感）；👤 = 仅人工可验。
 > 规则沿用 testing.md 第八节：全部 PASS 才收口；无法验证的项标 SKIP + 原因，
 > 连续两次 SKIP 的项排进下个版本补验；走查结论记入提交说明。
-> 来源：testing.md §八 W1–W16 · product-design.md §八 TA/TB/TC/TD/TE ·
-> v0.3.x 交付项（R/P/V 系列）。
+> 来源：testing.md §八 W1–W16、当前 API/界面契约与 v0.3.x 已交付行为。
 
 ### 8.1 面板骨架与工具条
 

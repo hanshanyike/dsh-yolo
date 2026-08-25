@@ -15,6 +15,20 @@
 
 - [产品愿景](VISION.md)：YOLO 要解决的问题、产品边界和长期方向。
 
+## 开发与架构
+
+| 你想了解 | 文档 |
+|---|---|
+| 模块如何协作、数据怎样流动 | [整体架构](architecture/overview.md) |
+| 每个代码模块的职责与文档 | [模块架构索引](architecture/modules.md) |
+| 宿主装配、构建与运行约束 | [运行与装配](architecture/runtime.md) |
+| 自动化测试与真机验收 | [测试体系](testing.md) · [E2E 手册](testing-e2e.md) |
+| 如何发布候选版本 | [发布流程](release.md) |
+| 记忆生态调研后的落地结论 | [借鉴落地结论](research/18-adoption-verdict.md) |
+
+架构文档描述当前实现与稳定工程契约。阶段计划、代码评审报告、验证快照和交互原型只用于
+本地工作过程，不作为远端长期事实源；历史交付统一查看 [CHANGELOG](../CHANGELOG.md)。
+
 ## 其他入口
 
 - [项目首页](../README.md)
