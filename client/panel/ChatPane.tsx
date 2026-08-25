@@ -93,6 +93,9 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   const anchorRef = useRef<ChatAnchor | null>(anchor)
   const sentWithContext = useRef(false)
   const scrollOwnerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const inputEngagedRef = useRef(false)
+  const restoreInputFocusRef = useRef(false)
   const nearBottomRef = useRef(true)
   const layoutConversationRef = useRef<string | null>(null)
   const transcriptSignatureRef = useRef('')
@@ -114,6 +117,19 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       if (replyRefreshTimerRef.current !== null) window.clearTimeout(replyRefreshTimerRef.current)
       for (const controller of controllersRef.current) controller.abort()
       controllersRef.current.clear()
+    }
+  }, [])
+
+  useEffect(() => {
+    const clearOnOutsidePointer = (event: PointerEvent): void => {
+      if (event.target !== inputRef.current) inputEngagedRef.current = false
+    }
+    const clearOnWindowBlur = (): void => { inputEngagedRef.current = false }
+    document.addEventListener('pointerdown', clearOnOutsidePointer, true)
+    window.addEventListener('blur', clearOnWindowBlur)
+    return () => {
+      document.removeEventListener('pointerdown', clearOnOutsidePointer, true)
+      window.removeEventListener('blur', clearOnWindowBlur)
     }
   }, [])
 
@@ -173,6 +189,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
           ? body.revision
           : chatConversationController.get(keyForCall).revision,
       })
+      restoreInputFocusRef.current = inputEngagedRef.current
       sendLockedRef.current = isChatWaiting(snapshot)
       setState({ ...snapshot, loading: false })
     } catch (e) {
@@ -223,7 +240,20 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       : decideChatScroll({ initial, contentChanged, wasNearBottom: nearBottomRef.current })
     if (decision === 'follow') scrollToLatest()
     else if (decision === 'notify') setNewerAvailable(true)
+    if (restoreInputFocusRef.current && decision !== 'notify') {
+      restoreInputFocusRef.current = false
+      inputRef.current?.focus()
+    }
   }, [conversationKey, scrollToLatest, state.loading, transcriptSignature])
+
+  // `notify` inserts the floating control in a second render. Restore after
+  // that render, otherwise browsers can discard focus while reconciling the
+  // newly inserted sibling even though the transcript update preserved it.
+  useLayoutEffect(() => {
+    if (!newerAvailable || !restoreInputFocusRef.current) return
+    restoreInputFocusRef.current = false
+    inputRef.current?.focus()
+  }, [newerAvailable])
 
   const send = useCallback(async (): Promise<void> => {
     const text = draft.trim()
@@ -296,12 +326,20 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
 
   const input = (
     <input
+      ref={inputRef}
       className={variant === 'full' ? 'cap-input' : undefined}
       value={draft}
       placeholder={anchor ? `就「${anchor.title}」追问…` : '和 YOLO 说…（Enter 发送）'}
       autoFocus
       aria-label="对 YOLO 说"
       disabled={isChatWaiting(state)}
+      onFocus={() => { inputEngagedRef.current = true }}
+      onBlur={(event) => {
+        // A real focus transfer (Tab/click) is user intent. A null target can
+        // be a transient DOM reconciliation blur; keep the engaged state so
+        // the next committed transcript update restores the same editor.
+        if (event.relatedTarget !== null) inputEngagedRef.current = false
+      }}
       onChange={(e) => {
         setDraftState(e.target.value)
         chatConversationController.setDraft(conversationKey, e.target.value)

@@ -70,6 +70,7 @@ test('W5/W7/W10: 长历史在 side/full 各自 owner 跟随最新且不抢用户
   await input.focus()
   await expect(input).toBeFocused()
   await scrollToTop(sideOwner)
+  await expect(input).toBeFocused()
   const sidePoll = page.waitForResponse('**/yolo/session/messages**')
   messages.push({ role: 'ai', text: sideArrival })
   revision += 1
@@ -99,6 +100,7 @@ test('W5/W7/W10: 长历史在 side/full 各自 owner 跟随最新且不抢用户
   await fullInput.focus()
   await expect(fullInput).toBeFocused()
   await scrollToTop(fullOwner)
+  await expect(fullInput).toBeFocused()
   const fullPoll = page.waitForResponse('**/yolo/session/messages**')
   messages.push({ role: 'ai', text: fullArrival })
   revision += 1
