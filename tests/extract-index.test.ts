@@ -52,13 +52,13 @@ function makeCtx(yolo: Yolo, llmText: string, settings?: SettingsStub) {
 }
 
 function sessionLike(id: string, cwd: string) {
-  const messages: Array<{ role: string; content: Array<{ type: string; text: string }> }> = []
+  const messages: Array<{ id: string; role: string; source: { kind: string }; content: Array<{ type: string; text: string }> }> = []
   return {
     id,
     header: { id, cwd },
     deriveMessages: () => messages,
     push(role: string, text: string) {
-      messages.push({ role, content: [{ type: 'text', text }] })
+      messages.push({ id: `${id}-${messages.length}`, role, source: { kind: role === 'user' ? 'user' : 'model' }, content: [{ type: 'text', text }] })
     },
   }
 }
@@ -79,10 +79,10 @@ afterEach(() => {
 })
 
 describe('extract apply: LLM semantic extraction (only path)', () => {
-  it('registers only the turn handler — the per-message regex path is gone', () => {
+  it('registers pre-step capture plus deferred turn scheduling — the regex path is gone', () => {
     const { ctx, handlers } = makeCtx(yolo, EMPTY_JSON)
     apply(ctx as never)
-    expect([...handlers.keys()]).toEqual(['agent/turn-stopping'])
+    expect([...handlers.keys()]).toEqual(['agent/pre-step', 'session/event', 'agent/turn-stopping'])
   })
 
   it('merges an LLM extraction into storage and logs it', async () => {
@@ -109,6 +109,67 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(yolo.listEvents(cwd).some((e) => e.summary === 'LLM 决策')).toBe(true)
   })
 
+  it('captures the exact human message and extracts the explicit today commitment after idle', async () => {
+    const llmJson = JSON.stringify({
+      todos: [{ title: '完成针对 dsh-yolo 的分析报告', due_at: '2026-08-25' }],
+      milestones: [], goals: [], preferences: [], events: [], updates: [],
+    })
+    const { ctx, handlers, stream } = makeCtx(yolo, llmJson)
+    apply(ctx as never)
+    const session = sessionLike('s-exact', cwd)
+    const events: Array<{ type: string; data: { turn: number; reason: { kind: string } } }> = []
+    Object.assign(session, { events })
+    session.push('user', `这是不属于本轮的旧内容${'x'.repeat(8_200)}`)
+    const message = {
+      id: 'human-exact', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '今天我需要完成针对dsh-yolo的分析报告' }],
+    }
+    let releaseIdle!: () => void
+    const idle = new Promise<void>((resolve) => { releaseIdle = resolve })
+    const agent = { id: 's-exact', options: { provider: 'custom-route', model: 'chat-model' }, session, status: 'running', whenIdle: () => idle }
+
+    await handlers.get('agent/pre-step')!({ agent, messages: [message], turn: 1, step: 1, signal: new AbortController().signal }, async () => ({ kind: 'enter', messages: [message] }))
+    expect(handlers.get('agent/turn-stopping')!({ agent, turn: 1, signal: new AbortController().signal })).toBeUndefined()
+    expect(stream).not.toHaveBeenCalled()
+    const steering = { id: 'human-steer', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '报告重点分析自动记忆链路' }] }
+    await handlers.get('agent/pre-step')!({ agent, messages: [steering], turn: 1, step: 2, signal: new AbortController().signal }, async () => ({ kind: 'enter', messages: [steering] }))
+    // turn-stopping may be revisited when late steering opens another step;
+    // it must still produce one extraction for the completed turn.
+    expect(handlers.get('agent/turn-stopping')!({ agent, turn: 1, signal: new AbortController().signal })).toBeUndefined()
+
+    events.push({ type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } })
+    agent.status = 'idle'
+    releaseIdle()
+    await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(1))
+
+    const call = stream.mock.calls[0][0] as { provider: string; model: string; messages: Array<{ content: Array<{ text: string }> }> }
+    expect(call.provider).toBe('custom-route')
+    expect(call.model).toBe('chat-model')
+    expect(call.messages[0].content[0].text).toContain('今天我需要完成针对dsh-yolo的分析报告')
+    expect(call.messages[0].content[0].text).toContain('报告重点分析自动记忆链路')
+    expect(call.messages[0].content[0].text).not.toContain('不属于本轮')
+    expect(yolo.listTodos(cwd).some((todo) => todo.title === '完成针对 dsh-yolo 的分析报告')).toBe(true)
+  })
+
+  it('does not extract an aborted turn after idle', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+    apply(ctx as never)
+    const session = sessionLike('s-abort', cwd)
+    const events: Array<{ type: string; data: { turn: number; reason: { kind: string } } }> = []
+    Object.assign(session, { events })
+    const message = { id: 'human-abort', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '今天完成报告' }] }
+    let releaseIdle!: () => void
+    const idle = new Promise<void>((resolve) => { releaseIdle = resolve })
+    const agent = { id: 's-abort', options: {}, session, status: 'running', whenIdle: () => idle }
+    await handlers.get('agent/pre-step')!({ agent, messages: [message], turn: 1, step: 1, signal: new AbortController().signal }, async () => ({ kind: 'enter', messages: [message] }))
+    handlers.get('agent/turn-stopping')!({ agent, turn: 1, signal: new AbortController().signal })
+    events.push({ type: 'turn/end', data: { turn: 1, reason: { kind: 'aborted' } } })
+    agent.status = 'idle'
+    releaseIdle()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(stream).not.toHaveBeenCalled()
+  })
+
   it('skips the model call when the turn has no text', async () => {
     const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
     apply(ctx as never)
@@ -117,8 +178,10 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(stream).not.toHaveBeenCalled()
   })
 
-  it('throttles repeat LLM pulls within the interval', async () => {
-    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+  it('does not drop a second completed turn inside the old throttle interval', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON, {
+      get: () => ({ extraction: { minIntervalSec: 0.02 } }),
+    })
     apply(ctx as never)
     const session = sessionLike('s3', cwd)
     session.push('user', '需要抽取的内容')
@@ -127,7 +190,7 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     await onTurn({ agent: { session }, turn: 1 })
     expect(stream).toHaveBeenCalledTimes(1)
     await onTurn({ agent: { session }, turn: 2 })
-    expect(stream).toHaveBeenCalledTimes(1) // throttled
+    expect(stream).toHaveBeenCalledTimes(2)
   })
 
   it('passes the dedup digest of known memories to the model', async () => {
@@ -302,7 +365,23 @@ describe('extract apply: frequency gates (M9 P44)', () => {
       }),
     )
     const row = logSpy.mock.calls[0][1]
-    expect(JSON.parse(row.extracted_json ?? '{}')).toEqual({ error: '模型服务超时' })
+    expect(JSON.parse(row.extracted_json ?? '{}')).toEqual(expect.objectContaining({ error: '模型服务超时' }))
     logSpy.mockRestore()
+  })
+
+  it('audits an empty model stream as error instead of a false empty extraction', async () => {
+    const { ctx, handlers } = makeCtx(yolo, '')
+    apply(ctx as never)
+    const logSpy = vi.spyOn(yolo, 'logExtraction')
+    const session = sessionLike('s-no-text', cwd)
+    session.push('user', '今天我需要完成针对dsh-yolo的分析报告')
+
+    await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })
+
+    expect(logSpy).toHaveBeenCalledWith(
+      cwd,
+      expect.objectContaining({ status: 'error' }),
+    )
+    expect(JSON.parse(logSpy.mock.calls[0][1].extracted_json ?? '{}').error).toContain('returned no text')
   })
 })

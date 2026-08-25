@@ -49,6 +49,21 @@ describe('validateExtraction', () => {
     const r = validateExtraction({ events: [{ summary: 'x', kind: 'weird' }] } as never)
     expect(r.events[0].kind).toBe('note')
   })
+
+  it('preserves date-only and timezone-qualified deadlines but rejects ambiguous timestamps', () => {
+    const r = validateExtraction({
+      todos: [
+        { title: '今天完成分析报告', due_at: '2026-08-25' },
+        { title: '一分钟后喝水', due_at: '2026-08-25T14:31:00+08:00' },
+        { title: '缺少时区', due_at: '2026-08-25T14:31:00' },
+      ],
+    })
+    expect(r.todos.map((todo) => todo.due_at)).toEqual([
+      '2026-08-25',
+      '2026-08-25T14:31:00+08:00',
+      null,
+    ])
+  })
 })
 
 describe('llmExtract', () => {
@@ -70,6 +85,25 @@ describe('llmExtract', () => {
     expect(r.milestones[0]?.title).toBe('M2 done')
     expect(r.preferences[0]?.value).toBe('zh')
     expect(r.events[0]?.summary).toContain('M2')
+  })
+
+  it('passes the authoritative local clock to resolve a one-minute reminder', async () => {
+    let request: { system?: string } | undefined
+    const llm = {
+      stream: (options: { system?: string }) => {
+        request = options
+        return chunkStream('{"todos":[{"title":"喝水","due_at":"2026-08-25T14:31:00+08:00"}]}')
+      },
+    } as unknown as LlmRuntime
+    const now = new Date('2026-08-25T14:30:00+08:00')
+    const result = await llmExtract({ llm, provider: 'p', model: 'm', turnText: '1分钟后提醒我喝水', now })
+    expect(request?.system).toContain('1分钟后')
+    expect(result.todos[0]?.due_at).toBe('2026-08-25T14:31:00+08:00')
+  })
+
+  it('rejects malformed and wrong-schema provider output at runtime', async () => {
+    await expect(llmExtract({ llm: mockLlm('{"answer":"nothing"}'), provider: 'p', model: 'm', turnText: '今天完成报告' }))
+      .rejects.toThrow('wrong-schema JSON')
   })
 })
 

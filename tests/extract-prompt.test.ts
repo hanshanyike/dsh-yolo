@@ -7,7 +7,7 @@ import { buildExtractionPrompt, buildKnownContext } from '../src/extract/prompt.
 describe('buildExtractionPrompt', () => {
   it('embeds the current date for relative-date resolution', () => {
     const prompt = buildExtractionPrompt(new Date('2026-08-22T00:00:00Z'))
-    expect(prompt).toContain('Current date: 2026-08-22')
+    expect(prompt).toContain('Current local datetime: 2026-08-22T')
     expect(prompt).toContain('milestones')
     expect(prompt).toContain('preferences')
   })
@@ -15,7 +15,7 @@ describe('buildExtractionPrompt', () => {
   it('uses the host local date instead of the UTC calendar date', () => {
     const localEarlyMorning = new Date(2026, 7, 24, 0, 30)
     const prompt = buildExtractionPrompt(localEarlyMorning)
-    expect(prompt).toContain('Current date: 2026-08-24')
+    expect(prompt).toContain('Current local datetime: 2026-08-24T00:30:00')
   })
 
   it('demands JSON-only output and dedup against known memories', () => {
@@ -30,6 +30,13 @@ describe('buildExtractionPrompt', () => {
     expect(prompt).toContain('scheduled commitments')
     expect(prompt).toContain('trips')
     expect(prompt).toContain('scheduled plans')
+  })
+
+  it('keeps calendar-only intent date-only and reserves datetimes for a clock or duration', () => {
+    const prompt = buildExtractionPrompt(new Date())
+    expect(prompt).toContain('今天、明天、下周、周五')
+    expect(prompt).toContain('never turn them into midnight datetimes')
+    expect(prompt).toContain('下午三点、14:30、1分钟后')
   })
 
   it('declares the updates array for state changes of known items (M8)', () => {

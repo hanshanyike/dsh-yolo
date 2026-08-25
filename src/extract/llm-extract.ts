@@ -1,9 +1,10 @@
 // YOLO LLM extraction — the turn-end semantic pass (the only extraction
 // strategy since M7; the per-message regex fast path was removed).
 // Folds ctx.llm.stream output via BlockAssembler, then parses strict JSON with
-// defensive fallbacks. Never throws into the caller: all failures return empty.
+// defensive parsing. Provider/transport failures throw to the turn handler,
+// which isolates them from the agent loop and writes an error audit row.
 
-import { BlockAssembler, type LlmRuntime, type Message } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, type FinishReason, type LlmRuntime, type Message, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import { contentBlocksToText } from '../shared/text.ts'
 import { buildExtractionPrompt } from './prompt.ts'
 
@@ -65,21 +66,45 @@ export const EMPTY_EXTRACTION: ExtractionResult = {
   updates: [],
 }
 
-/** Defensive parse of the model's JSON output. Returns empty result on any failure. */
-export function parseExtractionJson(text: string): ExtractionResult {
+/** Accept date-only deadlines and timezone-qualified ISO-8601 instants. */
+function validDueAt(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const text = value.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(text)) return text
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/u.test(text) && Number.isFinite(Date.parse(text))) return text
+  return null
+}
+
+function extractionCandidates(text: string): string[] {
   const cleaned = text.replace(/```(?:json)?\s*/g, '').replace(/```/g, '').trim()
   const candidates = [cleaned]
   const brace = cleaned.match(/\{[\s\S]*\}/)
   if (brace) candidates.push(brace[0])
-  for (const c of candidates) {
+  return candidates
+}
+
+function parseExtractionJsonStrict(text: string): ExtractionResult {
+  const recognized = ['session_summary', 'milestones', 'todos', 'goals', 'preferences', 'events', 'updates']
+  for (const c of extractionCandidates(text)) {
     try {
       const parsed = JSON.parse(c) as Partial<ExtractionResult>
+      if (!parsed || typeof parsed !== 'object' || !recognized.some((key) => Object.hasOwn(parsed, key))) continue
       return validateExtraction(parsed)
     } catch {
       // try next candidate
     }
   }
-  return EMPTY_EXTRACTION
+  throw new Error('extraction model returned malformed or wrong-schema JSON')
+}
+
+/** Tolerant public parser used by offline callers. Runtime extraction uses the
+ * strict sibling so malformed output is audited as an error, not false empty. */
+export function parseExtractionJson(text: string): ExtractionResult {
+  try {
+    return parseExtractionJsonStrict(text)
+  } catch {
+    return EMPTY_EXTRACTION
+  }
 }
 
 /** Shape-check + coerce parsed JSON into a well-typed ExtractionResult. */
@@ -102,7 +127,7 @@ export function validateExtraction(raw: Partial<ExtractionResult> | null | undef
     if (t && typeof t.title === 'string') {
       result.todos.push({
         title: t.title,
-        due_at: typeof t.due_at === 'string' ? t.due_at : null,
+        due_at: validDueAt(t.due_at),
         priority: typeof t.priority === 'string' ? t.priority : null,
         milestone_title: typeof t.milestone_title === 'string' ? t.milestone_title : null,
       })
@@ -139,7 +164,7 @@ export function validateExtraction(raw: Partial<ExtractionResult> | null | undef
         match_title: u.match_title,
         status: typeof u.status === 'string' ? u.status : null,
         progress: typeof u.progress === 'number' ? Math.round(u.progress) : null,
-        due_at: typeof u.due_at === 'string' ? u.due_at : null,
+        due_at: validDueAt(u.due_at),
         note: typeof u.note === 'string' ? u.note : null,
       })
     }
@@ -155,6 +180,16 @@ export interface LlmExtractOptions {
   /** Compact digest of already-stored memories — the model skips unchanged facts. */
   knownContext?: string | null
   signal?: AbortSignal
+  /** Authoritative host-local clock captured when the background job starts. */
+  now?: Date
+  /** Capture the provider-neutral response before normalization for audit/debug. */
+  observe?: (observation: LlmExtractionObservation) => void
+}
+
+export interface LlmExtractionObservation {
+  rawText: string
+  finish: FinishReason
+  usage?: TokenUsage
 }
 
 /**
@@ -163,7 +198,7 @@ export interface LlmExtractOptions {
  * (no custom tag), so we use 'session-title' to segregate auxiliary traffic.
  */
 export async function llmExtract(opts: LlmExtractOptions): Promise<ExtractionResult> {
-  const { llm, provider, model, turnText, knownContext, signal } = opts
+  const { llm, provider, model, turnText, knownContext, signal, observe, now = new Date() } = opts
   if (!turnText.trim()) return EMPTY_EXTRACTION
 
   const userContent = knownContext
@@ -173,7 +208,7 @@ export async function llmExtract(opts: LlmExtractOptions): Promise<ExtractionRes
   const stream = llm.stream({
     provider,
     model,
-    system: buildExtractionPrompt(new Date()),
+    system: buildExtractionPrompt(now),
     messages: [{ role: 'user', content: [{ type: 'text', text: userContent }] }] as Message[],
     temperature: 0,
     maxTokens: 2048,
@@ -185,6 +220,13 @@ export async function llmExtract(opts: LlmExtractOptions): Promise<ExtractionRes
   for await (const chunk of stream) {
     assembler.push(chunk)
   }
+  const finish = assembler.finish
   const blocks = assembler.blocks()
-  return parseExtractionJson(contentBlocksToText(blocks))
+  const text = contentBlocksToText(blocks).trim()
+  observe?.({ rawText: text, finish, usage: assembler.usage })
+  if (finish.kind === 'error' || finish.kind === 'aborted') {
+    throw new Error(`extraction model ${finish.kind}: ${finish.failure.message}`)
+  }
+  if (!text) throw new Error('extraction model returned no text')
+  return parseExtractionJsonStrict(text)
 }

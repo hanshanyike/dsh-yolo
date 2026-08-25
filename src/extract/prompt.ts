@@ -14,23 +14,28 @@ import { localDateStr } from '../shared/text.ts'
 
 export function buildExtractionPrompt(now: Date): string {
   const today = localDateStr(now)
+  const offsetMinutes = -now.getTimezoneOffset()
+  const offsetSign = offsetMinutes >= 0 ? '+' : '-'
+  const offsetHours = String(Math.floor(Math.abs(offsetMinutes) / 60)).padStart(2, '0')
+  const offsetRemainder = String(Math.abs(offsetMinutes) % 60).padStart(2, '0')
+  const localTime = `${today}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}${offsetSign}${offsetHours}:${offsetRemainder}`
   return `You are the semantic memory extractor of a managing assistant (like a project manager who tracks commitments and deadlines). Your job: read one finished conversation turn between the user and the AI agent, and extract ONLY what helps this assistant MANAGE the user's commitments and plans across future sessions.
 
 SCOPE DISCIPLINE (critical): this is NOT a general memory or personal-knowledge engine. A fact is only worth storing if it directly shapes how the assistant should TRACK, REMIND, or MANAGE a commitment/plan — otherwise it must be left out. Do not turn the user's life into a diary.
 
-Current date: ${today} (use it to resolve relative dates like 明天/下周/next week into absolute dates).
+Current local datetime: ${localTime}. Use this authoritative clock to resolve relative dates and times such as 今天、明天、1分钟后、下周 or next week.
 
 Return ONLY JSON, no commentary, no markdown fence. Schema:
 
 {
   "session_summary": string | null,
   "milestones": [{"title": string, "target_date": "YYYY-MM-DD" | null, "description": string | null}],
-  "todos":      [{"title": string, "due_at": "YYYY-MM-DD" | null, "priority": "low|medium|high|urgent" | null, "milestone_title": string | null}],
+  "todos":      [{"title": string, "due_at": "YYYY-MM-DD" | ISO-8601 datetime with timezone | null, "priority": "low|medium|high|urgent" | null, "milestone_title": string | null}],
   "goals":      [{"title": string, "description": string | null, "milestone_title": string | null}],
   "preferences":[{"key": string, "value": string}],
   "events":     [{"kind": "decision|milestone_reached", "summary": string, "occurred_at": "YYYY-MM-DD" | null}],
   "updates":    [
-    {"kind": "todo",      "match_title": string, "status": "in_progress|done|cancelled" | null, "due_at": "YYYY-MM-DD" | null, "note": string | null},
+    {"kind": "todo",      "match_title": string, "status": "in_progress|done|cancelled" | null, "due_at": "YYYY-MM-DD" | ISO-8601 datetime with timezone | null, "note": string | null},
     {"kind": "goal",      "match_title": string, "progress": 0-100},
     {"kind": "milestone", "match_title": string, "status": "active|done|abandoned"}
   ]
@@ -57,7 +62,7 @@ What NOT to extract (these are out of scope for a managing assistant):
 Rules:
 - Extract only explicit facts. Never invent or infer beyond what is stated.
 - Write titles/summaries in the user's language, close to their own wording; do not paraphrase into English unless they wrote in English.
-- Dates: absolute YYYY-MM-DD. No time component.
+- Calendar expressions without a clock or duration (今天、明天、下周、周五): absolute YYYY-MM-DD only; never turn them into midnight datetimes. Expressions with an explicit clock or duration (下午三点、14:30、1分钟后): an absolute ISO-8601 datetime including the local timezone offset (for example 2026-08-25T14:31:00+08:00). Never discard minute-level intent.
 - Progress: an integer 0-100.
 - If nothing is worth remembering, return all-empty arrays.
 - Keep the JSON compact.`
