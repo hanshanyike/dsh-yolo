@@ -4,11 +4,21 @@
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.3.0-rc.4] — 2026-08-25
 
 ### Changed
 
+- 工作区身份统一为规范化目录，不再按 Git 分支拆分计划；Git、非 Git 与 detached HEAD 会话在同一目录下共享一份连续记录。
+- 首次升级会幂等合并同一工作区遗留的 default/main/feature 数据库，保留旧库用于恢复；不同工作区仍保持隔离。
+- Today 截止时间改为本地可读日期，摘要明确区分“今天需回应”“全部挂起”和“今天到期”，提醒快捷动作统一显示“推迟 1 天”。
 - 事项独立对话改用更自然的开场提问，引导用户说明进展和需要调整的安排。
+
+### Fixed
+
+- 修复 Windows 下同一目录因大小写、分隔符、尾斜杠或 `..` 写法不同而重复登记工作区的问题。
+- 修复新消息提示出现时可能重建输入区域、让用户正在输入的对话失去焦点的问题。
+- 修复同名工作区标签难以区分的问题；聚合看板会追加最短且稳定的父目录提示。
+- 修复 E2E 成功、失败或中断后仍可能留下测试事项、提醒、全文索引和审计记录的问题。
 
 ## [0.3.0-rc.3] — 2026-08-25
 
@@ -94,7 +104,8 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.3...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.4...HEAD
+[0.3.0-rc.4]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.3...v0.3.0-rc.4
 [0.3.0-rc.3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.2...v0.3.0-rc.3
 [0.3.0-rc.2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.1...v0.3.0-rc.2
 [0.3.0-rc.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.2.0-alpha.1...v0.3.0-rc.1
