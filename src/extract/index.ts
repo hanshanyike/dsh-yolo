@@ -223,6 +223,7 @@ export function apply(ctx: Context): void {
   const yctx = ctx as YoloCtx
   const settings = (ctx as { settings?: SettingsLike }).settings
   const captured = new Map<string, Map<number, UserMessage[]>>()
+  const capturedAt = new Map<string, Map<number, number>>()
   const jobs = new Map<string, Promise<void>>()
   const scheduledTurns = new Set<string>()
   const controllers = new Set<AbortController>()
@@ -240,6 +241,9 @@ export function apply(ctx: Context): void {
       const seen = new Set(current.map((message) => message.id))
       turns.set(payload.turn, [...current, ...human.filter((message) => !seen.has(message.id))])
       captured.set(payload.agent.id, turns)
+      const clocks = capturedAt.get(payload.agent.id) ?? new Map<number, number>()
+      if (!clocks.has(payload.turn)) clocks.set(payload.turn, Date.now())
+      capturedAt.set(payload.agent.id, clocks)
     }
     return decision
   })
@@ -249,6 +253,7 @@ export function apply(ctx: Context): void {
     const reason = event.data.reason.kind
     if (reason === 'completed' || reason === 'max-tokens') return
     captured.get(session.id)?.delete(event.data.turn)
+    capturedAt.get(session.id)?.delete(event.data.turn)
     scheduledTurns.delete(`${session.id}:${event.data.turn}`)
   })
 
@@ -269,7 +274,9 @@ export function apply(ctx: Context): void {
         // Read only after true idle so steering accepted after an earlier
         // turn-stopping boundary is included in the same extraction.
         const capturedMessages = captured.get(sessionId)?.get(turn) ?? []
+        const acceptedAt = capturedAt.get(sessionId)?.get(turn)
         captured.get(sessionId)?.delete(turn)
+        capturedAt.get(sessionId)?.delete(turn)
         if (!completedTurn(agent.session, turn)) return
         const session = agent.session
         const cwd = cwdOf(session)
@@ -315,7 +322,9 @@ export function apply(ctx: Context): void {
             turnText,
             knownContext: knownDigest(yctx.yolo, cwd),
             signal: controller.signal,
-            now: new Date(started),
+            // Resolve “today/tomorrow” from when the host accepted the user's
+            // input, not from a later idle/spacing boundary that may cross midnight.
+            now: new Date(acceptedAt ?? started),
             observe: (value) => { observation = value },
           })
 
@@ -331,7 +340,12 @@ export function apply(ctx: Context): void {
               parsed: result,
               finish: observation?.finish ?? null,
               route,
-              input: { chars: turnText.length, messages: capturedMessages.length || 1, last_user_chars: lastUserText.length },
+              input: {
+                chars: turnText.length,
+                messages: capturedMessages.length || 1,
+                last_user_chars: lastUserText.length,
+                accepted_at: acceptedAt ? new Date(acceptedAt).toISOString() : null,
+              },
             }),
             token_in: observation?.usage?.inputTokens ?? null,
             token_out: observation?.usage?.outputTokens ?? null,
@@ -379,6 +393,7 @@ export function apply(ctx: Context): void {
     for (const controller of controllers) controller.abort(new Error('yolo-extract disposed'))
     controllers.clear()
     captured.clear()
+    capturedAt.clear()
     scheduledTurns.clear()
   })
 

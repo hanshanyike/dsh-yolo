@@ -39,6 +39,13 @@ describe('buildExtractionPrompt', () => {
     expect(prompt).toContain('下午三点、14:30、1分钟后')
   })
 
+  it('keeps an explicit due date when the user only declines immediate execution', () => {
+    const prompt = buildExtractionPrompt(new Date())
+    expect(prompt).toContain('due_at MUST preserve that date/time')
+    expect(prompt).toContain('只是告诉你安排')
+    expect(prompt).toContain('do NOT erase 今天、明天、周五')
+  })
+
   it('declares the updates array for state changes of known items (M8)', () => {
     const prompt = buildExtractionPrompt(new Date())
     expect(prompt).toContain('"updates"')

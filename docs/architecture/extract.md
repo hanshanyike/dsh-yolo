@@ -56,7 +56,8 @@ LLM 标题会被静默丢弃，不会让整轮失败。
 - 模型以 `error`/`aborted` 结束或没有返回文本时记为抽取错误，不再伪装成 `empty`。
 - 错误 JSON 或不含抽取 schema 字段的 JSON 记为 `error`；只有合法的空 schema 才记为 `empty`。
 - `due_at` 接受兼容的 `YYYY-MM-DD`，有明确时间或相对分钟时必须保存带时区的 ISO-8601 datetime；
-  相对时间以后台任务启动时捕获的宿主本地时钟为准。
+  相对时间以宿主接受本轮首条直接用户输入时捕获的本地时钟为准，不能因等待 agent 空闲或抽取节流跨过
+  午夜而改变“今天/明天”的日期。缺少 `agent/pre-step` 的兼容宿主才回退到后台任务启动时间。
 - aborted/blocked/error/interrupted 的 turn/end 不抽取；插件卸载会中止正在运行的后台抽取。
 - handler 必须隔离异常并写日志，不能把抽取失败抛回 agent 循环。
 

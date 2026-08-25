@@ -151,6 +151,34 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(yolo.listTodos(cwd).some((todo) => todo.title === '完成针对 dsh-yolo 的分析报告')).toBe(true)
   })
 
+  it('resolves relative dates from the accepted input time when extraction starts after midnight', async () => {
+    let clock = new Date('2026-08-26T23:58:00+08:00').getTime()
+    vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+    apply(ctx as never)
+    const session = sessionLike('s-midnight', cwd)
+    const events: Array<{ type: string; data: { turn: number; reason: { kind: string } } }> = []
+    Object.assign(session, { events })
+    const message = {
+      id: 'human-midnight', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '今天把值班记录发给组长' }],
+    }
+    let releaseIdle!: () => void
+    const idle = new Promise<void>((resolve) => { releaseIdle = resolve })
+    const agent = { id: 's-midnight', options: {}, session, status: 'running', whenIdle: () => idle }
+
+    await handlers.get('agent/pre-step')!({ agent, messages: [message], turn: 1, step: 1, signal: new AbortController().signal }, async () => ({ kind: 'enter', messages: [message] }))
+    handlers.get('agent/turn-stopping')!({ agent, turn: 1 })
+    events.push({ type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } })
+    agent.status = 'idle'
+    clock = new Date('2026-08-27T00:02:00+08:00').getTime()
+    releaseIdle()
+    await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(1))
+
+    const call = stream.mock.calls[0][0] as { system: string }
+    expect(call.system).toContain('Current local datetime: 2026-08-26T23:58:00')
+  })
+
   it('does not extract an aborted turn after idle', async () => {
     const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
     apply(ctx as never)

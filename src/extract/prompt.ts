@@ -62,6 +62,7 @@ What NOT to extract (these are out of scope for a managing assistant):
 Rules:
 - Extract only explicit facts. Never invent or infer beyond what is stated.
 - Write titles/summaries in the user's language, close to their own wording; do not paraphrase into English unless they wrote in English.
+- When one sentence contains both a concrete commitment and an explicit calendar expression, due_at MUST preserve that date/time. Instructions such as “只是告诉你安排”“先别执行”“不用现在做” constrain the assistant's immediate execution; they do NOT erase 今天、明天、周五 or another stated deadline. Only an explicit cancellation of the commitment removes it.
 - Calendar expressions without a clock or duration (今天、明天、下周、周五): absolute YYYY-MM-DD only; never turn them into midnight datetimes. Expressions with an explicit clock or duration (下午三点、14:30、1分钟后): an absolute ISO-8601 datetime including the local timezone offset (for example 2026-08-25T14:31:00+08:00). Never discard minute-level intent.
 - Progress: an integer 0-100.
 - If nothing is worth remembering, return all-empty arrays.

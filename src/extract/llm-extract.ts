@@ -180,7 +180,7 @@ export interface LlmExtractOptions {
   /** Compact digest of already-stored memories — the model skips unchanged facts. */
   knownContext?: string | null
   signal?: AbortSignal
-  /** Authoritative host-local clock captured when the background job starts. */
+  /** Authoritative host-local clock captured when the host accepted the input. */
   now?: Date
   /** Capture the provider-neutral response before normalization for audit/debug. */
   observe?: (observation: LlmExtractionObservation) => void
