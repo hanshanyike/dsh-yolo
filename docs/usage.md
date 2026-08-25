@@ -9,7 +9,7 @@ YOLO 会把对话中需要继续跟进的事项整理成计划，并在到期时
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.0-rc.3
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.0-rc.4
 npx @deepseek-ai/dsh web
 ```
 
@@ -19,7 +19,7 @@ npx @deepseek-ai/dsh web
 也可以从固定的 GitHub 标签安装：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.3.0-rc.3
+npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.3.0-rc.4
 npx @deepseek-ai/dsh web
 ```
 
