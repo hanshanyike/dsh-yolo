@@ -45,7 +45,7 @@ line) or Node.js 24, and make sure `pnpm` is available. If needed, run
 `corepack enable` first. Then run:
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.1-rc.1
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.1-rc.2
 npx @deepseek-ai/dsh web
 ```
 
