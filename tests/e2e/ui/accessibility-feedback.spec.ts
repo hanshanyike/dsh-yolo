@@ -17,8 +17,12 @@ test.afterAll(async () => {
 test('W2: a closed filter menu removes its controls from visibility and keyboard access', async ({ page }) => {
   await openYoloPanel(page)
 
-  await expect(page.getByRole('button', { name: '筛选' })).toHaveAttribute('aria-expanded', 'false')
+  const filter = page.getByRole('button', { name: '筛选事项，未启用筛选条件', exact: true })
+  await expect(filter).toHaveAttribute('aria-expanded', 'false')
   await expect(page.getByRole('checkbox', { name: '仅逾期' })).toBeHidden({ timeout: 1_000 })
+  await filter.click()
+  await expect(page.getByRole('dialog', { name: '筛选事项' })).toBeVisible()
+  await expect(filter).toHaveAttribute('aria-expanded', 'true')
 })
 
 test('W3: the todo handling panel exposes accessible names for every edit field', async ({ page }) => {

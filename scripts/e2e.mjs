@@ -134,16 +134,23 @@ function sweepE2EFixtures() {
       }
       const c = (sql) => { try { return db.prepare(sql).run().changes } catch { return 0 } }
       const n =
+        c("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id IN (SELECT id FROM todos WHERE title LIKE '[E2E]%')") +
+        c("DELETE FROM attention_feedback WHERE todo_id IN (SELECT id FROM todos WHERE title LIKE '[E2E]%')") +
+        c("DELETE FROM pending_reminders WHERE payload LIKE '%[E2E]%'") +
         c("DELETE FROM todos WHERE title LIKE '[E2E]%'") +
         c("DELETE FROM notifications WHERE title LIKE '[E2E]%'") +
         c("DELETE FROM events WHERE summary LIKE '%[E2E]%' OR detail LIKE '%[E2E]%'") +
-        c("DELETE FROM session_summaries WHERE summary LIKE '%[E2E]%'")
+        c("DELETE FROM session_summaries WHERE summary LIKE '%[E2E]%'") +
+        c("DELETE FROM client_actions WHERE outcome_json LIKE '%[E2E]%'") +
+        c("DELETE FROM extraction_log WHERE extracted_json LIKE '%[E2E]%'") +
+        c("DELETE FROM recall_log WHERE query LIKE '%[E2E]%' OR expansions LIKE '%[E2E]%'")
       total += n
       if (n > 0) console.log(`[e2e] fixture sweep ${file}: removed ${n} rows`)
       db.close()
     }
   }
   console.log(total > 0 ? `[e2e] fixture sweep done: ${total} stale rows removed` : '[e2e] fixture sweep: nothing to remove')
+  return total
 }
 
 /**
@@ -321,6 +328,27 @@ function selectionArgs() {
 ;(async () => {
   const t0 = Date.now()
   let startedChild = null
+  let stoppingOwnedHost = false
+  const stopOwnedHost = () => {
+    if (!startedChild || stoppingOwnedHost) return
+    stoppingOwnedHost = true
+    console.log('[e2e] stopping the host this runner started')
+    killTree(startedChild)
+    startedChild = null
+    // afterEach uses audited soft transitions so a failed/interrupted spec is
+    // safe, but those rows would still pollute Completed/Ledger. Once our own
+    // host is stopped the DB is exclusively available: remove only the
+    // machine-labelled rows, including their FTS/audit residue. A reused host
+    // is deliberately never swept because it may belong to the user.
+    console.log('[e2e] post-run fixture sweep (owned host stopped)')
+    sweepE2EFixtures()
+  }
+  const stopOnSignal = (code) => {
+    stopOwnedHost()
+    process.exit(code)
+  }
+  process.once('SIGINT', () => { stopOnSignal(130) })
+  process.once('SIGTERM', () => { stopOnSignal(143) })
   if (skipHost) {
     if (!hostUp()) {
       console.error(`[e2e] --no-host but nothing answering ${BASE}/yolo/dashboard (probe budget ${PROBE_TIMEOUT_MS}ms — raise YOLO_E2E_PROBE_MS if the host is just slow)`)
@@ -338,10 +366,7 @@ function selectionArgs() {
   if (sel.length) console.log(`[e2e] selection: ${sel.map((p) => p.slice(ROOT.length + 1)).join(', ')}`)
   const code = run('pnpm', ['exec', 'playwright', 'test', ...sel], { cwd: ROOT })
 
-  if (startedChild) {
-    console.log('[e2e] stopping the host this runner started')
-    killTree(startedChild)
-  }
+  stopOwnedHost()
   const report = process.env.YOLO_E2E_REPORT
   if (report && existsSync(report)) {
     try {

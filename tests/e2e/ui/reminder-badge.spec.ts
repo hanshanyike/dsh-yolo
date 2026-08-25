@@ -17,6 +17,7 @@ import {
   createFixtures,
   uid,
   openYoloPanel,
+  todayStr,
   type Api,
 } from '../helpers.ts'
 
@@ -41,7 +42,8 @@ test('未处理提醒驱动角标与通知卡，处理后归零（TB-3~TB-6）',
   const baseline = (await api.dashboard()).unhandled ?? 0
   const title = uid('提醒我把演示稿发给研发')
   const note = '上一版还没同步，需要补一段结论'
-  await fx.notification(`⏰ ${title}`, { note })
+  const todo = await fx.todo(title, { due: todayStr() })
+  await fx.notification(`⏰ ${title}`, { note, todoId: String(todo.id) })
 
   await openYoloPanel(page)
 
@@ -50,6 +52,7 @@ test('未处理提醒驱动角标与通知卡，处理后归零（TB-3~TB-6）',
   await expect(card).toBeVisible()
   await expect(card).toContainText('到期提醒')
   await expect(card).toContainText(note)
+  await expect(card.getByRole('button', { name: '推迟 1 天' })).toBeVisible()
 
   // the sidebar badge picked the card up on mount (badge fetches on load;
   // budget covers one slow dashboard roundtrip on a cold machine)

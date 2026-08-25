@@ -21,7 +21,7 @@ async function tabCount(page: Page): Promise<number> {
 
 async function dueTodayCount(page: Page): Promise<number> {
   const text = await page.locator('.v2-today-surface > header').textContent() ?? ''
-  return Number(text.match(/(\d+) 件今天到期/u)?.[1] ?? Number.NaN)
+  return Number(text.match(/今天到期 (\d+) 件/u)?.[1] ?? Number.NaN)
 }
 
 async function closePanel(page: Page): Promise<void> {
@@ -56,6 +56,7 @@ test('Today tab 统计默认表面开放事项的去重并集，且可与 dueTod
   await expect(todayTab).toHaveAttribute('aria-label', /今天，\d+ 件。今天默认表面承接的开放事项/u)
   expect(await tabCount(page)).toBe(baselineSurface + 2)
   expect(await dueTodayCount(page)).toBe(baselineDueToday + 1)
+  await expect(page.locator('.v2-today-surface > header')).toContainText(`今天需回应 ${baselineSurface + 2} 件`)
 
   await expect(page.locator('.v2-judgment, .v2-today-row').filter({ hasText: preciseTitle })).toBeVisible()
   await expect(page.locator('.notif').filter({ hasText: futureTitle })).toBeVisible()
