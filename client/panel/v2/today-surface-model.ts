@@ -42,6 +42,8 @@ export interface TodaySurfaceModel {
   openItemCount: number
   /** True when the count and rows cover only the successfully loaded workspaces. */
   partial: boolean
+  /** True only before the aggregate workspace contains any user material. */
+  pristine: boolean
   progress: TodayProgressView
   showClosure: boolean
 }
@@ -260,6 +262,19 @@ export function buildTodaySurfaceModel(
   }
 
   const partial = serverSummary?.partial === true || (data.workspaceErrors?.length ?? 0) > 0
+  // Keep first-run branding out of established workspaces, including ones
+  // that are merely quiet today but still have goals, history or notices.
+  const pristine = !partial
+    && data.todos.length === 0
+    && data.goals.length === 0
+    && data.milestones.length === 0
+    // Scheduled briefs are ambient assistant output, not user material. A
+    // brand-new installation may create them before the first panel open.
+    && data.events.every((row) => row.kind === 'brief_generated')
+    && data.ledger.every((row) => row.kind === 'brief_generated')
+    && data.notifications.every((row) => row.kind === 'brief')
+    && data.preferences.length === 0
+    && (data.attention?.length ?? 0) === 0
   const partialMessage = partial
     ? `部分工作区暂不可用${data.workspaceErrors?.length ? `：${data.workspaceErrors.join('；')}` : ''}。当前内容可能不完整。`
     : undefined
@@ -285,6 +300,7 @@ export function buildTodaySurfaceModel(
     todayRows,
     openItemCount: openItemKeys.size,
     partial,
+    pristine,
     progress,
     showClosure,
   }

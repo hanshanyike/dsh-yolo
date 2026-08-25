@@ -52,6 +52,22 @@ function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
   return '早期记录'
 }
 
+/** Keep the durable event table complete while presenting only management
+ * progress—not scheduler/notification mechanics—in the daily ledger. */
+const LEDGER_NOISE = new Set([
+  'reminder_fired',
+  'brief_generated',
+  'attention_seen',
+  'attention_suppressed',
+  'attention_feedback',
+  'todo_remind_again',
+  'todo_updated',
+])
+
+export function isProgressLedgerEvent(event: Pick<TimelineEvent, 'kind'>): boolean {
+  return !LEDGER_NOISE.has(event.kind)
+}
+
 /** Build a human workspace label from a cwd (basename; fall back to the scope slug). */
 export function workspaceLabel(cwd: string, scopeKey: string): string {
   const name = cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop()
@@ -203,7 +219,8 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
 
   const { from, to } = dayBounds(day)
   const dayEvents = yolo.listEventsBetween(cwd, from, to)
-  const ledger: YoloLedgerEntry[] = dayEvents.map((e) => ({
+  const progressEvents = dayEvents.filter(isProgressLedgerEvent)
+  const ledger: YoloLedgerEntry[] = progressEvents.map((e) => ({
     id: e.id,
     kind: e.kind,
     summary: e.summary,
@@ -213,7 +230,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     session_id: e.session_id ?? null,
     ws: owner,
   }))
-  const ledgerSessions = new Set(dayEvents.map((e) => e.session_id).filter((s): s is string => !!s)).size
+  const ledgerSessions = new Set(progressEvents.map((e) => e.session_id).filter((s): s is string => !!s)).size
 
   const notifications: YoloNotificationRow[] = yolo.listNotifications(cwd, 12).map((n) => ({
     id: n.id,

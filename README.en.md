@@ -32,7 +32,7 @@ how to do it. It can:
 - **Remind you when items are due** through YOLO notifications and its own
   conversation, without injecting messages into an active work conversation.
 - **Provide one place to review and act** from the sidebar dashboard, including
-  today, upcoming, completed, goals, and the activity ledger.
+  today, upcoming, completed, goals, and a low-noise daily progress digest.
 
 YOLO understands follow-up items in a conversation without requiring fixed
 keywords. It keeps items and rules that need continued management while filtering

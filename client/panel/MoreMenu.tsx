@@ -90,7 +90,7 @@ export function MoreMenu({ view, loading, theme, onViewChange, onOpenFilters, on
             <IcTarget size={15} /><span>目标与里程碑</span>
           </button>
           <button type="button" role="menuitem" className={view === 'ledger' ? 'on' : undefined} onClick={() => { run(() => { onViewChange('ledger') }) }}>
-            <IcLedger size={15} /><span>今日台账</span>
+            <IcLedger size={15} /><span>今日进展</span>
           </button>
           <button type="button" role="menuitem" onClick={() => { run(onOpenFilters, false) }}>
             <IcFilter size={15} /><span>高级筛选</span>

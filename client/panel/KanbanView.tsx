@@ -457,6 +457,10 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
 
   const handleTodayIntent = useCallback((intent: TodaySurfaceIntent): void => {
     if (intent.type === 'quick_capture') return
+    if (intent.type === 'open_empty_chat') {
+      onOpenChat({ title: '梳理今天', detail: '从今天想继续推进的一件事开始。' })
+      return
+    }
     if (intent.type === 'mark_judgment_seen') {
       void act(`seen-${intent.judgmentId}`, {
         action: 'seen', kind: 'attention', id: intent.judgmentId, scope_cwd: intent.scopeCwd,
@@ -897,13 +901,13 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
           {view === 'ledger' && (
             <>
               <div className="heading">
-                <h2>今日台账</h2>
+                <h2>今日进展</h2>
                 <span className="hint">{data.ledger.length} 条 · {data.ledgerSessions} 会话 · 点会话标签跳回</span>
               </div>
               {data.ledger.length === 0 ? (
                 <div className="empty">
-                  <h4>今天还没有记录</h4>
-                  <p>所有动作都会写进台账。</p>
+                  <h4>今天还没有关键进展</h4>
+                  <p>完成、推迟和计划变化会出现在这里。</p>
                 </div>
               ) : (
                 <div style={{ marginTop: 8 }}>

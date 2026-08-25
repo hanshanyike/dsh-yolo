@@ -70,6 +70,26 @@ function secondaryReason(over: Partial<NonNullable<YoloTodoRow['attention_reason
 }
 
 describe('buildTodaySurfaceModel', () => {
+  it('reserves the branded first-run state for a genuinely pristine aggregate workspace', () => {
+    expect(buildTodaySurfaceModel(dashboard(), { now: NOW }).pristine).toBe(true)
+
+    expect(buildTodaySurfaceModel(dashboard({
+      events: [{ id: 'event-brief', kind: 'brief_generated', summary: '生成早报', occurred_at: NOW.getTime() }],
+      ledger: [{ id: 'ledger-brief', kind: 'brief_generated', summary: '生成早报', occurred_at: NOW.getTime(), label: '助手' }],
+      notifications: [{ id: 'brief-1', kind: 'brief', title: '早报', created_at: NOW.getTime(), handled: false }],
+    }), { now: NOW }).pristine).toBe(true)
+
+    expect(buildTodaySurfaceModel(dashboard({
+      goals: [{ id: 'goal-1', title: '完成研究计划', status: 'active', progress: 0 }],
+    }), { now: NOW }).pristine).toBe(false)
+    expect(buildTodaySurfaceModel(dashboard({
+      notifications: [{ id: 'reminder-1', kind: 'reminder', title: '喝水', created_at: NOW.getTime(), handled: false }],
+    }), { now: NOW }).pristine).toBe(false)
+    expect(buildTodaySurfaceModel(dashboard({
+      ledger: [{ id: 'done-1', kind: 'todo_completed', summary: '完成分析报告', occurred_at: NOW.getTime(), label: '研究会话' }],
+    }), { now: NOW }).pristine).toBe(false)
+  })
+
   it('uses only attention[0] and removes that scoped todo from secondary lists', () => {
     const focus = todo('same', { due_at: '2026-08-22', overdue: true })
     const sameIdOtherWorkspace = todo('same', { scope_cwd: WS_B.cwd, ws: WS_B, due_at: '2026-08-23' })

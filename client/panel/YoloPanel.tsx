@@ -79,7 +79,7 @@ const VIEW_LABELS: Record<ViewKey, string> = {
   upcoming: '即将',
   done: '已完成',
   goals: '目标与里程碑',
-  ledger: '今日台账',
+  ledger: '今日进展',
 }
 
 export function YoloPanel({ left, onClose, openSession, notificationFocusRequest = 0, themeControl }: YoloPanelProps): JSX.Element {

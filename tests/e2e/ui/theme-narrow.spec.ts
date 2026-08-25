@@ -63,7 +63,7 @@ test('更多菜单承载辅助视图、刷新和目标主题，并在 Esc 后恢
   await more.click()
 
   await expect(page.getByRole('menuitem', { name: '目标与里程碑' })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: '今日台账' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '今日进展' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: '高级筛选' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: '刷新看板' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: '切换为深色主题' })).toBeVisible()

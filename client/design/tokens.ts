@@ -470,6 +470,24 @@ export const YOLO_CSS = `
 .yolo-scope .v2-today-partial,
 .yolo-scope .v2-judgment-partial { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--y-line-strong); border-left: 3px solid var(--y-focus); border-radius: var(--y-r-sm); background: var(--y-surface-2); color: var(--y-text-2); font-size: 13px; }
 
+/* First-run state: a quiet status rail, not an illustration. It only renders
+   while the aggregate workspace is genuinely pristine, so real work always
+   retakes visual priority as soon as it exists. */
+.yolo-scope .v2-today-empty { position: relative; display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 22px; min-height: 218px; margin-top: 20px; padding: 28px 30px; overflow: hidden; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-lg); background: var(--y-surface); animation: yolo-crossfade var(--y-dur-3) var(--y-ease-out); }
+.yolo-scope .v2-today-empty::after { content: ""; position: absolute; inset: auto 30px 0 126px; height: 1px; background: var(--y-line); }
+.yolo-scope .v2-empty-rail { position: relative; width: 74px; min-height: 152px; border-left: 1px solid var(--y-line-strong); }
+.yolo-scope .v2-empty-rail::before { content: ""; position: absolute; left: -2px; top: 26px; width: 3px; height: 48px; border-radius: 2px; background: var(--y-focus); }
+.yolo-scope .v2-empty-rail::after { content: "今日"; position: absolute; left: 14px; top: 24px; color: var(--y-text-3); font-family: var(--y-font-mono); font-size: 13px; letter-spacing: .12em; }
+.yolo-scope .v2-empty-rail span { position: absolute; left: 14px; right: 0; height: 1px; background: var(--y-line); }
+.yolo-scope .v2-empty-rail span:nth-child(1) { top: 74px; }
+.yolo-scope .v2-empty-rail span:nth-child(2) { top: 104px; }
+.yolo-scope .v2-empty-rail span:nth-child(3) { top: 134px; }
+.yolo-scope .v2-empty-copy { align-self: center; min-width: 0; }
+.yolo-scope .v2-empty-kicker { margin: 0 0 8px; color: var(--y-focus); font-size: 13px; font-weight: 700; letter-spacing: .08em; }
+.yolo-scope .v2-empty-copy h2 { margin: 0; color: var(--y-text-1); font-size: 21px; line-height: 1.3; letter-spacing: -.01em; }
+.yolo-scope .v2-empty-copy > p:not(.v2-empty-kicker) { max-width: 390px; margin: 8px 0 18px; color: var(--y-text-2); font-size: 13px; line-height: 1.7; }
+.yolo-scope .v2-empty-copy > button { min-height: 34px; padding: 0 12px; border-color: color-mix(in srgb, var(--y-focus) 42%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 8%, var(--y-surface)); color: var(--y-text-1); font-weight: 650; }
+
 /* Full and compact assistant judgment. */
 .yolo-scope .v2-judgment { min-width: 0; margin: 16px 0 22px; padding: 17px 18px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); background: var(--y-surface); box-shadow: var(--y-e1); animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
 .yolo-scope .v2-judgment--full { border-top: 2px solid color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); }
@@ -568,6 +586,11 @@ export const YOLO_CSS = `
    their own horizontal scroll surface at 340px, 480px or wide workbench sizes. */
 .yolo-scope.compact .v2-today-surface > header { padding-top: 15px; }
 .yolo-scope.compact .v2-today-surface > header h1 { font-size: 24px; }
+.yolo-scope.compact .v2-today-empty { grid-template-columns: 44px minmax(0, 1fr); gap: 16px; min-height: 204px; padding: 24px 20px; }
+.yolo-scope.compact .v2-today-empty::after { left: 80px; right: 20px; }
+.yolo-scope.compact .v2-empty-rail { width: 44px; }
+.yolo-scope.compact .v2-empty-rail::after { content: ""; }
+.yolo-scope.compact .v2-empty-copy h2 { font-size: 19px; }
 .yolo-scope.compact .v2-judgment { padding: 13px 12px; }
 .yolo-scope.compact .v2-judgment-header time { flex-basis: 100%; margin-left: 0; }
 .yolo-scope.compact .v2-today-row { grid-template-columns: 22px minmax(0, 1fr); padding-inline: 4px; }

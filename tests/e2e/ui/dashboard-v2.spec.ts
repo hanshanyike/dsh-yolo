@@ -208,7 +208,7 @@ test('即将事项支持长标题编辑，台账动作类型与摘要保持独�
   expect(await editor.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
   await page.getByRole('button', { name: '取消', exact: true }).click()
 
-  await page.getByRole('tab', { name: /台账/ }).click()
+  await page.getByRole('tab', { name: /进展/ }).click()
   const reopened = page.locator('.lg-row').filter({
     has: page.locator('.lg-type', { hasText: '重新打开' }),
     hasText: title,
@@ -245,7 +245,7 @@ test('约 340px 紧凑模式保留三主视图、More 辅助入口和完整 ARIA
 
   await page.getByRole('button', { name: '更多看板操作' }).click()
   await expect(page.getByRole('menuitem', { name: '目标与里程碑' })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: '今日台账' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '今日进展' })).toBeVisible()
   await page.keyboard.press('Escape')
 
   for (const selector of ['.p-head', '.y-tabs', '.v2-today-surface']) {

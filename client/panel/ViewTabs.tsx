@@ -23,7 +23,7 @@ const TABS: { key: ViewKey; label: string; title: string; icon: JSX.Element }[] 
   { key: 'upcoming', label: '即将', title: '即将：未来 7 天 + 滞留', icon: <IcClock size={15} /> },
   { key: 'done', label: '已完成', title: '已完成', icon: <IcCheck size={15} /> },
   { key: 'goals', label: '目标', title: '目标与里程碑', icon: <IcTarget size={15} /> },
-  { key: 'ledger', label: '台账', title: '今日台账', icon: <IcLedger size={15} /> },
+  { key: 'ledger', label: '进展', title: '今日进展', icon: <IcLedger size={15} /> },
 ]
 
 const PRIMARY_KEYS: readonly ViewKey[] = ['today', 'upcoming', 'done']

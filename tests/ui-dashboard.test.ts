@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import type Yolo from '../src/storage/index.ts'
-import { buildDashboardData, registerDashboardEndpoint } from '../src/ui/dashboard.ts'
+import { buildDashboardData, isProgressLedgerEvent, registerDashboardEndpoint } from '../src/ui/dashboard.ts'
 import type { Todo, Goal, Milestone, TimelineEvent, Preference } from '../src/storage/types.ts'
 import { localDateStr } from '../src/shared/text.ts'
 
@@ -60,6 +60,15 @@ function mockYolo(): Yolo {
 }
 
 describe('buildDashboardData', () => {
+  it('keeps operational audit events out of the user-facing progress ledger', () => {
+    for (const kind of ['reminder_fired', 'brief_generated', 'attention_seen', 'attention_suppressed', 'attention_feedback', 'todo_remind_again', 'todo_updated'] as const) {
+      expect(isProgressLedgerEvent({ kind })).toBe(false)
+    }
+    for (const kind of ['todo_created', 'todo_completed', 'todo_postponed', 'goal_progress', 'action_denied'] as const) {
+      expect(isProgressLedgerEvent({ kind })).toBe(true)
+    }
+  })
+
   it('projects all five categories with compact rows', () => {
     const data = buildDashboardData(mockYolo(), '/tmp/proj')
     expect(data.scopeKey).toBe('test/main')

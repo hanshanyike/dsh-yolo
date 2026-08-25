@@ -25,6 +25,7 @@ export type TodaySurfaceIntent =
   | { type: 'open_task'; todo: YoloTodoRowV2; scopeCwd: string }
   | { type: 'open_source'; source: JudgmentSource; todo: YoloTodoRowV2; scopeCwd: string }
   | { type: 'open_ledger' }
+  | { type: 'open_empty_chat' }
   | { type: 'review_changes' }
   | { type: 'discuss_closure' }
 
@@ -169,6 +170,20 @@ export function TodaySurface({
 
       {model.partialMessage ? <p role="status" className="v2-today-partial">{model.partialMessage}</p> : null}
 
+      {model.pristine ? (
+        <section className="v2-today-empty" aria-labelledby="v2-empty-title">
+          <div className="v2-empty-rail" aria-hidden="true">
+            <span /><span /><span />
+          </div>
+          <div className="v2-empty-copy">
+            <p className="v2-empty-kicker">管理工作与生活的助手</p>
+            <h2 id="v2-empty-title">今天没有挂起的事</h2>
+            <p>说一句要继续跟进的事，助手会把它留在轨道上；还没想清楚，也可以先聊聊。</p>
+            <button type="button" onClick={() => { onIntent({ type: 'open_empty_chat' }) }}>和助手聊聊</button>
+          </div>
+        </section>
+      ) : null}
+
       {judgment ? (
         <AssistantJudgment
           judgment={displayedJudgment ?? judgment}
@@ -201,12 +216,14 @@ export function TodaySurface({
       <TaskSection id="v2-attention-title" title="需要关注" rows={model.attentionRows} busyTodoId={busyTodoId} onIntent={onIntent} />
       <TaskSection id="v2-today-list-title" title="今天" rows={model.todayRows} busyTodoId={busyTodoId} onIntent={onIntent} />
 
-      <section aria-labelledby="v2-progress-title">
-        <h2 id="v2-progress-title">今天进展</h2>
-        <button type="button" onClick={() => { onIntent({ type: 'open_ledger' }) }}>
-          已完成 {model.progress.completed} 项 · 变更 {model.progress.changes} 条 · 来自 {model.progress.sessions} 个会话
-        </button>
-      </section>
+      {!model.pristine ? (
+        <section aria-labelledby="v2-progress-title">
+          <h2 id="v2-progress-title">今天进展</h2>
+          <button type="button" onClick={() => { onIntent({ type: 'open_ledger' }) }}>
+            已完成 {model.progress.completed} 项 · 变更 {model.progress.changes} 条 · 来自 {model.progress.sessions} 个会话
+          </button>
+        </section>
+      ) : null}
 
       {model.showClosure ? (
         <section aria-labelledby="v2-closure-title">
