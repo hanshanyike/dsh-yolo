@@ -366,7 +366,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
         <div className="msgs dock-msgs" ref={scrollOwnerRef} onScroll={observeScroll} role="log" aria-live="polite" aria-label="对话记录">
           {stream}
         </div>
-        {newestControl}
+        <div className="chat-newest-slot">{newestControl}</div>
         <div className="dock-input">
           {input}
           {hint}
@@ -389,7 +389,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
           </div>
         </div>
       </div>
-      {newestControl}
+      <div className="chat-newest-slot">{newestControl}</div>
       <footer className="capture capture--foot">
         {input}
         {hint}

@@ -64,11 +64,18 @@ test('W5/W7/W10: 长历史在 side/full 各自 owner 跟随最新且不抢用户
   await expectAtBottom(sideOwner)
 
   const input = page.getByRole('textbox', { name: '对 YOLO 说' })
+  // Establish the real user state under test. autoFocus timing is owned by the
+  // browser click lifecycle; this scenario verifies that polling/new messages
+  // preserve an input the user is actively using.
+  await input.focus()
   await expect(input).toBeFocused()
   await scrollToTop(sideOwner)
+  const sidePoll = page.waitForResponse('**/yolo/session/messages**')
   messages.push({ role: 'ai', text: sideArrival })
+  revision += 1
+  await sidePoll
   const newest = page.getByRole('button', { name: '有新消息，回到最新' })
-  await expect(newest).toBeVisible({ timeout: 6_000 })
+  await expect(newest).toBeVisible()
   await expect(input).toBeFocused()
   expect(await sideOwner.evaluate((element) => element.scrollTop)).toBe(0)
   await newest.click()
@@ -89,10 +96,14 @@ test('W5/W7/W10: 长历史在 side/full 各自 owner 跟随最新且不抢用户
   await expectAtBottom(fullOwner)
 
   const fullInput = page.getByRole('textbox', { name: '对 YOLO 说' })
+  await fullInput.focus()
   await expect(fullInput).toBeFocused()
   await scrollToTop(fullOwner)
+  const fullPoll = page.waitForResponse('**/yolo/session/messages**')
   messages.push({ role: 'ai', text: fullArrival })
-  await expect(page.getByRole('button', { name: '有新消息，回到最新' })).toBeVisible({ timeout: 6_000 })
+  revision += 1
+  await fullPoll
+  await expect(page.getByRole('button', { name: '有新消息，回到最新' })).toBeVisible()
   await expect(fullInput).toBeFocused()
   expect(await fullOwner.evaluate((element) => element.scrollTop)).toBe(0)
   await page.getByRole('button', { name: '有新消息，回到最新' }).click()
