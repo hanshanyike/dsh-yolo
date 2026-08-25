@@ -152,7 +152,10 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
   })
 
   it('resolves relative dates from the accepted input time when extraction starts after midnight', async () => {
-    let clock = new Date('2026-08-26T23:58:00+08:00').getTime()
+    // Construct both instants in the runner's host-local timezone. The
+    // extractor promises host-local calendar semantics, whether CI runs in
+    // UTC or a developer machine runs in Asia/Shanghai.
+    let clock = new Date(2026, 7, 26, 23, 58).getTime()
     vi.spyOn(Date, 'now').mockImplementation(() => clock)
     const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
     apply(ctx as never)
@@ -171,7 +174,7 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     handlers.get('agent/turn-stopping')!({ agent, turn: 1 })
     events.push({ type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } })
     agent.status = 'idle'
-    clock = new Date('2026-08-27T00:02:00+08:00').getTime()
+    clock = new Date(2026, 7, 27, 0, 2).getTime()
     releaseIdle()
     await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(1))
 
