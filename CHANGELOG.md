@@ -4,7 +4,22 @@
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.3.1-rc.1] — 2026-08-26
+
+### Changed
+
+- 对话整理改为在宿主接受本轮输入时捕获直接用户消息，轮次完成并空闲后由独立后台任务抽取；不再依赖主 agent 主动调用写入工具，也不从整段裁剪历史反推本轮承诺。
+- 快速连续轮次按会话串行延后抽取，不再因 30 秒间隔直接丢弃；抽取审计保留原始输出、模型路由、结束原因和用量。
+- 默认提醒扫描间隔从 5 分钟缩短为 30 秒；设置允许的最小间隔为 10 秒。
+- “今日台账”收敛为低噪“今日进展”：展示新增、完成、推迟、取消、合并和目标变化，提醒扫描、简报生成、已读与反馈仍保留在数据库审计中。
+- 全新无数据环境增加克制的品牌空态和“和助手聊聊”入口；真实事项、提醒或关键进展出现后立即让位。
+
+### Fixed
+
+- 修复“今天我需要完成……”等明确承诺可能因宿主生命周期接缝不稳定而没有进入看板的问题。
+- 修复“今天/明天”等日期粒度表达被规范为当天午夜、刚写入就被误判逾期并触发提醒的问题；“1 分钟后”等时长表达继续保留带时区的精确时间。
+- 修复聚合看板按工作区重复生成早报和晚报的问题；现在所有已知工作区每天各聚合一张早报和晚报。
+- 修复短时提醒可能要等待最长 5 分钟，导致右下角提示和侧边栏角标看似未触发的问题。
 
 ## [0.3.0-rc.4] — 2026-08-25
 
@@ -106,7 +121,7 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.4...HEAD
+[0.3.1-rc.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.4...v0.3.1-rc.1
 [0.3.0-rc.4]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.3...v0.3.0-rc.4
 [0.3.0-rc.3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.2...v0.3.0-rc.3
 [0.3.0-rc.2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.1...v0.3.0-rc.2
