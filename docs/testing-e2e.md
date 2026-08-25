@@ -108,7 +108,7 @@ node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
 
 | # | 根因 | 证据 | 修复 |
 |---|---|---|---|
-| 1 | `Yolo.resolve()` 每次调用都 `execSync git rev-parse`；一次 dashboard 请求触发 ~15 次 | 实测 15 次孵化 = 2985ms ≈ 端点延迟 | `perf(storage)` scope-key 按 TTL 记忆化（5s），一次请求 1 次孵化 |
+| 1 | `Yolo.resolve()` 曾在每次调用时执行 `git rev-parse`；一次 dashboard 请求触发 ~15 次 | 实测 15 次孵化 = 2985ms ≈ 端点延迟 | rc4 起 scope 只取 canonical cwd，不再孵化 Git 子进程或维护探测 TTL |
 | 2 | 每个 test 前后全量拉看板扫 `[E2E]` 行做清理（≥2 次完整 GET/用例 ×17） | cleanupPrefixed* 在 beforeEach/afterAll | `createFixtures` 按 id 追踪、O(创建数) 精准清理 |
 | 3 | 健康探测超时 3s < 实际延迟 3s+，健康宿主被判死 → `--no-host` 报"没起来"、bring-up 报"not ready" | 4080 宿主 3117ms 响应 vs probe 3000ms | 探测超时提到 15s（`YOLO_E2E_PROBE_MS` 可调） |
 | 4 | runner 生成的 patch 与 web profile 里 `dsh plugin add` 注册的同 id 行冲突 → **拉起必炸**(duplicate loader entry id: yolo) | 手动复现 boot stack | 标准 profile 捆绑路径不再打 patch；patch 只留给无标准安装的回退路径 |
@@ -258,7 +258,7 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 
 - [ ] 👤 **多区同板**：多工作区行聚合展示，`ws` 标签正确
 - [ ] 🤖 **跨区可操作**：直接完成/推迟其它工作区的行（`scope_cwd` 路由）
-- [ ] 👤 **分支隔离（A3）**：切分支记的待办不串到原分支看板（scope key 含 git 分支）
+- [ ] 👤 **工作区统一（A3）**：同一 cwd 在非 Git、main 和 feature 状态下共享待办，且不会重复成多个工作区
 
 ### 8.10 视觉与动效（VA，亮/暗各一轮）
 

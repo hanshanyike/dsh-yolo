@@ -88,6 +88,6 @@ LRU 限额的 `yolo-a-*` anchored 临时线程。两类内部 id 都不会移动
 ## 不变量
 
 1. 未知 `scope_cwd` 返回 `unknown_workspace_scope`，不能解析或注册任意路径。
-2. 看板行的动作固定到渲染时的 scope key，避免分支切换错写。
+2. 看板行的动作固定到 canonical cwd registry 的 scope key；等价路径可路由，未知路径仍拒绝。
 3. Dashboard 局部失败必须显式暴露 partial，不能静默伪装完整。
 4. resident 与 anchored 历史严格隔离；卡片“聊一聊”从空的 anchored episode 开始。

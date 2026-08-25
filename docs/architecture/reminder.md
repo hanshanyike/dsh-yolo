@@ -71,5 +71,5 @@ scheduler tick
 3. 安静时段内不能设置 `last_reminded_at`，否则离开窗口后会丢提醒。
 4. 投递失败不影响通知卡、审计事件和去重盖章。
 5. `reminder.enabled=false` 只停止到期待办扫描；简报与所选快照节奏保持独立运行。
-6. 当前 scheduler 只按 registry 中的 cwd 扫描，并未用其中的 scope key 调用 `runInScope`；分支在
-   登记后、扫描前发生切换时会按当前分支重新解析，这是现行限制。
+6. scheduler 按 canonical cwd registry 扫描；scope key 只由 cwd 决定，因此 Git 状态变化不会
+   改变扫描目标或把提醒分裂到另一份计划。

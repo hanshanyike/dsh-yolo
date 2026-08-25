@@ -75,7 +75,7 @@ YOLO reminds you through notifications and its own conversation
 ## Data and privacy
 
 YOLO stores data under `.dsh/yolo/` in each workspace and isolates it by
-workspace and Git branch. It keeps the working plan in a local database and
+workspace. Git branches in the same workspace share one plan. It keeps the working plan in a local database and
 creates readable Markdown snapshots for review and backup. Understanding a
 conversation uses the model configured in dsh, so data handling also depends on
 that model service.

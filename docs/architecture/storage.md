@@ -12,6 +12,7 @@ Markdown 快照只是可读、可 diff 的审阅投影；当前没有从快照�
 |---|---|
 | `index.ts` | `Yolo` 服务、scope handle 缓存、工作区注册表和对外 API |
 | `db.ts` | 打开 SQLite、执行 schema 和兼容旧库迁移、meta 读写 |
+| `migrate-scope.ts` | 将同一 cwd 的遗留分支库幂等合入 canonical 主库并修复冲突引用 |
 | `schema.sql` | 表、索引、FTS5 虚表及 INSERT 触发器的事实源 |
 | `repository.ts` | CRUD、去重、领域状态迁移、审计、通知、反馈和日志 |
 | `scope.ts` | 工作区/用户/全局数据目录与 scope key |
@@ -21,16 +22,21 @@ Markdown 快照只是可读、可 diff 的审阅投影；当前没有从快照�
 
 ## 作用域与生命周期
 
-- workspace scope key 为 `sha1(cwd).slice(0, 12) + '/' + gitBranch`，非 Git 目录回退 `default`。
+- workspace scope key 为 `sha1(canonical cwd).slice(0, 12) + '/default'`，与 Git 状态无关。
+  Windows identity 忽略大小写，并归一化分隔符与 `..`；registry 保留解析后的 cwd 拼写用于 payload。
 - workspace 数据位于 `<cwd>/.dsh/yolo/`；user/global 模式位于用户级 `.dsh/yolo/` 目录。
 - `scope.ts` 虽支持 user/global，设置 schema 也暴露了 `storage.scope`，但当前业务调用均未把 mode
   传给 `resolve()`，实际主链路仍固定使用 workspace scope。
 - DB 名为 `yolo-<scopeKey>.db`，路径分隔符会转为安全字符。
 - `resolve()` 懒打开并缓存句柄；服务卸载时 `close()` 关闭全部连接。
-- scope key 缓存 TTL 当前为 5 秒，避免 Windows 下每次查询都执行 `git rev-parse`。
-- `runInScope(cwd, scopeKey, fn)` 在一次同步操作中钉住 registry 中的 scope key，防止分支切换
-  将已渲染行的动作误写到另一分支。
+- scope 计算不再执行 `git rev-parse`，因此没有 Git 探测 TTL。
+- `runInScope(cwd, scopeKey, fn)` 在一次同步操作中钉住 registry 中的 canonical scope key，确保
+  已渲染行和动作使用同一个已登记工作区。
 - `listWorkspaceMeta()` 是跨工作区看板和提醒扫描的白名单来源。
+- 首次打开 cwd-only 主库时，`migrate-scope.ts` 会逐个合入同目录遗留分支库。每个源库在目标库
+  单事务导入并写入幂等 marker，源文件保留；相同 ID/不同内容会确定性改写 ID 并同步修复引用，
+  同标题事项不会自动合并。偏好按 `updated_at` 选择当前值并保留其余历史。损坏或锁定的源库
+  会带文件名报错，不能静默当成空库。
 
 ## Schema
 
@@ -39,8 +45,8 @@ Markdown 快照只是可读、可 diff 的审阅投影；当前没有从快照�
 `client_actions`、`extraction_log`、`pending_reminders`、`recall_log`，以及 FTS5 虚表
 `yolo_fts`。`pending_reminders` 仅为兼容旧库保留，当前主动提醒不再向工作会话回放它。
 
-旧库迁移由 `db.ts` 使用 `PRAGMA table_info` 后执行 `ALTER TABLE`；SQLite 不支持
-`ADD COLUMN IF NOT EXISTS`，不能把迁移简化成该语法。
+单库 schema 迁移由 `db.ts` 使用 `PRAGMA table_info` 后执行 `ALTER TABLE`；跨分支库合并由
+`migrate-scope.ts` 负责。SQLite 不支持 `ADD COLUMN IF NOT EXISTS`，不能把列迁移简化成该语法。
 
 ## 写入、状态与审计
 
