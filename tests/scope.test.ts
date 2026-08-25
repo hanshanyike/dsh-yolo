@@ -2,12 +2,16 @@
 
 import { describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { resolve, join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
 import {
+  canonicalWorkspaceCwd,
   computeScopeKey,
-  currentGitBranch,
   dbFileName,
   resolveDataDir,
+  workspaceIdentity,
 } from '../src/storage/scope.ts'
 
 describe('computeScopeKey', () => {
@@ -19,27 +23,45 @@ describe('computeScopeKey', () => {
     expect(a1).not.toBe(b)
   })
 
-  it('starts with a 12-hex cwd hash segment', () => {
+  it('is a cwd-only key with the stable default suffix', () => {
     const key = computeScopeKey('D:/proj/a')
-    expect(key).toMatch(/^[0-9a-f]{12}\//)
+    expect(key).toMatch(/^[0-9a-f]{12}\/default$/)
   })
 
-  it('falls back to "default" branch outside a git repo', () => {
-    // a fresh temp-ish path that is certainly not a git worktree
+  it('uses the same default suffix outside a git repo', () => {
     const key = computeScopeKey(join(homedir(), '.yolo-not-a-repo'))
     expect(key.endsWith('/default')).toBe(true)
   })
+
+  it('stays unchanged when the same cwd gains or switches Git state', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'yolo-git-state-'))
+    try {
+      const beforeGit = computeScopeKey(cwd)
+      execFileSync('git', ['init', cwd], { stdio: 'ignore' })
+      const afterInit = computeScopeKey(cwd)
+      execFileSync('git', ['-C', cwd, 'checkout', '-b', 'feature/scope-test'], { stdio: 'ignore' })
+      expect(computeScopeKey(cwd)).toBe(beforeGit)
+      expect(afterInit).toBe(beforeGit)
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
 })
 
-describe('currentGitBranch', () => {
-  it('resolves the branch of this repo (a git checkout)', () => {
-    const branch = currentGitBranch(process.cwd())
-    expect(branch).toBeTruthy()
-    expect(branch).not.toBe('HEAD')
+describe('workspace cwd identity', () => {
+  it('collapses equivalent Windows spelling, separators, case and dot segments', () => {
+    const variants = ['D:\\Work\\Alpha', 'd:/work/alpha', 'D:\\Work\\x\\..\\Alpha\\']
+    expect(new Set(variants.map((cwd) => workspaceIdentity(cwd, 'win32')))).toHaveLength(1)
+    expect(new Set(variants.map((cwd) => computeScopeKey(cwd, 'win32')))).toHaveLength(1)
   })
 
-  it('returns null for a nonexistent directory', () => {
-    expect(currentGitBranch('Z:/definitely/not/here')).toBeNull()
+  it('keeps POSIX path case significant', () => {
+    expect(workspaceIdentity('/work/Alpha', 'linux')).not.toBe(workspaceIdentity('/work/alpha', 'linux'))
+  })
+
+  it('retains resolved registry spelling separately from comparison identity', () => {
+    expect(canonicalWorkspaceCwd('D:/Work/Alpha', 'win32')).toBe('D:\\Work\\Alpha')
+    expect(workspaceIdentity('D:/Work/Alpha', 'win32')).toBe('d:\\work\\alpha')
   })
 })
 

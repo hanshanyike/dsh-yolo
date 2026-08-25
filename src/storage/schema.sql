@@ -1,6 +1,6 @@
 -- YOLO storage schema (SQLite + FTS5)
 -- Used by src/storage/db.ts on first open (idempotent — CREATE IF NOT EXISTS).
--- Scope: see scope.ts; scope_key = sha1(cwd) + '/' + (git branch or 'default').
+-- Scope: see scope.ts; scope_key = sha1(canonical cwd) + '/default'.
 
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;

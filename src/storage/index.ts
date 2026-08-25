@@ -11,7 +11,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { getMeta, openDb, setMeta, withTransaction, type DB } from './db.ts'
-import { computeScopeKey, resolveDataDir, dbFileName } from './scope.ts'
+import { canonicalWorkspaceCwd, computeScopeKey, resolveDataDir, dbFileName, workspaceIdentity } from './scope.ts'
+import { migrateLegacyScopeDatabases } from './migrate-scope.ts'
 import * as repo from './repository.ts'
 import { ftsRecallSearch } from './search.ts'
 import { renderSnapshot, writeSnapshot } from './snapshot.ts'
@@ -57,22 +58,11 @@ export interface ScopeHandle {
 // "invalid plugin, expect function or object with an apply method".
 export default class Yolo extends Service {
   private scopes = new Map<string, ScopeHandle>()
-  /** Workspace scopes the plugin has opened (cwd -> latest scopeKey) for cross-workspace aggregation. */
-  private readonly knownWorkspaces = new Map<string, string>()
-
-  /** Memoized scope keys: cwd -> { scopeKey, resolvedAt }. See resolve(). */
-  private scopeKeys = new Map<string, { scopeKey: string; at: number }>()
-  /** How long a memoized scope key stays fresh. computeScopeKey shells out to
-   * `git rev-parse` (~200ms on Windows); without memoization every list/count
-   * call re-spawns it — one GET /yolo/dashboard fired ~15 git processes and
-   * cost ~3s (measured). Branch switches are honored after the TTL elapses,
-   * so cross-branch memory separation keeps working. */
-  readonly SCOPE_KEY_TTL_MS = 5_000
+  /** Workspace registry keyed by canonical cwd identity, not Git state. */
+  private readonly knownWorkspaces = new Map<string, { cwd: string; scopeKey: string }>()
 
   /** Active runInScope pins (innermost last). resolve() consults these so a
-   * whole operation lands in ONE exact DB even if the git branch changes
-   * mid-operation (v0.3.3 review fix: a board row rendered from branch A must
-   * stay editable on branch A, not silently re-route to branch B's store). */
+   * whole operation lands in the exact registered workspace DB. */
   private readonly scopePins: Array<{ cwd: string; scopeKey: string }> = []
 
   constructor(ctx: Context) {
@@ -91,7 +81,6 @@ export default class Yolo extends Service {
       }
     }
     this.scopes.clear()
-    this.scopeKeys.clear()
   }
 
   /**
@@ -102,7 +91,7 @@ export default class Yolo extends Service {
    * so actions and projections hit exactly the store the user is looking at.
    */
   runInScope<T>(cwd: string, scopeKey: string, fn: () => T): T {
-    this.scopePins.push({ cwd, scopeKey })
+    this.scopePins.push({ cwd: workspaceIdentity(cwd), scopeKey })
     try {
       return fn()
     } finally {
@@ -112,34 +101,35 @@ export default class Yolo extends Service {
 
   /** Resolve (and lazily open+cache) the DB handle for a scope. */
   resolve(cwd: string, mode: ScopeMode = 'workspace'): ScopeHandle {
+    const ownerCwd = mode === 'workspace' ? canonicalWorkspaceCwd(cwd) : cwd
+    const cwdIdentity = workspaceIdentity(ownerCwd)
     const pin =
       mode === 'workspace'
-        ? [...this.scopePins].reverse().find((p) => p.cwd === cwd)
+        ? [...this.scopePins].reverse().find((p) => p.cwd === cwdIdentity)
         : undefined
-    const scopeKey = pin ? pin.scopeKey : this.scopeKeyOf(cwd, mode)
-    const dataDir = resolveDataDir(mode, cwd)
+    const scopeKey = pin ? pin.scopeKey : computeScopeKey(ownerCwd)
+    const dataDir = resolveDataDir(mode, ownerCwd)
     const dbPath = join(dataDir, dbFileName(scopeKey))
-    let h = this.scopes.get(dbPath)
+    const dbCacheKey = workspaceIdentity(dbPath)
+    let h = this.scopes.get(dbCacheKey)
     if (!h) {
       mkdirSync(dataDir, { recursive: true })
-      h = { db: openDb(dbPath), scopeKey, dataDir }
-      this.scopes.set(dbPath, h)
-      if (mode === 'workspace') this.knownWorkspaces.set(cwd, scopeKey)
+      const db = openDb(dbPath)
+      try {
+        if (mode === 'workspace') {
+          const migration = migrateLegacyScopeDatabases(db, dataDir, dbPath, scopeKey, ownerCwd)
+          for (const warning of migration.warnings) this.ctx.logger?.warn?.('[yolo] %s', warning)
+          if (migration.imported.length > 0) this.ctx.logger?.info?.('[yolo] merged legacy workspace stores: %s', migration.imported.join(', '))
+        }
+        h = { db, scopeKey, dataDir }
+        this.scopes.set(dbCacheKey, h)
+      } catch (error) {
+        db.close()
+        throw error
+      }
     }
+    if (mode === 'workspace') this.knownWorkspaces.set(cwdIdentity, { cwd: ownerCwd, scopeKey })
     return h
-  }
-
-  /** Scope key for a cwd, memoized for SCOPE_KEY_TTL_MS (per mode: only the
-   * workspace mode is memoized — user/global modes have no git dimension and
-   * their callers are rare). One process lifetime typically hits git once per
-   * TTL window per workspace instead of once per storage call. */
-  private scopeKeyOf(cwd: string, mode: ScopeMode): string {
-    if (mode !== 'workspace') return computeScopeKey(cwd)
-    const hit = this.scopeKeys.get(cwd)
-    if (hit && Date.now() - hit.at < this.SCOPE_KEY_TTL_MS) return hit.scopeKey
-    const scopeKey = computeScopeKey(cwd)
-    this.scopeKeys.set(cwd, { scopeKey, at: Date.now() })
-    return scopeKey
   }
 
   // ---- todos ----
@@ -282,7 +272,7 @@ export default class Yolo extends Service {
 
   /** Workspace scopes opened so far (aggregation registry; cwd -> scopeKey). */
   listWorkspaceMeta(): Array<{ cwd: string; scopeKey: string }> {
-    return [...this.knownWorkspaces.entries()].map(([cwd, scopeKey]) => ({ cwd, scopeKey }))
+    return [...this.knownWorkspaces.values()]
   }
   // ---- events ----
   addEvent(

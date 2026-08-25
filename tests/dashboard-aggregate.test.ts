@@ -2,7 +2,7 @@
 // ws tagging in buildDashboardData, and the GET /yolo/dashboard?scope=all path.
 
 import { describe, it, expect } from 'vitest'
-import { buildDashboardData, aggregateDashboards, registerDashboardEndpoint, workspaceLabel } from '../src/ui/dashboard.ts'
+import { buildDashboardData, aggregateDashboards, disambiguateWorkspaceLabels, registerDashboardEndpoint, workspaceLabel } from '../src/ui/dashboard.ts'
 import type Yolo from '../src/storage/index.ts'
 import type { YoloDashboardData, WorkspaceTag, YoloTodoRow, YoloLedgerEntry, YoloNotificationRow } from '../src/shared/dashboard.ts'
 import type { Todo, Goal, Milestone, TimelineEvent, Preference, Notification } from '../src/storage/types.ts'
@@ -144,6 +144,24 @@ describe('workspaceLabel', () => {
     expect(workspaceLabel('C:\\', 'x/main')).toBe('x/main')
     expect(workspaceLabel('/', 'x/main')).toBe('x/main')
   })
+
+  it('uses the shortest stable parent suffix only when basenames collide', () => {
+    const workspaces = [
+      { cwd: 'C:\\teams\\alpha\\app', scopeKey: 'a/default' },
+      { cwd: 'C:\\teams\\beta\\app', scopeKey: 'b/default' },
+      { cwd: 'C:\\teams\\beta\\service', scopeKey: 'c/default' },
+    ]
+    const labels = disambiguateWorkspaceLabels(workspaces)
+    expect([...labels.values()]).toEqual(['alpha/app', 'beta/app', 'service'])
+
+    const a = makeDashboard('a/default', 'app', [row('a', '准备甲方案', 'a/default')])
+    const b = makeDashboard('b/default', 'app', [row('b', '准备乙方案', 'b/default')])
+    a.cwd = workspaces[0]!.cwd
+    b.cwd = workspaces[1]!.cwd
+    const out = aggregateDashboards([a, b])
+    expect(out.workspaces?.map((ws) => ws.label)).toEqual(['alpha/app', 'beta/app'])
+    expect(out.todos.map((todo) => todo.ws?.label)).toEqual(['alpha/app', 'beta/app'])
+  })
 })
 
 describe('registerDashboardEndpoint scope handling', () => {
@@ -231,4 +249,3 @@ describe('registerDashboardEndpoint scope handling', () => {
     expect(data?.workspaceErrors?.[0]).toContain('database locked')
   })
 })
-

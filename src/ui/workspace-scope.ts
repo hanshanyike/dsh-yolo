@@ -1,4 +1,4 @@
-import { resolve } from 'node:path'
+import { canonicalWorkspaceCwd, workspaceIdentity } from '../storage/scope.ts'
 
 export interface WorkspaceScopeMeta {
   cwd: string
@@ -9,10 +9,20 @@ export interface WorkspaceScopeMeta {
  * the storage registry. Windows paths are case-insensitive; other platforms
  * retain their native case-sensitive behavior. */
 export function normalizeWorkspaceCwd(cwd: string): string | undefined {
-  const value = cwd.trim()
-  if (!value || value.includes('\u0000')) return undefined
-  const normalized = resolve(value)
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+  try {
+    return workspaceIdentity(cwd)
+  } catch {
+    return undefined
+  }
+}
+
+/** Registry spelling used in payloads; identity comparisons remain canonical. */
+export function resolvedWorkspaceCwd(cwd: string): string | undefined {
+  try {
+    return canonicalWorkspaceCwd(cwd)
+  } catch {
+    return undefined
+  }
 }
 
 /** Return the registry-owned cwd/scope pair, never the untrusted spelling from

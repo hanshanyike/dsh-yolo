@@ -5,6 +5,7 @@
 
 import type Yolo from '../storage/index.ts'
 import { applyYoloAction, type YoloActionRequest, type YoloActionOutcome } from '../shared/actions.ts'
+import { findKnownWorkspaceScope } from './workspace-scope.ts'
 
 export interface WebServerLike {
   register(opts: {
@@ -93,14 +94,11 @@ export function registerActionsEndpoint(ctx: { webServer?: WebServerLike }, yolo
           return
         }
         const req = body as YoloActionRequest
-        // v0.3.3 review fix: route by the workspace REGISTRY the board rows were
-        // rendered from (listWorkspaceMeta). An unknown scope_cwd must NOT
-        // silently create a "ghost workspace" store on disk; a known one is
-        // PINNED to its registered scopeKey so a git-branch switch between
-        // rendering the row and clicking it cannot re-route the action into
-        // another branch's DB ("todo not found" / cross-branch edits).
+        // Route only through the canonical cwd registry. Equivalent Windows
+        // spellings resolve to the registry-owned cwd; an unknown path must not
+        // silently create a ghost workspace store.
         const scopeHeader = typeof req.scope_cwd === 'string' && req.scope_cwd ? req.scope_cwd : undefined
-        const meta = scopeHeader ? yolo.listWorkspaceMeta().find((m) => m.cwd === scopeHeader) : undefined
+        const meta = scopeHeader ? findKnownWorkspaceScope(scopeHeader, yolo.listWorkspaceMeta()) : undefined
         if (scopeHeader && !meta) {
           send(res, 400, { ok: false, error: 'unknown workspace scope', code: 'unknown_workspace_scope' })
           return

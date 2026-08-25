@@ -187,11 +187,11 @@ describe('POST /yolo/actions', () => {
     expect(yolo.applyTodoAction).not.toHaveBeenCalled()
   })
 
-  it('a known scope_cwd routes AND pins the registered scopeKey', async () => {
+  it('an equivalent known scope_cwd routes with registry-owned spelling and key', async () => {
     const runInScope = vi.fn((_cwd: string, _scopeKey: string, fn: () => unknown) => fn())
     const listWorkspaceMeta = vi.fn(() => [{ cwd: '/ws/known', scopeKey: 'known/main' }])
     const { server, yolo } = setup({ runInScope, listWorkspaceMeta })
-    const r = await call(server, 'POST', JSON.stringify({ action: 'complete', kind: 'todo', id: 't1', scope_cwd: '/ws/known' }))
+    const r = await call(server, 'POST', JSON.stringify({ action: 'complete', kind: 'todo', id: 't1', scope_cwd: '/ws/known/child/..' }))
     expect(r.status).toBe(200)
     expect(runInScope).toHaveBeenCalledWith('/ws/known', 'known/main', expect.any(Function))
     expect(yolo.applyTodoAction).toHaveBeenCalledWith('/ws/known', { id: 't1' }, 'complete', { session_id: null })

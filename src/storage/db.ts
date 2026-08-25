@@ -82,12 +82,17 @@ function loadSchema(): string {
 /** Open (or create) a YOLO database and ensure all tables/indexes/FTS exist. */
 export function openDb(dbPath: string): DB {
   const db = new YoloDatabase(dbPath)
-  db.exec('PRAGMA journal_mode = WAL')
-  db.exec('PRAGMA foreign_keys = ON')
-  db.exec('PRAGMA synchronous = NORMAL')
-  db.exec(loadSchema())
-  migrate(db)
-  return db
+  try {
+    db.exec('PRAGMA journal_mode = WAL')
+    db.exec('PRAGMA foreign_keys = ON')
+    db.exec('PRAGMA synchronous = NORMAL')
+    db.exec(loadSchema())
+    migrate(db)
+    return db
+  } catch (error) {
+    db.close()
+    throw error
+  }
 }
 
 let savepointSequence = 0

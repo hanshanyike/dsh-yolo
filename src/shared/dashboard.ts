@@ -7,7 +7,7 @@ export { isTodoOverdue } from './due.ts'
 
 /** A workspace tag attached to aggregated rows (cross-workspace view, v0.3.0). */
 export interface WorkspaceTag {
-  /** Scope key (`sha1(cwd)/branch`) — stable, dedup anchor. */
+  /** Cwd-only scope key (`sha1(canonical cwd)/default`) — stable dedup anchor. */
   slug: string
   /** Human-friendly workspace name (e.g. the workspace folder's basename). */
   label: string

@@ -24,6 +24,7 @@ import type {
 } from '../shared/dashboard.ts'
 import { isTodoOpen, isTodoOverdue, isTodoStale } from '../shared/dashboard.ts'
 import { localDateStr, dayBounds } from '../shared/text.ts'
+import { workspaceIdentity } from '../storage/scope.ts'
 import {
   applyAttentionFeedback,
   buildDashboardSummary,
@@ -55,6 +56,24 @@ function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
 export function workspaceLabel(cwd: string, scopeKey: string): string {
   const name = cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop()
   return name && !/^[A-Za-z]:$/.test(name) ? name : scopeKey
+}
+
+/** Basename by default; duplicate basenames gain the shortest stable parent suffix. */
+export function disambiguateWorkspaceLabels(workspaces: readonly { cwd: string; scopeKey: string }[]): Map<string, string> {
+  const segments = workspaces.map(({ cwd }) => cwd.replaceAll('\\', '/').replace(/\/+$/, '').split('/').filter(Boolean))
+  const labels = new Map<string, string>()
+  for (let i = 0; i < workspaces.length; i++) {
+    const own = segments[i] ?? []
+    let depth = 1
+    while (depth < own.length) {
+      const suffix = own.slice(-depth).join('/')
+      const unique = segments.every((other, j) => j === i || other.slice(-depth).join('/') !== suffix)
+      if (unique) break
+      depth++
+    }
+    labels.set(workspaceIdentity(workspaces[i]!.cwd), own.slice(-depth).join('/') || workspaces[i]!.scopeKey)
+  }
+  return labels
 }
 
 function workspaceTag(cwd: string, scopeKey: string, supplied?: WorkspaceTag): WorkspaceTag {
@@ -300,14 +319,21 @@ function mergeRows<T extends { id: string; ws?: WorkspaceTag }>(rows: readonly T
 export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDashboardData {
   const base = list[0]
   if (!base) throw new Error('aggregateDashboards: empty dashboard list')
-  const allTodos = mergeRows(list.flatMap((d) => d.todos))
-  const allGoals = mergeRows(list.flatMap((d) => d.goals))
-  const allMilestones = mergeRows(list.flatMap((d) => d.milestones))
-  const allEvents = mergeRows(list.flatMap((d) => d.events))
-  const allPrefs = mergeRows(list.flatMap((d) => d.preferences))
-  const allLedger = mergeRows(list.flatMap((d) => d.ledger)).sort((a, b) => b.occurred_at - a.occurred_at)
-  const allNotifications = mergeRows(list.flatMap((d) => d.notifications)).sort((a, b) => b.created_at - a.created_at)
-  const workspaceAttention = list.flatMap((d) => d.attention ?? [])
+  const labels = disambiguateWorkspaceLabels(list.map((d) => ({ cwd: d.cwd, scopeKey: d.scopeKey })))
+  const labelOf = (d: YoloDashboardData): string => labels.get(workspaceIdentity(d.cwd)) ?? workspaceLabel(d.cwd, d.scopeKey)
+  const labelRow = <T extends { ws?: WorkspaceTag; source?: YoloItemSource }>(row: T, label: string): T => ({
+    ...row,
+    ...(row.ws ? { ws: { ...row.ws, label } } : {}),
+    ...(row.source?.workspace ? { source: { ...row.source, workspace: { ...row.source.workspace, label } } } : {}),
+  })
+  const allTodos = mergeRows(list.flatMap((d) => d.todos.map((row) => labelRow(row, labelOf(d)))))
+  const allGoals = mergeRows(list.flatMap((d) => d.goals.map((row) => labelRow(row, labelOf(d)))))
+  const allMilestones = mergeRows(list.flatMap((d) => d.milestones.map((row) => labelRow(row, labelOf(d)))))
+  const allEvents = mergeRows(list.flatMap((d) => d.events.map((row) => labelRow(row, labelOf(d)))))
+  const allPrefs = mergeRows(list.flatMap((d) => d.preferences.map((row) => labelRow(row, labelOf(d)))))
+  const allLedger = mergeRows(list.flatMap((d) => d.ledger.map((row) => labelRow(row, labelOf(d))))).sort((a, b) => b.occurred_at - a.occurred_at)
+  const allNotifications = mergeRows(list.flatMap((d) => d.notifications.map((row) => labelRow(row, labelOf(d))))).sort((a, b) => b.created_at - a.created_at)
+  const workspaceAttention = list.flatMap((d) => (d.attention ?? []).map((row) => labelRow(row, labelOf(d))))
 
   // health: sum the counters; weight each hit-rate by its run count
   const healths = list.map((d) => d.health).filter((h): h is YoloMemoryHealth => h !== undefined)
@@ -330,7 +356,7 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
   const wsMap = new Map<string, YoloWorkspaceInfo>()
   for (const d of list) {
     const slug = d.scopeKey
-    const label = d.todos[0]?.ws?.label ?? workspaceLabel(d.cwd, slug)
+    const label = labelOf(d)
     const existing = wsMap.get(slug)
     const count = d.todos.filter((t) => isTodoOpen(t.status)).length
     if (existing) existing.count += count
@@ -397,12 +423,12 @@ export function registerDashboardEndpoint(
         const list: YoloDashboardData[] = []
         const errors: string[] = []
         if (metas.length > 0) {
+          const labels = disambiguateWorkspaceLabels(metas)
           for (const { cwd: wcwd, scopeKey } of metas) {
             try {
-              // Pin to the REGISTRY's scopeKey so the projection (and every
-              // action later routed to this row) reads exactly this store even
-              // if the workspace's git branch switches mid-flight.
-              list.push(yolo.runInScope(wcwd, scopeKey, () => buildDashboardData(yolo, wcwd, day, { slug: scopeKey, label: workspaceLabel(wcwd, scopeKey), cwd: wcwd })))
+              // Pin to the canonical registry scope so projection and actions
+              // share one workspace identity regardless of Git state.
+              list.push(yolo.runInScope(wcwd, scopeKey, () => buildDashboardData(yolo, wcwd, day, { slug: scopeKey, label: labels.get(workspaceIdentity(wcwd)) ?? workspaceLabel(wcwd, scopeKey), cwd: wcwd })))
             } catch (e) {
               errors.push(`${workspaceLabel(wcwd, scopeKey)}: ${e instanceof Error ? e.message : String(e)}`)
               ctx.logger?.warn?.('[yolo] dashboard skipped workspace %s: %s', wcwd, e instanceof Error ? e.message : String(e))
