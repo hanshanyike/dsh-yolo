@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-yolo",
-  "version": "0.3.0-rc.3",
+  "version": "0.3.0-rc.4",
   "description": "Personal assistant plugin for deepseek-harness that organizes commitments from conversations, tracks plans across sessions, and delivers low-interruption reminders.",
   "type": "module",
   "engines": {
