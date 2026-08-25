@@ -142,7 +142,7 @@ test('W2/W11/W16: 同日精确 datetime 到时后进入逾期事实与摘要', a
   await openYoloPanel(page)
   await expect(taskFor(page, title)).toContainText(/逾期|已超过截止时间/)
   await expect(taskFor(page, futureTitle)).not.toContainText(/逾期|已超过截止时间/)
-  await expect(page.locator('.v2-today-surface > header')).toContainText(/\d+ 件逾期/)
+  await expect(page.locator('.v2-today-surface > header')).toContainText(/逾期 \d+ 件/)
 })
 
 test('捕获条快速记一条并落入看板（TA-2 快捷入口）', async ({ page }) => {

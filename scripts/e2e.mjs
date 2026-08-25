@@ -121,6 +121,7 @@ function run(cmd, argsList, opts = {}) {
 function sweepE2EFixtures() {
   const dirs = [join(ROOT, '.dsh', 'yolo'), join(homedir(), '.dsh', 'yolo')]
   let total = 0
+  let errors = 0
   for (const dir of dirs) {
     if (!existsSync(dir)) continue
     for (const file of readdirSync(dir).filter((f) => f.startsWith('yolo-') && f.endsWith('.db'))) {
@@ -128,11 +129,23 @@ function sweepE2EFixtures() {
       let db
       try {
         db = new DatabaseSync(path)
-      } catch {
+      } catch (error) {
+        errors += 1
         console.log(`[e2e] fixture sweep: skip (locked) ${path}`)
         continue
       }
-      const c = (sql) => { try { return db.prepare(sql).run().changes } catch { return 0 } }
+      const c = (sql) => {
+        try { return db.prepare(sql).run().changes }
+        catch (error) {
+          // Old pre-dashboard stores legitimately lack newer tables. There is
+          // nothing to clean in a table that never existed; lock/corruption and
+          // every other failure still make the sweep incomplete.
+          if (error instanceof Error && error.message.includes('no such table:')) return 0
+          errors += 1
+          console.log(`[e2e] fixture sweep failed in ${file}: ${error instanceof Error ? error.message : String(error)}`)
+          return 0
+        }
+      }
       const n =
         c("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id IN (SELECT id FROM todos WHERE title LIKE '[E2E]%')") +
         c("DELETE FROM attention_feedback WHERE todo_id IN (SELECT id FROM todos WHERE title LIKE '[E2E]%')") +
@@ -150,7 +163,7 @@ function sweepE2EFixtures() {
     }
   }
   console.log(total > 0 ? `[e2e] fixture sweep done: ${total} stale rows removed` : '[e2e] fixture sweep: nothing to remove')
-  return total
+  return { removed: total, errors }
 }
 
 /**
@@ -228,7 +241,7 @@ async function bringUpHost() {
     }
     step(3, '[E2E] fixture sweep (DB closed — safe window)')
     if (noClean) console.log('[e2e] skipped (--no-clean)')
-    else sweepE2EFixtures()
+    else if (sweepE2EFixtures().errors > 0) process.exit(1)
     step(4, `start installed dsh web on :${PORT}`)
     cmd = 'dsh'
     argsList = ['web', '--no-open', '--port', String(PORT)]
@@ -287,7 +300,7 @@ async function bringUpHost() {
 
     step('7b', '[E2E] fixture sweep (DB closed — safe window)')
     if (noClean) console.log('[e2e] skipped (--no-clean)')
-    else sweepE2EFixtures()
+    else if (sweepE2EFixtures().errors > 0) process.exit(1)
 
     step(8, `start dsh web (host checkout) on :${PORT}`)
     cmd = 'pnpm'
@@ -329,8 +342,8 @@ function selectionArgs() {
   const t0 = Date.now()
   let startedChild = null
   let stoppingOwnedHost = false
-  const stopOwnedHost = () => {
-    if (!startedChild || stoppingOwnedHost) return
+  const stopOwnedHost = async () => {
+    if (!startedChild || stoppingOwnedHost) return true
     stoppingOwnedHost = true
     console.log('[e2e] stopping the host this runner started')
     killTree(startedChild)
@@ -341,11 +354,19 @@ function selectionArgs() {
     // machine-labelled rows, including their FTS/audit residue. A reused host
     // is deliberately never swept because it may belong to the user.
     console.log('[e2e] post-run fixture sweep (owned host stopped)')
-    sweepE2EFixtures()
+    // A force-stopped Windows process can release SQLite/WAL handles a moment
+    // after taskkill returns. Repeat until one clean verification pass observes
+    // no errors and removes nothing; do not silently call a partial sweep good.
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const result = sweepE2EFixtures()
+      if (result.errors === 0 && result.removed === 0) return true
+      await sleep(250)
+    }
+    console.error('[e2e] post-run fixture sweep did not reach a clean verification pass')
+    return false
   }
   const stopOnSignal = (code) => {
-    stopOwnedHost()
-    process.exit(code)
+    void stopOwnedHost().finally(() => { process.exit(code) })
   }
   process.once('SIGINT', () => { stopOnSignal(130) })
   process.once('SIGTERM', () => { stopOnSignal(143) })
@@ -366,7 +387,7 @@ function selectionArgs() {
   if (sel.length) console.log(`[e2e] selection: ${sel.map((p) => p.slice(ROOT.length + 1)).join(', ')}`)
   const code = run('pnpm', ['exec', 'playwright', 'test', ...sel], { cwd: ROOT })
 
-  stopOwnedHost()
+  const cleanupOk = await stopOwnedHost()
   const report = process.env.YOLO_E2E_REPORT
   if (report && existsSync(report)) {
     try {
@@ -375,6 +396,7 @@ function selectionArgs() {
       console.log(`[e2e] report ${report}: expected=${stats.expected} unexpected=${stats.unexpected} skipped=${stats.skipped} durationMs=${Math.round(stats.duration ?? 0)}`)
     } catch { /* summary is best-effort */ }
   }
-  console.log(`[e2e] wall ${(Date.now() - t0) / 1000}s, exit ${code ?? 0}`)
-  process.exit(code ?? 0)
+  const finalCode = cleanupOk ? code ?? 0 : 1
+  console.log(`[e2e] wall ${(Date.now() - t0) / 1000}s, exit ${finalCode}`)
+  process.exit(finalCode)
 })()
