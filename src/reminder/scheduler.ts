@@ -13,7 +13,7 @@ import { DEFAULTS } from '../shared/constants.ts'
 import { localDateStr, localHm } from '../shared/text.ts'
 import { compareDueAt, isDueAtReached } from '../shared/due.ts'
 import { isTodoOpen } from '../shared/dashboard.ts'
-import { collectMorningFacts, collectEveningFacts, polishBrief, renderBriefMarkdown, type BriefKind } from './brief.ts'
+import { collectMorningFactsAcross, collectEveningFactsAcross, polishBrief, renderBriefMarkdown, type BriefKind } from './brief.ts'
 
 /**
  * Delivery into the YOLO resident thread (best effort — the card is the
@@ -140,6 +140,9 @@ export interface BriefTickResult {
 export async function runBriefTick(deps: {
   yolo: Yolo
   cwd: () => string
+  /** Workspaces represented by this one product-level brief. The notification
+   * is stored in `cwd()`, while facts and daily stamps cover this whole set. */
+  workspaces?: readonly string[]
   config: BriefConfig
   llm?: LlmRuntime
   provider?: string
@@ -150,32 +153,39 @@ export async function runBriefTick(deps: {
   const now = deps.now?.() ?? new Date()
   const hm = localHm(now)
   const today = localDateStr(now)
+  const ownerCwd = deps.cwd()
+  const cwds = [...new Set((deps.workspaces?.length ? deps.workspaces : [ownerCwd]).filter(Boolean))]
   const plan: { kind: BriefKind; time: string }[] = [
     { kind: 'morning', time: deps.config.morningTime },
     { kind: 'evening', time: deps.config.eveningTime },
   ]
   for (const { kind, time } of plan) {
     if (hm < time) continue
-    const cwd = deps.cwd()
-    if (deps.yolo.getBriefStamp(cwd, kind) === today) continue
+    // v0.3.1: the dashboard aggregates workspaces, therefore the brief is one
+    // aggregate card. A stamp in any member is enough to recognize a legacy or
+    // already-generated card; successful generation stamps every member so a
+    // later change of the active workspace cannot generate a duplicate.
+    if (cwds.some((cwd) => deps.yolo.getBriefStamp(cwd, kind) === today)) continue
     const facts =
-      kind === 'morning' ? collectMorningFacts(deps.yolo, cwd, today, now) : collectEveningFacts(deps.yolo, cwd, today)
+      kind === 'morning'
+        ? collectMorningFactsAcross(deps.yolo, cwds, today, now)
+        : collectEveningFactsAcross(deps.yolo, cwds, today)
     const fallback = renderBriefMarkdown(kind, facts, today)
     const body = deps.llm
       ? await polishBrief(deps.llm, deps.provider ?? 'deepseek', deps.config.model, kind, facts, fallback)
       : fallback
-    deps.yolo.addNotification(cwd, {
+    deps.yolo.addNotification(ownerCwd, {
       kind: 'brief',
       title: kind === 'morning' ? `早报 · ${today}` : `晚报 · ${today}`,
       body,
-      scope_cwd: cwd,
+      scope_cwd: ownerCwd,
     })
-    deps.yolo.addEvent(cwd, {
+    deps.yolo.addEvent(ownerCwd, {
       kind: 'brief_generated',
       summary: kind === 'morning' ? `生成早报（${today}）` : `生成晚报（${today}）`,
       source: 'tool',
     })
-    deps.yolo.setBriefStamp(cwd, kind, today)
+    for (const cwd of cwds) deps.yolo.setBriefStamp(cwd, kind, today)
     result[kind] = true
   }
   return result
@@ -241,7 +251,14 @@ export interface SchedulerDeps {
  * tracked cwd (the shape all pre-existing single-workspace callers get). */
 function targetsOf(deps: SchedulerDeps): ReadonlyArray<{ cwd: string }> {
   const ws = deps.workspaces?.() ?? []
-  return ws.length > 0 ? ws : [{ cwd: deps.cwd() }]
+  const candidates = ws.length > 0 ? ws : [{ cwd: deps.cwd() }]
+  const seen = new Set<string>()
+  return candidates.filter(({ cwd }) => {
+    const key = process.platform === 'win32' ? cwd.toLowerCase() : cwd
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 /** Create the scheduler (reminder tick + brief tick); returns a cleanup function. */
@@ -270,20 +287,31 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
     }
   }
 
-  // briefs run on a tighter loop so a configured minute lands on time (TD-1)
+  // Briefs are product-level aggregates. Running once per workspace creates
+  // duplicate morning/evening cards because the dashboard merges all stores.
   const briefTick = (): void => {
     if (!deps.briefs) return
-    for (const t of targetsOf(deps)) {
-      void runBriefTick({
-        yolo: deps.yolo,
-        cwd: () => t.cwd,
-        config: deps.briefs.config(),
-        llm: deps.briefs.llm,
-        provider: deps.briefs.provider,
-      }).catch((e: unknown) => {
-        ctx.logger?.warn?.('[yolo-brief] tick failed (%s): %s', t.cwd, e instanceof Error ? e.message : String(e))
-      })
-    }
+    const targets = targetsOf(deps)
+    const tracked = deps.cwd()
+    // Before the first work session, `cwd()` falls back to the host process
+    // directory, which need not be a registered workspace. Never open a ghost
+    // store merely to own the aggregate card: prefer the tracked workspace only
+    // when it is one of the scan targets, otherwise use the first real target.
+    const owner = targets.find((target) => (
+      process.platform === 'win32'
+        ? target.cwd.toLowerCase() === tracked.toLowerCase()
+        : target.cwd === tracked
+    ))?.cwd ?? targets[0]!.cwd
+    void runBriefTick({
+      yolo: deps.yolo,
+      cwd: () => owner,
+      workspaces: targets.map((target) => target.cwd),
+      config: deps.briefs.config(),
+      llm: deps.briefs.llm,
+      provider: deps.briefs.provider,
+    }).catch((e: unknown) => {
+      ctx.logger?.warn?.('[yolo-brief] tick failed (%s): %s', owner, e instanceof Error ? e.message : String(e))
+    })
   }
 
   const timer = setInterval(tick, intervalMs)

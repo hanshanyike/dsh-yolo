@@ -37,9 +37,11 @@ scheduler tick
 
 ## 简报
 
-调度器按分钟检查本地时间，并用 brief stamp 保证 morning/evening 每个本地日最多各生成一次。
-事实来自存储查询；配置了 LLM 时可润色，失败则使用确定性的 Markdown fallback。简报和提醒一样
-只进入通知卡与 YOLO 常驻线程。
+调度器按分钟检查本地时间，并对看板中的全部已知工作区生成一份聚合简报，而不是每个工作区
+各生成一份。聚合卡存入最近使用的真实工作区（尚无会话时取登记表首项），并给参与聚合的全部
+工作区写入 brief stamp；升级当天若任一工作区已有旧版 stamp，则视为当天简报已经生成，避免再次
+补发。事实来自存储查询；配置了 LLM 时可润色，失败则使用确定性的 Markdown fallback。简报和提醒
+一样只进入通知卡与 YOLO 常驻线程。
 
 ## 快照
 
@@ -53,7 +55,7 @@ scheduler tick
 | 键 | 当前默认值 | 说明 |
 |---|---:|---|
 | `reminder.enabled` | `true` | 提醒扫描开关 |
-| `reminder.checkIntervalSec` | `300` | interval 在插件启动时确定 |
+| `reminder.checkIntervalSec` | `30` | interval 在插件启动时确定；支持分钟级提醒 |
 | `reminder.aheadMin` | `0` | 提前量；0 为到点触发 |
 | `reminder.quietHoursEnabled` | `false` | 安静时段开关 |
 | `reminder.quietStart` / `quietEnd` | `22:00` / `08:00` | 支持跨午夜窗口 |

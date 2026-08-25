@@ -16,6 +16,9 @@ function mockYolo(overrides: Partial<Record<keyof Yolo, unknown>> = {}) {
     lastSnapshotDate: vi.fn(() => localDateStr()),
     writeSnapshot: vi.fn(),
     setSnapshotDate: vi.fn(),
+    listEventsBetween: vi.fn(() => []),
+    getBriefStamp: vi.fn(() => ''),
+    setBriefStamp: vi.fn(),
     ...overrides,
   } as unknown as Yolo
 }
@@ -202,6 +205,59 @@ describe('startReminderScheduler: multi-workspace scan (v0.3.3 review fix)', () 
     await vi.advanceTimersByTimeAsync(1000)
     expect(yolo.listTodos).toHaveBeenCalledWith('/ws/good')
     expect((ctx.logger.warn as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[1] === '/ws/bad')).toBe(true)
+    cleanup()
+  })
+})
+
+describe('startReminderScheduler: aggregate daily brief', () => {
+  it('generates one card containing facts from every workspace', async () => {
+    vi.useFakeTimers({ now: new Date('2026-08-25T10:00:00') })
+    const yolo = mockYolo({
+      listTodos: vi.fn((cwd: string) => [{
+        id: cwd, title: cwd === '/ws/a' ? '提交采购申请' : '确认发布窗口',
+        due_at: '2026-08-25', status: 'pending', scope_key: cwd,
+        created_at: 0, updated_at: 0,
+      }]),
+    })
+    const cleanup = startReminderScheduler(mockCtx(), {
+      yolo,
+      cwd: () => '/ws/a',
+      intervalMs: 999_999,
+      workspaces: () => [{ cwd: '/ws/a' }, { cwd: '/ws/b' }],
+      briefs: {
+        config: () => ({ enabled: true, morningTime: '09:00', eveningTime: '21:00', model: 'unused' }),
+      },
+    })
+
+    await vi.advanceTimersByTimeAsync(DEFAULTS.briefCheckIntervalSec * 1000)
+
+    expect(yolo.addNotification).toHaveBeenCalledTimes(1)
+    expect(yolo.addNotification).toHaveBeenCalledWith('/ws/a', expect.objectContaining({
+      kind: 'brief',
+      body: expect.stringContaining('今日到期 2 件：提交采购申请、确认发布窗口'),
+    }))
+    expect(yolo.setBriefStamp).toHaveBeenCalledWith('/ws/a', 'morning', '2026-08-25')
+    expect(yolo.setBriefStamp).toHaveBeenCalledWith('/ws/b', 'morning', '2026-08-25')
+    cleanup()
+  })
+
+  it('uses a registered workspace as owner before any work session is tracked', async () => {
+    vi.useFakeTimers({ now: new Date('2026-08-25T10:00:00') })
+    const yolo = mockYolo()
+    const cleanup = startReminderScheduler(mockCtx(), {
+      yolo,
+      cwd: () => 'C:/host/process-cwd',
+      intervalMs: 999_999,
+      workspaces: () => [{ cwd: 'C:/ws/real' }, { cwd: 'C:/ws/real' }],
+      briefs: {
+        config: () => ({ enabled: true, morningTime: '09:00', eveningTime: '21:00', model: 'unused' }),
+      },
+    })
+
+    await vi.advanceTimersByTimeAsync(DEFAULTS.briefCheckIntervalSec * 1000)
+
+    expect(yolo.addNotification).toHaveBeenCalledWith('C:/ws/real', expect.objectContaining({ kind: 'brief' }))
+    expect(yolo.setBriefStamp).toHaveBeenCalledTimes(1)
     cleanup()
   })
 })

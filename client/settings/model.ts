@@ -61,7 +61,7 @@ export function validateSettingsDraft(draft: YoloSettingsDraft): SettingsValidat
   const interval = wholeNumber(draft.checkIntervalSec)
   const ahead = wholeNumber(draft.aheadMin)
   if (!draft.extractionModel.trim()) issues.push({ field: 'extractionModel', message: '提取模型不能为空。' })
-  if (interval === undefined || interval < 60) issues.push({ field: 'checkIntervalSec', message: '扫描间隔必须是至少 60 秒的整数。' })
+  if (interval === undefined || interval < 10) issues.push({ field: 'checkIntervalSec', message: '扫描间隔必须是至少 10 秒的整数。' })
   if (ahead === undefined) issues.push({ field: 'aheadMin', message: '提前量必须是 0 或更大的整数分钟。' })
   for (const [field, label] of [
     ['quietStart', '安静时段开始'],

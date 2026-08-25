@@ -19,17 +19,35 @@ const nowForDay = (today: string): Date => {
   const now = new Date()
   return dueAtLocalDate(now.toISOString()) === today ? now : new Date(`${today}T12:00:00`)
 }
+
+function uniqueCwds(cwds: readonly string[]): string[] {
+  return [...new Set(cwds.filter(Boolean))]
+}
+
 /** Morning brief facts (4.4): due today + overdue + yesterday leftovers + goal moves. */
 export function collectMorningFacts(yolo: Yolo, cwd: string, today: string, now = nowForDay(today)): string[] {
-  const todos = yolo.listTodos(cwd).filter(isOpen)
+  return collectMorningFactsAcross(yolo, [cwd], today, now)
+}
+
+/** Aggregate morning facts across the same workspace set rendered by the
+ * assistant dashboard. A daily brief is a product-level digest, not one card
+ * per backing SQLite store. */
+export function collectMorningFactsAcross(
+  yolo: Yolo,
+  cwds: readonly string[],
+  today: string,
+  now = nowForDay(today),
+): string[] {
+  const targets = uniqueCwds(cwds)
+  const todos = targets.flatMap((cwd) => yolo.listTodos(cwd)).filter(isOpen)
   const dueToday = todos.filter((t) => dueAtLocalDate(t.due_at) === today)
   const overdue = todos.filter((t) => isTodoOverdue(t.due_at, t.status, now))
   const yStart = dayBounds(today).from - DAY_MS
   const leftovers = todos.filter(
     (t) => t.created_at >= yStart && t.created_at < yStart + DAY_MS && dueAtLocalDate(t.due_at) !== today,
   )
-  const goalMoves = yolo
-    .listEventsBetween(cwd, yStart, yStart + DAY_MS)
+  const goalMoves = targets
+    .flatMap((cwd) => yolo.listEventsBetween(cwd, yStart, yStart + DAY_MS))
     .filter((e) => e.kind === 'goal_progress' || e.kind === 'milestone_status')
 
   const facts: string[] = []
@@ -46,11 +64,17 @@ export function collectMorningFacts(yolo: Yolo, cwd: string, today: string, now 
 
 /** Evening brief facts (4.4): done today + newly recorded + still hanging. */
 export function collectEveningFacts(yolo: Yolo, cwd: string, today: string): string[] {
+  return collectEveningFactsAcross(yolo, [cwd], today)
+}
+
+/** Aggregate evening facts across all known workspaces into one digest. */
+export function collectEveningFactsAcross(yolo: Yolo, cwds: readonly string[], today: string): string[] {
+  const targets = uniqueCwds(cwds)
   const { from, to } = dayBounds(today)
-  const events: TimelineEvent[] = yolo.listEventsBetween(cwd, from, to)
+  const events: TimelineEvent[] = targets.flatMap((cwd) => yolo.listEventsBetween(cwd, from, to))
   const done = events.filter((e) => e.kind === 'todo_completed')
   const added = events.filter((e) => e.kind === 'todo_created')
-  const open = yolo.listTodos(cwd).filter(isOpen)
+  const open = targets.flatMap((cwd) => yolo.listTodos(cwd)).filter(isOpen)
   const next = open
     .filter((t) => t.due_at)
     .sort((a, b) => compareDueAt(a.due_at, b.due_at))

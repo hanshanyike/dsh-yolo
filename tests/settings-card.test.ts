@@ -56,7 +56,7 @@ describe('YOLO settings card model', () => {
     const current = Config(undefined)
     const scope = writableScope(current)
     const draft = settingsDraftFrom(current)
-    draft.checkIntervalSec = '30'
+    draft.checkIntervalSec = '5'
     draft.quietStart = '25:00'
 
     expect(validateSettingsDraft(draft).map((issue) => issue.field)).toEqual(['checkIntervalSec', 'quietStart'])

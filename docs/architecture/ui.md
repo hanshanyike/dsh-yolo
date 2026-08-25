@@ -31,7 +31,7 @@ loader 可能在 bundle 没有 config 段时传入 `undefined`，所以 `apply()
 | 总开关 | `enabled` | `true` |
 | extraction | `enableLLM` / `model` | `true` / `deepseek-chat` |
 | extraction | `minIntervalSec` / `minTurnChars` / `maxRunsPerDay` | `30` / `4` / `300` |
-| reminder | `enabled` / `checkIntervalSec` / `aheadMin` | `true` / `300` / `0` |
+| reminder | `enabled` / `checkIntervalSec` / `aheadMin` | `true` / `30` / `0` |
 | reminder | `quietHoursEnabled` / `quietStart` / `quietEnd` | `false` / `22:00` / `08:00` |
 | brief | `enabled` / `morningTime` / `eveningTime` / `model` | `true` / `09:00` / `21:00` / `deepseek-chat` |
 | storage | `scope` / `snapshotInterval` | `workspace` / `daily` |

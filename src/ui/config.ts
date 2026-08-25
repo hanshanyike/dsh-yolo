@@ -65,7 +65,7 @@ export const Config: z<Config> = z.object({
   }),
   reminder: z.object({
     enabled: z.boolean().default(true),
-    checkIntervalSec: z.number().default(300).min(60),
+    checkIntervalSec: z.number().default(30).min(10),
     aheadMin: z.number().default(0).min(0),
     quietHoursEnabled: z.boolean().default(false),
     quietStart: z.string().default('22:00').pattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u),

@@ -22,7 +22,9 @@ export const PROMPT_ORDER = {
 /** Default storage config. */
 export const DEFAULTS = {
   scope: 'workspace' as const,
-  reminderCheckIntervalSec: 300,
+  // Short enough for minute-scale reminders to feel on time. The sidebar feed
+  // polls every 5s, so a due card is normally visible within ~35s of its time.
+  reminderCheckIntervalSec: 30,
   reminderAheadMin: 0,
   // v0.3.2 quiet-hours gate (borrowed from dsh-memory-evolve): outside this
   // window reminders are held and fire on the first tick after the window.
@@ -60,4 +62,3 @@ export const DEFAULTS = {
   briefModel: 'deepseek-chat',
   briefCheckIntervalSec: 30,
 } as const
-

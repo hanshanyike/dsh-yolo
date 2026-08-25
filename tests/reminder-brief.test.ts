@@ -70,6 +70,46 @@ describe('runBriefTick timing (TD-1)', () => {
     expect(r).toEqual({ morning: false, evening: false })
     expect(yolo.addNotification).not.toHaveBeenCalled()
   })
+
+  it('uses one owner card and all-workspace stamps for an aggregate brief', async () => {
+    const yolo = mockYolo({
+      listTodos: vi.fn((cwd: string) => [todo({
+        id: cwd,
+        title: cwd === '/ws/a' ? '提交差旅报销' : '确认版本发布时间',
+        due_at: '2026-08-22',
+      })]),
+    })
+    const result = await runBriefTick({
+      yolo,
+      cwd: () => '/ws/a',
+      workspaces: ['/ws/a', '/ws/b'],
+      config: CONFIG,
+      now: at('10:00'),
+    })
+
+    expect(result).toEqual({ morning: true, evening: false })
+    expect(yolo.addNotification).toHaveBeenCalledTimes(1)
+    expect(yolo.addNotification).toHaveBeenCalledWith('/ws/a', expect.objectContaining({
+      body: expect.stringContaining('今日到期 2 件：提交差旅报销、确认版本发布时间'),
+    }))
+    expect(yolo.setBriefStamp).toHaveBeenCalledWith('/ws/a', 'morning', '2026-08-22')
+    expect(yolo.setBriefStamp).toHaveBeenCalledWith('/ws/b', 'morning', '2026-08-22')
+  })
+
+  it('recognizes an existing stamp in any workspace as the aggregate daily card', async () => {
+    const yolo = mockYolo({
+      getBriefStamp: vi.fn((cwd: string) => cwd === '/ws/b' ? '2026-08-22' : ''),
+    })
+    const result = await runBriefTick({
+      yolo,
+      cwd: () => '/ws/a',
+      workspaces: ['/ws/a', '/ws/b'],
+      config: CONFIG,
+      now: at('10:00'),
+    })
+    expect(result).toEqual({ morning: false, evening: false })
+    expect(yolo.addNotification).not.toHaveBeenCalled()
+  })
 })
 
 describe('brief body fallback (TD-6)', () => {
