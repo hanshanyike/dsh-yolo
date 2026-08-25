@@ -38,6 +38,7 @@ import {
   type YoloTodoRowV2,
 } from './v2/index.ts'
 import { postYoloAction, type ClientActionOutcome } from './v2/api.ts'
+import { formatDueLabel } from './due-label.ts'
 
 export interface KanbanViewProps {
   data: YoloDashboardData
@@ -210,18 +211,7 @@ function draftForTodo(todo: YoloTodoRowV2): TaskEditDraft {
 }
 
 /** Due text: 今天/明天/昨天 · 周X M/D within a week · M/D beyond (5.2). */
-function fmtDue(iso: string | null | undefined): string {
-  if (!iso) return '不限期'
-  const day = iso.slice(0, 10)
-  const today = localDateStr()
-  const time = iso.length > 10 ? ` ${iso.slice(11, 16)}` : ''
-  if (day === today) return `今天${time}`
-  if (day === addDays(today, 1)) return '明天'
-  if (day === addDays(today, -1)) return '昨天'
-  const diff = Math.round((new Date(`${day}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / DAY_MS)
-  if (diff > 1 && diff <= 7) return `周${'日一二三四五六'[new Date(`${day}T00:00:00`).getDay()]} ${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`
-  return `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}${time}`
-}
+const fmtDue = formatDueLabel
 
 /** Done-slot text「完成 HH:MM」for completed rows (5.4). */
 function fmtDone(epochMs: number): string {
@@ -710,6 +700,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
           key={k}
           type="button"
           className={`cap${filter.focus === k ? ' on' : ''}`}
+          aria-pressed={filter.focus === k}
           onClick={() => { patch({ focus: filter.focus === k ? null : k }) }}
         >
           {FOCUS_LABEL[k]} <span className="num">{counts[k]}</span>
@@ -741,7 +732,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
                     <IcCheck size={12} />完成
                   </button>
                   <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id!, due_at: nextDayStr(dueFor?.due_at ?? null), scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
-                    <IcPlusDay size={12} />+1d
+                    <IcPlusDay size={12} />推迟 1 天
                   </button>
                   <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'remind_again', kind: 'todo', id: n.todo_id!, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
                     <IcBell size={12} />再提醒
@@ -1019,7 +1010,7 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
       onKeyDown={(e) => {
         if (isRetiring || !open) return
         // Only the ROW itself owns Space/Enter/E/↑/↓. When focus sits on a
-        // child control (✓/+1d/编辑/聊一聊), let the key activate THAT control
+        // child control (完成/推迟/编辑/聊一聊), let the key activate THAT control
         // — without this guard, Space on 「聊一聊」 completed the todo.
         if (e.target !== e.currentTarget) return
         if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onComplete() }

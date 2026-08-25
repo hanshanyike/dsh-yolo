@@ -277,7 +277,7 @@ export function buildTodaySurfaceModel(
 
   return {
     dateLabel: `${now.getMonth() + 1}月${now.getDate()}日 · 周${'日一二三四五六'[now.getDay()]}`,
-    description: `${summary.open} 件挂起 · ${summary.dueToday} 件今天到期 · ${summary.overdue} 件逾期`,
+    description: `今天需回应 ${openItemKeys.size} 件 · 全部挂起 ${summary.open} 件 · 今天到期 ${summary.dueToday} 件 · 逾期 ${summary.overdue} 件`,
     partialMessage,
     judgment: primary?.view,
     judgmentScopeCwd: primary?.scopeCwd,

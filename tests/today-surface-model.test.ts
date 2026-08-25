@@ -132,7 +132,8 @@ describe('buildTodaySurfaceModel', () => {
     const model = buildTodaySurfaceModel(data, { now: NOW })
 
     expect(model.openItemCount).toBe(1)
-    expect(model.description).toContain('0 件今天到期')
+    expect(model.description).toContain('今天需回应 1 件')
+    expect(model.description).toContain('今天到期 0 件')
   })
 
   it('shows an explicit partial-data message with failed workspace details', () => {

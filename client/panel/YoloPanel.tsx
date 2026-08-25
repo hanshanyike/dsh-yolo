@@ -384,6 +384,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
           aria-haspopup="dialog"
           aria-expanded={filterMenuOpen}
           aria-controls="yolo-list-filter"
+          aria-label={`筛选事项${hasDetailFilter(filter) ? '，已启用筛选条件' : '，未启用筛选条件'}`}
           onClick={() => { setFilterMenuOpen((value) => !value) }}
         >
           <IcFilter size={13} />筛选<span className="chev"><IcChevron size={10} /></span><span className="flt-dot" />

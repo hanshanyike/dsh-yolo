@@ -11,6 +11,7 @@ import {
   type BuildTodaySurfaceOptions,
   type TodayTaskRowView,
 } from './today-surface-model.ts'
+import { formatDueLabel } from '../due-label.ts'
 
 export type TodaySurfaceIntent =
   | { type: 'quick_capture' }
@@ -86,8 +87,8 @@ function TodayTaskRow({ row, busy, onIntent }: {
               {source.label}
             </button>
           ) : <span>{source.label}</span>}
-          {row.todo.ws ? <span>{row.todo.ws.label}</span> : null}
-          {row.todo.due_at ? <time dateTime={row.todo.due_at}>{row.todo.due_at}</time> : null}
+          {row.todo.ws ? <span title={row.todo.ws.label}>{row.todo.ws.label}</span> : null}
+          {row.todo.due_at ? <time dateTime={row.todo.due_at}>{formatDueLabel(row.todo.due_at)}</time> : null}
         </div>
       </div>
       <button type="button" disabled={busy} onClick={openTask}>处理</button>
