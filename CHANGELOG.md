@@ -4,10 +4,11 @@
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.3.1-rc.3] — 2026-08-26
 
 ### Fixed
 
+- 修复在事项“更多处理”面板中点击“和助手讨论”后，旧编辑面板仍覆盖右侧锚定聊天、导致聊天无法交互的问题；现在会先退出事项面板，再把焦点交给聊天输入框。
 - 修复 Goal 模式每个自动推进 round 都可能被当成新的用户输入并重复触发承诺抽取、进而把内部执行步骤写成多个事项的问题；现在只有本轮真实用户消息可以启动抽取，Goal 期间的真人 steering 仍会单独处理。
 
 ## [0.3.1-rc.2] — 2026-08-26
@@ -136,7 +137,8 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.2...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.3...HEAD
+[0.3.1-rc.3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.2...v0.3.1-rc.3
 [0.3.1-rc.2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.1...v0.3.1-rc.2
 [0.3.1-rc.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.4...v0.3.1-rc.1
 [0.3.0-rc.4]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.0-rc.3...v0.3.0-rc.4
