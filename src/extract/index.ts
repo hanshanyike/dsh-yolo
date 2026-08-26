@@ -103,6 +103,15 @@ function completedTurn(session: Session, turn: number): boolean {
   return reason === 'completed' || reason === 'max-tokens'
 }
 
+/** Modern hosts expose a durable event log and always deliver direct-human
+ * input through agent/pre-step. Only event-log-less compatibility hosts may
+ * use the derived-message fallback; otherwise an automatic Goal round
+ * (`role=user`, `source.kind=goal`) can make every round re-extract an older
+ * human request. */
+function hasDurableEventLog(session: Session): boolean {
+  return Array.isArray((session as Session & { events?: readonly unknown[] }).events)
+}
+
 function routeFor(ctx: Context, agent: ExtractAgent, configuredModel?: string): { provider: string; model: string } {
   const selected = (ctx as { get?: (name: string) => { currentSelection(): { provider: string; model: string } } | undefined })
     .get?.('agentDefaultModel')?.currentSelection()
@@ -287,10 +296,16 @@ export function apply(ctx: Context): void {
         const derived = session.deriveMessages()
         const turnText = capturedMessages.length
           ? humanMessagesToText(capturedMessages)
-          : (() => {
-              const latest = [...derived].reverse().find((message) => message.role === 'user')
-              return latest ? messagesToText([latest]) : ''
-            })()
+          : !hasDurableEventLog(session)
+              ? (() => {
+                  // Compatibility only: never treat plugin/Goal user-role
+                  // messages as human evidence, even on an older host.
+                  const latest = [...derived].reverse().find((message) =>
+                    message.role === 'user' && message.source?.kind === 'user',
+                  )
+                  return latest ? messagesToText([latest]) : ''
+                })()
+              : ''
         if (!turnText.trim()) return
 
         const lastUserText = capturedMessages.length

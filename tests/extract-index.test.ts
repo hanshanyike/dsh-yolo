@@ -151,6 +151,88 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(yolo.listTodos(cwd).some((todo) => todo.title === '完成针对 dsh-yolo 的分析报告')).toBe(true)
   })
 
+  it('does not extract automatic Goal rounds that carry user-role goal messages', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+    apply(ctx as never)
+    const session = sessionLike('s-goal-round', cwd)
+    const goalMessage = {
+      id: 'goal-round-1', role: 'user',
+      source: { kind: 'goal', goalId: 'goal-1', revision: 1, round: 1 },
+      content: [{ type: 'text', text: '继续完成目标的下一步：补充回归测试' }],
+    }
+    session.deriveMessages().push(goalMessage)
+    Object.assign(session, {
+      events: [
+        { type: 'turn/start', data: { turn: 1 } },
+        { type: 'user/message', data: goalMessage },
+        { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+      ],
+    })
+
+    await handlers.get('agent/pre-step')!(
+      { agent: { id: session.id, session }, messages: [goalMessage], turn: 1, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [goalMessage] }),
+    )
+    await handlers.get('agent/turn-stopping')!({ agent: { id: session.id, session }, turn: 1 })
+
+    expect(stream).not.toHaveBeenCalled()
+  })
+
+  it('does not treat a Goal message as human in the event-log-less compatibility fallback', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+    apply(ctx as never)
+    const session = sessionLike('s-legacy-goal', cwd)
+    const goalMessage = {
+      id: 'legacy-goal-round', role: 'user',
+      source: { kind: 'goal', goalId: 'goal-legacy', revision: 1, round: 1 },
+      content: [{ type: 'text', text: '继续目标内部步骤' }],
+    }
+    session.deriveMessages().push(goalMessage)
+
+    await handlers.get('agent/turn-stopping')!({ agent: { id: session.id, session }, turn: 1 })
+
+    expect(stream).not.toHaveBeenCalled()
+  })
+
+  it('extracts real human steering once while ignoring Goal continuation text', async () => {
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+    apply(ctx as never)
+    const session = sessionLike('s-goal-steer', cwd)
+    const goalMessage = {
+      id: 'goal-round-2', role: 'user',
+      source: { kind: 'goal', goalId: 'goal-1', revision: 1, round: 2 },
+      content: [{ type: 'text', text: '继续完成目标的下一步：整理发布说明' }],
+    }
+    const steering = {
+      id: 'human-goal-steer', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '发布说明改到明天完成' }],
+    }
+    session.deriveMessages().push(goalMessage, steering)
+    Object.assign(session, {
+      events: [
+        { type: 'turn/start', data: { turn: 2 } },
+        { type: 'user/message', data: goalMessage },
+        { type: 'user/message', data: steering },
+        { type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } },
+      ],
+    })
+
+    await handlers.get('agent/pre-step')!(
+      { agent: { id: session.id, session }, messages: [goalMessage], turn: 2, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [goalMessage] }),
+    )
+    await handlers.get('agent/pre-step')!(
+      { agent: { id: session.id, session }, messages: [steering], turn: 2, step: 2, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [steering] }),
+    )
+    await handlers.get('agent/turn-stopping')!({ agent: { id: session.id, session }, turn: 2 })
+
+    expect(stream).toHaveBeenCalledTimes(1)
+    const call = stream.mock.calls[0][0] as { messages: Array<{ content: Array<{ text: string }> }> }
+    expect(call.messages[0].content[0].text).toContain('发布说明改到明天完成')
+    expect(call.messages[0].content[0].text).not.toContain('继续完成目标的下一步')
+  })
+
   it('resolves relative dates from the accepted input time when extraction starts after midnight', async () => {
     // Construct both instants in the runner's host-local timezone. The
     // extractor promises host-local calendar semantics, whether CI runs in

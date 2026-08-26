@@ -92,6 +92,8 @@ pre-step 捕获本轮直接用户消息（不含工具结果和插件上下文�
    ▼
 turn-stopping 只排队；等待 turn/end 与 agent 空闲后启动独立后台任务
    │
+   ├─ 本 turn 无 direct-human → 跳过（含 Goal 自动 round）
+   │
    ▼
 extract：使用捕获的本轮用户消息（有长度上限，不从整段历史反推）
    │
@@ -293,8 +295,8 @@ data/
 |---|---|---|
 | `ctx.effect` / service provide | storage | 提供 `ctx.yolo` 服务 |
 | `session/event`（`user/message` 等） | memory | 跟踪最新用户文本，以供动态召回 |
-| `agent/pre-step` | extract | 在宿主接受 step 后快照本轮直接用户消息，避免从裁剪后的完整历史反推 |
-| `agent/turn-stopping` | extract、reminder、ui | extract 只排队，待 `turn/end`/空闲后后台提取；reminder/ui 跟踪快照/工作区；均忽略 YOLO 内部线程 |
+| `agent/pre-step` | extract | 在宿主接受 step 后快照本轮 `source.kind=user` 的直接用户消息，避免从裁剪后的完整历史反推；Goal/plugin/tool 消息不是承诺证据 |
+| `agent/turn-stopping` | extract、reminder、ui | extract 只排队，待 `turn/end`/空闲后后台提取；现代宿主没有本轮 direct-human 捕获就跳过，避免 Goal 自动 round 每轮重抽取；无 event log 的兼容回退也只接受 direct-human source。reminder/ui 跟踪快照/工作区；均忽略 YOLO 内部线程 |
 | `ctx.llm.stream` | extract | 结构化提取提示词（`purpose: 'session-title'` 用于隔离辅助流量） |
 | `ctx.tools.register` | memory | 注册 `memory_*` + `yolo_query` + `yolo_action` |
 | `ctx.systemPrompt.section/context` | memory | 注入偏好前言 + 动态召回 |

@@ -21,6 +21,7 @@ agent/pre-step（只捕获本轮实际进入模型的 direct-human 消息）
   → agent/turn-stopping 仅排队，不等待辅助模型
   → agent.whenIdle() + durable turn/end completed|max-tokens
   → 跳过 YOLO 内部会话
+  → 现代宿主若本 turn 没有 direct-human 捕获则跳过（Goal 自动 round 不抽取）
   → 本轮 direct-human 输入折叠为有界文本（排除 plugin/tool context）
   → minTurnChars、每日运行次数/预算检查
   → buildKnownContext（包含已知状态、进度、到期与标题）
@@ -59,6 +60,10 @@ LLM 标题会被静默丢弃，不会让整轮失败。
   相对时间以宿主接受本轮首条直接用户输入时捕获的本地时钟为准，不能因等待 agent 空闲或抽取节流跨过
   午夜而改变“今天/明天”的日期。缺少 `agent/pre-step` 的兼容宿主才回退到后台任务启动时间。
 - aborted/blocked/error/interrupted 的 turn/end 不抽取；插件卸载会中止正在运行的后台抽取。
+- Goal continuation 是 `role=user`、`source.kind=goal` 的自动消息，每个 round 都是独立 turn；它不代表
+  新的用户承诺，不能触发抽取。现代宿主有 durable event log 时，没有本轮 direct-human 捕获就直接跳过；
+  只有无 event log 的兼容宿主可回退到 derived messages，且仍必须满足 `source.kind=user`。
+- Goal 执行期间新到达的真人 steering 仍由 `agent/pre-step` 捕获，只抽取该真人消息，不混入 Goal 文本。
 - handler 必须隔离异常并写日志，不能把抽取失败抛回 agent 循环。
 
 ## 记忆范围

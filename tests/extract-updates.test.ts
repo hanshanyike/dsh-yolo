@@ -38,10 +38,13 @@ function makeCtx(yolo: Yolo, llmText: string) {
 }
 
 function sessionLike(id: string, cwd: string) {
+  const message = { id: `${id}-human-1`, role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '对话内容' }] }
   return {
     id,
     header: { id, cwd },
-    deriveMessages: () => [{ role: 'user', content: [{ type: 'text', text: '对话内容' }] }],
+    events: [{ type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } }],
+    deriveMessages: () => [message],
+    message,
   }
 }
 
@@ -64,7 +67,13 @@ afterEach(() => {
 async function runTurn(llmJson: string, sessionId = 's1'): Promise<void> {
   const { ctx, handlers } = makeCtx(yolo, llmJson)
   apply(ctx as never)
-  await handlers.get('agent/turn-stopping')!({ agent: { session: sessionLike(sessionId, cwd) }, turn: 1 })
+  const session = sessionLike(sessionId, cwd)
+  const agent = { id: session.id, session }
+  await handlers.get('agent/pre-step')!(
+    { agent, messages: [session.message], turn: 1, step: 1, signal: new AbortController().signal },
+    async () => ({ kind: 'enter', messages: [session.message] }),
+  )
+  await handlers.get('agent/turn-stopping')!({ agent, turn: 1 })
 }
 
 describe('validateExtraction: updates array', () => {
@@ -217,7 +226,13 @@ describe('known digest carries state for targeted updates', () => {
 
     const { ctx, handlers, stream } = makeCtx(yolo, '{"todos":[]}')
     apply(ctx as never)
-    await handlers.get('agent/turn-stopping')!({ agent: { session: sessionLike('digest', cwd) }, turn: 1 })
+    const session = sessionLike('digest', cwd)
+    const agent = { id: session.id, session }
+    await handlers.get('agent/pre-step')!(
+      { agent, messages: [session.message], turn: 1, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [session.message] }),
+    )
+    await handlers.get('agent/turn-stopping')!({ agent, turn: 1 })
 
     const call = stream.mock.calls[0]?.[0] as { messages: Array<{ content: Array<{ text: string }> }> }
     const userText = call.messages[0].content[0].text
