@@ -15,11 +15,11 @@
 |---|---|---|---|---|---|
 | 单元测试 | vitest | `tests/**/*.test.ts` | 内存 SQLite / ctx stub | 纯逻辑、领域动作、插件接线 | ~15s 全量 |
 | 集成测试（HTTP 接口） | **api** | `tests/e2e/api/` | 真实宿主 HTTP（无浏览器） | 端点契约：dashboard 形状、动作路由、审计事件 | **< 10s** |
-| 端到端测试（浏览器） | **ui** | `tests/e2e/ui/` | 真实宿主 + Edge（Playwright） | 表达层与宿主集成：看板交互、主题、锚定对话 | ~1min |
+| 端到端测试（浏览器） | **ui** | `tests/e2e/ui/` | 真实宿主 + Edge（Playwright） | 表达层与宿主集成：首页/计划/历史、主题、助手对话与事项讨论 | ~1min |
 | 手工验收走查 | — | [testing.md](testing.md) 第八节 | 人肉清单 | 自动化盲区（IME、动效观感、DPI…） | 按触发范围 |
 
 选择原则：**能跑低层就不跑高层**——接口层的问题不进浏览器，交互问题才上真机。
-断言落在持久元素（看板行）而非易消失的 toast；夹具经真实端点种入，绝不 mock 存储。
+断言落在持久元素（事项行或详情）而非易消失的 toast；夹具经真实端点种入，绝不 mock 存储。
 
 ## 二、场景 × 用例矩阵
 
@@ -27,48 +27,127 @@
 
 | spec · 用例 | 场景 | 验收来源 |
 |---|---|---|
-| `api/dashboard-scope.spec.ts` | `GET /yolo/dashboard?scope=all` 返回 200 与合法看板形状（todos/notifications 数组、无 error、聚合标记带 workspace 信息） | v0.3.0/v0.3.3 聚合 |
-| `api/due-semantics.spec.ts` | date-only、精确 datetime 与终态的 overdue/attention/summary 事实一致，快速记录不会立即生成提醒 | rc.3 到期语义 |
-| `api/actions-consolidate.spec.ts` · P35 | 合并两条待办：保留方继承字段、被并方退场、台账留 `todo_consolidated` | product-design P35 |
-| `api/actions-consolidate.spec.ts` · P34 | 非法动作 400 且落 `action_denied` 审计——拒绝绝不静默 | product-design P34 |
+| `api/dashboard-scope.spec.ts` | 聚合 `single / all / partial / all-fail / recovery`；同 id 跨 scope 不误合并，workspace identity 和来源 owner 稳定 | W13 / WS-01～03 |
+| `api/dashboard-surfaces.spec.ts` | 首页安静/正常/高压和 partial；最多一个首要事项、跨区去重、计划与历史边界、最近变化过滤 | W2 / W11 / W13 / HOME / HIST |
+| `api/source-provenance.spec.ts` | 会话来源保存有界摘录、时间、工作区、session id 和可选 turn；manual/tool/legacy/旧数据降级；capability 与字段一致 | W8 / W16 / SRC-01～03 |
+| `api/due-semantics.spec.ts` | date-only、精确 datetime 与终态的 overdue/attention/summary 一致，并正确进入首页和计划投影；快速记录不会立即生成提醒 | W2 / W4 / W11 |
+| `api/actions-consolidate.spec.ts` · P35 | 合并两条待办：保留方继承字段、被并方退场、审计保留；最近变化是否展示只按产品白名单 | W3 / HIST-01 |
+| `api/actions-consolidate.spec.ts` · P34 | 非法动作 400 且落 `action_denied` 审计——拒绝绝不静默，UI 不把内部审计伪装成用户进展 | W12 / W16 |
 
 ### ui 套件 · 浏览器端到端测试
 
 | spec · 用例 | 场景 | 验收来源 |
 |---|---|---|
-| `ui/panel-flow.spec.ts` · TA-1/TA-2 | 打开助手看板按真实任务渲染今日行（到期槽读「今天」） | TA-1/TA-2, 5.2 |
-| `ui/panel-flow.spec.ts` · TA-3 | 完成 → retire → toast 带 4 秒「撤销」→ 撤销恢复原位 | TA-3, 5.4 |
-| `ui/panel-flow.spec.ts` · TA-4 | 逾期聚焦胶囊过滤：只留逾期行 | TA-4 |
-| `ui/panel-flow.spec.ts` · W2/W11/W16 | 同日精确 datetime 到时后进入逾期事实与摘要，未来时刻不误报 | rc.3 到期语义 |
-| `ui/panel-flow.spec.ts` · TA-2′ | 捕获条回车快速记一条并落入看板 | TA-2 快捷入口 |
-| `ui/panel-flow.spec.ts` · TA-5 | 卡片「聊一聊」打开侧栏对话并锚定该任务 | TA-5 |
-| `ui/panel-flow.spec.ts` · TA-6 | Esc 逐级退出：全屏对话 → 侧栏 → 关面板 | TA-6 |
-| `ui/reminder-badge.spec.ts` · TB-3~6 | 未处理提醒驱动角标+通知卡；「知道了」后归零 | TB-3~TB-6 |
-| `ui/theme-narrow.spec.ts` · W6 | 亮/暗宿主下 `--background` 解析为 light/dark | W6 |
-| `ui/theme-narrow.spec.ts` · W7 | 窄面板(<480px)紧凑态、对话直接全屏、Esc 退回 | W7 |
-| `ui/panel-v032.spec.ts` · W10 | 「聊一聊」全新锚定对话，无常驻历史泄漏 | R19/W10 |
-| `ui/chat-scroll.spec.ts` · W5/W7/W10 | 长历史 side/full 使用真实滚动 owner；首载、发送、回复贴底跟随，上翻后只提示新消息，形态切换可继续 | rc.3 对话滚动 |
-| `ui/chat-request-lifecycle.spec.ts` · W5/W7/W10 | 慢回复在 side/full、Esc 与面板重挂载后保持 accepted/stale，回复后完成且不二次 POST | rc.3 XP-08 |
-| `ui/chat-responsive-actions.spec.ts` · W5/W7/W10 | 1029×742 medium、959/960 边界、wide side/full 双向、返回 Today 焦点与 draft 保留 | rc.3 XP-09 |
-| `ui/panel-v032.spec.ts` · W9 | 看板描边从侧栏开始；侧栏区点击让面板让位 | R18/W9 |
-| `ui/ledger-panel.spec.ts` | 合并事件进入今日进展并在进展 tab 渲染 | v5 进展面 |
-| `ui/board-scope.spec.ts` | 面板头部保留工作区切换开关时可用 | v0.3.3 |
-| `ui/accessibility-feedback.spec.ts` | 关闭筛选菜单不可聚焦、行内编辑字段可读名、对话发送状态持续到回复、通知正文多行保真 | W2/W3/W5 |
-| `ui/settings-card.spec.ts` · W14 | 设置页修改 YOLO 提醒配置、保存并刷新回读；卡片无内部里程碑或错误入口说明 | rc.3 XP-06/W14 |
-| `ui/today-tab-count.spec.ts` · W2/W7/W11/W16 | Today tab 按默认表面开放事项做 workspace+todo 去重；与自然日 dueToday 可不同，partial 明示只计已加载 | rc.3 XP-07 |
+| `ui/panel-flow.spec.ts` | 默认首页、快速记录、完成/取消/推迟、四秒撤销和跨首页/计划/历史同步 | W1～W4 / W12 / W15 |
+| `ui/home-plan-history.spec.ts` | 首页安静/正常/高压；计划“今天/接下来/目标/全部”；历史“已完成/最近变化”；没有“进展”或“Agent 任务”入口 | W2 / W11 / W15 / HOME / HIST |
+| `ui/source-navigation.spec.ts` | 首页、计划、历史和详情使用同一来源行为；预览、失败不关闭、成功打开宿主会话、重开恢复；旧数据降级 | W8 / W9 / SRC-01～04 |
+| `ui/foreground-exclusion.spec.ts` | 助手对话、事项讨论、详情、来源预览互斥；返回、Esc、焦点和单/双栏语义一致 | W5 / SM-01～03 / A11Y-01 |
+| `ui/context-responsive.spec.ts` | 可用容器宽度 340、479 和阈值两侧；宿主侧栏展开/收起；resize 保留 thread/draft/pending/scroll/focus，至多一个上下文区 | W7 / RSP-01～02 |
+| `ui/item-discussion.spec.ts` | resident、事项 A、事项 B 隔离；响应式隐藏继续 episode，显式结束后新建 episode；慢回复不串写 | W10 / CHAT-01～02 |
+| `ui/chat-scroll.spec.ts` | 单栏和双栏上下文各自真实 scroll owner；首载、发送、回复贴底，上翻后只提示新消息 | W5 / W7 / W10 |
+| `ui/chat-request-lifecycle.spec.ts` | 单/双栏、Esc 和 panel 重挂载保持 accepted/stale；POST 恰好一次，旧轮询不覆盖当前前景 | W5 / W7 / W10 / CHAT-02 |
+| `ui/dashboard-trust.spec.ts` | 服务端回执、撤销、partial scope、reason/evidence/source 与 payload 一致，首页不重复 | W11～W16 |
+| `ui/reminder-badge.spec.ts` | badge 按 notification 精确计数；首页按事项聚合；handled 只处理目标通知，不完成 todo | W12 / W14 / REM-HOME-01 |
+| `ui/reminder-popup.spec.ts` | 历史提醒不补弹、新提醒不抢前景、面板已开只刷新、点击定位首页正确事项 | W14 / REM-HOME-02 |
+| `ui/theme-narrow.spec.ts` | 新表面深浅主题、340px 和 `<480px` 单栏，无横向滚动或遮挡，reduced-motion 退化正确 | W6 / W7 |
+| `ui/accessibility-feedback.spec.ts` | 一级 Tab 键盘、单栏 focus trap/背景 inert、双栏非 modal、返回焦点、live region 和所有控件可读名 | W2 / W5 / W14 / A11Y |
+| `ui/workspace-routing.spec.ts` | 同 id 双工作区真实 UI 动作只改变目标 scope；partial 切页/来源/刷新与 recovery owner 不漂移 | W13 / WS-01～03 |
+| `ui/capture-composition.spec.ts` | 中文输入法组合态 Enter 不误提交，组合结束后只新增一次真实事项 | W4 |
+| `ui/settings-card.spec.ts` | 提醒与简报设置可保存并在刷新后回读；设置不泄漏内部实现入口 | W14 |
 
-### 已知覆盖缺口（真机走查兜底）
+### 首页 / 计划 / 历史重构验收矩阵
 
-W1 控制台零报错未断言 · W4 中文 IME 组合态回车（Playwright 无法模拟组合态）· W8 今日进展数字精确性 ·
-reduced-motion / 特定 DPI。
+本矩阵是本轮信息架构、来源证据和宿主原生布局的准入契约。用例可以合并到同一个 spec，
+但每个编号都必须有独立断言，不能只在测试名中出现。任何 `if (visible)`、新旧任一界面出现即通过、
+捕获异常后继续或仅截图的软断言都不计入覆盖。
+
+#### 状态机与响应式
+
+| 编号 | 层级 | 场景与硬断言 |
+|---|---|---|
+| SM-01 | unit + ui | 参数化覆盖 `home / plan / history × none / assistant-chat / item-detail / item-discussion / source-preview` 的允许进入和返回；状态断言包含页面、前景 kind/id、thread key、呈现偏好与焦点返回目标 |
+| SM-02 | unit + ui | `item-detail → source-preview → back=item-detail`；`source-preview → discuss` 替换前景而非叠层；DOM 中任一时刻只能存在一个前景，不能只是隐藏第二个 |
+| SM-03 | unit + ui | Esc 优先级为菜单/弹层 → 当前前景 → YOLO 面板；单栏和双栏语义一致，焦点回到原触发器 |
+| RSP-01 | unit + ui + host | 可用容器宽度 340、479、阈值 `-1 / = / +1`；改变宿主侧栏宽度而非只改变 viewport，验证布局由侧栏右侧空间推导 |
+| RSP-02 | ui + host | `wide → narrow → wide` 三次往返期间保留未发草稿、pending POST（恰好一次）、thread key、上翻滚动位置/新消息提示和焦点；resize 不创建或结束讨论 |
+| A11Y-01 | ui + host | 单栏前景使用正确 dialog/focus trap 且背景 inert；双栏上下文不使用 `aria-modal=true`，主面仍可操作；返回后焦点恢复 |
+| A11Y-02 | ui + host | 一级 Tab 支持 roving tabindex、Left/Right/Home/End；live region 不因刷新重复播报；高压状态不只靠颜色；reduced-motion 生效 |
+
+#### 来源、工作区与恢复
+
+| 编号 | 层级 | 场景与硬断言 |
+|---|---|---|
+| SRC-01 | unit + api + ui | session 来源可预览并跳转；预览包含来源时间、workspace、session id 和有界 excerpt，Unicode/换行不损坏且不复制完整 transcript；capability 与字段实际可用性一致；manual/tool/legacy、`session_id=null` 和旧记录无 excerpt 明确降级；本期无精确 turn 导航时不得伪造 |
+| SRC-02 | unit + ui | 宿主 `openSession` 不可用、抛错或目标不存在时不先关闭 YOLO，保留页面/事项/来源前景并显示可恢复反馈 |
+| SRC-03 | api + ui | 两个工作区使用相同 todo id 或 session id 时，来源和动作均按 `scope_cwd` 指向正确 owner；若宿主 API 无法消歧，测试必须失败而非跳过 |
+| SRC-04 | ui + host | 导航成功后 YOLO 收起；重新打开恢复原页面、事项和来源预览，返回一步到事项；不重复发送请求 |
+| WS-01 | unit + api + ui | 同 id 双工作区同时出现；操作其中一行，请求、SQLite 与 dashboard 只改变对应 `scope_cwd` |
+| WS-02 | unit + api + ui | `partial → 切页 → 来源预览 → 动作 → 刷新 → recovery`，owner 不漂移，partial 只提示一次，恢复后数据补齐 |
+| WS-03 | unit + api | `single / all / partial / all-fail / recovery` 五态；all-fail 才整体失败，同 basename 工作区标签稳定消歧 |
+
+#### 首页、提醒、历史和对话
+
+| 编号 | 层级 | 场景与硬断言 |
+|---|---|---|
+| HOME-01 | unit + api + ui | 普通无日期积压不为填空进入首页；判断、提醒、关注和今天事项按 `(scope,id)` 只出现一次；5 个待处理项只突出 1 个，其余可达 |
+| HOME-02 | unit + api + ui | partial 计数只代表已加载数据；reason/evidence 逐字段来自 payload，客户端不拼接推断；首页没有 Agent 任务入口或区块 |
+| REM-HOME-01 | unit + ui | 同 todo 两条未处理通知时 badge 为 2、首页事项为 1；处理一条后 badge 2→1、剩余 notification/card 仍存在、todo 仍开放、只有目标 `handled_at` 非空；历史未读首载不补弹 |
+| REM-HOME-02 | ui + host | 已打开 item/source/chat 前景时新提醒不抢占；panel 已开只刷新不弹；点击 popup 定位首页对应事项且 scope/source 正确 |
+| HIST-01 | unit + api + ui | 混合 `completed / cancelled / reopened / postponed / todo_updated / reminder_fired / attention_seen / brief_generated`，断言最近变化白名单与噪声排除，摘要计数等于可见集合 |
+| HIST-02 | unit + ui | 跨工作区按全局时间排序；完成/取消分区且各自可 reopen；reopen 后退出终态集合，partial 明示 |
+| CHAT-01 | unit + ui + host | resident、事项 A、事项 B 三类历史隔离；响应式返回/隐藏后再次打开 A 继续同一 episode；显式结束清除它，之后再次讨论 A 创建新 episode；A/B/resident 不串写 |
+| CHAT-02 | unit + ui | 慢回复和旧轮询不得写入当前 B；单/双栏切换、panel unmount/remount 后 POST 恰好一次，pending/draft/scroll 连续 |
+
+#### 数据库迁移
+
+| 编号 | 层级 | 场景与硬断言 |
+|---|---|---|
+| MIG-01 | unit | 分别使用 fresh、current 和真正缺少来源列的旧单库；每种连续打开两次，迁移幂等，todo/event/session summary/notification/client action/FTS 行数与关键字段不丢，`PRAGMA integrity_check=ok` |
+| MIG-02 | unit | 真旧 legacy branch DB 不含新列，合入 canonical 两次；显式 column 清单正确处理缺失来源列，新字段降级 NULL，引用与 FTS 完整，`integrity_check=ok` |
+
+#### 旧用例迁移规则
+
+- `ledger-panel.spec.ts` 文件退役；其“事件进入用户历史并正确渲染”的价值迁移到 HIST-01/02。
+- `board-scope.spec.ts` 文件退役；跨工作区 UI 动作路由迁移到 WS-01，不能只留下 API 断言。
+- `chat-responsive-actions.spec.ts` 重写为容器驱动的单栏/双栏契约，不保留固定 959/960 产品语义。
+- `today-tab-count.spec.ts` 重写为首页准入、计数、去重、空/正常/高压和 partial；不保留 Today 一级 Tab。
+- `panel-v032.spec.ts` 的宿主侧栏让位与事项新讨论隔离必须迁移，不能因旧文件名退役而删除。
+- 完成加四秒撤销、快速记录、中文 IME、提醒角标/弹窗、深浅主题、慢回复、滚动、服务端回执、
+  partial scope、完成/取消分离和 reason/evidence 一致性全部保留原行为断言。
+
+### 已知自动化盲区（真机走查兜底）
+
+W1 控制台零报错 · W4 中文 IME 组合态 · 宿主侧栏展开/收起后的真实可用宽度 · 125%/150% DPI ·
+reduced-motion 观感 · 原会话实际身份与来源摘录人工核对。
+
+### 真实宿主重构回归（RH-01～RH-05）
+
+所有场景使用隔离 `DSH_HOME`、工作区和数据库；正文必须是真实用户语言。每次结束后检查
+`PRAGMA integrity_check=ok`、`[E2E]` 残留为零、浏览器控制台无未解释 error。
+
+| 编号 | 真实操作 | 必须证据 |
+|---|---|---|
+| RH-01 | 在普通工作会话说“明天下午三点提醒我把客户访谈纪要发给产品组” | 真实回复、唯一事项、正确 datetime、SQLite、`extraction_log`、provider/model、来源摘录/会话/工作区；打开原会话后收起，重开恢复来源预览；普通会话零提醒注入 |
+| RH-02 | 在另一普通会话说“把客户访谈纪要改到后天下午四点发” | 仍为一条事项、日期更新、旧时间不提醒、历史显示改期而非“进展”；来源规则与规格一致，不静默覆盖得无法解释 |
+| RH-03 | “和助手聊聊”发送“帮我梳理今天最需要处理的事情”；事项讨论发送“我需要先确认收件人名单，怎么安排更稳妥？” | 两处真实回复；resident 与事项讨论隔离；关闭重开和单/双栏切换不丢 pending/draft、不重复 POST；YOLO 自有对话不被抽取成重复事项 |
+| RH-04 | 普通会话说“一分钟后提醒我起身活动一下”并保持前台 | 到时恰好一张 notification；普通会话零注入/零切换；popup、badge、首页一致；“知道了”只 handled 提醒，SQLite 与审计一致 |
+| RH-05 | 真实 Edge 依次走 340px、`<480px`、标准宽和宽屏，再展开/收起宿主侧栏 | 单栏/双栏正确、至多一个上下文区、无横滚/遮挡；resize 保留页面/事项/thread/draft/scroll/focus；深浅主题、DPI、reduced-motion、Tab/Shift+Tab/Esc 可用 |
+
+### 覆盖充分门槛
+
+1. SM/SRC/WS/MIG/RSP/REM-HOME/HIST/CHAT/A11Y/HOME 每个编号都有指定层级、夹具、操作和持久化或 DOM 硬断言。
+2. 每个 P0 状态机、来源、跨工作区和迁移场景均有 normal、failure、recovery；不能只有 happy path。
+3. 关键跨边界契约至少有纯状态/投影单测和 API 或真实 Edge 两层证据；来源往返、响应式、提醒和对话必须有真实宿主证据。
+4. 最终必须通过 `pnpm check`、`pnpm test:run`、`pnpm build`、API/UI E2E、受影响 W1–W16 与 RH-01～RH-05；历史通过数量不作为当前证据。
+5. 测试后检查隔离 SQLite 完整性、夹具残留和控制台；测试名存在但没有对应断言视为未覆盖。
 
 ### 真实语义对话手工回归（RM-DIALOG-01）
 
-1. 在全新 dsh 宿主打开 YOLO →「对话」，发送“请记住：明天下午三点提醒我把客户访谈纪要发给产品组”。
+1. 在全新 dsh 宿主打开 YOLO →「和助手聊聊」，发送“请记住：明天下午三点提醒我把客户访谈纪要发给产品组”。
 2. 断言用户气泡立即出现，且回复到达前持续显示明确的处理中状态。
-3. 等待助手回复，断言看板出现“把客户访谈纪要发给产品组”，到期时间为本地次日 15:00。
+3. 等待助手回复，断言首页或计划出现“把客户访谈纪要发给产品组”，到期时间为本地次日 15:00。
 4. 继续发送“把刚才的「把客户访谈纪要发给产品组」标记完成”。
-5. 断言助手确认完成、任务进入「已完成」、不再出现在待办/即将列表。
+5. 断言助手确认完成、事项进入历史“已完成”，不再出现在首页或开放计划中。
 6. 记录两轮端到端时延及 console error/warn。用例数据需加 `[E2E]` 前缀，并在验证后清理。
 
 ### 真实语义对话回归用例库
@@ -76,7 +155,7 @@ reduced-motion / 特定 DPI。
 这组用例验证的是“用户原话 → 后台语义抽取 → 持久化 → 到期提醒”的整条链路，不以助手口头说
 “记住了”为通过。受控时钟测试固定宿主时区为 `Asia/Shanghai`，除边界用例外，把当前时间固定为
 `2026-08-26 10:00:00 +08:00`（周三）；真实宿主没有假时钟入口时，以发送时捕获的实际 `T0`
-动态换算期望，不修改系统时钟。每条正向用例至少核对看板、SQLite 中的行、
+动态换算期望，不修改系统时钟。每条正向用例至少核对首页/计划投影、SQLite 中的行、
 `extraction_log` 和到期后的通知卡；反向用例核对所有可管理实体表均无新增行。
 
 时间验收口径：
@@ -129,7 +208,7 @@ reduced-motion / 特定 DPI。
 | RM-DIALOG-21 | 已有“把演示稿发给研发”；“演示稿已经发给研发了” | 既有 todo 状态改为 done | 不创建“已经发给研发”新待办，之后不再提醒 |
 | RM-DIALOG-22 | 已有“准备周五评审”；“周五评审取消了” | 既有 todo 状态改为 cancelled | 取消与完成分离，不再提醒，不新建“取消评审”待办 |
 | RM-DIALOG-23 | 连续两轮均说“明天把访谈纪要发给产品组” | 保持一条语义相同、日期相同的 todo | 重复表述不产生重复卡片或重复通知 |
-| RM-DIALOG-24 | “提醒我今天交报告——等等，不用了，我已经交了” | 最终不留开放 todo；允许同轮创建后立即完成，或识别为无需新建 | 看板不能留下待提醒事项；同轮最终语义优先于前半句 |
+| RM-DIALOG-24 | “提醒我今天交报告——等等，不用了，我已经交了” | 最终不留开放 todo；允许同轮创建后立即完成，或识别为无需新建 | 首页和开放计划不能留下待提醒事项；同轮最终语义优先于前半句 |
 | RM-DIALOG-25 | 已有“周五提交预算表”；“周五的预算表不用再跟进了，取消吧” | 对已知 todo 发出 `status=cancelled` update，`match_title` 精确复用“周五提交预算表” | 当前 updates 没有 forget/delete 动作；本例只验业务取消，不把“忘掉/删除我的数据”偷换成取消，且绝不能新建提交预算表待办 |
 | RM-DIALOG-26 | “记住这个”“好的”“到时候再说吧” | 不新增可管理实体 | 低信息、自指和模糊闲聊必须被质量闸门拦截 |
 
@@ -277,23 +356,24 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 > 连续两次 SKIP 的项排进下个版本补验；走查结论记入提交说明。
 > 来源：testing.md §八 W1–W16、当前 API/界面契约与 v0.3.x 已交付行为。
 
-### 8.1 面板骨架与工具条
+### 8.1 首页、计划、历史与恢复
 
-- [ ] 👤 **W1 首开渲染**：骨架短暂出现后完整渲染；控制台零报错；无 Emoji 字形残留（图标全 SVG）
-- [ ] 🤖 **W2 工具条**：预设 Tab 切换 + 下划线指示；焦点胶囊过滤且计数一致；筛选菜单开合；时段 chip 出现 / ✕ 清除
-- [ ] 🤖 **TA-1 打开面板**：点侧栏 YOLO 按钮，默认看板 Tab，筛选条/聚焦/任务/台账完整
-- [ ] 👤 **TA-6 状态保持**：做过筛选与编辑后关闭再打开面板——Tab、筛选条件、侧栏收起态均保持
-- [ ] 👤 **VA-7 空库首启**：新库首启出现引导块、空态、捕获条自动聚焦，不白屏不报错
+- [ ] 👤 **W1 首开渲染**：骨架短暂出现后默认首页完整渲染；控制台零报错；无 Emoji 字形残留（图标全 SVG）
+- [ ] 🤖 **W2 一级导航**：首页 / 计划 / 历史支持下划线指示、roving tabindex 与 Left/Right/Home/End；没有“进展”或“Agent 任务”一级入口
+- [ ] 🤖 **W2 计划筛选**：计划内“今天 / 接下来 / 目标 / 全部”、高级筛选、时段 chip 与清除行为一致；首页不复用计划筛选状态
+- [ ] 👤 **W11 首页四态**：分别走空、安静、正常和高压数据；普通积压不填首页，高压只突出一个首要事项，其余仍可达
+- [ ] 👤 **W1 状态恢复**：在计划/历史打开事项、来源或讨论后关闭再打开 YOLO——原页面、筛选、事项和前景恢复；失效目标安全回首页
+- [ ] 👤 **空库首启**：新库首启出现专业空态和快速记录入口，不白屏、不虚构待处理事项、不强迫创建计划
 
-### 8.2 任务行操作
+### 8.2 事项处理与跨页面一致性
 
-- [ ] 👤 **W3 hover 操作组**：悬停浮现操作组，移出收起
-- [ ] 🤖 **TA-3 完成→撤销**：勾选完成 → retire → toast 带 4 秒「撤销」→ 撤销后原位恢复（5.4）
-- [ ] 👤 **TE-4 行内改标题**：改字回车即时刷新、快照同步、台账出现改名事件
-- [ ] 👤 **TE-5 改截止日**：逾期任务改到下周 → 移出逾期分类，胶囊计数 −1
-- [ ] 👤 **TE-6 删除确认**：删除弹确认层；确认后条目消失且 `todo_cancelled` 事件落库
-- [ ] 👤 **TE-7 进度只读**：目标折叠区无任何手动进度编辑控件
-- [ ] 👤 **TE-8 快照一致**：任意编辑后 Markdown 快照与看板一致
+- [ ] 👤 **W3 操作入口**：首页主卡、计划行、事项详情和历史终态提供符合上下文的动作；悬停、键盘和触控均可发现
+- [ ] 🤖 **W3 完成→撤销**：勾选完成 → 退出首页/计划开放集合 → 历史已完成可见 → toast 带 4 秒“撤销”→ 撤销后所有页面同步恢复
+- [ ] 👤 **W3 改标题**：改字回车即时刷新、快照同步、历史出现用户可读的改名变化且内部技术事件不暴露
+- [ ] 👤 **W3 改截止日**：逾期事项改到下周 → 移出首页到期区并进入计划“接下来”，计数与摘要同步
+- [ ] 👤 **W15 取消确认**：取消弹确认层；确认后退出开放计划并进入历史“已取消”，`todo_cancelled` 审计落库；完成与取消各自可重新打开
+- [ ] 👤 **目标进度只读**：目标区无任何没有事实来源的手动进度编辑控件
+- [ ] 👤 **快照一致**：任意编辑后 Markdown 快照、SQLite、dashboard 和三个页面一致
 
 ### 8.3 捕获条与快速记一条
 
@@ -303,41 +383,45 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 ### 8.4 提醒与角标（TB）
 
 - [ ] 👤 **TB-1 静默红线（核心）**：造 1 分钟后到期待办，另开工作会话等到期——工作会话全程无任何新增消息，提醒只出现在 YOLO 侧
-- [ ] 🤖 **TB-2 面板内通知卡**：面板开着等到期 → 看板顶部出现含标题与快捷操作的通知卡
-- [ ] 🤖 **TB-3 角标计数**：关面板等到期 → 角标数字=未处理数，处理后递减归零隐藏
-- [ ] 👤 **TB-4 对话处理提醒**：从通知卡「聊一聊」回复「推迟到明天」→ 待办改期、卡片消失、审计事件落库
+- [ ] 🤖 **TB-2 首页待处理**：面板开着等到期 → 首页“需要你处理”出现含标题、原因与快捷操作的卡片，不抢占已有详情/来源/讨论前景
+- [ ] 🤖 **TB-3 角标与聚合**：同一事项两条未处理通知时 badge 精确为 2、首页事项只显示一次；处理一条后 badge 2→1，剩余通知仍在、todo 仍开放、只有目标 `handled_at` 非空
+- [ ] 👤 **TB-4 对话处理提醒**：从提醒卡“讨论这项安排”回复“推迟到明天”→ 待办改期、对应提醒处理、最近变化可追溯
 - [ ] 👤 **TB-5 重启恢复**：提醒已投递未处理时重启插件 → 未处理提醒回放（卡/角标仍可见）
-- [ ] 👤 **TB-6 并发到期**：同一 tick 两条待办同时到期 → 各自成卡、计数正确
+- [ ] 👤 **TB-6 并发到期**：同一 tick 两个不同事项到期 → 各自进入首页待处理且 badge 正确；多个提醒不会形成告警墙
+- [ ] 🤖 **TB-7 Popup 定位**：历史未读首载不补弹；panel 已开只刷新不弹；点击新 popup 打开首页正确事项并保持 `scope_cwd/source`
 
 ### 8.5 早晚报（TD）
 
 - [ ] 👤 **TD-1 早报准点**：`morningTime` 设为下一分钟 → 到点出早报卡，含今日到期/逾期/昨日遗留/目标变化四要素
 - [ ] 👤 **TD-2 晚报内容**：到点出晚报卡，含今日完成/新增记录/还挂着的事
 - [ ] 👤 **TD-3 开关生效**：关闭晚报开关后到点不再生成，日志有跳过原因
-- [ ] 👤 **TD-4 简报追问**：早报卡「聊一聊」→ 首条上下文携带简报全文可追问
+- [ ] 👤 **TD-4 简报追问**：早报卡「和助手聊聊」→ 首条上下文携带简报全文可追问
 - [ ] 👤 **TD-5 面板未开**：简报生成时面板关闭 → 打开后通知卡可见、角标计入
 - [ ] 👤 **TD-6 空事项日**：无任何到期/完成/遗留 → 显示「今天没有到期事项」，不空白不报错
 
-### 8.6 今日进展与来源（TC）
+### 8.6 历史、最近变化与来源（TC）
 
-- [ ] 👤 **TC-1 完成入账**：勾选完成 → 今日进展「✓ 完成…」带来源徽标、头部计数 +1
-- [ ] 👤 **TC-2 对话记录入账**：工作会话说「记一下：周五体检」→ 今日进展「＋记录新待办」来源为该会话摘要
-- [ ] 👤 **TC-3 来源可区分**：多个会话各产生事件 → 徽标显示各自摘要，肉眼可辨
-- [ ] 👤 **TC-4 跨天边界**：23:59 与 00:01 各一条事件 → 分属两个自然日进展
-- [ ] 👤 **TC-5 旧数据迁移**：0.2→0.3 升级旧事件不丢，无 session 归属的显示「早期记录」
-- [ ] 👤 **TC-6 数据一致**：sqlite 直查 events 后按公开的进展事件集合过滤，条数、内容与今日进展一致；提醒触发、简报生成、已读和反馈等审计事件不显示
-- [ ] 🤖 **P35 合并入账**：合并两条待办 → 进展 tab 出现「合并：」条目（真机面）
+- [ ] 👤 **TC-1 完成与取消**：完成、取消和重新打开分别进入正确历史分区；重新打开后退出终态集合，历史更正轨迹不被静默改写
+- [ ] 👤 **TC-2 最近变化**：工作会话新增、改期、完成、取消、合并和目标变化进入“最近变化”；提醒扫描、简报生成、已读和反馈等操作型审计不显示
+- [ ] 👤 **TC-3 来源一致**：同一事项在首页、计划、历史和详情显示相同“来自：会话名 · 工作区”行为；点击先打开来源预览
+- [ ] 👤 **TC-4 来源数据边界**：预览显示来源时间、工作区、session id 和有界来源摘录；Unicode/换行不损坏，不复制或泄露完整 transcript；capability 与真实字段一致
+- [ ] 👤 **TC-5 来源降级**：manual/tool/legacy、无 session 和旧行无 excerpt 均有明确文案且不伪造可点击按钮或精确 turn 定位
+- [ ] 👤 **TC-6 来源往返**：打开原会话成功后 YOLO 收起；重开恢复原页面、事项和来源预览；宿主导航失败时不先关闭并显示可恢复反馈
+- [ ] 👤 **TC-7 跨日与全局排序**：23:59 与 00:01 的变化分属正确自然日；跨工作区最近变化按全局时间排序，partial 计数只含已加载内容
+- [ ] 🤖 **P35 合并历史**：合并两条待办 → 审计保留；最近变化按白名单展示一条用户可理解的合并摘要
 
-### 8.7 对话与会话（v0.3.2/v0.3.3）
+### 8.7 对话、详情、来源与宿主会话
 
-- [ ] 👤 **W9 会话切换让位**：看板打开时点侧栏其它会话 → 会话切前台、看板自动收起
-- [ ] 🤖 **W10 聊一聊全新对话**：无历史泄漏；发送后能收到回复到锚定对话
-- [ ] 👤 **TA-2 双视图同线程**：看板 ⇄ 对话来回切换，历史不重不漏
-- [ ] 👤 **V1 会话能力**：常驻与锚定会话真实回复模型（`{{model}}` 绑定生效）
+- [ ] 👤 **W9 会话切换让位**：YOLO 打开时点宿主侧栏其它会话 → 会话切前台、YOLO 自动收起
+- [ ] 🤖 **W10 三类历史隔离**：工作区常驻对话、事项 A 新讨论、事项 B 新讨论互不泄漏，真实模型回复进入正确线程
+- [ ] 👤 **W10 Episode 生命周期**：响应式返回或隐藏后再次打开 A 继续同一 episode；显式“结束讨论”清除它；之后再次讨论 A 创建新 episode
+- [ ] 🤖 **W5 单一前景**：事项详情、来源预览、事项讨论和助手对话任一时刻只存在一个；从来源进入讨论是替换，不叠出第三层
+- [ ] 👤 **W5 单/双栏一致**：标准宽单栏替换、足够宽时主面 + 一个上下文区；resize 只改变呈现，thread/pending/draft/scroll/focus 不丢
+- [ ] 👤 **V1 会话能力**：“和助手聊聊”与“讨论这项安排”均真实回复模型（`{{model}}` 绑定生效）；旧轮询或慢回复不串写当前事项
 
 ### 8.8 记忆抽取与召回（M9）
 
-- [ ] 👤 **抽取入库**：会话说截止时间/目标 → 时间线与看板出现对应条目，LLM 语义提取（非正则）
+- [ ] 👤 **抽取入库**：会话说截止时间/目标 → 首页或计划与历史出现对应投影，LLM 语义提取（非正则）
 - [ ] 👤 **写入质量闸门（B3）**：「好的/收到」「记住这个」等自指/低信息句不落库
 - [ ] 👤 **动态召回**：新会话提到相关主题 → 偏好/承诺注入 system 段（yolo-instructions 可查）
 - [ ] 👤 **偏好时效（R14）**：过期偏好不再注入；被替代的偏好带出处历史
@@ -352,17 +436,17 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 ### 8.10 视觉与动效（VA，亮/暗各一轮）
 
 - [ ] 👤 **VA-1** 暗色 IDE 打开面板：无亮色残留，对比度实测通过
-- [ ] 👤 **VA-2** 早晨首开：早报块淡入，首屏 ≥3 任务行，骨架 ≤300ms
+- [ ] 👤 **VA-2** 首页首开：摘要、首要事项和必要区块按层级出现；空区块不占位，骨架 ≤300ms
 - [ ] 👤 **VA-3** 完成一项：填充→retire→撤销 toast 全链路顺滑可撤销
-- [ ] 👤 **VA-4** 通知到达（面板开启中）：淡入+计数 crossfade，零布局跳动
-- [ ] 👤 **VA-5** 窄面板对话：全屏态无横向滚动，Esc 逐级退回并归还焦点
+- [ ] 👤 **VA-4** 通知到达（面板开启中）：首页摘要更新且不抢占前景；淡入+计数 crossfade，零布局跳动
+- [ ] 👤 **VA-5** 宿主原生响应式：340px、`<480px`、标准宽和宽屏均无横向滚动；至多主面 + 一个上下文区；Esc 一层退回并归还焦点
 - [ ] 👤 **VA-6** 轮询刷新：数据变化时 refresh-sweep 出现一次，未变化完全静止
-- [ ] 👤 **VA-7** 空库首启：引导块+空态+捕获条聚焦
+- [ ] 👤 **VA-7** 空库首启：专业空态、快速记录和“和助手聊聊”可用，不用普通积压填充首页
 - [ ] 👤 **VA-8** reduced-motion：动效退化为即时切换，功能零损失
 
 ### 8.11 性能与资源（本轮治理引入的行为复核）
 
-- [ ] 👤 **A1 看板响应体感**：`/yolo/dashboard` 数百 ms 到达，无 ~3s 停顿
+- [ ] 👤 **A1 助手页面响应体感**：`/yolo/dashboard` 数百 ms 到达，无 ~3s 停顿
 - [ ] 👤 **A2 无 git 进程轮询孵化**：角标 30s 周期内任务管理器无 `git.exe` 闪现
 
 ### 8.12 E2E 工具链抽查（runner 行为）
