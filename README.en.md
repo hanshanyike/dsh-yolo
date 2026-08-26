@@ -47,7 +47,7 @@ line) or Node.js 24, and make sure `pnpm` is available. If needed, run
 `corepack enable` first. Then run:
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.1-rc.3
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc1
 npx @deepseek-ai/dsh web
 ```
 
@@ -59,8 +59,21 @@ to open the dashboard.
 Pass `--no-open` to start without opening a browser. If port 3080 is occupied,
 append `--port 4080` and open
 [http://127.0.0.1:4080](http://127.0.0.1:4080). The
-[Chinese user guide](docs/usage.md) covers GitHub installation and additional
-troubleshooting.
+[Chinese user guide](docs/usage.md) covers GitHub installation, additional
+installation options, and troubleshooting.
+
+To install the current release candidate directly from source:
+
+```bash
+git clone https://github.com/hanshanyike/dsh-yolo.git
+cd dsh-yolo
+git checkout v0.4.0-rc1
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+npx @deepseek-ai/dsh plugin --profile web add .
+npx @deepseek-ai/dsh web
+```
 
 ### A typical flow
 

@@ -16,9 +16,9 @@
 
 ## 版本与标签约定
 
-- `package.json` 和 npm registry 使用不带 `v` 的 SemVer，例如 `0.3.0-rc.3`。
-- Git 标签在同一版本前加 `v`，例如 `v0.3.0-rc.3`。候选版必须使用
-  `-rc.<递增数字>`，不要写成 `0.3.0.rc3`、`0.3.0-rc3` 或重复使用已经发布的版本。
+- `package.json` 和 npm registry 使用不带 `v` 的 SemVer，例如 `0.4.0-rc1`。
+- Git 标签在同一版本前加 `v`，例如 `v0.4.0-rc1`。候选版必须使用
+  `-rc<递增数字>`，不要写成 `0.4.0.rc1`、`0.4.0-rc.1` 或重复使用已经发布的版本。
 - 下文以 `<new-version>` 和 `<new-tag>` 表示这两个值；执行前先把占位符替换成实际值，
   并确认 `<new-tag>` 严格等于 `v<new-version>`。
 - 已推送的标签和已发布的 npm 版本都视为不可变；不得强推、移动远端标签或取消发布来覆盖错误。
@@ -203,6 +203,18 @@ npx @deepseek-ai/dsh web
 
 ```bash
 npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#<tag>
+```
+
+也可以克隆对应标签并从源码安装：
+
+```bash
+git clone https://github.com/hanshanyike/dsh-yolo.git
+cd dsh-yolo
+git checkout <tag>
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+npx @deepseek-ai/dsh plugin --profile web add .
 ```
 
 GitHub 安装依赖 `prepare` 从源码构建，pnpm ≥10 可能要求使用方先把 `dsh-plugin-yolo` 加入该 profile

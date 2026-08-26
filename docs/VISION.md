@@ -1,6 +1,8 @@
 # YOLO 产品愿景
 
-> **Say it once. Keep it on track.**
+> **交代一次，持续跟进。**
+>
+> *Say it once. Keep it on track.*
 >
 > 把一次交代变成持续、可信、不过度打扰的跟进。
 

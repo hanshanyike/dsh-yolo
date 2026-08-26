@@ -4,7 +4,7 @@
 
 # YOLO
 
-**说一次，就持续跟进。**
+**交代一次，持续跟进。**
 
 *为 deepseek-harness 打造的个人助手：从对话中整理事项、跟踪变化，并在需要时提醒你。*
 
@@ -36,7 +36,7 @@ YOLO 会理解对话里的计划信息，而不是要求你使用固定关键词
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.3.1-rc.3
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc1
 npx @deepseek-ai/dsh web
 ```
 
@@ -53,6 +53,19 @@ npx @deepseek-ai/dsh web --no-open
 如果 3080 端口已被占用，可以追加 `--port 4080`，然后打开
 [http://127.0.0.1:4080](http://127.0.0.1:4080)。GitHub 安装、固定版本和常见问题见
 [使用指南](docs/usage.md)。
+
+也可以直接从源码安装当前候选版：
+
+```bash
+git clone https://github.com/hanshanyike/dsh-yolo.git
+cd dsh-yolo
+git checkout v0.4.0-rc1
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+npx @deepseek-ai/dsh plugin --profile web add .
+npx @deepseek-ai/dsh web
+```
 
 ### 一个典型流程
 
