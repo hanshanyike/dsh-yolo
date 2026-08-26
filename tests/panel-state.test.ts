@@ -6,6 +6,7 @@ afterEach(() => {
     sideChatOpen: false,
     activeChat: null,
     navigation: { route: { page: 'home' }, foreground: { kind: 'none' }, presentation: 'auto' },
+    discussionThreads: {},
   })
 })
 
@@ -60,5 +61,12 @@ describe('panel chat state', () => {
     expect(readPanelState().navigation.foreground).toMatchObject({
       item: { title: '发送纪要' }, source: { workspace: { label: 'A' } },
     })
+  })
+
+  it('retains discussion episodes defensively across panel remounts', () => {
+    writePanelState({ discussionThreads: { 'D:/ws/a\u0000todo-a': 'thread-a' } })
+    const first = readPanelState()
+    first.discussionThreads['D:/ws/a\u0000todo-a'] = 'changed'
+    expect(readPanelState().discussionThreads).toEqual({ 'D:/ws/a\u0000todo-a': 'thread-a' })
   })
 })

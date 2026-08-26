@@ -8,12 +8,12 @@
 // + audit events.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { YoloDashboardData, YoloMilestoneRow, YoloTodoRow } from '../../src/shared/dashboard.ts'
+import type { YoloDashboardData, YoloItemSource, YoloLedgerEntry, YoloMilestoneRow, YoloTodoRow } from '../../src/shared/dashboard.ts'
 import { isTodoOpen } from '../../src/shared/dashboard.ts'
+import { buildDashboardSurfaces } from '../../src/shared/dashboard-surfaces.ts'
 import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/shared/actions.ts'
 import {
   applyKanbanFilter,
-  dueBucket,
   focusCounts,
   sortForKanban,
   type FocusBucket,
@@ -25,7 +25,6 @@ import {
 } from '../design/icons.tsx'
 import type { ChatAnchor } from './ChatPane.tsx'
 import { CaptureBar } from './CaptureBar.tsx'
-import type { ViewKey } from './ViewTabs.tsx'
 import {
   TaskActionPanel,
   TodaySurface,
@@ -46,17 +45,27 @@ export interface KanbanViewProps {
   /** The persisted kanban filter (owned by the shell). */
   filter: KanbanFilter
   patchFilter: (patch: Partial<KanbanFilter>) => void
-  /** Active horizontal view tab. */
-  view: ViewKey
-  /** Switch the view (e.g. quick-add lands on 今日). */
-  onViewChange: (view: ViewKey) => void
+  /** Active product page section. */
+  surface: BoardSurfaceKey
+  /** Switch product page section (e.g. quick-add lands on Home). */
+  onSurfaceChange: (surface: BoardSurfaceKey) => void
   /** Open the side chat anchored to a card (聊一聊). */
   onOpenChat: (anchor: ChatAnchor) => void
-  /** Jump to a dsh session (ledger source badges); optional. */
-  openSession?: (sessionId: string) => void
+  /** Open a source preview in the shell's single foreground context. */
+  onOpenSource?: (todo: YoloTodoRow, source: NonNullable<YoloTodoRow['source']>) => void
+  onOpenChangeSource?: (change: YoloLedgerEntry, source: YoloItemSource) => void
   /** Increments when the header bell jumps to today's notification cards. */
   notifFocusTick?: number
 }
+
+export type BoardSurfaceKey =
+  | 'home'
+  | 'plan-today'
+  | 'plan-upcoming'
+  | 'plan-goals'
+  | 'plan-all'
+  | 'history-terminal'
+  | 'history-changes'
 
 interface EditorDraft {
   id: string
@@ -116,38 +125,6 @@ const LEDGER_KIND_LABEL: Record<string, string> = {
   attention_feedback: '反馈',
   action_denied: '未执行',
   todo_consolidated: '合并',
-}
-
-interface Section {
-  key: string
-  label: string
-  danger: boolean
-  accent: boolean
-  rows: YoloTodoRow[]
-}
-
-interface Buckets {
-  overdue: YoloTodoRow[]
-  today: YoloTodoRow[]
-  week: YoloTodoRow[]
-  stale: YoloTodoRow[]
-}
-
-/** Bucket open rows by due date. By default stale rows leave for their own
- *  bucket (the 即将 face's 滞留 section). The 今日 face opts OUT: a stale row
- *  still has a due bucket, and hiding it there made the hero/胶囊 counts show
- *  rows the list did not — an all-stale day rendered a blank board with no
- *  empty state (v0.3.3 review fix; undated rows never reach this face). */
-function partitionRows(rows: readonly YoloTodoRow[], opts: { splitStale?: boolean } = {}): Buckets {
-  const out: Buckets = { overdue: [], today: [], week: [], stale: [] }
-  for (const t of rows) {
-    if (opts.splitStale !== false && t.stale) { out.stale.push(t); continue }
-    const b = dueBucket(t)
-    if (b === 'overdue') out.overdue.push(t)
-    else if (b === 'today') out.today.push(t)
-    else out.week.push(t)
-  }
-  return out
 }
 
 function fmtTime(ms: number): string {
@@ -249,7 +226,7 @@ function cleanNotificationText(value: string): string {
 
 const noop = (): void => {}
 
-export function KanbanView({ data, refresh, filter, patchFilter, view, onViewChange, onOpenChat, openSession, notifFocusTick = 0 }: KanbanViewProps): JSX.Element {
+export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, onOpenChat, onOpenSource, onOpenChangeSource, notifFocusTick = 0 }: KanbanViewProps): JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [completing, setCompleting] = useState<Set<string>>(new Set())
@@ -268,7 +245,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   const [terminalView, setTerminalView] = useState<'completed' | 'cancelled'>('completed')
   // v0.3.2: completion/处理 animations — rows retire with a height collapse
   // before being removed, so nothing "jumps" out of the board.
-  const [retiring, setRetiring] = useState<YoloTodoRow[]>([])
+  const [, setRetiring] = useState<YoloTodoRow[]>([])
   const bodyRef = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
   const taskReturnFocus = useRef<HTMLElement | null>(null)
@@ -281,12 +258,12 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   }, [toast])
 
   // Each face scrolls independently: switching tabs starts at the top.
-  useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }) }, [view])
+  useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }) }, [surface])
 
   // The header bell jumps to today's notification cards.
   useEffect(() => {
-    if (notifFocusTick > 0 && view === 'today') notifRef.current?.scrollIntoView({ block: 'start' })
-  }, [notifFocusTick, view])
+    if (notifFocusTick > 0 && surface === 'home') notifRef.current?.scrollIntoView({ block: 'start' })
+  }, [notifFocusTick, surface])
 
   // Map every board row to its owning workspace cwd so an action on an
   // all-workspaces row routes to that scope (the board is always scope=all).
@@ -354,14 +331,11 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   }, [act])
 
   const counts = useMemo(() => focusCounts(data.todos), [data.todos])
+  const surfaces = useMemo(() => buildDashboardSurfaces(data), [data])
   const milestoneTitles = useMemo(() => data.milestones.map((m) => m.title), [data.milestones])
 
   // Per-face filtered sets — the shared filter functions stay the source of
   // truth: the face only picks the preset the tab maps to.
-  const visibleUpcoming = useMemo(
-    () => sortForKanban(applyKanbanFilter(data.todos, { ...filter, preset: 'all' })),
-    [data.todos, filter],
-  )
   const visibleDone = useMemo(
     () => sortForKanban(applyKanbanFilter(data.todos, { ...filter, preset: 'done' })),
     [data.todos, filter],
@@ -370,25 +344,18 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
     () => sortForKanban(data.todos.filter((todo) => todo.status === 'cancelled')),
     [data.todos],
   )
-
-  const retiringToShowUpcoming = useMemo(
-    () => retiring.filter((t) => !visibleUpcoming.some((v) => v.id === t.id)),
-    [retiring, visibleUpcoming],
+  const visiblePlanToday = useMemo(
+    () => sortForKanban(applyKanbanFilter(surfaces.plan.today, { ...filter, preset: 'all' })),
+    [filter, surfaces.plan.today],
   )
-
-  const upcomingSections = useMemo<Section[]>(() => {
-    const p = partitionRows(visibleUpcoming)
-    for (const t of retiringToShowUpcoming) {
-      if (t.stale) p.stale.push(t)
-      else if (dueBucket(t) === 'week') p.week.push(t)
-      else if (dueBucket(t) === 'overdue' || dueBucket(t) === 'today') { /* stays in today's face */ }
-      else p.week.push(t)
-    }
-    return [
-      { key: 'week', label: '未来 7 天', danger: false, accent: false, rows: p.week },
-      { key: 'stale', label: '滞留', danger: false, accent: false, rows: p.stale },
-    ].filter((s) => s.rows.length > 0)
-  }, [visibleUpcoming, retiringToShowUpcoming])
+  const visiblePlanUpcoming = useMemo(
+    () => sortForKanban(applyKanbanFilter(surfaces.plan.upcoming, { ...filter, preset: 'all' })),
+    [filter, surfaces.plan.upcoming],
+  )
+  const visiblePlanAll = useMemo(
+    () => sortForKanban(applyKanbanFilter(surfaces.plan.all, { ...filter, preset: 'all' })),
+    [filter, surfaces.plan.all],
+  )
 
   const openNotifications = data.notifications.filter((n) => !n.handled)
   const activeGoals = data.goals.filter((g) => g.status === 'active')
@@ -418,11 +385,11 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
     const ok = await act('quick-add', { action: 'quick_add', kind: 'todo', title: text })
     if (ok) {
       setToast({ text: '已记下 · 今日到期' })
-      onViewChange('today')
+      onSurfaceChange('home')
     }
     setQuickBusy(false)
     return ok !== null
-  }, [act, quickBusy, onViewChange])
+  }, [act, quickBusy, onSurfaceChange])
 
   const openTaskPanel = useCallback((next: OpenTaskPanel): void => {
     taskReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -495,11 +462,11 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
       return
     }
     if (intent.type === 'open_source') {
-      if (intent.source.sessionId) openSession?.(intent.source.sessionId)
+      if (intent.todo.source) onOpenSource?.(intent.todo, intent.todo.source)
       return
     }
     if (intent.type === 'open_ledger' || intent.type === 'review_changes') {
-      onViewChange('ledger')
+      onSurfaceChange('history-changes')
       return
     }
     if (intent.type === 'discuss_closure') {
@@ -556,7 +523,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
         openJudgmentPanel(intent.todo, binding)
       }
     }
-  }, [act, completeTodo, data, onOpenChat, onViewChange, openJudgmentPanel, openSession, openTaskPanel])
+  }, [act, completeTodo, data, onOpenChat, onOpenSource, onSurfaceChange, openJudgmentPanel, openTaskPanel])
 
   const handleTaskAction = useCallback((intent: TaskActionIntent): void => {
     if (!taskPanel) return
@@ -643,7 +610,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
     })()
   }, [act, taskPanel, taskUndo])
 
-  const rowActions = (t: YoloTodoRow): { onComplete: () => void; onAct: (action: string, extra?: { due_at?: string }) => void; onEdit: () => void; onChat: () => void } => ({
+  const rowActions = (t: YoloTodoRow): { onComplete: () => void; onAct: (action: string, extra?: { due_at?: string }) => void; onEdit: () => void; onChat: () => void; onSource?: () => void } => ({
     onComplete: () => { void completeTodo(t) },
     onAct: (action, extra) => { void act(t.id, { action, kind: 'todo', id: t.id, scope_cwd: t.scope_cwd ?? t.ws?.cwd, ...extra }) },
     onEdit: () => { setEditor({ id: t.id, scopeCwd: t.scope_cwd ?? t.ws?.cwd, title: t.title, due: dayOf(t.due_at), priority: t.priority ?? '', milestoneTitle: t.milestone_title ?? '' }) },
@@ -661,6 +628,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
         } : undefined,
       })
     },
+    onSource: t.source ? () => { onOpenSource?.(t, t.source!) } : undefined,
   })
 
   const renderRow = (t: YoloTodoRow, opts: { retiring?: boolean } = {}): JSX.Element => (
@@ -692,17 +660,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
         {...rowActions(t)}
       />
     )
-  )
-
-  const renderSection = (s: Section, opts: { retiringIds: Set<string> }): JSX.Element => (
-    <section key={s.key} className={`sec${s.danger ? ' danger' : ''}${s.accent ? ' today' : ''}`} aria-label={`${s.label} ${s.rows.length}`}>
-      <div className="sec-head">
-        <span className="sec-name"><span className="dot" />{s.label}</span>
-        <span className={`sec-count${s.danger ? ' danger' : ''}`}>{s.rows.length}</span>
-        <span className="sec-rule" />
-      </div>
-      {s.rows.map((t) => renderRow(t, { retiring: opts.retiringIds.has(t.id) }))}
-    </section>
   )
 
   const caps = (
@@ -777,13 +734,11 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
     </div>
   )
 
-  const retiringUpcoming = useMemo(() => new Set(retiringToShowUpcoming.map((t) => t.id)), [retiringToShowUpcoming])
-
   return (
     <div
-      id={`yolo-view-${view}`}
+      id={`yolo-surface-${surface}`}
       role="tabpanel"
-      aria-labelledby={`yolo-tab-${view}`}
+      aria-label="助手内容"
       style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
     >
       <div className="p-body" ref={bodyRef} aria-hidden={taskPanel ? true : undefined}>
@@ -795,7 +750,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
             </div>
           )}
 
-          {view === 'today' && (
+          {surface === 'home' && (
             <>
               <TodaySurface
                 data={data}
@@ -808,21 +763,50 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
             </>
           )}
 
-          {view === 'upcoming' && (
+          {surface === 'plan-today' && (
             <>
-              <div className="heading"><h2>即将</h2><span className="hint">未来 7 天与更远</span></div>
-              {caps}
-              {upcomingSections.map((s) => renderSection(s, { retiringIds: retiringUpcoming }))}
-              {visibleUpcoming.length === 0 && (
+              <div className="heading"><h2>今天</h2><span className="hint">{visiblePlanToday.length} 件</span></div>
+              {visiblePlanToday.length > 0 ? (
+                <section className="sec today" aria-label={`今天 ${visiblePlanToday.length}`}>
+                  {visiblePlanToday.map((todo) => renderRow(todo))}
+                </section>
+              ) : (
+                <div className="empty"><h4>今天没有待处理安排</h4><p>逾期和今天到期的事项会出现在这里。</p></div>
+              )}
+            </>
+          )}
+
+          {surface === 'plan-upcoming' && (
+            <>
+              <div className="heading"><h2>接下来</h2><span className="hint">有明确日期的后续安排</span></div>
+              {visiblePlanUpcoming.length > 0 ? (
+                <section className="sec" aria-label={`接下来 ${visiblePlanUpcoming.length}`}>
+                  {visiblePlanUpcoming.map((todo) => renderRow(todo))}
+                </section>
+              ) : (
                 <div className="empty">
                   <h4>没有即将到来的事</h4>
-                  <p>未来 7 天这里会是空的。</p>
+                  <p>有明确后续日期的事项会出现在这里。</p>
                 </div>
               )}
             </>
           )}
 
-          {view === 'done' && (
+          {surface === 'plan-all' && (
+            <>
+              <div className="heading"><h2>全部计划</h2><span className="hint">{visiblePlanAll.length} 件开放事项</span></div>
+              {caps}
+              {visiblePlanAll.length > 0 ? (
+                <section className="sec" aria-label={`全部计划 ${visiblePlanAll.length}`}>
+                  {visiblePlanAll.map((todo) => renderRow(todo))}
+                </section>
+              ) : (
+                <div className="empty"><h4>没有开放事项</h4><p>你记录的计划会保留在这里。</p></div>
+              )}
+            </>
+          )}
+
+          {surface === 'history-terminal' && (
             <>
               <div className="heading"><h2>{terminalView === 'completed' ? '已完成' : '已取消'}</h2><span className="hint">{terminalView === 'completed' ? visibleDone.length : visibleCancelled.length} 件</span></div>
               <div className="caps" role="group" aria-label="终态事项筛选">
@@ -846,6 +830,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
                       onAct={noop}
                       onEdit={noop}
                       onChat={noop}
+                      onSource={t.source ? () => { onOpenSource?.(t, t.source!) } : undefined}
                       onReopen={() => { void act(`reopen-${t.id}`, { action: 'reopen', kind: 'todo', id: t.id, scope_cwd: t.scope_cwd ?? t.ws?.cwd }) }}
                     />
                   ))}
@@ -854,7 +839,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
             </>
           )}
 
-          {view === 'goals' && (
+          {surface === 'plan-goals' && (
             <>
               <div className="heading"><h2>目标与里程碑</h2><span className="hint">{activeGoals.length} 目标 · 平均 {avgGoalPct}% · 进度只读</span></div>
               {activeGoals.map((g) => (
@@ -906,20 +891,20 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
             </>
           )}
 
-          {view === 'ledger' && (
+          {surface === 'history-changes' && (
             <>
               <div className="heading">
-                <h2>今日进展</h2>
-                <span className="hint">{data.ledger.length} 条 · {data.ledgerSessions} 会话 · 点会话标签跳回</span>
+                <h2>最近变化</h2>
+                <span className="hint">{surfaces.history.recentChanges.length} 条用户可见变化</span>
               </div>
-              {data.ledger.length === 0 ? (
+              {surfaces.history.recentChanges.length === 0 ? (
                 <div className="empty">
-                  <h4>今天还没有关键进展</h4>
-                  <p>完成、推迟和计划变化会出现在这里。</p>
+                  <h4>还没有可展示的变化</h4>
+                  <p>新增、改期、完成与取消会按时间保留在这里。</p>
                 </div>
               ) : (
                 <div style={{ marginTop: 8 }}>
-                  {data.ledger.map((e) => (
+                  {surfaces.history.recentChanges.map((e) => (
                     <div key={e.id} className={`lg-row${e.kind === 'todo_completed' ? ' is-done' : ''}`}>
                       <span className="lg-status" aria-hidden="true">
                         {e.kind === 'todo_completed' ? <IcCheck className="ic-ok" size={12} /> : null}
@@ -927,12 +912,14 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
                       <span className="lg-time">{fmtTime(e.occurred_at)}</span>
                       <span className="lg-type">{LEDGER_KIND_LABEL[e.kind] ?? e.kind}</span>
                       <span className="lg-sum" title={e.summary}>{e.summary}</span>
-                      {e.label && (e.session_id && openSession ? (
+                      {e.label && (e.session_id && onOpenChangeSource ? (
                         <button
                           type="button"
                           className="lg-src-btn"
-                          title="跳到该会话"
-                          onClick={() => { openSession(e.session_id!) }}
+                          title="查看来源"
+                          onClick={() => { onOpenChangeSource(e, {
+                            type: 'session', label: e.label, session_id: e.session_id, workspace: e.ws,
+                          }) }}
                         >
                           <span>{e.label}</span>↗
                         </button>
@@ -962,7 +949,9 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
           onDraftChange={setTaskDraft}
           onSave={saveTaskPanel}
           onClose={closeTaskPanel}
-          onOpenSource={(source) => { if (source.sessionId) openSession?.(source.sessionId) }}
+          onOpenSource={() => {
+            if (taskPanel.item.source) onOpenSource?.(taskPanel.item, taskPanel.item.source)
+          }}
           onUndoReceipt={taskUndo ? undoTaskReceipt : undefined}
         />
       ) : null}
@@ -980,7 +969,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   )
 }
 
-function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit, onChat, onReopen }: {
+function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit, onChat, onSource, onReopen }: {
   t: YoloTodoRow
   busy: boolean
   completing: boolean
@@ -989,6 +978,7 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
   onAct: (action: string, extra?: { due_at?: string }) => void
   onEdit: () => void
   onChat: () => void
+  onSource?: () => void
   onReopen?: () => void
 }): JSX.Element {
   const open = isTodoOpen(t.status)
@@ -1060,12 +1050,14 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
               <span>{t.milestone_title}</span>
             </>
           )}
-          {t.session_label && (
-            <span className="src" title={t.session_label}>
+          {t.source && onSource ? (
+            <button type="button" className="src" title="查看来源" onClick={(event) => { event.stopPropagation(); onSource() }}>
               <IcPin size={11} />
-              <span>{t.session_label}</span>
-            </span>
-          )}
+              <span>{t.source.label}</span>
+            </button>
+          ) : t.session_label ? (
+            <span className="src" title={t.session_label}><IcPin size={11} /><span>{t.session_label}</span></span>
+          ) : null}
           {t.belief && t.belief.stale >= 2 && t.belief.stale > t.belief.good && (
             <>
               <span className="sep">·</span>

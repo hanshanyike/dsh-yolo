@@ -74,7 +74,10 @@ describe('dashboard v2 projection', () => {
         short_reason: '有一条未处理提醒',
         reason_version: 'attention-v1',
       },
-      source: { type: 'session', label: '季度发布讨论', session_id: 's1', excerpt: '本周把季度材料发给研发', turn: 4 },
+      source: {
+        type: 'session', label: '季度发布讨论', session_id: 's1', excerpt: '本周把季度材料发给研发', turn: 4,
+        created_at: NOW.getTime() - 10_000,
+      },
       ws: { slug: 'quarterly/main', label: 'quarterly', cwd },
     })
     for (const rows of [data.todos, data.goals, data.milestones, data.events, data.preferences, data.ledger, data.notifications]) {

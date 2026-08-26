@@ -87,7 +87,7 @@ function SectionTabs({ label, value, entries, onChange }: {
   onChange: (value: string) => void
 }): JSX.Element {
   return (
-    <div className="caps" role="tablist" aria-label={label}>
+    <div className="caps page-subtabs" role="tablist" aria-label={label}>
       {entries.map(([key, text]) => (
         <button key={key} type="button" role="tab" aria-selected={value === key} className={`cap${value === key ? ' on' : ''}`} onClick={() => { onChange(key) }}>
           {text}

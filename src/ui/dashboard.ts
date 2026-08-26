@@ -101,6 +101,7 @@ function itemSource(todo: Todo, sessions: Map<string, string>, ws: WorkspaceTag)
       session_id: todo.session_id,
       excerpt: todo.source_excerpt ?? null,
       turn: todo.source_turn ?? null,
+      created_at: todo.created_at,
       workspace: ws,
     }
   }
@@ -188,6 +189,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     milestone_status: t.milestone_id ? msStatus.get(t.milestone_id) ?? null : null,
     milestone_open_todo_count: t.milestone_id ? openByMilestone.get(t.milestone_id) ?? 0 : 0,
     updated_at: t.updated_at,
+    created_at: t.created_at,
     completed_at: t.completed_at ?? null,
     overdue: isTodoOverdue(t.due_at, t.status, new Date(now)),
     stale: isTodoStale(t.status, t.updated_at, now),

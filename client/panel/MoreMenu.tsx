@@ -3,20 +3,17 @@
 // this labelled menu instead of competing with chat and notifications.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IcDots, IcFilter, IcLedger, IcMoon, IcRefresh, IcSun, IcTarget } from '../design/icons.tsx'
-import type { ViewKey } from './ViewTabs.tsx'
+import { IcDots, IcFilter, IcMoon, IcRefresh, IcSun } from '../design/icons.tsx'
 
 export interface MoreMenuProps {
-  view: ViewKey
   loading: boolean
   theme: 'dark' | 'light'
-  onViewChange: (view: ViewKey) => void
-  onOpenFilters: () => void
+  onOpenFilters?: () => void
   onRefresh: () => void
   onToggleTheme: () => void
 }
 
-export function MoreMenu({ view, loading, theme, onViewChange, onOpenFilters, onRefresh, onToggleTheme }: MoreMenuProps): JSX.Element {
+export function MoreMenu({ loading, theme, onOpenFilters, onRefresh, onToggleTheme }: MoreMenuProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -68,13 +65,12 @@ export function MoreMenu({ view, loading, theme, onViewChange, onOpenFilters, on
     close(restoreFocus)
   }
 
-  const auxiliaryActive = view === 'goals' || view === 'ledger'
   return (
     <div className="more-wrap">
       <button
         ref={buttonRef}
         type="button"
-        className={`head-secondary more-trigger${auxiliaryActive ? ' on' : ''}`}
+        className="head-secondary more-trigger"
         aria-label="更多看板操作"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -86,16 +82,12 @@ export function MoreMenu({ view, loading, theme, onViewChange, onOpenFilters, on
       </button>
       {open && (
         <div ref={menuRef} className="more-menu" role="menu" aria-label="更多看板操作">
-          <button type="button" role="menuitem" className={view === 'goals' ? 'on' : undefined} onClick={() => { run(() => { onViewChange('goals') }) }}>
-            <IcTarget size={15} /><span>目标与里程碑</span>
-          </button>
-          <button type="button" role="menuitem" className={view === 'ledger' ? 'on' : undefined} onClick={() => { run(() => { onViewChange('ledger') }) }}>
-            <IcLedger size={15} /><span>今日进展</span>
-          </button>
-          <button type="button" role="menuitem" onClick={() => { run(onOpenFilters, false) }}>
-            <IcFilter size={15} /><span>高级筛选</span>
-          </button>
-          <span className="more-separator" role="separator" />
+          {onOpenFilters ? (
+            <button type="button" role="menuitem" onClick={() => { run(onOpenFilters, false) }}>
+              <IcFilter size={15} /><span>高级筛选</span>
+            </button>
+          ) : null}
+          {onOpenFilters ? <span className="more-separator" role="separator" /> : null}
           <button type="button" role="menuitem" className={loading ? 'refreshing' : undefined} aria-busy={loading} onClick={() => { run(onRefresh) }}>
             <IcRefresh size={15} /><span>刷新看板</span>
           </button>

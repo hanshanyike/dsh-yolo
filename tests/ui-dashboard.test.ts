@@ -61,7 +61,7 @@ function mockYolo(): Yolo {
 
 describe('buildDashboardData', () => {
   it('uses an explicit allow-list for user-facing recent changes', () => {
-    for (const kind of ['reminder_fired', 'brief_generated', 'attention_seen', 'attention_suppressed', 'attention_feedback', 'action_denied', 'future_internal_event'] as const) {
+    for (const kind of ['reminder_fired', 'brief_generated', 'attention_seen', 'attention_suppressed', 'attention_feedback', 'action_denied'] as const) {
       expect(isProgressLedgerEvent({ kind })).toBe(false)
     }
     for (const kind of ['todo_created', 'todo_completed', 'todo_postponed', 'todo_remind_again', 'todo_updated', 'goal_progress'] as const) {

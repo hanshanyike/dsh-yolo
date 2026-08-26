@@ -23,6 +23,8 @@ export interface YoloItemSource {
   excerpt?: string | null
   /** Originating host turn when known. The current host navigation opens the session only. */
   turn?: number | null
+  /** Item creation time; the host does not expose a separate source-message timestamp. */
+  created_at?: number | null
   workspace?: WorkspaceTag
 }
 
@@ -93,6 +95,8 @@ export interface YoloTodoRow {
   milestone_open_todo_count?: number
   /** Epoch ms of the last status/content change — powers the stale signal. */
   updated_at?: number
+  /** Persisted creation time, used by provenance preview and stable ordering. */
+  created_at?: number
   /** Epoch ms when the todo was completed — powers the「完成 HH:MM」due-slot (5.4). */
   completed_at?: number | null
   /** The shared due instant has passed and the todo is still open. */

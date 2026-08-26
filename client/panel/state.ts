@@ -24,6 +24,8 @@ export interface PanelUiState {
   filter: KanbanFilter
   /** Product-level route and its single foreground context. */
   navigation: PanelNavigationState
+  /** Active item discussion episodes, keyed by scope + item id. */
+  discussionThreads: Record<string, string>
   /** @deprecated Kept only while the old shell is migrated to navigation.foreground. */
   sideChatOpen: boolean
   /** @deprecated Kept only while the old shell is migrated to navigation.foreground. */
@@ -33,6 +35,7 @@ export interface PanelUiState {
 const state: PanelUiState = {
   filter: { ...DEFAULT_FILTER },
   navigation: cloneNavigation(DEFAULT_PANEL_NAVIGATION),
+  discussionThreads: {},
   sideChatOpen: false,
   activeChat: null,
 }
@@ -67,6 +70,7 @@ export function readPanelState(): PanelUiState {
   return {
     filter: { ...state.filter },
     navigation: cloneNavigation(state.navigation),
+    discussionThreads: { ...state.discussionThreads },
     sideChatOpen: state.sideChatOpen,
     activeChat: state.activeChat
       ? { threadKey: state.activeChat.threadKey, anchor: { ...state.activeChat.anchor, source: state.activeChat.anchor.source ? { ...state.activeChat.anchor.source } : undefined } }
@@ -77,6 +81,7 @@ export function readPanelState(): PanelUiState {
 export function writePanelState(patch: Partial<PanelUiState>): void {
   if (patch.filter !== undefined) state.filter = { ...patch.filter }
   if (patch.navigation !== undefined) state.navigation = cloneNavigation(patch.navigation)
+  if (patch.discussionThreads !== undefined) state.discussionThreads = { ...patch.discussionThreads }
   if (patch.sideChatOpen !== undefined) state.sideChatOpen = patch.sideChatOpen
   if (patch.activeChat !== undefined) {
     state.activeChat = patch.activeChat

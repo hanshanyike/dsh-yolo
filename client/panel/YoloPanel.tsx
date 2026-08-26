@@ -8,9 +8,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData } from '../../src/shared/dashboard.ts'
+import { buildDashboardSurfaces } from '../../src/shared/dashboard-surfaces.ts'
 import {
   DEFAULT_FILTER,
-  focusCounts,
   hasDetailFilter,
   matchRangePreset,
   rangeLabel,
@@ -21,15 +21,26 @@ import {
 } from '../../src/shared/filters.ts'
 import { ensureYoloStyle, detectYoloTheme } from '../design/style.ts'
 import { yoloTokens } from '../design/tokens.ts'
-import { IcBell, IcChat, IcCheck, IcChevron, IcClose, IcExpand, IcFilter, IcShrink } from '../design/icons.tsx'
+import { IcBell, IcChat, IcCheck, IcChevron, IcClose, IcFilter } from '../design/icons.tsx'
 import { YoloLogo } from '../YoloLogo.tsx'
 import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
-import { KanbanView } from './KanbanView.tsx'
+import { KanbanView, type BoardSurfaceKey } from './KanbanView.tsx'
 import { MoreMenu } from './MoreMenu.tsx'
-import { ViewTabs, type ViewKey } from './ViewTabs.tsx'
+import { HistoryTabs, PageTabs, PlanTabs } from './PageTabs.tsx'
+import { ForegroundContext, type SessionNavigationState } from './ForegroundContext.tsx'
 import { readPanelState, writePanelState } from './state.ts'
 import { buildTodaySurfaceModel } from './v2/today-surface-model.ts'
-import { chatEscapeAction, fullChatHeaderAction, isMediumChatLayout } from './chat/layout.ts'
+import {
+  backFromForeground,
+  derivePanelPresentation,
+  escapePanel,
+  openForeground,
+  samePanelItem,
+  type BoardPage,
+  type BoardRoute,
+  type PanelItemRef,
+  type PanelNavigationState,
+} from './navigation.ts'
 
 export interface YoloPanelProps {
   /** Panel left edge (the sidebar's right edge) — spans to the viewport right. */
@@ -64,22 +75,10 @@ export function dashboardSignature(d: YoloDashboardData): string {
   })
 }
 
-/** Map the persisted preset back to a view face; 'all' lands on 今日 (Today-first). */
-function viewFromPreset(p: PresetTab): ViewKey {
-  return p === 'today' ? 'today' : p === 'done' ? 'done' : 'today'
-}
-
-/** The view face a tab maps to as a filter preset (persisted across reopen). */
-function presetForView(v: ViewKey): PresetTab {
-  return v === 'today' ? 'today' : v === 'done' ? 'done' : 'all'
-}
-
-const VIEW_LABELS: Record<ViewKey, string> = {
-  today: '今天',
-  upcoming: '即将',
-  done: '已完成',
-  goals: '目标与里程碑',
-  ledger: '今日进展',
+const PAGE_LABELS: Record<BoardPage, string> = {
+  home: '首页',
+  plan: '计划',
+  history: '历史',
 }
 
 export function YoloPanel({ left, onClose, openSession, notificationFocusRequest = 0, themeControl }: YoloPanelProps): JSX.Element {
@@ -89,16 +88,11 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   const [state, setState] = useState<LoadState>({ loading: true, error: null, data: null })
   const initial = useMemo(() => readPanelState(), [])
   const [filter, setFilter] = useState<KanbanFilter>(initial.filter)
-  const [view, setViewState] = useState<ViewKey>(() => viewFromPreset(initial.filter.preset))
+  const [navigation, setNavigation] = useState<PanelNavigationState>(initial.navigation)
+  const [discussionThreads, setDiscussionThreads] = useState<Record<string, string>>(initial.discussionThreads)
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [notifFocusTick, setNotifFocusTick] = useState(0)
-  const [sideChatOpen, setSideChatOpen] = useState(initial.sideChatOpen)
-  const [chatFullscreen, setChatFullscreen] = useState(false)
-  const [anchor, setAnchor] = useState<ChatAnchor | null>(() => initial.activeChat?.anchor ?? null)
-  // v0.3.2 聊一聊: a FRESH ephemeral thread per anchored chat. A new key per
-  // anchored episode, reset on close/switch, so the pane never inherits the
-  // resident thread's history; the unanchored 对话 keeps the resident thread.
-  const [chatThread, setChatThread] = useState<string | undefined>(() => initial.activeChat?.threadKey)
+  const [sessionNavigation, setSessionNavigation] = useState<SessionNavigationState>({ status: 'idle' })
   const [sweepTick, setSweepTick] = useState(0)
   const lastSig = useRef<string | null>(null)
   const previousNotificationFocusRequest = useRef<number | null>(null)
@@ -106,7 +100,9 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   const menuRef = useRef<HTMLDivElement>(null)
   const chatToggleRef = useRef<HTMLButtonElement>(null)
   const chatOpenerRef = useRef<HTMLElement | null>(null)
-  const chatReturnTodoIdRef = useRef<string | undefined>(anchor?.todoId)
+  const chatReturnTodoIdRef = useRef<string | undefined>(
+    navigation.foreground.kind === 'item_discussion' ? navigation.foreground.item.id : undefined,
+  )
 
   // Panel width → Compact gear (<480px: chat opens full-screen).
   const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 1000 : Math.max(0, window.innerWidth - left)))
@@ -116,7 +112,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     return () => { window.removeEventListener('resize', on) }
   }, [left])
   const compact = width < yoloTokens.compactBreakpoint
-  const medium = isMediumChatLayout(width)
+  const presentation = derivePanelPresentation(width, navigation.foreground, navigation.presentation)
 
   // Follow host theme changes while the panel is mounted. The More menu uses
   // the same body attribute contract as the host theme presenter, so the
@@ -154,40 +150,41 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
 
   // Persist view state so reopening keeps the filter and side chat (TA-6).
   useEffect(() => { writePanelState({ filter }) }, [filter])
-  useEffect(() => { writePanelState({ sideChatOpen }) }, [sideChatOpen])
-  useEffect(() => {
-    writePanelState({ activeChat: anchor && chatThread ? { anchor, threadKey: chatThread } : null })
-  }, [anchor, chatThread])
+  useEffect(() => { writePanelState({ navigation }) }, [navigation])
+  useEffect(() => { writePanelState({ discussionThreads }) }, [discussionThreads])
 
   const patchFilter = useCallback((patch: Partial<KanbanFilter>): void => {
     setFilter((f) => ({ ...f, ...patch }))
   }, [])
 
-  const setView = useCallback((v: ViewKey): void => {
-    setViewState(v)
-    const preset = presetForView(v)
-    setFilter((f) => (f.preset === preset ? f : { ...f, preset }))
+  const setRoute = useCallback((route: BoardRoute): void => {
+    setNavigation((current) => ({ ...current, route }))
+    if (route.page === 'plan') {
+      const preset: PresetTab = route.section === 'today' ? 'today' : 'all'
+      setFilter((current) => current.preset === preset ? current : { ...current, preset })
+    }
   }, [])
+
+  const setPage = useCallback((page: BoardPage): void => {
+    setRoute(page === 'home'
+      ? { page: 'home' }
+      : page === 'plan'
+        ? { page: 'plan', section: 'today' }
+        : { page: 'history', section: 'completed' })
+  }, [setRoute])
 
   // One request owns both refresh and focus. Waiting for load prevents a tick
   // against an old board whose notification section has not mounted yet.
   useEffect(() => {
     const shouldFocus = notificationFocusRequest > 0 && previousNotificationFocusRequest.current !== notificationFocusRequest
     previousNotificationFocusRequest.current = notificationFocusRequest
-    if (shouldFocus) setView('today')
+    if (shouldFocus) setRoute({ page: 'home' })
     let active = true
     void load().then(() => {
       if (active && shouldFocus) setNotifFocusTick((tick) => tick + 1)
     })
     return () => { active = false }
-  }, [load, notificationFocusRequest, setView])
-
-  // A ledger source jump should land the user back in that session: close the
-  // panel so it is actually in view (the overlay otherwise stays covering it).
-  const openSessionAndClose = useCallback((id: string): void => {
-    openSession?.(id)
-    onClose()
-  }, [openSession, onClose])
+  }, [load, notificationFocusRequest, setRoute])
 
   const focusChatOpener = useCallback((): void => {
     window.setTimeout(() => {
@@ -209,37 +206,42 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     }, 0)
   }, [])
 
-  // Explicit side close ends an anchored episode. Responsive "返回看板"
-  // below only hides the surface and preserves its thread/pending/draft.
-  const closeSideChat = useCallback(() => {
-    setSideChatOpen(false)
-    setChatFullscreen(false)
-    setAnchor(null)
-    setChatThread(undefined)
+  const closeForeground = useCallback((): void => {
+    setNavigation((current) => {
+      if (current.foreground.kind === 'item_discussion') {
+        const key = `${current.foreground.item.scopeCwd}\u0000${current.foreground.item.id}`
+        setDiscussionThreads((threads) => {
+          const next = { ...threads }
+          delete next[key]
+          return next
+        })
+      }
+      return { ...current, foreground: { kind: 'none' } }
+    })
+    setSessionNavigation({ status: 'idle' })
     focusChatOpener()
   }, [focusChatOpener])
 
-  const returnChatToBoard = useCallback(() => {
-    setSideChatOpen(false)
-    setChatFullscreen(false)
+  const backForeground = useCallback((): void => {
+    setNavigation((current) => backFromForeground(current))
+    setSessionNavigation({ status: 'idle' })
     focusChatOpener()
   }, [focusChatOpener])
-
-  const showChatAsSide = useCallback(() => {
-    setChatFullscreen(false)
-  }, [])
 
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      const action = chatEscapeAction({ availableWidth: width, sideChatOpen, chatFullscreen })
-      if (action === 'show_side') showChatAsSide()
-      else if (action === 'show_board') returnChatToBoard()
-      else onClose()
+      const result = escapePanel(navigation)
+      if (result.action === 'state') {
+        event.preventDefault()
+        setNavigation(result.state)
+        setSessionNavigation({ status: 'idle' })
+        focusChatOpener()
+      } else onClose()
     }
     document.addEventListener('keydown', listener)
     return () => { document.removeEventListener('keydown', listener) }
-  }, [chatFullscreen, onClose, returnChatToBoard, showChatAsSide, sideChatOpen, width])
+  }, [focusChatOpener, navigation, onClose])
 
   // Filter menu: outside-pointer + Esc close (Esc must not unwind the panel).
   useEffect(() => {
@@ -271,47 +273,64 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   const openAnchoredChat = useCallback((a: ChatAnchor) => {
     chatOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     chatReturnTodoIdRef.current = a.todoId
-    if (chatThread && anchor?.todoId && a.todoId === anchor.todoId && a.scopeCwd === anchor.scopeCwd) {
-      setSideChatOpen(true)
-      return
+    const item: PanelItemRef = {
+      id: a.todoId ?? `context-${Date.now().toString(36)}`,
+      scopeCwd: a.scopeCwd ?? state.data?.cwd ?? '',
+      title: a.title,
     }
-    setAnchor(a)
-    setChatThread(`a-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`)
-    setSideChatOpen(true)
-  }, [anchor, chatThread])
+    setNavigation((current) => {
+      const key = `${item.scopeCwd}\u0000${item.id}`
+      const existing = current.foreground.kind === 'item_discussion' && samePanelItem(current.foreground.item, item)
+        ? current.foreground.threadKey
+        : discussionThreads[key]
+      const threadKey = existing ?? `a-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+      setDiscussionThreads((threads) => threads[key] === threadKey ? threads : { ...threads, [key]: threadKey })
+      return openForeground(current, { kind: 'item_discussion', item, threadKey }, a.todoId ? `todo-${a.todoId}` : undefined)
+    })
+  }, [discussionThreads, state.data?.cwd])
 
-  const toggleSideChat = useCallback(() => {
+  const toggleAssistantChat = useCallback(() => {
     chatOpenerRef.current = chatToggleRef.current
     chatReturnTodoIdRef.current = undefined
-    if (sideChatOpen) {
-      closeSideChat()
+    setNavigation((current) => current.foreground.kind === 'assistant_chat'
+      ? { ...current, foreground: { kind: 'none' } }
+      : openForeground(current, { kind: 'assistant_chat' }, 'yolo-assistant-chat'))
+  }, [])
+
+  const openSourcePreview = useCallback((item: PanelItemRef, source: NonNullable<YoloDashboardData['todos'][number]['source']>): void => {
+    setSessionNavigation({ status: 'idle' })
+    setNavigation((current) => openForeground(current, {
+      kind: 'source_preview', item, source,
+      returnTo: current.foreground.kind === 'item_detail' ? current.foreground : undefined,
+    }))
+  }, [])
+
+  const navigateToSourceSession = useCallback((sessionId: string): void => {
+    if (!openSession) {
+      setSessionNavigation({ status: 'error', message: '当前宿主不支持打开会话。' })
       return
     }
-    setAnchor(null)
-    setChatThread(undefined)
-    setSideChatOpen(true)
-  }, [closeSideChat, sideChatOpen])
-
-  // One chat surface, two sizes; on compact panels the side pane IS fullscreen.
-  const chatShowingFull = chatFullscreen || (sideChatOpen && medium)
-  const showSideDock = sideChatOpen && !chatFullscreen && !medium
-  const fullChatAction = fullChatHeaderAction({ availableWidth: width, sideChatOpen, chatFullscreen })
+    setSessionNavigation({ status: 'pending' })
+    Promise.resolve().then(() => { openSession(sessionId) }).then(() => {
+      setSessionNavigation({ status: 'idle' })
+      onClose()
+    }).catch((error: unknown) => {
+      setSessionNavigation({ status: 'error', message: error instanceof Error ? error.message : String(error) })
+    })
+  }, [onClose, openSession])
 
   // Tab counts — Today is the deduplicated set its default surface actually
   // carries; other tabs keep their domain-specific live counts.
   const countState = useMemo(() => {
-    const openCounts = state.data ? focusCounts(state.data.todos) : { overdue: 0, today: 0, week: 0, stale: 0 }
-    const done = state.data ? state.data.todos.filter((t) => t.status === 'done' || t.status === 'completed').length : 0
+    const surfaces = state.data ? buildDashboardSurfaces(state.data) : undefined
     const todayModel = state.data ? buildTodaySurfaceModel(state.data) : undefined
     return {
       counts: {
-        today: todayModel?.openItemCount ?? 0,
-        upcoming: openCounts.week,
-        done,
-        goals: state.data?.goals.length ?? 0,
-        ledger: state.data?.ledger.length ?? 0,
+        home: todayModel?.openItemCount ?? 0,
+        plan: surfaces?.plan.all.length ?? 0,
+        history: (surfaces?.history.completed.length ?? 0) + (surfaces?.history.cancelled.length ?? 0),
       },
-      todayPartial: todayModel?.partial ?? false,
+      partial: surfaces?.home.coverage.partial ?? false,
     }
   }, [state.data])
 
@@ -321,6 +340,41 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
 
   const d = new Date()
   const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日 · 周${'日一二三四五六'[d.getDay()]}`
+
+  const surface: BoardSurfaceKey = navigation.route.page === 'home'
+    ? 'home'
+    : navigation.route.page === 'plan'
+      ? `plan-${navigation.route.section}`
+      : navigation.route.section === 'completed' ? 'history-terminal' : 'history-changes'
+
+  const setSurface = useCallback((next: BoardSurfaceKey): void => {
+    if (next === 'home') setRoute({ page: 'home' })
+    else if (next.startsWith('plan-')) setRoute({ page: 'plan', section: next.slice(5) as 'today' | 'upcoming' | 'goals' | 'all' })
+    else setRoute({ page: 'history', section: next === 'history-changes' ? 'changes' : 'completed' })
+  }, [setRoute])
+
+  const sourceForForeground = useMemo(() => {
+    if (!state.data || !('item' in navigation.foreground)) return undefined
+    const target = navigation.foreground.item
+    return state.data.todos.find((todo) => todo.id === target.id && (todo.scope_cwd ?? todo.ws?.cwd ?? state.data!.cwd) === target.scopeCwd)?.source
+  }, [navigation.foreground, state.data])
+
+  const chatAnchor = useMemo<ChatAnchor | null>(() => {
+    if (navigation.foreground.kind !== 'item_discussion') return null
+    return {
+      title: navigation.foreground.item.title,
+      todoId: navigation.foreground.item.id,
+      scopeCwd: navigation.foreground.item.scopeCwd,
+      source: sourceForForeground ? {
+        type: sourceForForeground.type,
+        label: sourceForForeground.label,
+        sessionId: sourceForForeground.session_id,
+        excerpt: sourceForForeground.excerpt,
+      } : undefined,
+    }
+  }, [navigation.foreground, sourceForForeground])
+
+  const chatThread = navigation.foreground.kind === 'item_discussion' ? navigation.foreground.threadKey : undefined
 
   // The board column, extracted so the fullscreen-chat branch can keep it
   // mounted (display:none) instead of unmounting KanbanView and losing
@@ -346,10 +400,23 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
             refresh={load}
             filter={filter}
             patchFilter={patchFilter}
-            view={view}
-            onViewChange={setView}
+            surface={surface}
+            onSurfaceChange={setSurface}
             onOpenChat={openAnchoredChat}
-            openSession={openSessionAndClose}
+            onOpenSource={(todo, source) => {
+              openSourcePreview({
+                id: todo.id,
+                scopeCwd: todo.scope_cwd ?? todo.ws?.cwd ?? state.data!.cwd,
+                title: todo.title,
+              }, source)
+            }}
+            onOpenChangeSource={(change, source) => {
+              openSourcePreview({
+                id: change.id,
+                scopeCwd: change.ws?.cwd ?? state.data!.cwd,
+                title: change.summary,
+              }, source)
+            }}
             notifFocusTick={notifFocusTick}
           />
         </div>
@@ -369,7 +436,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   // Filters belong to the todo list context, not to the product-level header.
   // Goals and ledger do not consume the todo filter, so the toolbar disappears
   // on those auxiliary views instead of suggesting a false global scope.
-  const listTools = view !== 'goals' && view !== 'ledger' ? (
+  const listTools = navigation.route.page === 'plan' && navigation.route.section !== 'goals' ? (
     <div className="list-tools" aria-label="事项列表工具">
       {rangeActive && (
         <button type="button" className="range-chip" title="按时段筛选生效中，点击清除" onClick={() => { patchFilter({ rangeFrom: null, rangeTo: null }) }}>
@@ -435,100 +502,107 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     </div>
   ) : null
 
+  const foreground = navigation.foreground
+  const contextTitle = foreground.kind === 'assistant_chat'
+    ? '助手对话'
+    : foreground.kind === 'item_discussion'
+      ? foreground.item.title
+      : foreground.kind === 'item_detail'
+        ? '事项详情'
+        : foreground.kind === 'source_preview' ? '来源' : ''
+  const contextContent = foreground.kind === 'assistant_chat' || foreground.kind === 'item_discussion'
+    ? <ChatPane variant={presentation === 'split' ? 'side' : 'full'} anchor={foreground.kind === 'item_discussion' ? chatAnchor : null} threadKey={chatThread} />
+    : foreground.kind === 'item_detail' || foreground.kind === 'source_preview'
+      ? (
+          <ForegroundContext
+            foreground={foreground}
+            itemSource={sourceForForeground}
+            sessionNavigation={sessionNavigation}
+            onBack={backForeground}
+            onClose={closeForeground}
+            onDiscuss={(item) => { openAnchoredChat({ title: item.title, todoId: item.id, scopeCwd: item.scopeCwd }) }}
+            onOpenSource={openSourcePreview}
+            onOpenSession={navigateToSourceSession}
+          />
+        )
+      : null
+
   return (
     <div
-      className={`yolo-scope panel${compact ? ' compact' : medium ? ' medium' : ''}`}
+      className={`yolo-scope panel${compact ? ' compact' : ''}`}
       data-y-theme={theme}
+      data-presentation={presentation}
       style={{ position: 'fixed', left, right: 0, top: 0, bottom: 0, zIndex: 10000 }}
     >
-      {/* Product-level actions: chat → notifications → more → close. */}
       <header className="p-head">
         <div className="brand">
-          <span className="mark"><YoloLogo size={18} /></span>
+          {presentation === 'focus' ? (
+            <button type="button" className="hbtn" onClick={backForeground} aria-label={`返回${PAGE_LABELS[navigation.route.page]}`}>←</button>
+          ) : <span className="mark"><YoloLogo size={18} /></span>}
           <span className="brand-name">YOLO</span>
-          <span className="surface-name brand-wide">{VIEW_LABELS[view]}</span>
+          <span className="surface-name brand-wide">{presentation === 'focus' ? contextTitle : PAGE_LABELS[navigation.route.page]}</span>
           <span className="p-date mono">{dateLabel}</span>
         </div>
         <div className="p-head-acts">
-          {!chatShowingFull && (
-            <button ref={chatToggleRef} type="button" className={`ctoggle head-primary${sideChatOpen ? ' on' : ''}`} onClick={toggleSideChat} title={sideChatOpen ? '收起对话' : '打开对话'}>
-              <IcChat size={14} /><span>对话</span>
-            </button>
-          )}
-          {chatShowingFull && (
-            <button
-              type="button"
-              className="ctoggle head-primary"
-              onClick={fullChatAction.action === 'show_side' ? showChatAsSide : returnChatToBoard}
-              title={fullChatAction.title}
-            >
-              <IcShrink size={14} /><span>{fullChatAction.label}</span>
-            </button>
-          )}
+          <button ref={chatToggleRef} type="button" className={`ctoggle head-primary${foreground.kind === 'assistant_chat' ? ' on' : ''}`} onClick={toggleAssistantChat} title="和助手聊聊">
+            <IcChat size={14} /><span>和助手聊聊</span>
+          </button>
           <button
             type="button"
             className="head-secondary bell"
-            onClick={() => { setView('today'); setNotifFocusTick((t) => t + 1) }}
+            onClick={() => { setRoute({ page: 'home' }); setNotifFocusTick((tick) => tick + 1) }}
             title={unhandled > 0 ? `${unhandled} 条未处理提醒，点击查看` : '通知'}
             aria-label={unhandled > 0 ? `通知，${unhandled} 条未处理` : '通知，无未处理消息'}
           >
-            <IcBell size={13} />
-            <span>通知</span>
+            <IcBell size={13} /><span>通知</span>
             {unhandled > 0 && <span className="bnum">{unhandled}</span>}
             {unhandled > 0 && <span className="bdot" />}
           </button>
           <MoreMenu
-            view={view}
             loading={state.loading}
             theme={theme}
-            onViewChange={setView}
-            onOpenFilters={() => { setView('today'); setFilterMenuOpen(true) }}
+            onOpenFilters={navigation.route.page === 'plan' ? () => { setFilterMenuOpen(true) } : undefined}
             onRefresh={() => { void load() }}
             onToggleTheme={toggleTheme}
           />
-          <button type="button" className="hbtn" onClick={onClose} title="关闭 (Esc)" aria-label="关闭面板">
-            <IcClose size={15} />
-          </button>
+          <button type="button" className="hbtn" onClick={onClose} title="关闭 (Esc)" aria-label="关闭面板"><IcClose size={15} /></button>
         </div>
         <span key={sweepTick} className={`sweep${sweepTick > 0 ? ' run' : ''}`} />
       </header>
 
-      {/* ② horizontal view tabs — the face switcher (vertical nav is the host's) */}
-      <ViewTabs view={view} counts={countState.counts} onChange={setView} compact={compact} todayPartial={countState.todayPartial} />
-      {!chatShowingFull && listTools}
+      {presentation !== 'focus' ? (
+        <>
+          <PageTabs page={navigation.route.page} counts={countState.counts} partial={countState.partial} onChange={setPage} />
+          {navigation.route.page === 'plan' ? <PlanTabs section={navigation.route.section} onChange={(section) => { setRoute({ page: 'plan', section }) }} /> : null}
+          {navigation.route.page === 'history' ? <HistoryTabs section={navigation.route.section} onChange={(section) => { setRoute({ page: 'history', section }) }} /> : null}
+          {listTools}
+        </>
+      ) : null}
 
-      {/* ③ body: full-screen chat takes over the panel while the board stays
-          MOUNTED (display:none) so its editor drafts, the 4s undo window and
-          fold/notification states survive the round-trip (4.2⑨) — the previous
-          conditional render actually unmounted KanbanView and lost them. */}
-      {chatShowingFull ? (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-          <div style={{ display: 'none' }} aria-hidden="true">{boardColumn}</div>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <ChatPane variant="full" anchor={anchor} threadKey={chatThread} />
-          </div>
-        </div>
-      ) : (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        <div style={{ flex: 1, minWidth: 0, display: presentation === 'focus' ? 'none' : 'flex' }} aria-hidden={presentation === 'focus' ? true : undefined}>
           {boardColumn}
-
-          {showSideDock && (
-            <aside className="dock">
-              <div className="dock-head">
-                <span className="dock-tag">锚定</span>
-                <span className="dock-ctx" title={anchor?.title ?? '看板全局'}>{anchor?.title ?? '看板全局'}</span>
-                <button type="button" className="dact" onClick={() => { setChatFullscreen(true) }} title="展开为全屏">
-                  <span className="tico"><IcExpand size={11} /></span>全屏
-                </button>
-                <button type="button" className="hbtn" onClick={closeSideChat} title="关闭对话" aria-label="收起侧栏对话">
-                  <IcClose size={14} />
-                </button>
-              </div>
-              <ChatPane variant="side" anchor={anchor} threadKey={chatThread} />
-            </aside>
-          )}
         </div>
-      )}
+        {foreground.kind !== 'none' ? (
+          <aside
+            className={presentation === 'split' ? 'dock' : undefined}
+            role={presentation === 'focus' ? 'dialog' : undefined}
+            aria-modal={presentation === 'focus' ? true : undefined}
+            aria-label={contextTitle}
+            style={presentation === 'split'
+              ? undefined
+              : { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}
+          >
+            {presentation === 'split' && (foreground.kind === 'assistant_chat' || foreground.kind === 'item_discussion') ? (
+              <div className="dock-head">
+                <span className="dock-tag">上下文</span><span className="dock-ctx" title={contextTitle}>{contextTitle}</span>
+                <button type="button" className="hbtn" onClick={closeForeground} title="关闭上下文" aria-label="关闭上下文"><IcClose size={14} /></button>
+              </div>
+            ) : null}
+            {contextContent}
+          </aside>
+        ) : null}
+      </div>
     </div>
   )
 }

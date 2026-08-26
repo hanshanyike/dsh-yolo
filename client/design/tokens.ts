@@ -144,6 +144,7 @@ export const YOLO_CSS = `
 /* horizontal view tabs (replace the old vertical nav / preset seg) */
 .yolo-scope .y-tabs { flex: none; display: flex; align-items: stretch; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--y-line); overflow-x: auto; scrollbar-width: none; }
 .yolo-scope .y-tabs::-webkit-scrollbar { display: none; }
+.yolo-scope .page-subtabs { flex: none; padding: 8px 16px; border-bottom: 1px solid var(--y-line); background: var(--y-surface); }
 .yolo-scope .ytab { position: relative; display: flex; align-items: center; gap: 7px; height: 42px; padding: 0 13px; border: none; background: none; color: var(--y-text-2); font-size: 13.5px; cursor: pointer; transition: color var(--y-dur-1); white-space: nowrap; }
 .yolo-scope .ytab:hover { color: var(--y-text-1); }
 .yolo-scope .ytab svg { width: 15px; height: 15px; flex: none; }
@@ -296,7 +297,9 @@ export const YOLO_CSS = `
 .yolo-scope .row.overdue .due { color: var(--y-danger); }
 .yolo-scope .sep { color: var(--y-line-strong); }
 .yolo-scope .stale-tag { flex: none; font-size: 10px; font-weight: 600; color: var(--y-text-2); background: var(--y-surface-3); padding: 1px 6px; border-radius: 4px; }
-.yolo-scope .src { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.yolo-scope .src { display: inline-flex; align-items: center; gap: 4px; min-width: 0; border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: default; }
+.yolo-scope button.src { color: var(--y-accent-text); cursor: pointer; }
+.yolo-scope button.src:hover span { text-decoration: underline; }
 .yolo-scope .src svg { flex: none; width: 11px; height: 11px; opacity: .7; }
 .yolo-scope .src span { overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
 .yolo-scope .row-acts { flex: none; display: flex; gap: 2px; opacity: 0; transition: opacity var(--y-dur-1); }
@@ -401,7 +404,7 @@ export const YOLO_CSS = `
 .yolo-scope .chat-newest--full { right: max(18px, calc((100% - 760px) / 2 + 28px)); }
 
 /* side chat dock — surface, hairline left, NO shadow (docked ≠ floating) */
-.yolo-scope .dock { flex: none; width: min(340px, 45%); background: var(--y-surface); border-left: 1px solid var(--y-line); display: flex; flex-direction: column; min-width: 0; animation: yolo-dock-in var(--y-dur-3) var(--y-ease-out); }
+.yolo-scope .dock { flex: none; width: 340px; background: var(--y-surface); border-left: 1px solid var(--y-line); display: flex; flex-direction: column; min-width: 0; animation: yolo-dock-in var(--y-dur-3) var(--y-ease-out); }
 @keyframes yolo-dock-in { from { opacity: 0; transform: translateX(12px); } }
 .yolo-scope .dock-head { flex: none; height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--y-line); }
 .yolo-scope .dock-tag { font-size: 12px; font-weight: 600; flex: none; }
