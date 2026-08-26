@@ -61,12 +61,14 @@ describe('dashboard v2 Mono style contract', () => {
     expect(css).toContain('outline: 2px solid var(--y-focus)')
   })
 
-  it('defines compact, 480px and 960px layouts without a component scroll lane', () => {
+  it('defines compact and fluid presentation layouts without a fixed viewport split', () => {
     const css = v2Css()
     expect(css).toContain('.yolo-scope.compact .v2-today-row')
     expect(css).toContain('.yolo-scope.compact .v2-task-action-panel')
-    expect(css).toContain('@media (min-width: 480px)')
-    expect(css).toContain('@media (min-width: 960px)')
+    expect(css).toContain('.yolo-scope:not(.compact) .v2-today-surface > header')
+    expect(css).not.toContain('@media (min-width: 480px)')
+    expect(css).not.toContain('@media (min-width: 960px)')
+    expect(css).toContain('.yolo-scope[data-presentation="split"] .v2-task-action-panel')
     expect(css).toContain('overflow-x: clip')
     expect(css).toMatch(/\.v2-today-row-reason[^}]*overflow-wrap:\s*anywhere/u)
     expect(css).toContain('minmax(0, 1fr)')

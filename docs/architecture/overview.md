@@ -256,7 +256,7 @@ data/
   或每 10 个真实工作会话轮次一次，并采用临时文件加重命名的原子写入；
   `snapshotKeepDays` 目前只是常量，尚无自动清理任务消费它。
 - **会话归属（v0.3.0）**——`events.session_id`（来源 dsh 会话）与 `events.source`
-  （`llm|tool|manual`）共同生成今日台账的来源标记；`session_summaries` 保存提取时写入的每个会话
+  （`llm|tool|manual`）共同生成事项来源标记；`session_summaries` 保存提取时写入的每个会话
   单行摘要。`notifications` 保存提醒/简报卡片；侧栏角标显示未处理行数。
 - **判断信任状态**——`attention_feedback` 以
   `(scope_key, todo_id, reason_version, evidence_fingerprint)` 为键，只为对应的不可变判断版本保存

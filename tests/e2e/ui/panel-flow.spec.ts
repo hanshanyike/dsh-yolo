@@ -14,6 +14,7 @@ import {
   createFixtures,
   uid,
   openYoloPanel,
+  revealHomeItems,
   todayStr,
   waitForDashboard,
   type Api,
@@ -89,6 +90,7 @@ test('打开助手看板并按真实任务渲染今日行（TA-1/TA-2）', async
   await fx.todo(title, { due: todayStr() })
 
   await openYoloPanel(page)
+  await revealHomeItems(page)
 
   await expect(taskFor(page, title)).toBeVisible()
   const row = todayRowFor(page, title)
@@ -105,6 +107,7 @@ test('完成任务弹出撤销，4 秒内撤销后任务恢复原位（TA-3 / 5.
   await fx.todo(title, { due: todayStr() })
 
   await openYoloPanel(page)
+  await revealHomeItems(page)
   await expect(taskFor(page, title)).toBeVisible()
 
   // Complete from whichever approved v2 presentation owns the task.
@@ -135,6 +138,7 @@ test('逾期事项进入 v2 关注判断并保留可核验处理依据（TA-4）
   })
 
   await openYoloPanel(page)
+  await revealHomeItems(page)
   // Both remain visible, while v2 promotes the overdue fact into an explicit
   // judgment/attention reason instead of hiding unrelated work behind a capsule.
   await expect(taskFor(page, overdueTitle)).toBeVisible()
@@ -154,6 +158,7 @@ test('W2/W11/W16: 同日精确 datetime 到时后进入逾期事实与摘要', a
   await fx.todo(futureTitle, { due: localDateTime(new Date(Date.now() + 3_600_000)) })
 
   await openYoloPanel(page)
+  await revealHomeItems(page)
   await expect(taskFor(page, title)).toContainText(/逾期|已超过截止时间/)
   await expect(taskFor(page, futureTitle)).not.toContainText(/逾期|已超过截止时间/)
   await expect(page.locator('.v2-today-surface > header')).toContainText(/逾期 \d+ 件/)
@@ -166,6 +171,7 @@ test('捕获条快速记一条并落入看板（TA-2 快捷入口）', async ({ 
   await page.locator('.cap-input').fill(title)
   await page.keyboard.press('Enter')
   await expect(page.locator('.toast').filter({ hasText: '已记下' })).toBeVisible()
+  await revealHomeItems(page)
   // this row was born in the browser, not through the API — look its id up
   // once so dispose() can remove it by id like every other fixture
   const d = await api.dashboard()
@@ -178,6 +184,7 @@ test('“讨论这项安排”打开 item discussion，并与“和助手聊聊�
   const title = uid('定稿本周直播的主题')
   await fx.todo(title, { due: todayStr() })
   await openYoloPanel(page)
+  await revealHomeItems(page)
 
   await openTaskHandling(page, title)
   const taskDialog = page.getByRole('dialog', { name: title })

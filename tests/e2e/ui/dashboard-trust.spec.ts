@@ -7,6 +7,7 @@ import {
   connectApi,
   createFixtures,
   openYoloPanel,
+  revealHomeItems,
   uid,
   waitForDashboard,
   type Api,
@@ -269,6 +270,7 @@ test('W1/W2/W7/W11/W16: 需要关注行去重依据且在 340px 窄面板内换�
 
   await page.setViewportSize({ width: 400, height: 800 })
   await openYoloPanel(page, { refreshOnSlow: false })
+  await revealHomeItems(page)
   await expect(page.locator('.yolo-scope')).toHaveClass(/compact/)
   expect(renderedDashboard).toBeDefined()
   const singleReason = renderedDashboard!.todos.find((todo: Record<string, any>) => todo.id === String(single.id)).attention_reason

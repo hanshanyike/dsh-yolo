@@ -90,7 +90,7 @@ describe('buildTodaySurfaceModel', () => {
     }), { now: NOW }).pristine).toBe(false)
   })
 
-  it('uses only attention[0] and removes that scoped todo from secondary lists', () => {
+  it('uses only the first usable server-ranked attention and removes it from secondary lists', () => {
     const focus = todo('same', { due_at: '2026-08-22', overdue: true })
     const sameIdOtherWorkspace = todo('same', { scope_cwd: WS_B.cwd, ws: WS_B, due_at: '2026-08-23' })
     const data = dashboard({
@@ -105,6 +105,24 @@ describe('buildTodaySurfaceModel', () => {
     expect(model.attentionRows).toHaveLength(0)
     expect(model.todayRows.map((row) => row.todo.ws?.label)).toEqual(['内部工具'])
     expect(model.openItemCount).toBe(2)
+  })
+
+  it('projects dated upcoming work and allow-listed recent changes onto Home', () => {
+    const future = todo('future', { due_at: '2026-08-26' })
+    const undated = todo('undated')
+    const data = dashboard({
+      todos: [future, undated],
+      ledger: [
+        { id: 'visible', kind: 'todo_updated', summary: '调整了客户回访安排', occurred_at: NOW.getTime(), label: '客户会话' },
+        { id: 'internal', kind: 'extraction_completed', summary: '内部抽取完成', occurred_at: NOW.getTime() + 1, label: '系统' },
+      ],
+    })
+
+    const model = buildTodaySurfaceModel(data, { now: NOW })
+
+    expect(model.upcomingRows.map((row) => row.todo.id)).toEqual([future.id])
+    expect(model.upcomingRows.map((row) => row.todo.id)).not.toContain(undated.id)
+    expect(model.recentChanges.map((row) => row.id)).toEqual(['visible'])
   })
 
   it('counts the deduplicated open-item union carried by Today', () => {
@@ -152,7 +170,7 @@ describe('buildTodaySurfaceModel', () => {
     const model = buildTodaySurfaceModel(data, { now: NOW })
 
     expect(model.openItemCount).toBe(1)
-    expect(model.description).toContain('今天需回应 1 件')
+    expect(model.description).toContain('重点安排 1 件')
     expect(model.description).toContain('今天到期 0 件')
   })
 

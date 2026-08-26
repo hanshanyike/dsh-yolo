@@ -2,6 +2,7 @@ import type {
   YoloAttentionRow,
   YoloDashboardData,
   YoloItemSource,
+  YoloLedgerEntry,
   YoloTodoRow,
 } from '../../../src/shared/dashboard.ts'
 import type {
@@ -10,6 +11,7 @@ import type {
   YoloTodoRowV2,
 } from './model.ts'
 import { dueAtLocalDate, isTodoOverdue } from '../../../src/shared/due.ts'
+import { buildDashboardSurfaces, dashboardTodoKey } from '../../../src/shared/dashboard-surfaces.ts'
 
 export interface TodayTaskReason {
   label: string
@@ -38,6 +40,8 @@ export interface TodaySurfaceModel {
   judgmentScopeCwd?: string
   attentionRows: TodayTaskRowView[]
   todayRows: TodayTaskRowView[]
+  upcomingRows: TodayTaskRowView[]
+  recentChanges: YoloLedgerEntry[]
   /** Deduplicated open todo owners actually carried by the default Today face. */
   openItemCount: number
   /** True when the count and rows cover only the successfully loaded workspaces. */
@@ -226,29 +230,44 @@ export function buildTodaySurfaceModel(
     changesToday: serverSummary?.changesToday ?? fallback.changesToday,
   }
 
-  const primary = buildJudgment(data, data.attention?.[0])
+  const home = buildDashboardSurfaces(data).home
+  const primary = buildJudgment(data, home.primary?.judgment)
   const attentionRows: TodayTaskRowView[] = []
   const todayRows: TodayTaskRowView[] = []
+  const upcomingRows: TodayTaskRowView[] = []
   const openItemKeys = new Set<string>()
   if (primary) openItemKeys.add(primary.todoKey)
 
-  for (const todo of data.todos) {
-    if (!isOpen(todo.status) || scopedTodoKey(todo, data) === primary?.todoKey) continue
+  const mapHomeRow = (todo: YoloTodoRow): TodayTaskRowView => {
     const mapped = mapTodo(todo, data)
-    const row: TodayTaskRowView = {
-      key: scopedTodoKey(todo, data),
+    return {
+      key: dashboardTodoKey(todo, data.cwd),
       todo: mapped,
       scopeCwd: scopeOf(todo, data),
       source: mapSource(todo.source, todo),
     }
-    const fact = todo.attention_reason ? buildTodayTaskReason(todo.attention_reason) : undefined
-    if (fact) {
-      attentionRows.push({ ...row, reason: fact })
-      openItemKeys.add(row.key)
-    } else if (dueAtLocalDate(todo.due_at) === today) {
-      todayRows.push(row)
-      openItemKeys.add(row.key)
-    }
+  }
+
+  for (const action of home.needsAction) {
+    if (action.kind !== 'todo') continue
+    const row = mapHomeRow(action.todo)
+    attentionRows.push({
+      ...row,
+      reason: action.todo.attention_reason
+        ? buildTodayTaskReason(action.todo.attention_reason)
+        : undefined,
+    })
+    openItemKeys.add(row.key)
+  }
+  for (const todo of home.today) {
+    const row = mapHomeRow(todo)
+    todayRows.push(row)
+    openItemKeys.add(row.key)
+  }
+  for (const todo of home.upcoming) {
+    const row = mapHomeRow(todo)
+    upcomingRows.push(row)
+    openItemKeys.add(row.key)
   }
 
   // Reminder cards render on Today after the task lists. A future/open todo
@@ -292,12 +311,14 @@ export function buildTodaySurfaceModel(
 
   return {
     dateLabel: `${now.getMonth() + 1}月${now.getDate()}日 · 周${'日一二三四五六'[now.getDay()]}`,
-    description: `今天需回应 ${openItemKeys.size} 件 · 全部挂起 ${summary.open} 件 · 今天到期 ${summary.dueToday} 件 · 逾期 ${summary.overdue} 件`,
+    description: `重点安排 ${openItemKeys.size} 件 · 全部挂起 ${summary.open} 件 · 今天到期 ${summary.dueToday} 件 · 逾期 ${summary.overdue} 件`,
     partialMessage,
     judgment: primary?.view,
     judgmentScopeCwd: primary?.scopeCwd,
     attentionRows,
     todayRows,
+    upcomingRows,
+    recentChanges: home.recentChanges,
     openItemCount: openItemKeys.size,
     partial,
     pristine,

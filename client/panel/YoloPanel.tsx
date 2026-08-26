@@ -365,12 +365,18 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     if (presentation !== 'focus' || navigation.foreground.kind === 'none') return
     const root = contextRef.current
     if (!root) return
+    const focusableElements = (): HTMLElement[] => Array.from(root.querySelectorAll<HTMLElement>(
+      'input:not(:disabled), textarea:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    )).filter((element) => {
+      const style = window.getComputedStyle(element)
+      return element.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none'
+    })
     const focusFirst = window.setTimeout(() => {
-      root.querySelector<HTMLElement>('input, textarea, button, [tabindex]:not([tabindex="-1"])')?.focus()
+      focusableElements()[0]?.focus()
     }, 0)
     const trap = (event: KeyboardEvent): void => {
       if (event.key !== 'Tab') return
-      const focusable = Array.from(root.querySelectorAll<HTMLElement>('input:not(:disabled), textarea:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])'))
+      const focusable = focusableElements()
       if (focusable.length === 0) return
       const first = focusable[0]!
       const last = focusable[focusable.length - 1]!

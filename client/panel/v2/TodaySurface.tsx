@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { YoloDashboardData } from '../../../src/shared/dashboard.ts'
 import { AssistantJudgment } from './AssistantJudgment.tsx'
 import type {
@@ -136,6 +136,17 @@ export function TodaySurface({
   onIntent,
 }: TodaySurfaceProps): JSX.Element {
   const model = buildTodaySurfaceModel(data, { now, nearQuietHours, closureDismissed })
+  const [showAllSecondary, setShowAllSecondary] = useState(false)
+  const secondaryPreviewLimit = 4
+  const secondaryCount = model.attentionRows.length + model.todayRows.length + model.upcomingRows.length
+  const highPressure = secondaryCount + (model.judgment ? 1 : 0) >= 5
+  let remainingPreview = showAllSecondary ? secondaryCount : highPressure ? 0 : secondaryPreviewLimit
+  const visibleAttention = model.attentionRows.slice(0, remainingPreview)
+  remainingPreview -= visibleAttention.length
+  const visibleToday = model.todayRows.slice(0, remainingPreview)
+  remainingPreview -= visibleToday.length
+  const visibleUpcoming = model.upcomingRows.slice(0, remainingPreview)
+  const hiddenSecondaryCount = secondaryCount - visibleAttention.length - visibleToday.length - visibleUpcoming.length
   const judgment = model.judgment
   const displayedJudgment = judgment && judgmentExpanded
     ? { ...judgment, presentation: 'full' as const, reason: judgment.fullReason }
@@ -217,12 +228,25 @@ export function TodaySurface({
         />
       ) : null}
 
-      <TaskSection id="v2-attention-title" title="需要关注" rows={model.attentionRows} busyTodoId={busyTodoId} onIntent={onIntent} />
-      <TaskSection id="v2-today-list-title" title="今天" rows={model.todayRows} busyTodoId={busyTodoId} onIntent={onIntent} />
+      <TaskSection id="v2-attention-title" title="需要处理" rows={visibleAttention} busyTodoId={busyTodoId} onIntent={onIntent} />
+      <TaskSection id="v2-today-list-title" title="今天" rows={visibleToday} busyTodoId={busyTodoId} onIntent={onIntent} />
+      <TaskSection id="v2-upcoming-title" title="接下来" rows={visibleUpcoming} busyTodoId={busyTodoId} onIntent={onIntent} />
+      {hiddenSecondaryCount > 0 ? (
+        <button type="button" className="v2-secondary-more" onClick={() => { setShowAllSecondary(true) }}>
+          查看其余 {hiddenSecondaryCount} 项安排
+        </button>
+      ) : showAllSecondary && highPressure ? (
+        <button type="button" className="v2-secondary-more" onClick={() => { setShowAllSecondary(false) }}>收起次要安排</button>
+      ) : null}
 
       {!model.pristine ? (
         <section aria-labelledby="v2-progress-title">
           <h2 id="v2-progress-title">最近变化</h2>
+          {model.recentChanges.length > 0 ? (
+            <ul className="v2-recent-changes">
+              {model.recentChanges.map((change) => <li key={change.id}>{change.summary}</li>)}
+            </ul>
+          ) : <p>还没有新的用户可见变化。</p>}
           <button type="button" onClick={() => { onIntent({ type: 'open_ledger' }) }}>
             已完成 {model.progress.completed} 项 · 变更 {model.progress.changes} 条 · 来自 {model.progress.sessions} 个会话
           </button>

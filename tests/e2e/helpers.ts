@@ -192,6 +192,12 @@ export function createFixtures(api: Api) {
   }
 }
 
+/** Reveal Home's secondary rows when real host data has crossed the pressure threshold. */
+export async function revealHomeItems(page: import('@playwright/test').Page): Promise<void> {
+  const folded = page.getByRole('button', { name: /查看其余 \d+ 项安排/u })
+  if (await folded.isVisible().catch(() => false)) await folded.click()
+}
+
 /** Cancel (soft-delete, audited) every todo whose title starts with the prefix. */
 export async function cleanupPrefixedTodos(api: Api, prefix: string = E2E_PREFIX): Promise<number> {
   const d = await api.dashboard()

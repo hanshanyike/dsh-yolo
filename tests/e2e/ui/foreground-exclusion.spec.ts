@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { connectApi, createFixtures, openYoloPanel, todayStr, uid, type Api } from '../helpers.ts'
+import { connectApi, createFixtures, openYoloPanel, revealHomeItems, todayStr, uid, type Api } from '../helpers.ts'
 
 let api: Api
 let fx: ReturnType<typeof createFixtures>
@@ -41,8 +41,9 @@ test('事项详情与来源预览共用前景，返回后保留编辑草稿', as
   const title = uid('确认活动场地与供应商档期')
   await fx.todo(title, { due: todayStr() })
   await openYoloPanel(page)
+  await revealHomeItems(page)
 
-  const homeRow = page.locator('.v2-today-row').filter({ hasText: title })
+  const homeRow = page.locator('.v2-judgment, .v2-today-row').filter({ hasText: title })
   await homeRow.getByRole('button', { name: '处理', exact: true }).click()
   const detail = page.getByRole('dialog', { name: title })
   await expect(detail).toBeVisible()

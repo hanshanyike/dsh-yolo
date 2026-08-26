@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { openDb, type DB } from '../src/storage/db.ts'
 import { migrateLegacyScopeDatabases } from '../src/storage/migrate-scope.ts'
 
@@ -59,7 +60,100 @@ function seedSecondLegacy(db: DB): void {
   db.prepare('INSERT INTO notifications(id,kind,title,todo_id,scope_cwd,created_at,handled_at,scope_key) VALUES(?,?,?,?,?,?,?,?)').run('notice-2', 'reminder', '已处理的分支提醒', 'feature-extra', '/old/path', 30, 31, 'canonical/feature')
 }
 
+/** Build a real pre-provenance branch DB without ever passing through openDb.
+ * Its todos table physically lacks source_excerpt/source_turn until the
+ * production migration opens it. */
+function createPreSourceLegacy(path: string): void {
+  const currentSchema = readFileSync(new URL('../src/storage/schema.sql', import.meta.url), 'utf8')
+  const legacySchema = currentSchema
+    .replace(/^\s*source_excerpt\s+TEXT[^\r\n]*(?:\r?\n)/mu, '')
+    .replace(/^\s*source_turn\s+INTEGER[^\r\n]*(?:\r?\n)/mu, '')
+  const db = new DatabaseSync(path)
+  try {
+    db.exec('PRAGMA foreign_keys = ON')
+    db.exec(legacySchema)
+    const columns = db.prepare('PRAGMA table_info(todos)').all() as Array<{ name: string }>
+    expect(columns.some((column) => column.name === 'source_excerpt')).toBe(false)
+    expect(columns.some((column) => column.name === 'source_turn')).toBe(false)
+
+    db.prepare('INSERT INTO milestones(id,title,status,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?)')
+      .run('old-ms', '完成客户演示准备', 'active', LEGACY, 1, 20)
+    db.prepare(`INSERT INTO todos(id,title,detail,status,priority,due_at,milestone_id,scope_key,dedup_key,source,session_id,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run('old-todo', '把客户演示材料发给研发', '先确认最终数字', 'pending', 'high', '2026-08-28', 'old-ms', LEGACY, '把客户演示材料发给研发', 'llm', 'old-session', 2, 20)
+    db.prepare('INSERT INTO goals(id,title,progress,status,milestone_id,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
+      .run('old-goal', '完成发布准备', 60, 'active', 'old-ms', LEGACY, 2, 20)
+    db.prepare('INSERT INTO events(id,kind,summary,session_id,source,occurred_at,scope_key) VALUES(?,?,?,?,?,?,?)')
+      .run('old-event', 'todo_created', '创建：把客户演示材料发给研发', 'old-session', 'llm', 20, LEGACY)
+    db.prepare('INSERT INTO session_summaries(session_id,summary,scope_key,updated_at) VALUES(?,?,?,?)')
+      .run('old-session', '客户演示交付讨论', LEGACY, 20)
+    db.prepare('INSERT INTO notifications(id,kind,title,todo_id,scope_cwd,created_at,scope_key) VALUES(?,?,?,?,?,?,?)')
+      .run('old-notification', 'reminder', '提醒发送客户演示材料', 'old-todo', 'D:\\old\\alpha', 20, LEGACY)
+    db.prepare('INSERT INTO attention_feedback(scope_key,todo_id,reason_version,evidence_fingerprint,seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?)')
+      .run(LEGACY, 'old-todo', 'v1', 'old-fingerprint', 20, 20, 20)
+    db.prepare('INSERT INTO pending_reminders(id,todo_id,milestone_id,fire_at,payload,scope_key) VALUES(?,?,?,?,?,?)')
+      .run('old-pending', 'old-todo', 'old-ms', 30, '继续跟进客户演示材料', LEGACY)
+  } finally {
+    db.close()
+  }
+}
+
 describe('legacy branch scope migration', () => {
+  it('MIG-02 migrates a true pre-source-column branch twice without loss or duplication', () => {
+    const dataDir = tempDir()
+    const canonicalPath = join(dataDir, 'yolo-canonical_default.db')
+    const legacyPath = join(dataDir, 'yolo-canonical_main.db')
+    createPreSourceLegacy(legacyPath)
+
+    const canonical = openDb(canonicalPath)
+    openDatabases.push(canonical)
+    const first = migrateLegacyScopeDatabases(canonical, dataDir, canonicalPath, CANONICAL, 'D:\\Work\\Alpha')
+    expect(first.imported).toEqual(['yolo-canonical_main.db'])
+    expect(first.warnings).toEqual([])
+
+    expect(canonical.prepare(`SELECT title,detail,status,priority,due_at,milestone_id,scope_key,source,session_id,source_excerpt,source_turn
+                              FROM todos WHERE id=?`).get('old-todo')).toEqual({
+      title: '把客户演示材料发给研发',
+      detail: '先确认最终数字',
+      status: 'pending',
+      priority: 'high',
+      due_at: '2026-08-28',
+      milestone_id: 'old-ms',
+      scope_key: CANONICAL,
+      source: 'llm',
+      session_id: 'old-session',
+      source_excerpt: null,
+      source_turn: null,
+    })
+    expect(canonical.prepare('SELECT milestone_id,scope_key FROM goals WHERE id=?').get('old-goal'))
+      .toEqual({ milestone_id: 'old-ms', scope_key: CANONICAL })
+    expect(canonical.prepare('SELECT todo_id,scope_cwd,scope_key FROM notifications WHERE id=?').get('old-notification'))
+      .toEqual({ todo_id: 'old-todo', scope_cwd: 'D:\\Work\\Alpha', scope_key: CANONICAL })
+    expect(canonical.prepare('SELECT todo_id FROM attention_feedback WHERE evidence_fingerprint=?').get('old-fingerprint'))
+      .toEqual({ todo_id: 'old-todo' })
+    expect(canonical.prepare('SELECT todo_id,milestone_id,scope_key FROM pending_reminders WHERE id=?').get('old-pending'))
+      .toEqual({ todo_id: 'old-todo', milestone_id: 'old-ms', scope_key: CANONICAL })
+    expect(canonical.prepare('SELECT summary,scope_key FROM session_summaries WHERE session_id=?').get('old-session'))
+      .toEqual({ summary: '客户演示交付讨论', scope_key: CANONICAL })
+    expect(canonical.prepare("SELECT COUNT(*) AS n FROM yolo_fts WHERE yolo_fts MATCH '客户演示材料' AND row_type='todo'").get()).toEqual({ n: 1 })
+    expect(canonical.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
+
+    const countsBefore = Object.fromEntries([
+      'milestones', 'todos', 'goals', 'events', 'session_summaries', 'notifications',
+      'attention_feedback', 'pending_reminders', 'yolo_fts',
+    ].map((table) => [table, canonical.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()]))
+    const second = migrateLegacyScopeDatabases(canonical, dataDir, canonicalPath, CANONICAL, 'D:\\Work\\Alpha')
+    expect(second).toEqual({ imported: [], warnings: [] })
+    for (const [table, count] of Object.entries(countsBefore)) {
+      expect(canonical.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get(), table).toEqual(count)
+    }
+    expect(canonical.prepare('SELECT source_excerpt,source_turn FROM todos WHERE id=?').get('old-todo'))
+      .toEqual({ source_excerpt: null, source_turn: null })
+    expect(canonical.prepare("SELECT COUNT(*) AS n FROM yolo_fts WHERE yolo_fts MATCH '客户演示材料' AND row_type='todo'").get()).toEqual({ n: 1 })
+    expect(canonical.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
+    canonical.close()
+  })
+
   it('keeps true conflicts, deterministically remaps ids and repairs every reference', () => {
     const dataDir = tempDir()
     const canonicalPath = join(dataDir, 'yolo-canonical_default.db')

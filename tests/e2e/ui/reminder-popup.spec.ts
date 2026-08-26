@@ -2,7 +2,7 @@
 // 点击回到看板；看板已打开时直接刷新通知区而不叠加弹窗。
 
 import { test, expect } from '@playwright/test'
-import { connectApi, createFixtures, uid, type Api } from '../helpers.ts'
+import { connectApi, createFixtures, openYoloPanel, todayStr, uid, type Api } from '../helpers.ts'
 
 let api: Api
 let fx: ReturnType<typeof createFixtures>
@@ -86,3 +86,41 @@ test('精确到期事项由真实调度器驱动右下角提示与侧栏角标',
     return dashboard.notifications.some((row: Record<string, unknown>) => row.todo_id != null && String(row.title).includes(title))
   }, { timeout: 10_000 }).toBe(true)
 })
+
+for (const foreground of ['item_detail', 'source_preview', 'item_discussion'] as const) {
+  test(`REM-HOME-02: ${foreground} 前景打开时新提醒只刷新首页且不抢占`, async ({ page }) => {
+    const title = uid(`确认${foreground}中的客户回访安排`)
+    const todo = await fx.todo(title, { due: todayStr() })
+    await openYoloPanel(page)
+    const folded = page.getByRole('button', { name: /查看其余 \d+ 项安排/u })
+    if (await folded.isVisible().catch(() => false)) await folded.click()
+
+    const homeItem = page.locator('.v2-judgment, .v2-today-row').filter({ hasText: title })
+    const openDetail = homeItem.getByRole('button', { name: /^(处理|更多处理)$/u })
+    await expect(openDetail).toHaveCount(1)
+    await openDetail.click()
+    const detail = page.getByRole('dialog', { name: title })
+    await expect(detail).toBeVisible()
+
+    if (foreground !== 'item_detail') {
+      await detail.getByRole('button', { name: /^快速记一条/u }).click()
+      const source = page.locator(`section[aria-label="来源：${title}"]`)
+      await expect(source).toBeVisible()
+      if (foreground === 'item_discussion') {
+        await source.getByRole('button', { name: '讨论这项安排' }).click()
+        await expect(page.getByRole('textbox', { name: '对 YOLO 说' })).toBeVisible()
+      }
+    }
+    await expect(page.locator(`aside[data-foreground="${foreground}"]`)).toHaveCount(1)
+
+    const notification = await fx.notification(uid(`提醒我继续处理 ${foreground}`), { todoId: String(todo.id) })
+    await refreshBadgeAsForeground(page)
+    await expect.poll(async () => {
+      const dashboard = await api.dashboard()
+      return dashboard.notifications.some((row: Record<string, any>) => row.id === notification.id && !row.handled)
+    }, { timeout: 12_000 }).toBe(true)
+    await expect(page.locator(`aside[data-foreground="${foreground}"]`)).toHaveCount(1)
+    await expect(page.locator('.yolo-reminder-popup')).toHaveCount(0)
+    await expect(page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^首页/ })).toHaveAttribute('aria-selected', 'true')
+  })
+}

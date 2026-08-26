@@ -735,7 +735,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
                   scopeCwd: n.scope_cwd ?? n.ws?.cwd,
                 })
               }}>
-                <IcChat size={12} />聊一聊
+                <IcChat size={12} />{n.todo_id ? '讨论这项安排' : '和助手聊聊'}
               </button>
               <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
                 知道了
@@ -1090,7 +1090,7 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
           <button type="button" className="act" disabled={busy} title="标记完成" aria-label="标记完成" onClick={onComplete}><IcCheck size={14} /></button>
           <button type="button" className="act" disabled={busy} title={`推迟到 ${nextDayStr(t.due_at)}`} aria-label="推迟一天" onClick={() => { onAct('postpone', { due_at: nextDayStr(t.due_at) }) }}><IcPlusDay size={14} /></button>
           <button type="button" className="act" disabled={busy} title="编辑" aria-label="编辑" onClick={onEdit}><IcDots size={14} /></button>
-          <button type="button" className="act" disabled={busy} title="聊一聊" aria-label="聊一聊" onClick={onChat}><IcChat size={14} /></button>
+          <button type="button" className="act" disabled={busy} title="讨论这项安排" aria-label="讨论这项安排" onClick={onChat}><IcChat size={14} /></button>
         </div>
       )}
       {!open && onReopen ? (

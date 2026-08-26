@@ -79,3 +79,25 @@ test('计划页提供筛选，更多菜单只承载通用操作并在 Esc 后恢
   await page.getByRole('tablist', { name: '计划范围' }).getByRole('tab', { name: '目标', exact: true }).click()
   await expect(page.getByRole('heading', { name: '目标与里程碑' })).toBeVisible()
 })
+
+test('A11Y-02: reduced-motion 关闭面板动效但不影响导航和前景操作', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await openPanelUnderBackground(page, '#ffffff')
+  const panel = page.locator('.yolo-scope')
+  const motion = await panel.evaluate((root) => {
+    const child = root.querySelector('.p-head') as HTMLElement
+    return {
+      rootAnimation: getComputedStyle(root).animationName,
+      rootTransition: getComputedStyle(root).transitionDuration,
+      childAnimation: getComputedStyle(child).animationName,
+      childTransition: getComputedStyle(child).transitionDuration,
+    }
+  })
+  expect(motion).toEqual({ rootAnimation: 'none', rootTransition: '0s', childAnimation: 'none', childTransition: '0s' })
+
+  await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^计划/ }).click()
+  await expect(page.getByRole('tablist', { name: '计划范围' })).toBeVisible()
+  await page.getByRole('button', { name: '和助手聊聊' }).click()
+  await expect(page.locator('aside[data-foreground="assistant_chat"]')).toHaveCount(1)
+  await expect(page.getByRole('textbox', { name: '对 YOLO 说' })).toBeVisible()
+})

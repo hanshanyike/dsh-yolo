@@ -187,19 +187,28 @@ describe('registerDashboardEndpoint scope handling', () => {
     allowAggregate: boolean,
     url: string,
   ): YoloDashboardData | undefined {
-    const captured: { data?: YoloDashboardData } = {}
+    const result = invoke(yolo, allowAggregate, url)
+    return result.status === 200 ? result.data as YoloDashboardData : undefined
+  }
+
+  function invoke(
+    yolo: Yolo,
+    allowAggregate: boolean,
+    url: string,
+  ): { status: number; data?: Record<string, any> } {
+    const captured: { status: number; data?: Record<string, any> } = { status: 0 }
     const server = {
       register: (o: { handler: (req: unknown, res: { writeHead: (s: number, h: Record<string, string>) => void; end: (b?: string) => void }) => Promise<void> | void }) => {
         void o.handler({ url }, {
-          writeHead: () => {},
+          writeHead: (status) => { captured.status = status },
           end: (b?: string) => {
-            if (b !== undefined) captured.data = JSON.parse(b) as YoloDashboardData
+            if (b !== undefined) captured.data = JSON.parse(b) as Record<string, any>
           },
         })
       },
     }
     registerDashboardEndpoint({ webServer: server } as never, yolo, () => 'C:\\work\\projA', { allowAggregate: () => allowAggregate })
-    return captured.data
+    return captured
   }
 
   it('normalizes even one known workspace to the all-workspaces v2 projection', () => {
@@ -247,5 +256,51 @@ describe('registerDashboardEndpoint scope handling', () => {
     expect(data?.workspaceCount).toBe(1)
     expect(data?.workspaceErrors).toHaveLength(1)
     expect(data?.workspaceErrors?.[0]).toContain('database locked')
+    expect(data?.summary?.partial).toBe(true)
+  })
+
+  it('WS-03 returns 500 only when all workspaces fail, then recovers cleanly on the next read', () => {
+    let failAll = true
+    const metas = [
+      { cwd: 'C:\\work\\projA', scopeKey: SCOPE_A },
+      { cwd: 'C:\\work\\projB', scopeKey: SCOPE_B },
+    ]
+    const yolo = {
+      resolve: (cwd: string) => ({ scopeKey: cwd.includes('projB') ? SCOPE_B : SCOPE_A, db: {}, dataDir: '' }),
+      runInScope: (_cwd: string, _scopeKey: string, fn: () => unknown) => fn(),
+      listTodos: (cwd: string) => {
+        if (failAll) throw new Error(`database unavailable: ${cwd}`)
+        return [{
+          id: 'same-id', title: cwd.includes('projB') ? '确认体检预约' : '把演示稿发给研发',
+          status: 'pending', scope_key: cwd.includes('projB') ? SCOPE_B : SCOPE_A,
+          created_at: 1, updated_at: 1,
+        }]
+      },
+      listGoals: () => [],
+      listMilestones: () => [],
+      listPreferences: () => [],
+      listEvents: () => [],
+      listEventsBetween: () => [],
+      listNotifications: () => [],
+      listUnhandledNotifications: () => [],
+      listSessionSummaries: () => [],
+      listWorkspaceMeta: () => metas,
+    } as unknown as Yolo
+
+    const failed = invoke(yolo, true, '/yolo/dashboard?scope=all')
+    expect(failed.status).toBe(500)
+    expect(failed.data?.error).toContain('database unavailable')
+
+    failAll = false
+    const recovered = invoke(yolo, true, '/yolo/dashboard?scope=all')
+    expect(recovered.status).toBe(200)
+    expect(recovered.data).toMatchObject({ scope: 'all', workspaceCount: 2 })
+    expect(recovered.data?.workspaceErrors).toBeUndefined()
+    expect(recovered.data?.summary).toMatchObject({ partial: false, open: 2 })
+    const rows = recovered.data?.todos as YoloTodoRow[]
+    expect(rows).toHaveLength(2)
+    expect(rows.map((item) => item.id)).toEqual(['same-id', 'same-id'])
+    expect(rows.map((item) => item.ws?.slug)).toEqual([SCOPE_A, SCOPE_B])
+    expect(rows.map((item) => item.scope_cwd)).toEqual(['C:\\work\\projA', 'C:\\work\\projB'])
   })
 })

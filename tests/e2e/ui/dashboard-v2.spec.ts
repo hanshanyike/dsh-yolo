@@ -7,6 +7,7 @@ import {
   connectApi,
   createFixtures,
   openYoloPanel,
+  revealHomeItems,
   todayStr,
   uid,
   waitForDashboard,
@@ -75,6 +76,7 @@ test('首页保持固定阅读顺序、唯一判断，更多处理展示完整�
   await fx.todo(uid('整理下周客户回访需要确认的问题'), { due: localDateOffset(-1) })
 
   await openYoloPanel(page, { refreshOnSlow: false })
+  await revealHomeItems(page)
   const surface = page.locator('.v2-today-surface')
   const judgment = surface.locator('.v2-judgment')
   await expect(judgment).toHaveCount(1)

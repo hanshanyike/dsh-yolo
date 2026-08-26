@@ -538,7 +538,9 @@ export const YOLO_CSS = `
 .yolo-scope .v2-today-row-meta button { min-height: 32px; padding: 0 6px; border-color: transparent; background: none; color: var(--y-text-2); text-align: left; }
 .yolo-scope .v2-today-row-meta time { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
 .yolo-scope .v2-today-row > button { min-width: 58px; padding: 0 10px; }
+.yolo-scope .v2-secondary-more { width: 100%; margin-top: 10px; border-color: var(--y-line-strong); background: var(--y-surface-2); color: var(--y-text-2); }
 .yolo-scope .v2-today-surface > section[aria-labelledby="v2-progress-title"] > h2 { border-bottom: 0; }
+.yolo-scope .v2-recent-changes > li { padding: 7px 2px; border-bottom: 1px solid var(--y-line); color: var(--y-text-2); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
 .yolo-scope .v2-today-surface > section[aria-labelledby="v2-progress-title"] > button { width: 100%; min-height: 44px; padding: 9px 12px; border-color: var(--y-line-strong); background: var(--y-surface-2); color: var(--y-text-2); text-align: left; font-variant-numeric: tabular-nums; }
 .yolo-scope .v2-today-surface > section[aria-labelledby="v2-closure-title"] { padding: 15px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); background: var(--y-surface-2); }
 .yolo-scope .v2-today-surface > section[aria-labelledby="v2-closure-title"] > h2 { padding: 0; border: 0; }
@@ -605,14 +607,10 @@ export const YOLO_CSS = `
 .yolo-scope.compact .v2-task-action-panel [role="group"] button { flex-basis: 100%; min-height: 40px; }
 .yolo-scope.compact .v2-learning-receipt dl > div { grid-template-columns: 1fr; gap: 2px; }
 .yolo-scope.compact .v2-learning-receipt dd { text-align: left; }
-@media (min-width: 480px) {
-  .yolo-scope .v2-today-surface > header { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; }
-  .yolo-scope .v2-today-surface > header h1, .yolo-scope .v2-today-surface > header p:last-child { grid-column: 1 / -1; }
-}
-@media (min-width: 960px) {
-  .yolo-scope .v2-today-surface { max-width: 820px; margin-inline: auto; }
-  .yolo-scope .v2-task-action-panel { width: 380px; }
-}
+.yolo-scope:not(.compact) .v2-today-surface > header { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; }
+.yolo-scope:not(.compact) .v2-today-surface > header h1, .yolo-scope:not(.compact) .v2-today-surface > header p:last-child { grid-column: 1 / -1; }
+.yolo-scope[data-presentation="split"] .v2-today-surface { max-width: 820px; margin-inline: auto; }
+.yolo-scope[data-presentation="split"] .v2-task-action-panel { width: 100%; }
 
 /* narrow panel (4.3 Compact) */
 .yolo-scope.compact .p-date { display: none; }

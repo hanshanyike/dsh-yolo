@@ -27,7 +27,7 @@
 
 | spec · 用例 | 场景 | 验收来源 |
 |---|---|---|
-| `api/dashboard-scope.spec.ts` | 聚合 `single / all / partial / all-fail / recovery`；同 id 跨 scope 不误合并，workspace identity 和来源 owner 稳定 | W13 / WS-01～03 |
+| `api/dashboard-scope.spec.ts` | 真实 HTTP 的 `single / all` 聚合契约、workspace/source owner、未知 scope 拒绝后恢复；`partial / all-fail / recovery` 与同 id 双 scope 由 `tests/dashboard-aggregate.test.ts` 确定性覆盖 | W13 / WS-01 / WS-03 |
 | `api/dashboard-surfaces.spec.ts` | 首页安静/正常/高压和 partial；最多一个首要事项、跨区去重、计划与历史边界、最近变化过滤 | W2 / W11 / W13 / HOME / HIST |
 | `api/source-provenance.spec.ts` | 会话来源保存有界摘录、时间、工作区、session id 和可选 turn；manual/tool/legacy/旧数据降级；capability 与字段一致 | W8 / W16 / SRC-01～03 |
 | `api/due-semantics.spec.ts` | date-only、精确 datetime 与终态的 overdue/attention/summary 一致，并正确进入首页和计划投影；快速记录不会立即生成提醒 | W2 / W4 / W11 |
@@ -43,7 +43,7 @@
 | `ui/source-navigation.spec.ts` | 首页、计划、历史和详情使用同一来源行为；预览、失败不关闭、成功打开宿主会话、重开恢复；旧数据降级 | W8 / W9 / SRC-01～04 |
 | `ui/foreground-exclusion.spec.ts` | 助手对话、事项讨论、详情、来源预览互斥；返回、Esc、焦点和单/双栏语义一致 | W5 / SM-01～03 / A11Y-01 |
 | `ui/context-responsive.spec.ts` | 可用容器宽度 340、479 和阈值两侧；宿主侧栏展开/收起；resize 保留 thread/draft/pending/scroll/focus，至多一个上下文区 | W7 / RSP-01～02 |
-| `ui/item-discussion.spec.ts` | resident、事项 A、事项 B 隔离；响应式隐藏继续 episode，显式结束后新建 episode；慢回复不串写 | W10 / CHAT-01～02 |
+| `ui/panel-v032.spec.ts` · `ui/chat-request-lifecycle.spec.ts` | resident、事项 A、事项 B 隔离；响应式隐藏继续 episode，显式结束后新建 episode；慢回复不串写 | W10 / CHAT-01～02 |
 | `ui/chat-scroll.spec.ts` | 单栏和双栏上下文各自真实 scroll owner；首载、发送、回复贴底，上翻后只提示新消息 | W5 / W7 / W10 |
 | `ui/chat-request-lifecycle.spec.ts` | 单/双栏、Esc 和 panel 重挂载保持 accepted/stale；POST 恰好一次，旧轮询不覆盖当前前景 | W5 / W7 / W10 / CHAT-02 |
 | `ui/dashboard-trust.spec.ts` | 服务端回执、撤销、partial scope、reason/evidence/source 与 payload 一致，首页不重复 | W11～W16 |
@@ -51,7 +51,7 @@
 | `ui/reminder-popup.spec.ts` | 历史提醒不补弹、新提醒不抢前景、面板已开只刷新、点击定位首页正确事项 | W14 / REM-HOME-02 |
 | `ui/theme-narrow.spec.ts` | 新表面深浅主题、340px 和 `<480px` 单栏，无横向滚动或遮挡，reduced-motion 退化正确 | W6 / W7 |
 | `ui/accessibility-feedback.spec.ts` | 一级 Tab 键盘、单栏 focus trap/背景 inert、双栏非 modal、返回焦点、live region 和所有控件可读名 | W2 / W5 / W14 / A11Y |
-| `ui/workspace-routing.spec.ts` | 同 id 双工作区真实 UI 动作只改变目标 scope；partial 切页/来源/刷新与 recovery owner 不漂移 | W13 / WS-01～03 |
+| `ui/dashboard-trust.spec.ts` · `api/dashboard-scope.spec.ts` · `tests/dashboard-aggregate.test.ts` | UI 中 partial 只提示一次且动作固定原 `scope_cwd`；API 验证真实 owner/未知 scope recovery；同 id 双 scope 与 all-fail recovery 由确定性聚合单测验证 | W13 / WS-01～03 |
 | `ui/capture-composition.spec.ts` | 中文输入法组合态 Enter 不误提交，组合结束后只新增一次真实事项 | W4 |
 | `ui/settings-card.spec.ts` | 提醒与简报设置可保存并在刷新后回读；设置不泄漏内部实现入口 | W14 |
 
@@ -83,7 +83,7 @@
 | SRC-04 | ui + host | 导航成功后 YOLO 收起；重新打开恢复原页面、事项和来源预览，返回一步到事项；不重复发送请求 |
 | WS-01 | unit + api + ui | 同 id 双工作区同时出现；操作其中一行，请求、SQLite 与 dashboard 只改变对应 `scope_cwd` |
 | WS-02 | unit + api + ui | `partial → 切页 → 来源预览 → 动作 → 刷新 → recovery`，owner 不漂移，partial 只提示一次，恢复后数据补齐 |
-| WS-03 | unit + api | `single / all / partial / all-fail / recovery` 五态；all-fail 才整体失败，同 basename 工作区标签稳定消歧 |
+| WS-03 | unit + api | `tests/dashboard-aggregate.test.ts` 参数化 `single / all / partial / all-fail / recovery` 五态，且 all-fail 后同一服务下一次读取恢复；`api/dashboard-scope.spec.ts` 验证真实 HTTP single/all 与未知 scope 拒绝后的恢复；同 basename 标签稳定消歧 |
 
 #### 首页、提醒、历史和对话
 
@@ -103,7 +103,7 @@
 | 编号 | 层级 | 场景与硬断言 |
 |---|---|---|
 | MIG-01 | unit | 分别使用 fresh、current 和真正缺少来源列的旧单库；每种连续打开两次，迁移幂等，todo/event/session summary/notification/client action/FTS 行数与关键字段不丢，`PRAGMA integrity_check=ok` |
-| MIG-02 | unit | 真旧 legacy branch DB 不含新列，合入 canonical 两次；显式 column 清单正确处理缺失来源列，新字段降级 NULL，引用与 FTS 完整，`integrity_check=ok` |
+| MIG-02 | unit | `tests/storage-scope-migration.test.ts` 用原生 SQLite 创建真正缺少 `source_excerpt/source_turn` 的 legacy branch DB（建库不经 current `openDb`），合入 canonical 两次；新字段降级 NULL，引用与 FTS 完整，`integrity_check=ok` |
 
 #### 旧用例迁移规则
 
