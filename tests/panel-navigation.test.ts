@@ -23,11 +23,15 @@ describe('panel navigation state machine', () => {
       item: itemA,
       source: { type: 'session', label: '客户跟进', session_id: 'session-a' },
       returnTo: detail.foreground.kind === 'item_detail' ? detail.foreground : undefined,
-    })
+      returnToFocusId: detail.returnFocusId,
+    }, 'detail-source-a')
 
     expect(source.route).toEqual({ page: 'plan', section: 'upcoming' })
     expect(source.foreground.kind).toBe('source_preview')
-    expect(backFromForeground(source).foreground).toEqual({ kind: 'item_detail', item: itemA })
+    expect(backFromForeground(source)).toMatchObject({
+      foreground: { kind: 'item_detail', item: itemA },
+      returnFocusId: 'todo-a',
+    })
     expect(backFromForeground(backFromForeground(source)).foreground).toEqual({ kind: 'none' })
   })
 

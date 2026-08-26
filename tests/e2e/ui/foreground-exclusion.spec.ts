@@ -51,7 +51,8 @@ test('事项详情与来源预览共用前景，返回后保留编辑草稿', as
 
   const titleInput = detail.getByRole('textbox', { name: '标题' })
   await titleInput.fill(`${title}（待确认）`)
-  await detail.getByRole('button', { name: /快速记一条/u }).click()
+  const detailSourceButton = detail.getByRole('button', { name: /快速记一条/u })
+  await detailSourceButton.click()
 
   const source = page.locator(`section[aria-label="来源：${title}"]`)
   await expect(source).toBeVisible()
@@ -61,6 +62,7 @@ test('事项详情与来源预览共用前景，返回后保留编辑草稿', as
   await source.getByRole('button', { name: '返回上一层' }).click()
   await expect(detail).toBeVisible()
   await expect(titleInput).toHaveValue(`${title}（待确认）`)
+  await expect(detailSourceButton).toBeFocused()
 
   await detail.getByRole('button', { name: '和助手讨论' }).click()
   await expect(detail).toHaveCount(0)

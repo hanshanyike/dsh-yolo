@@ -84,6 +84,7 @@ function TodayTaskRow({ row, busy, onIntent }: {
         <div className="v2-today-row-meta">
           <button
             type="button"
+            data-yolo-focus-id={`home-source:${row.scopeCwd}:${row.todo.id}`}
             onClick={() => { onIntent({ type: 'open_source', source, todo: row.todo, scopeCwd: row.scopeCwd }) }}
           >
             {source.label}

@@ -121,7 +121,7 @@ export function TaskActionPanel({
         <section aria-label="来源">
           <h3>来源</h3>
           {onOpenSource ? (
-            <button type="button" onClick={() => { onOpenSource(source) }}>
+            <button type="button" data-yolo-focus-id={`detail-source:${item.scope_cwd}:${item.id}`} onClick={() => { onOpenSource(source) }}>
               {source.label}{source.workspace ? ` · ${source.workspace.label}` : ''}
             </button>
           ) : <p>{source.label}{source.workspace ? ` · ${source.workspace.label}` : ''}</p>}

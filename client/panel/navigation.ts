@@ -31,6 +31,8 @@ export type PanelForeground =
       item: PanelItemRef
       source: YoloItemSource
       returnTo?: ItemDetailForeground
+      /** Focus target owned by the underlying detail after Source returns. */
+      returnToFocusId?: string
     }
 
 export type PresentationPreference = 'auto' | 'focus' | 'dock'
@@ -82,7 +84,7 @@ export function openForeground(
 
 export function backFromForeground(state: PanelNavigationState): PanelNavigationState {
   if (state.foreground.kind === 'source_preview' && state.foreground.returnTo) {
-    return { ...state, foreground: state.foreground.returnTo }
+    return { ...state, foreground: state.foreground.returnTo, returnFocusId: state.foreground.returnToFocusId }
   }
   return { ...state, foreground: { kind: 'none' } }
 }

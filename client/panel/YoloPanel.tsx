@@ -205,14 +205,21 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     return () => { active = false }
   }, [load, notificationFocusRequest, setRoute])
 
-  const focusChatOpener = useCallback((): void => {
+  const focusChatOpener = useCallback((returnFocusId = navigation.returnFocusId, todoId = chatReturnTodoIdRef.current): void => {
     window.setTimeout(() => {
+      if (returnFocusId) {
+        const exact = Array.from(document.querySelectorAll<HTMLElement>('[data-yolo-focus-id]'))
+          .find((element) => element.dataset.yoloFocusId === returnFocusId)
+        if (exact?.isConnected && exact.getClientRects().length > 0) {
+          exact.focus()
+          return
+        }
+      }
       const original = chatOpenerRef.current
-      if (original?.isConnected) {
+      if (original?.isConnected && original.getClientRects().length > 0) {
         original.focus()
         return
       }
-      const todoId = chatReturnTodoIdRef.current
       if (todoId) {
         const row = Array.from(document.querySelectorAll<HTMLElement>('[data-yolo-todo-id]'))
           .find((element) => element.dataset.yoloTodoId === todoId)
@@ -223,9 +230,13 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
       }
       chatToggleRef.current?.focus()
     }, 0)
-  }, [])
+  }, [navigation.returnFocusId])
 
   const closeForeground = useCallback((): void => {
+    const returnFocusId = navigation.returnFocusId
+    const returnTodoId = navigation.foreground.kind === 'none' ? undefined : navigation.foreground.kind === 'assistant_chat'
+      ? undefined
+      : navigation.foreground.item.id
     setNavigation((current) => {
       if (current.foreground.kind === 'item_discussion') {
         const key = `${current.foreground.item.scopeCwd}\u0000${current.foreground.item.id}`
@@ -242,10 +253,14 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     setDetailReceipt(null)
     setDetailUndo(null)
     setDetailError(null)
-    focusChatOpener()
-  }, [focusChatOpener])
+    focusChatOpener(returnFocusId, returnTodoId)
+  }, [focusChatOpener, navigation.foreground, navigation.returnFocusId])
 
   const backForeground = useCallback((): void => {
+    const returnFocusId = navigation.returnFocusId
+    const returnTodoId = navigation.foreground.kind === 'none' || navigation.foreground.kind === 'assistant_chat'
+      ? undefined
+      : navigation.foreground.item.id
     setNavigation((current) => backFromForeground(current))
     setSessionNavigation({ status: 'idle' })
     if (navigation.foreground.kind === 'item_detail') {
@@ -254,8 +269,8 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
       setDetailUndo(null)
       setDetailError(null)
     }
-    focusChatOpener()
-  }, [focusChatOpener, navigation.foreground.kind])
+    focusChatOpener(returnFocusId, returnTodoId)
+  }, [focusChatOpener, navigation.foreground, navigation.returnFocusId])
 
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {
@@ -324,11 +339,18 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   }, [])
 
   const openSourcePreview = useCallback((item: PanelItemRef, source: NonNullable<YoloDashboardData['todos'][number]['source']>): void => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    chatOpenerRef.current = opener
+    chatReturnTodoIdRef.current = item.id
     setSessionNavigation({ status: 'idle' })
-    setNavigation((current) => openForeground(current, {
-      kind: 'source_preview', item, source,
-      returnTo: current.foreground.kind === 'item_detail' ? current.foreground : undefined,
-    }))
+    setNavigation((current) => {
+      const focusId = opener?.dataset.yoloFocusId
+      return openForeground(current, {
+        kind: 'source_preview', item, source,
+        returnTo: current.foreground.kind === 'item_detail' ? current.foreground : undefined,
+        returnToFocusId: current.foreground.kind === 'item_detail' ? current.returnFocusId : undefined,
+      }, focusId)
+    })
   }, [])
 
   const openItemDetail = useCallback((todo: YoloTodoRow): void => {

@@ -1070,7 +1070,7 @@ function TodoRowView({ t, busy, completing, retiring, onComplete, onAct, onEdit,
             </>
           )}
           {t.source && onSource ? (
-            <button type="button" className="src" title="查看来源" onClick={(event) => { event.stopPropagation(); onSource() }}>
+            <button type="button" className="src" title="查看来源" data-yolo-focus-id={`row-source:${t.scope_cwd ?? t.ws?.cwd ?? ''}:${t.id}`} onClick={(event) => { event.stopPropagation(); onSource() }}>
               <IcPin size={11} />
               <span>{t.source.label}</span>
             </button>

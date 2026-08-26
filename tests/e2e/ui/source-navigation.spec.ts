@@ -64,7 +64,8 @@ test('手动来源明确降级，不提供原会话跳转', async ({ page }) => 
 
   await openPlanToday(page)
   const row = page.getByRole('listitem', { name: `任务：${title}` })
-  await row.getByRole('button', { name: '快速记一条', exact: true }).click()
+  const sourceButton = row.getByRole('button', { name: '快速记一条', exact: true })
+  await sourceButton.click()
 
   const preview = page.locator(`section[aria-label="来源：${title}"]`)
   await expect(preview).toBeVisible()
@@ -76,6 +77,7 @@ test('手动来源明确降级，不提供原会话跳转', async ({ page }) => 
   await preview.getByRole('button', { name: '返回上一层' }).click()
   await expect(preview).toHaveCount(0)
   await expect(row).toBeVisible()
+  await expect(sourceButton).toBeFocused()
 })
 
 test('旧会话来源无摘录时保留会话入口并诚实说明降级', async ({ page }) => {
