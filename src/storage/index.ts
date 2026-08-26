@@ -137,7 +137,7 @@ export default class Yolo extends Service {
    * (drives the todo_created ledger event). */
   addTodo(
     cwd: string,
-    data: { title: string; detail?: string | null; priority?: Priority | null; due_at?: string | null; milestone_id?: string | null; source?: Source; session_id?: string | null },
+    data: { title: string; detail?: string | null; priority?: Priority | null; due_at?: string | null; milestone_id?: string | null; source?: Source; session_id?: string | null; source_excerpt?: string | null; source_turn?: number | null },
   ): { todo: Todo; created: boolean } {
     const h = this.resolve(cwd)
     const { row, created } = repo.upsertTodo(h.db, { ...data, scope_key: h.scopeKey })

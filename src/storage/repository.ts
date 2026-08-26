@@ -119,6 +119,27 @@ export function findMilestoneByTitle(db: DB, scopeKey: string, title: string): M
 
 // ---------- todos ----------
 
+const SOURCE_EXCERPT_LIMIT = 400
+
+function normalizeSourceEvidence(data: {
+  source?: Source
+  session_id?: string | null
+  source_excerpt?: string | null
+  source_turn?: number | null
+}): { excerpt: string | null; turn: number | null } {
+  // Only the semantic extraction path has direct-user evidence. Manual/tool
+  // callers cannot turn arbitrary text into a quotation by filling these fields.
+  if (data.source !== 'llm' || !data.session_id || !Number.isInteger(data.source_turn)) {
+    return { excerpt: null, turn: null }
+  }
+  const text = data.source_excerpt?.replace(/\s+/gu, ' ').trim() ?? ''
+  if (!text) return { excerpt: null, turn: null }
+  return {
+    excerpt: Array.from(text).slice(0, SOURCE_EXCERPT_LIMIT).join(''),
+    turn: data.source_turn as number,
+  }
+}
+
 export function upsertTodo(
   db: DB,
   data: {
@@ -130,6 +151,8 @@ export function upsertTodo(
     scope_key: string
     source?: Source
     session_id?: string | null
+    source_excerpt?: string | null
+    source_turn?: number | null
   },
 ): { row: Todo; created: boolean } {
   const dedupKey = `todo:${normalize(data.title)}`
@@ -149,6 +172,7 @@ export function upsertTodo(
     syncTodoFts(db, existing.id, existing.title, detail)
     return { row: { ...existing, due_at: due, priority: pri, detail, milestone_id: ms, updated_at: ts }, created: false }
   }
+  const sourceEvidence = normalizeSourceEvidence(data)
   const row: Todo = {
     id: genId(),
     title: data.title,
@@ -161,13 +185,15 @@ export function upsertTodo(
     dedup_key: dedupKey,
     source: data.source ?? null,
     session_id: data.session_id ?? null,
+    source_excerpt: sourceEvidence.excerpt,
+    source_turn: sourceEvidence.turn,
     created_at: ts,
     updated_at: ts,
     completed_at: null,
   }
   db.prepare(
-    `INSERT INTO todos(id, title, detail, status, priority, due_at, milestone_id, scope_key, dedup_key, source, session_id, created_at, updated_at, completed_at)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+    `INSERT INTO todos(id, title, detail, status, priority, due_at, milestone_id, scope_key, dedup_key, source, session_id, source_excerpt, source_turn, created_at, updated_at, completed_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
   ).run(
     row.id,
     row.title,
@@ -180,6 +206,8 @@ export function upsertTodo(
     row.dedup_key,
     row.source,
     row.session_id,
+    row.source_excerpt,
+    row.source_turn,
     row.created_at,
     row.updated_at,
   )

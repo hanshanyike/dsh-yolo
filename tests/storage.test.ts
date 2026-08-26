@@ -1,6 +1,10 @@
 // YOLO storage layer unit tests — exercises the pure repository/db/search/snapshot
 // functions against an in-memory SQLite DB (no Cordis host needed).
 
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { openDb, withTransaction, type DB } from '../src/storage/db.ts'
 import * as repo from '../src/storage/repository.ts'
@@ -24,6 +28,34 @@ describe('db + schema', () => {
     for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'goals', 'preferences', 'preference_history', 'events', 'extraction_log', 'pending_reminders', 'yolo_fts']) {
       expect(tableNames).toContain(t)
     }
+  })
+
+  it('idempotently adds source evidence columns to an old database', () => {
+    const root = mkdtempSync(join(tmpdir(), 'yolo-old-source-'))
+    const path = join(root, 'old.db')
+    const old = new DatabaseSync(path)
+    old.exec(`CREATE TABLE todos (
+      id TEXT PRIMARY KEY, title TEXT NOT NULL, detail TEXT,
+      status TEXT NOT NULL DEFAULT 'pending', priority TEXT, due_at TEXT,
+      milestone_id TEXT, scope_key TEXT NOT NULL, dedup_key TEXT, source TEXT,
+      session_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+      completed_at INTEGER, last_reminded_at INTEGER,
+      good_count INTEGER NOT NULL DEFAULT 0, stale_count INTEGER NOT NULL DEFAULT 0
+    )`)
+    old.prepare('INSERT INTO todos(id,title,status,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?)')
+      .run('old-1', '旧事项', 'pending', SCOPE, 1, 1)
+    old.close()
+
+    const migrated = openDb(path)
+    const columns = migrated.prepare('PRAGMA table_info(todos)').all() as Array<{ name: string }>
+    expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining(['source_excerpt', 'source_turn']))
+    expect(migrated.prepare('SELECT source_excerpt,source_turn FROM todos WHERE id=?').get('old-1'))
+      .toEqual({ source_excerpt: null, source_turn: null })
+    migrated.close()
+
+    // A second open proves the PRAGMA-gated ALTERs are idempotent.
+    expect(() => openDb(path).close()).not.toThrow()
+    rmSync(root, { recursive: true, force: true })
   })
 
   it('commits successful transactions and rolls back failed ones', () => {
@@ -65,6 +97,43 @@ describe('todos', () => {
     expect(todos).toHaveLength(1)
     expect(todos[0].due_at).toBe('2026-08-21')
     expect(todos[0].priority).toBe('high')
+  })
+
+  it('keeps the original source evidence when a later upsert updates the todo', () => {
+    const first = repo.upsertTodo(db, {
+      title: '把演示稿发给研发', scope_key: SCOPE, source: 'llm', session_id: 'session-origin',
+      source_excerpt: '明天下午把演示稿发给研发', source_turn: 3,
+    })
+    const second = repo.upsertTodo(db, {
+      title: '把演示稿发给研发', scope_key: SCOPE, due_at: '2026-08-28', source: 'llm', session_id: 'session-update',
+      source_excerpt: '刚才那件事改到周五', source_turn: 8,
+    })
+
+    expect(second.created).toBe(false)
+    expect(second.row).toMatchObject({
+      id: first.row.id,
+      due_at: '2026-08-28',
+      session_id: 'session-origin',
+      source_excerpt: '明天下午把演示稿发给研发',
+      source_turn: 3,
+    })
+  })
+
+  it('bounds source evidence at storage and rejects it for manual or tool rows', () => {
+    const llm = repo.upsertTodo(db, {
+      title: '核对发布窗口', scope_key: SCOPE, source: 'llm', session_id: 'session-source',
+      source_excerpt: `核对  ${'😀'.repeat(450)}`, source_turn: 5,
+    }).row
+    expect(Array.from(llm.source_excerpt ?? '')).toHaveLength(400)
+    expect(llm.source_turn).toBe(5)
+
+    for (const source of ['manual', 'tool'] as const) {
+      const row = repo.upsertTodo(db, {
+        title: `${source} 来源`, scope_key: SCOPE, source, session_id: 'forged-session',
+        source_excerpt: '不应保存', source_turn: 9,
+      }).row
+      expect(row).toMatchObject({ source_excerpt: null, source_turn: null })
+    }
   })
 
   it('keeps the persisted todo title and its FTS projection identical after a normalized-title upsert', () => {

@@ -84,6 +84,21 @@ function humanMessagesToText(messages: readonly UserMessage[], maxChars = 8000):
   return joined.length > maxChars ? joined.slice(0, maxChars) : joined
 }
 
+/** A preview is provenance, not another transcript store. Keep only direct
+ * human input from this accepted turn, normalize layout, and truncate by
+ * Unicode code points so astral characters are never split. */
+export function sourceExcerptFromMessages(messages: readonly UserMessage[], maxChars = 400): string | null {
+  const text = messages
+    .filter((message) => message.source?.kind === 'user')
+    .map((message) => contentBlocksToText(message.content).trim())
+    .filter(Boolean)
+    .join('\n')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  if (!text) return null
+  return Array.from(text).slice(0, maxChars).join('')
+}
+
 interface ExtractAgent extends Pick<Agent, 'id' | 'options' | 'session' | 'status'> {
   whenIdle?: () => Promise<void>
 }
@@ -151,7 +166,13 @@ async function waitForSpacing(ms: number, signal: AbortSignal): Promise<void> {
  * v0.3.0: everything lands with session attribution — events carry
  * session_id, NEW todos write a todo_created ledger event, and a
  * session_summary keeps the ledger's source badge readable. */
-function mergeExtraction(yolo: Yolo, cwd: string, r: ExtractionResult, sessionId: string): void {
+function mergeExtraction(
+  yolo: Yolo,
+  cwd: string,
+  r: ExtractionResult,
+  source: { sessionId: string; turn: number; excerpt: string | null },
+): void {
+  const { sessionId } = source
   // Write-quality gate (v0.3.2 / B3): junk acknowledgements and bare meta
   // commands never land in storage — a wrong memory can trigger a wrong reminder.
   for (const m of r.milestones) {
@@ -162,7 +183,16 @@ function mergeExtraction(yolo: Yolo, cwd: string, r: ExtractionResult, sessionId
     title ? yolo.findMilestoneId(cwd, title) : null
   for (const t of r.todos) {
     if (shouldDropExtracted('todo', t.title)) continue
-    const { created } = yolo.addTodo(cwd, { title: t.title, due_at: t.due_at, priority: toPriority(t.priority), milestone_id: link(t.milestone_title), source: 'llm', session_id: sessionId })
+    const { created } = yolo.addTodo(cwd, {
+      title: t.title,
+      due_at: t.due_at,
+      priority: toPriority(t.priority),
+      milestone_id: link(t.milestone_title),
+      source: 'llm',
+      session_id: sessionId,
+      source_excerpt: source.excerpt,
+      source_turn: source.excerpt ? source.turn : null,
+    })
     if (created) {
       yolo.addEvent(cwd, {
         kind: 'todo_created',
@@ -343,7 +373,13 @@ export function apply(ctx: Context): void {
             observe: (value) => { observation = value },
           })
 
-          mergeExtraction(yctx.yolo, cwd, result, session.id)
+          mergeExtraction(yctx.yolo, cwd, result, {
+            sessionId: session.id,
+            turn,
+            // Compatibility fallback text is useful extraction input but is
+            // not sufficiently strong provenance to persist as a quotation.
+            excerpt: sourceExcerptFromMessages(capturedMessages),
+          })
           const hasContent = result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0 || result.updates.length > 0
           yctx.yolo.logExtraction(cwd, {
             session_id: session.id,

@@ -162,6 +162,12 @@ function migrate(db: DB): void {
   if (!todoCols.some((c) => c.name === 'session_id')) {
     db.exec('ALTER TABLE todos ADD COLUMN session_id TEXT')
   }
+  if (!todoCols.some((c) => c.name === 'source_excerpt')) {
+    db.exec('ALTER TABLE todos ADD COLUMN source_excerpt TEXT')
+  }
+  if (!todoCols.some((c) => c.name === 'source_turn')) {
+    db.exec('ALTER TABLE todos ADD COLUMN source_turn INTEGER')
+  }
 }
 
 export function setMeta(db: DB, key: string, value: string): void {

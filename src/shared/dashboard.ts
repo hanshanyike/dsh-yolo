@@ -21,6 +21,8 @@ export interface YoloItemSource {
   label: string
   session_id?: string | null
   excerpt?: string | null
+  /** Originating host turn when known. The current host navigation opens the session only. */
+  turn?: number | null
   workspace?: WorkspaceTag
 }
 

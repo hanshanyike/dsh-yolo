@@ -35,7 +35,8 @@ function seedCanonical(db: DB): void {
 
 function seedLegacy(db: DB): void {
   db.prepare('INSERT INTO milestones(id,title,status,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?)').run('same-ms', '功能分支里程碑', 'active', LEGACY, 2, 20)
-  db.prepare('INSERT INTO todos(id,title,status,milestone_id,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run('same-todo', '功能分支事项', 'pending', 'same-ms', LEGACY, 2, 20)
+  db.prepare('INSERT INTO todos(id,title,status,milestone_id,scope_key,session_id,source_excerpt,source_turn,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+    .run('same-todo', '功能分支事项', 'pending', 'same-ms', LEGACY, 'session-1', '请继续跟进功能分支事项', 2, 2, 20)
   db.prepare('INSERT INTO goals(id,title,progress,status,milestone_id,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').run('same-goal', '功能分支目标', 20, 'active', 'same-ms', LEGACY, 2, 20)
   // Same id+key but different content must still follow updated_at conflict policy.
   db.prepare('INSERT INTO preferences(id,key,value,confidence,scope_key,updated_at,valid_at) VALUES(?,?,?,?,?,?,?)').run('pref-main', '跟进节奏', '每天', 0.8, LEGACY, 20, 20)
@@ -91,6 +92,8 @@ describe('legacy branch scope migration', () => {
     expect(featureMilestone.id).not.toBe('same-ms')
     expect(featureTodo.id).not.toBe('same-todo')
     expect(featureTodo.milestone_id).toBe(featureMilestone.id)
+    expect(canonical.prepare('SELECT session_id,source_excerpt,source_turn FROM todos WHERE id=?').get(featureTodo.id))
+      .toEqual({ session_id: 'session-1', source_excerpt: '请继续跟进功能分支事项', source_turn: 2 })
     expect(goals.find((row) => row.title === '功能分支目标')?.milestone_id).toBe(featureMilestone.id)
     expect(canonical.prepare('SELECT todo_id FROM notifications WHERE title = ?').get('发送功能分支方案')).toEqual({ todo_id: featureTodo.id })
     expect(canonical.prepare('SELECT handled_at FROM notifications WHERE title = ?').get('已处理的分支提醒')).toEqual({ handled_at: 31 })

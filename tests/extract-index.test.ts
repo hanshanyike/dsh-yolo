@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LlmRuntime, StreamChunk } from '@deepseek-ai/dsh-llm'
 import Yolo from '../src/storage/index.ts'
-import { apply } from '../src/extract/index.ts'
+import { apply, sourceExcerptFromMessages } from '../src/extract/index.ts'
 
 type Handler = (...args: any[]) => void
 
@@ -79,6 +79,19 @@ afterEach(() => {
 })
 
 describe('extract apply: LLM semantic extraction (only path)', () => {
+  it('builds a bounded Unicode-safe excerpt from direct user input only', () => {
+    const messages = [
+      { source: { kind: 'system' }, content: [{ type: 'text', text: '系统秘密' }] },
+      { source: { kind: 'tool' }, content: [{ type: 'text', text: '工具输出' }] },
+      { source: { kind: 'user' }, content: [{ type: 'text', text: `  用户决定  ${'😀'.repeat(410)}` }] },
+    ] as never
+    const excerpt = sourceExcerptFromMessages(messages)
+    expect(excerpt).not.toContain('系统秘密')
+    expect(excerpt).not.toContain('工具输出')
+    expect(Array.from(excerpt ?? '')).toHaveLength(400)
+    expect(excerpt?.endsWith('\ud83d')).toBe(false)
+  })
+
   it('registers pre-step capture plus deferred turn scheduling — the regex path is gone', () => {
     const { ctx, handlers } = makeCtx(yolo, EMPTY_JSON)
     apply(ctx as never)
@@ -100,7 +113,8 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
 
     await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })
 
-    expect(yolo.listTodos(cwd).some((t) => t.title === 'LLM 提取的任务')).toBe(true)
+    const fallbackTodo = yolo.listTodos(cwd).find((t) => t.title === 'LLM 提取的任务')
+    expect(fallbackTodo).toMatchObject({ session_id: 's1', source_excerpt: null, source_turn: null })
     // invalid LLM priority strings are dropped, not stored
     const bad = yolo.listTodos(cwd).find((t) => t.title === '非法优先级任务')
     expect(bad?.priority ?? null).toBeNull()
@@ -148,7 +162,12 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(call.messages[0].content[0].text).toContain('今天我需要完成针对dsh-yolo的分析报告')
     expect(call.messages[0].content[0].text).toContain('报告重点分析自动记忆链路')
     expect(call.messages[0].content[0].text).not.toContain('不属于本轮')
-    expect(yolo.listTodos(cwd).some((todo) => todo.title === '完成针对 dsh-yolo 的分析报告')).toBe(true)
+    const extracted = yolo.listTodos(cwd).find((todo) => todo.title === '完成针对 dsh-yolo 的分析报告')
+    expect(extracted).toMatchObject({
+      session_id: 's-exact',
+      source_turn: 1,
+      source_excerpt: '今天我需要完成针对dsh-yolo的分析报告 报告重点分析自动记忆链路',
+    })
   })
 
   it('does not extract automatic Goal rounds that carry user-role goal messages', async () => {

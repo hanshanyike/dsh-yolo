@@ -141,7 +141,7 @@ function normalizeCanonicalRows(db: DB, scopeKey: string, cwd: string): void {
 function importAttached(db: DB, scopeKey: string, cwd: string, source: string, warnings: string[]): void {
   const milestoneColumns = ['id', 'title', 'description', 'target_date', 'status', 'scope_key', 'source', 'created_at', 'updated_at']
   const milestoneMap = mergeIdTable(db, source, 'milestones', milestoneColumns, milestoneColumns.filter((c) => c !== 'scope_key'), (row) => ({ ...row, scope_key: scopeKey }))
-  const todoColumns = ['id', 'title', 'detail', 'status', 'priority', 'due_at', 'milestone_id', 'scope_key', 'dedup_key', 'source', 'session_id', 'created_at', 'updated_at', 'completed_at', 'last_reminded_at', 'good_count', 'stale_count']
+  const todoColumns = ['id', 'title', 'detail', 'status', 'priority', 'due_at', 'milestone_id', 'scope_key', 'dedup_key', 'source', 'session_id', 'source_excerpt', 'source_turn', 'created_at', 'updated_at', 'completed_at', 'last_reminded_at', 'good_count', 'stale_count']
   const todoMap = mergeIdTable(db, source, 'todos', todoColumns, todoColumns.filter((c) => c !== 'scope_key'), (row) => ({
     ...row,
     milestone_id: row.milestone_id == null ? null : milestoneMap.get(String(row.milestone_id)) ?? row.milestone_id,

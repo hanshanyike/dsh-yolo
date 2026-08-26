@@ -48,6 +48,7 @@ describe('dashboard v2 projection', () => {
     const todo: Todo = {
       id: 't1', title: '把季度材料发给研发', detail: '先确认最终数字', status: 'pending',
       priority: 'high', due_at: '2026-08-22', milestone_id: 'm1', session_id: 's1', source: 'llm',
+      source_excerpt: '本周把季度材料发给研发', source_turn: 4,
       scope_key: 'quarterly/main', created_at: NOW.getTime() - 10_000, updated_at: NOW.getTime() - 9 * 86_400_000,
     }
     const notification: Notification = {
@@ -58,7 +59,7 @@ describe('dashboard v2 projection', () => {
     const data = buildDashboardData(yoloFor('quarterly/main', todo, notification), cwd, '2026-08-23')
 
     expect(data.ui_contract_version).toBe(2)
-    expect(data.capabilities).toEqual({ preferenceUndo: false, notificationSeen: true, sourceExcerpt: false })
+    expect(data.capabilities).toEqual({ preferenceUndo: false, notificationSeen: true, sourceExcerpt: true })
     expect(data.summary).toMatchObject({ open: 1, overdue: 1, completedToday: 0, changesToday: 1, partial: false })
     expect(data.attention).toHaveLength(1)
     expect(data.attention?.[0]).toMatchObject({ todo_id: 't1', scope_cwd: cwd, reason_code: 'reminder_due' })
@@ -73,12 +74,24 @@ describe('dashboard v2 projection', () => {
         short_reason: '有一条未处理提醒',
         reason_version: 'attention-v1',
       },
-      source: { type: 'session', label: '季度发布讨论', session_id: 's1' },
+      source: { type: 'session', label: '季度发布讨论', session_id: 's1', excerpt: '本周把季度材料发给研发', turn: 4 },
       ws: { slug: 'quarterly/main', label: 'quarterly', cwd },
     })
     for (const rows of [data.todos, data.goals, data.milestones, data.events, data.preferences, data.ledger, data.notifications]) {
       expect(rows[0]?.ws?.cwd).toBe(cwd)
     }
+  })
+
+  it('degrades manual, tool and old LLM rows without inventing session evidence', () => {
+    vi.useFakeTimers({ now: NOW })
+    const make = (source: Todo['source']) => buildDashboardData(yoloFor('source/main', {
+      id: `todo-${source}`, title: `来源 ${source}`, status: 'pending', source,
+      scope_key: 'source/main', created_at: NOW.getTime(), updated_at: NOW.getTime(),
+    }), 'D:\\Code\\source', '2026-08-23').todos[0]?.source
+
+    expect(make('manual')).toMatchObject({ type: 'manual', label: '快速记一条', session_id: null })
+    expect(make('tool')).toMatchObject({ type: 'tool', label: '助手操作', session_id: null })
+    expect(make('llm')).toMatchObject({ type: 'legacy', label: '会话记录', session_id: null })
   })
 
   it('re-ranks one global judgment and propagates partial summary state', () => {

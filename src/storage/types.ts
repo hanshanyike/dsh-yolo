@@ -71,6 +71,10 @@ export interface Todo {
   dedup_key?: string | null
   source?: Source | null
   session_id?: string | null
+  /** Bounded excerpt of the direct user input that created this todo. */
+  source_excerpt?: string | null
+  /** Originating host turn. Null for manual/tool/legacy rows and older data. */
+  source_turn?: number | null
   created_at: number
   updated_at: number
   completed_at?: number | null

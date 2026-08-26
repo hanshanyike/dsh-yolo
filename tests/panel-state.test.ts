@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { readPanelState, writePanelState } from '../client/panel/state.ts'
 
 afterEach(() => {
-  writePanelState({ sideChatOpen: false, activeChat: null })
+  writePanelState({
+    sideChatOpen: false,
+    activeChat: null,
+    navigation: { route: { page: 'home' }, foreground: { kind: 'none' }, presentation: 'auto' },
+  })
 })
 
 describe('panel chat state', () => {
@@ -27,5 +31,34 @@ describe('panel chat state', () => {
     expect(readPanelState().activeChat?.anchor.title).toBe('旧事项')
     writePanelState({ activeChat: null })
     expect(readPanelState().activeChat).toBeNull()
+  })
+
+  it('retains route and source preview without exposing mutable state', () => {
+    writePanelState({
+      navigation: {
+        route: { page: 'history', section: 'changes', day: '2026-08-26' },
+        presentation: 'auto',
+        foreground: {
+          kind: 'source_preview',
+          item: { id: 'todo-a', scopeCwd: 'D:/ws/a', title: '发送纪要' },
+          source: {
+            type: 'session', label: '客户访谈', session_id: 'session-a', excerpt: '明天发送纪要',
+            workspace: { slug: 'a/default', label: 'A', cwd: 'D:/ws/a' },
+          },
+        },
+      },
+    })
+
+    const first = readPanelState()
+    expect(first.navigation).toMatchObject({
+      route: { page: 'history', section: 'changes' },
+      foreground: { kind: 'source_preview', item: { id: 'todo-a' } },
+    })
+    if (first.navigation.foreground.kind !== 'source_preview') throw new Error('expected source preview')
+    first.navigation.foreground.item.title = '外部修改'
+    first.navigation.foreground.source.workspace!.label = '外部修改'
+    expect(readPanelState().navigation.foreground).toMatchObject({
+      item: { title: '发送纪要' }, source: { workspace: { label: 'A' } },
+    })
   })
 })

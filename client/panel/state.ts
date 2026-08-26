@@ -9,6 +9,11 @@
 import type { KanbanFilter } from '../../src/shared/filters.ts'
 import { DEFAULT_FILTER } from '../../src/shared/filters.ts'
 import type { ChatAnchor } from './ChatPane.tsx'
+import {
+  DEFAULT_PANEL_NAVIGATION,
+  type PanelForeground,
+  type PanelNavigationState,
+} from './navigation.ts'
 
 export interface ActivePanelChat {
   anchor: ChatAnchor
@@ -17,19 +22,51 @@ export interface ActivePanelChat {
 
 export interface PanelUiState {
   filter: KanbanFilter
+  /** Product-level route and its single foreground context. */
+  navigation: PanelNavigationState
+  /** @deprecated Kept only while the old shell is migrated to navigation.foreground. */
   sideChatOpen: boolean
+  /** @deprecated Kept only while the old shell is migrated to navigation.foreground. */
   activeChat: ActivePanelChat | null
 }
 
 const state: PanelUiState = {
   filter: { ...DEFAULT_FILTER },
+  navigation: cloneNavigation(DEFAULT_PANEL_NAVIGATION),
   sideChatOpen: false,
   activeChat: null,
+}
+
+function cloneForeground(foreground: PanelForeground): PanelForeground {
+  if (foreground.kind === 'none' || foreground.kind === 'assistant_chat') return { ...foreground }
+  if (foreground.kind === 'source_preview') {
+    return {
+      ...foreground,
+      item: { ...foreground.item },
+      source: {
+        ...foreground.source,
+        workspace: foreground.source.workspace ? { ...foreground.source.workspace } : undefined,
+      },
+      returnTo: foreground.returnTo
+        ? { kind: 'item_detail', item: { ...foreground.returnTo.item } }
+        : undefined,
+    }
+  }
+  return { ...foreground, item: { ...foreground.item } }
+}
+
+function cloneNavigation(navigation: PanelNavigationState): PanelNavigationState {
+  return {
+    ...navigation,
+    route: { ...navigation.route },
+    foreground: cloneForeground(navigation.foreground),
+  }
 }
 
 export function readPanelState(): PanelUiState {
   return {
     filter: { ...state.filter },
+    navigation: cloneNavigation(state.navigation),
     sideChatOpen: state.sideChatOpen,
     activeChat: state.activeChat
       ? { threadKey: state.activeChat.threadKey, anchor: { ...state.activeChat.anchor, source: state.activeChat.anchor.source ? { ...state.activeChat.anchor.source } : undefined } }
@@ -39,6 +76,7 @@ export function readPanelState(): PanelUiState {
 
 export function writePanelState(patch: Partial<PanelUiState>): void {
   if (patch.filter !== undefined) state.filter = { ...patch.filter }
+  if (patch.navigation !== undefined) state.navigation = cloneNavigation(patch.navigation)
   if (patch.sideChatOpen !== undefined) state.sideChatOpen = patch.sideChatOpen
   if (patch.activeChat !== undefined) {
     state.activeChat = patch.activeChat

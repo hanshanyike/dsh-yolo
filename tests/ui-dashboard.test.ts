@@ -60,11 +60,11 @@ function mockYolo(): Yolo {
 }
 
 describe('buildDashboardData', () => {
-  it('keeps operational audit events out of the user-facing progress ledger', () => {
-    for (const kind of ['reminder_fired', 'brief_generated', 'attention_seen', 'attention_suppressed', 'attention_feedback', 'todo_remind_again', 'todo_updated'] as const) {
+  it('uses an explicit allow-list for user-facing recent changes', () => {
+    for (const kind of ['reminder_fired', 'brief_generated', 'attention_seen', 'attention_suppressed', 'attention_feedback', 'action_denied', 'future_internal_event'] as const) {
       expect(isProgressLedgerEvent({ kind })).toBe(false)
     }
-    for (const kind of ['todo_created', 'todo_completed', 'todo_postponed', 'goal_progress', 'action_denied'] as const) {
+    for (const kind of ['todo_created', 'todo_completed', 'todo_postponed', 'todo_remind_again', 'todo_updated', 'goal_progress'] as const) {
       expect(isProgressLedgerEvent({ kind })).toBe(true)
     }
   })
@@ -119,16 +119,16 @@ describe('buildDashboardData', () => {
       listUnhandledNotifications: () => [],
     } as unknown as Yolo
     const data = buildDashboardData(yolo, '/tmp/proj')
-    // distinct session count ignores manual/tool rows; s9 still counts
-    expect(data.ledgerSessions).toBe(3)
+    // Only allow-listed management changes contribute source sessions; generic
+    // note rows and manual/tool rows do not inflate user-visible history.
+    expect(data.ledgerSessions).toBe(1)
     const byId = new Map(data.ledger.map((e) => [e.id, e]))
     expect(byId.get('a')).toMatchObject({ session_id: 's1', label: '会话一' })
     expect(byId.get('b')).toMatchObject({ session_id: 's1', label: '会话一' })
-    expect(byId.get('c')).toMatchObject({ session_id: 's2', label: '会话二' })
+    expect(byId.get('c')).toBeUndefined()
     expect(byId.get('d')).toMatchObject({ session_id: null, label: '快速记一条' })
     expect(byId.get('e')).toMatchObject({ session_id: null, label: '助手操作' })
-    // unsummarized (not deleted) session: neutral badge, jump still possible
-    expect(byId.get('f')).toMatchObject({ session_id: 's9', label: '来源会话' })
+    expect(byId.get('f')).toBeUndefined()
   })
 
   it('joins milestone titles and computes overdue/stale (M8)', () => {

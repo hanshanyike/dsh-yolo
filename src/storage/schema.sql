@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS todos (
   dedup_key     TEXT,                -- rule/llm dedup (see extract/merge.ts)
   source        TEXT,
   session_id    TEXT,                -- originating dsh session (ledger source badge, v0.3.0)
+  source_excerpt TEXT,               -- bounded direct-user excerpt; never a full transcript
+  source_turn   INTEGER,             -- originating host turn when known
   created_at    INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,
   completed_at  INTEGER,

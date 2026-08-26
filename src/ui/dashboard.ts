@@ -23,6 +23,7 @@ import type {
   WorkspaceTag,
 } from '../shared/dashboard.ts'
 import { isTodoOpen, isTodoOverdue, isTodoStale } from '../shared/dashboard.ts'
+import { isUserVisibleChange } from '../shared/dashboard-surfaces.ts'
 import { localDateStr, dayBounds } from '../shared/text.ts'
 import { workspaceIdentity } from '../storage/scope.ts'
 import {
@@ -52,20 +53,8 @@ function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
   return '早期记录'
 }
 
-/** Keep the durable event table complete while presenting only management
- * progress—not scheduler/notification mechanics—in the daily ledger. */
-const LEDGER_NOISE = new Set([
-  'reminder_fired',
-  'brief_generated',
-  'attention_seen',
-  'attention_suppressed',
-  'attention_feedback',
-  'todo_remind_again',
-  'todo_updated',
-])
-
 export function isProgressLedgerEvent(event: Pick<TimelineEvent, 'kind'>): boolean {
-  return !LEDGER_NOISE.has(event.kind)
+  return isUserVisibleChange(event)
 }
 
 /** Build a human workspace label from a cwd (basename; fall back to the scope slug). */
@@ -101,11 +90,20 @@ function workspaceTag(cwd: string, scopeKey: string, supplied?: WorkspaceTag): W
 }
 
 function itemSource(todo: Todo, sessions: Map<string, string>, ws: WorkspaceTag): YoloItemSource {
-  if (todo.session_id) {
-    return { type: 'session', label: sessions.get(todo.session_id) ?? '来源会话', session_id: todo.session_id, workspace: ws }
-  }
+  // Manual/tool rows are not source-conversation evidence even if a caller
+  // accidentally supplied a session id; never turn them into navigation links.
   if (todo.source === 'manual') return { type: 'manual', label: '快速记一条', session_id: null, workspace: ws }
   if (todo.source === 'tool') return { type: 'tool', label: '助手操作', session_id: null, workspace: ws }
+  if (todo.session_id) {
+    return {
+      type: 'session',
+      label: sessions.get(todo.session_id) ?? '来源会话',
+      session_id: todo.session_id,
+      excerpt: todo.source_excerpt ?? null,
+      turn: todo.source_turn ?? null,
+      workspace: ws,
+    }
+  }
   if (todo.source === 'llm') return { type: 'legacy', label: '会话记录', session_id: null, workspace: ws }
   return { type: 'legacy', label: '早期记录', session_id: null, workspace: ws }
 }
@@ -272,7 +270,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     capabilities: {
       preferenceUndo: false,
       notificationSeen: true,
-      sourceExcerpt: false,
+      sourceExcerpt: true,
     },
     todos: projectedTodos,
     goals: yolo.listGoals(cwd).map((g) => ({
