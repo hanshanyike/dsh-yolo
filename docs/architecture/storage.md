@@ -48,6 +48,11 @@ Markdown 快照只是可读、可 diff 的审阅投影；当前没有从快照�
 单库 schema 迁移由 `db.ts` 使用 `PRAGMA table_info` 后执行 `ALTER TABLE`；跨分支库合并由
 `migrate-scope.ts` 负责。SQLite 不支持 `ADD COLUMN IF NOT EXISTS`，不能把列迁移简化成该语法。
 
+`todos.source_excerpt` 与 `todos.source_turn` 保存新事项的最小来源证据。只有 `source=llm`、存在
+`session_id`、轮次有效且摘录非空时才写入；摘录规范化空白并按 Unicode code point 截断到 400 字符。
+manual/tool 调用即使传入伪造字段也会落为 NULL。语义去重命中已有事项时只更新可变计划字段，
+不会用后续对话覆盖首次来源。旧库迁移与 legacy scope 合并缺列时降级为 NULL，且可重复执行。
+
 ## 写入、状态与审计
 
 基础 upsert 负责 todo、milestone、goal、preference、event 和 session summary。状态变化应走

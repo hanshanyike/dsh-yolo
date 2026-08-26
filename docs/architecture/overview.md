@@ -197,14 +197,14 @@ Dashboard v2 是**单一聚合读取投影**，以 `ui_contract_version: 2` 标�
 ### v0.3.2——管理型助手能力细化
 
 - **对话线程（R19）。** `registerSessionEndpoints` 为 `GET /yolo/session/messages` 和
-  `POST /yolo/session/send` 都增加了可选 `thread`。无锚点的“对话”页仍指向每个工作区的
-  **常驻**线程（`yolo-w-*`、`YoloSessions`）。卡片上的“聊一聊”会传入新的临时 `thread` 键，
+  `POST /yolo/session/send` 都增加了可选 `thread`。“和助手聊聊”仍指向每个工作区的
+  **常驻**线程（`yolo-w-*`、`YoloSessions`）。“讨论这项安排”会传入按事项 episode 管理的 `thread` 键，
   由 `YoloChatThreads` 解析到可丢弃的 agent 会话（`yolo-a-*`）；该会话在首次发送时延迟创建，
-  并按工作区设置 LRU 上限（最旧会话被逐出并释放）。因此面板初始为空，形成一段不会继承常驻线程历史的
-  聚焦对话。`yolo-w-*` 与 `yolo-a-*` 都属于 YOLO 内部会话（`isYoloSessionId`），所以提取器和
+  并按工作区设置 LRU 上限（最旧会话被逐出并释放）。同一事项在显式结束前复用 episode，显式结束后
+  再次讨论才创建新 thread，且不会继承常驻线程历史。`yolo-w-*` 与 `yolo-a-*` 都属于 YOLO 内部会话（`isYoloSessionId`），所以提取器和
   工作区跟踪器会跳过它们。两个端点也接受显式工作区（查询参数或请求体中的 `cwd` 字段），但只有与
   `listWorkspaceMeta()` 匹配时才接受；锚定对话因此始终绑定到卡片所属工作区。没有 `thread` 表示
-  持久常驻通道，有 `thread` 则表示一段全新、隔离的锚定会话。
+  持久常驻通道，有 `thread` 则表示一段隔离的事项讨论会话。
 - **创建 agent 时选择模型（v0.3.3）。** `YoloSessions` 和 `YoloChatThreads` 现在都从
   `agentDefaultModel.currentSelection()` 取得并传入 `agentOptions: { provider, model }`，同时在
   `setup` 中运行 `installModelSelection`（沿用无头运行器模式）。没有这一步，编程创建的 agent 会报错

@@ -27,6 +27,7 @@ agent/pre-step（只捕获本轮实际进入模型的 direct-human 消息）
   → buildKnownContext（包含已知状态、进度、到期与标题）
   → 独立 AbortController + llmExtract + 严格 JSON schema 入口 + validateExtraction
   → shouldDropExtracted 质量过滤
+  → 只从 captured direct-human 消息生成有界来源摘录与 turn 元数据
   → 先写 todos/milestones/goals/preferences/events
   → 再应用 updates[] 的状态变化
   → extraction_log / session summary 审计
@@ -35,6 +36,11 @@ agent/pre-step（只捕获本轮实际进入模型的 direct-human 消息）
 先新增、后更新保证“同一轮创建并完成”能够命中新条目。`updates[].match_title` 应复用 known
 context 的标题；定位时优先精确归一化匹配，再按活跃状态与新近度选择宽松匹配。无法匹配的
 LLM 标题会被静默丢弃，不会让整轮失败。
+
+来源摘录不是第二份 transcript：只使用本轮 `agent/pre-step` 捕获且 `source.kind=user` 的直接用户输入，
+不包含 system、assistant、tool、Goal continuation、模型提示词或完整会话历史。旧宿主缺少可靠捕获时，
+derived-message fallback 仍可作为抽取输入，但不会被当作可引用证据写入。`source_turn` 目前只用于预览
+元数据；宿主只支持打开会话时，界面不得声称能够精确定位到该轮。
 
 `extraction_log.status` 的现行 `hasContent` 判断只统计 todo、milestone、goal 与 `updates[]`；
 仅抽到 preference、event 或 session summary 的轮次仍会记为 `empty`。这是当前审计口径，不代表

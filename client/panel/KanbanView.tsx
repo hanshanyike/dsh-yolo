@@ -1,8 +1,6 @@
-// YOLO kanban faces — v5「宿主原生」drawer (frontend-redesign-v5-native.md §四).
-// The panel is a drawer from the host sidebar's right edge; its face switching
-// is a horizontal tab bar owned by the shell (YoloPanel). This component
-// renders the ACTIVE face (今日 / 即将 / 已完成 / 目标 / 台账) inside one
-// independently-scrolling body. All filtering/bucketing stays in the shared
+// Assistant board content for Home / Plan / History. The shell owns product
+// navigation and the single foreground context; this component renders one
+// active page section inside an independently scrolling body. Filtering stays in shared
 // pure functions (src/shared/filters.ts); every mutation goes through
 // POST /yolo/actions so a click and a chat reply produce identical transitions
 // + audit events.

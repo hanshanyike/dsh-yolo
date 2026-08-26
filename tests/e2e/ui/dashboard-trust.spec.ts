@@ -233,7 +233,7 @@ test('W14/W16: header 控件可读，判断 reason/evidence 与响应一致且�
   }
   await expect(page.locator('.v2-today-row').filter({ hasText: primary.title })).toHaveCount(0)
 
-  await expect(page.getByRole('button', { name: '对话' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '和助手聊聊' })).toBeVisible()
   await expect(page.getByRole('button', { name: '通知' })).toHaveAttribute('aria-label', /^通知，.+/)
   await expect(page.getByRole('button', { name: '更多看板操作' })).toHaveAttribute('aria-label', '更多看板操作')
   await expect(page.getByRole('button', { name: '关闭面板' })).toHaveAttribute('aria-label', '关闭面板')

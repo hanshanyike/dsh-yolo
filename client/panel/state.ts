@@ -1,24 +1,16 @@
-// YOLO panel UI state (v0.3.0 A, TA-6) — module-scope so closing the panel
-// (unmount) and reopening keeps the filter and side-chat visibility.
+// YOLO panel UI state — module-scope so closing the panel (unmount) and
+// reopening keeps the route, foreground, filters and discussion episodes.
 // Deliberately not persisted to storage: it is view state, not memory.
-// v0.3.1: the 看板/对话 tabs merged into one chat surface (side pane that can
-// expand full-screen), so `tab` is gone; `chatFullscreen` is session state
-// (Esc unwinds full → side → closed) and is not persisted.
-// v0.3.3: the board is always all-workspaces, so `workspaceScope` is gone.
+// Presentation itself is intentionally not persisted: it is always derived
+// from current usable width. The board is always all-workspaces.
 
 import type { KanbanFilter } from '../../src/shared/filters.ts'
 import { DEFAULT_FILTER } from '../../src/shared/filters.ts'
-import type { ChatAnchor } from './ChatPane.tsx'
 import {
   DEFAULT_PANEL_NAVIGATION,
   type PanelForeground,
   type PanelNavigationState,
 } from './navigation.ts'
-
-export interface ActivePanelChat {
-  anchor: ChatAnchor
-  threadKey: string
-}
 
 export interface PanelUiState {
   filter: KanbanFilter
@@ -26,18 +18,12 @@ export interface PanelUiState {
   navigation: PanelNavigationState
   /** Active item discussion episodes, keyed by scope + item id. */
   discussionThreads: Record<string, string>
-  /** @deprecated Kept only while the old shell is migrated to navigation.foreground. */
-  sideChatOpen: boolean
-  /** @deprecated Kept only while the old shell is migrated to navigation.foreground. */
-  activeChat: ActivePanelChat | null
 }
 
 const state: PanelUiState = {
   filter: { ...DEFAULT_FILTER },
   navigation: cloneNavigation(DEFAULT_PANEL_NAVIGATION),
   discussionThreads: {},
-  sideChatOpen: false,
-  activeChat: null,
 }
 
 function cloneForeground(foreground: PanelForeground): PanelForeground {
@@ -71,10 +57,6 @@ export function readPanelState(): PanelUiState {
     filter: { ...state.filter },
     navigation: cloneNavigation(state.navigation),
     discussionThreads: { ...state.discussionThreads },
-    sideChatOpen: state.sideChatOpen,
-    activeChat: state.activeChat
-      ? { threadKey: state.activeChat.threadKey, anchor: { ...state.activeChat.anchor, source: state.activeChat.anchor.source ? { ...state.activeChat.anchor.source } : undefined } }
-      : null,
   }
 }
 
@@ -82,10 +64,4 @@ export function writePanelState(patch: Partial<PanelUiState>): void {
   if (patch.filter !== undefined) state.filter = { ...patch.filter }
   if (patch.navigation !== undefined) state.navigation = cloneNavigation(patch.navigation)
   if (patch.discussionThreads !== undefined) state.discussionThreads = { ...patch.discussionThreads }
-  if (patch.sideChatOpen !== undefined) state.sideChatOpen = patch.sideChatOpen
-  if (patch.activeChat !== undefined) {
-    state.activeChat = patch.activeChat
-      ? { threadKey: patch.activeChat.threadKey, anchor: { ...patch.activeChat.anchor, source: patch.activeChat.anchor.source ? { ...patch.activeChat.anchor.source } : undefined } }
-      : null
-  }
 }

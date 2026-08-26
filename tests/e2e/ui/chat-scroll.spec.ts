@@ -1,4 +1,5 @@
 import { test, expect, type Locator } from '@playwright/test'
+import { SPLIT_MIN_WIDTH } from '../../../client/panel/navigation.ts'
 import { openYoloPanel } from '../helpers.ts'
 import type { ChatRequestSnapshot } from '../../../src/shared/chat.ts'
 
@@ -21,14 +22,14 @@ async function scrollToTop(owner: Locator): Promise<void> {
   await expect.poll(() => owner.evaluate((element) => element.scrollTop)).toBe(0)
 }
 
-test('W5/W7/W10: 长历史在 side/full 各自 owner 跟随最新且不抢用户上翻位置', async ({ page }) => {
+test('W5/W7/W10: assistant chat 长历史在 split/focus 各自 owner 跟随最新且不抢用户上翻位置', async ({ page }) => {
   const messages: ChatMessage[] = Array.from({ length: 48 }, (_, index) => ({
     role: index % 2 === 0 ? 'user' : 'ai',
     text: `历史消息 ${index + 1}\n这是用于验证真实滚动容器的较长内容，保持对话具有足够高度。`,
   }))
-  const sideArrival = '侧栏上翻后到达的新消息'
+  const splitArrival = '双栏上翻后到达的新消息'
   const reply = '已收到，我会按新的安排继续跟进。'
-  const fullArrival = '全屏上翻后到达的新消息'
+  const focusArrival = '聚焦模式上翻后到达的新消息'
   let request: ChatRequestSnapshot | null = null
   let revision = 0
 
@@ -55,13 +56,18 @@ test('W5/W7/W10: 长历史在 side/full 各自 owner 跟随最新且不抢用户
 
   await page.setViewportSize({ width: 1440, height: 760 })
   await openYoloPanel(page)
-  await page.getByRole('button', { name: '对话' }).click()
+  const panel = page.locator('.yolo-scope')
+  const left = (await panel.boundingBox())?.x
+  expect(left).not.toBeUndefined()
+  await page.getByRole('button', { name: '和助手聊聊' }).click()
+  await expect(panel).toHaveAttribute('data-presentation', 'split')
+  await expect(page.locator('aside[data-foreground="assistant_chat"]')).toHaveCount(1)
 
-  const sideOwner = page.locator('.chat-pane-shell--side .dock-msgs')
-  await expect(sideOwner.locator('.msg')).toHaveCount(messages.length)
-  await expect(sideOwner).toHaveCSS('overflow-y', 'auto')
-  await expect.poll(() => sideOwner.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
-  await expectAtBottom(sideOwner)
+  const splitOwner = page.locator('.chat-pane-shell--side .dock-msgs')
+  await expect(splitOwner.locator('.msg')).toHaveCount(messages.length)
+  await expect(splitOwner).toHaveCSS('overflow-y', 'auto')
+  await expect.poll(() => splitOwner.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expectAtBottom(splitOwner)
 
   const input = page.getByRole('textbox', { name: '对 YOLO 说' })
   // Establish the real user state under test. autoFocus timing is owned by the
@@ -69,50 +75,52 @@ test('W5/W7/W10: 长历史在 side/full 各自 owner 跟随最新且不抢用户
   // preserve an input the user is actively using.
   await input.focus()
   await expect(input).toBeFocused()
-  await scrollToTop(sideOwner)
+  await scrollToTop(splitOwner)
   await expect(input).toBeFocused()
-  const sidePoll = page.waitForResponse('**/yolo/session/messages**')
-  messages.push({ role: 'ai', text: sideArrival })
+  const splitPoll = page.waitForResponse('**/yolo/session/messages**')
+  messages.push({ role: 'ai', text: splitArrival })
   revision += 1
-  await sidePoll
+  await splitPoll
   const newest = page.getByRole('button', { name: '有新消息，回到最新' })
   await expect(newest).toBeVisible()
   await expect(input).toBeFocused()
-  expect(await sideOwner.evaluate((element) => element.scrollTop)).toBe(0)
+  expect(await splitOwner.evaluate((element) => element.scrollTop)).toBe(0)
   await newest.click()
-  await expectAtBottom(sideOwner)
+  await expectAtBottom(splitOwner)
 
   await input.fill('请把刚才的安排继续往下跟进')
   await input.press('Enter')
-  await expect(sideOwner.getByText('已提交，等待助手回复')).toBeVisible()
-  await expectAtBottom(sideOwner)
-  await expect(sideOwner.getByText(reply)).toBeVisible({ timeout: 6_000 })
-  await expectAtBottom(sideOwner)
+  await expect(splitOwner.getByText('已提交，等待助手回复')).toBeVisible()
+  await expectAtBottom(splitOwner)
+  await expect(splitOwner.getByText(reply)).toBeVisible({ timeout: 6_000 })
+  await expectAtBottom(splitOwner)
 
-  await page.locator('.dock .dact').filter({ hasText: '全屏' }).click()
-  const fullOwner = page.locator('.chat-pane-shell--full > .p-body')
-  await expect(fullOwner).toBeVisible()
-  await expect(fullOwner).toHaveCSS('overflow-y', 'auto')
-  await expect.poll(() => fullOwner.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
-  await expectAtBottom(fullOwner)
+  await page.setViewportSize({ width: Math.floor(left! + SPLIT_MIN_WIDTH - 2), height: 760 })
+  await expect(panel).toHaveAttribute('data-presentation', 'focus')
+  const focusOwner = page.locator('.chat-pane-shell--full > .p-body')
+  await expect(focusOwner).toBeVisible()
+  await expect(focusOwner).toHaveCSS('overflow-y', 'auto')
+  await expect.poll(() => focusOwner.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expectAtBottom(focusOwner)
 
-  const fullInput = page.getByRole('textbox', { name: '对 YOLO 说' })
-  await fullInput.focus()
-  await expect(fullInput).toBeFocused()
-  await scrollToTop(fullOwner)
-  await expect(fullInput).toBeFocused()
-  const fullPoll = page.waitForResponse('**/yolo/session/messages**')
-  messages.push({ role: 'ai', text: fullArrival })
+  const focusInput = page.getByRole('textbox', { name: '对 YOLO 说' })
+  await focusInput.focus()
+  await expect(focusInput).toBeFocused()
+  await scrollToTop(focusOwner)
+  await expect(focusInput).toBeFocused()
+  const focusPoll = page.waitForResponse('**/yolo/session/messages**')
+  messages.push({ role: 'ai', text: focusArrival })
   revision += 1
-  await fullPoll
+  await focusPoll
   await expect(page.getByRole('button', { name: '有新消息，回到最新' })).toBeVisible()
-  await expect(fullInput).toBeFocused()
-  expect(await fullOwner.evaluate((element) => element.scrollTop)).toBe(0)
+  await expect(focusInput).toBeFocused()
+  expect(await focusOwner.evaluate((element) => element.scrollTop)).toBe(0)
   await page.getByRole('button', { name: '有新消息，回到最新' }).click()
-  await expectAtBottom(fullOwner)
+  await expectAtBottom(focusOwner)
 
-  await page.getByRole('button', { name: '侧栏' }).click()
-  const restoredSideOwner = page.locator('.chat-pane-shell--side .dock-msgs')
-  await expect(restoredSideOwner).toBeVisible()
-  await expectAtBottom(restoredSideOwner)
+  await page.setViewportSize({ width: Math.ceil(left! + SPLIT_MIN_WIDTH + 2), height: 760 })
+  await expect(panel).toHaveAttribute('data-presentation', 'split')
+  const restoredSplitOwner = page.locator('.chat-pane-shell--side .dock-msgs')
+  await expect(restoredSplitOwner).toBeVisible()
+  await expectAtBottom(restoredSplitOwner)
 })

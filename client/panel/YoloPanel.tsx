@@ -1,10 +1,8 @@
-// YOLO panel shell — v5「宿主原生」drawer (frontend-redesign-v5-native.md).
-// YOLO is a first-class surface of the dsh host: a drawer from the sidebar's
-// right edge with a horizontal tab bar (今日/即将/已完成/目标/台账), a
-// capture-first command bar, and a chat surface in two sizes (side 340px dock
-// ↔ full). Esc unwinds fullscreen → side chat → closed. Narrow panels (<480px)
-// open the chat full-screen directly. Filter + side-chat visibility persist
-// across close/reopen via panel/state.ts.
+// Host-native assistant shell. The host sidebar remains global navigation;
+// YOLO owns Home / Plan / History and exactly one contextual foreground.
+// Presentation is derived from usable width: focus replaces the board, while
+// split adds one 340px context surface. Route, drafts, threads and requests do
+// not change when presentation changes.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData, YoloTodoRow } from '../../src/shared/dashboard.ts'
@@ -306,6 +304,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
       id: a.todoId ?? `context-${Date.now().toString(36)}`,
       scopeCwd: a.scopeCwd ?? state.data?.cwd ?? '',
       title: a.title,
+      entity: a.todoId ? 'todo' : 'context',
     }
     const key = `${item.scopeCwd}\u0000${item.id}`
     const existing = navigation.foreground.kind === 'item_discussion' && samePanelItem(navigation.foreground.item, item)
@@ -337,6 +336,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
       id: todo.id,
       scopeCwd: todo.scope_cwd ?? todo.ws?.cwd ?? state.data?.cwd ?? '',
       title: todo.title,
+      entity: 'todo',
     }
     chatOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     chatReturnTodoIdRef.current = todo.id
@@ -414,6 +414,18 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     else if (next.startsWith('plan-')) setRoute({ page: 'plan', section: next.slice(5) as 'today' | 'upcoming' | 'goals' | 'all' })
     else setRoute({ page: 'history', section: next === 'history-changes' ? 'changes' : 'completed' })
   }, [setRoute])
+
+  useEffect(() => {
+    if (!state.data || !('item' in navigation.foreground) || navigation.foreground.item.entity !== 'todo') return
+    const item = navigation.foreground.item
+    const exists = state.data.todos.some((todo) => todo.id === item.id && (todo.scope_cwd ?? todo.ws?.cwd ?? state.data!.cwd) === item.scopeCwd)
+    if (exists) return
+    setNavigation((current) => ({ ...current, route: { page: 'home' }, foreground: { kind: 'none' } }))
+    setDetailDraft(null)
+    setDetailReceipt(null)
+    setDetailUndo(null)
+    setDetailError(null)
+  }, [navigation.foreground, state.data])
 
   const foregroundTodo = useMemo(() => {
     if (!state.data || !('item' in navigation.foreground)) return undefined
@@ -560,6 +572,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
                 id: todo.id,
                 scopeCwd: todo.scope_cwd ?? todo.ws?.cwd ?? state.data!.cwd,
                 title: todo.title,
+                entity: 'todo',
               }, source)
             }}
             onOpenChangeSource={(change, source) => {
@@ -567,6 +580,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
                 id: change.id,
                 scopeCwd: change.ws?.cwd ?? state.data!.cwd,
                 title: change.summary,
+                entity: 'change',
               }, source)
             }}
             notifFocusTick={notifFocusTick}
@@ -718,6 +732,9 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
           <span className="p-date mono">{dateLabel}</span>
         </div>
         <div className="p-head-acts">
+          {presentation === 'focus' && foreground.kind === 'item_discussion' ? (
+            <button type="button" className="head-secondary" onClick={closeForeground}>结束讨论</button>
+          ) : null}
           <button ref={chatToggleRef} type="button" className={`ctoggle head-primary${foreground.kind === 'assistant_chat' ? ' on' : ''}`} onClick={toggleAssistantChat} title="和助手聊聊">
             <IcChat size={14} /><span>和助手聊聊</span>
           </button>
@@ -772,7 +789,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
             {presentation === 'split' && (foreground.kind === 'assistant_chat' || foreground.kind === 'item_discussion') ? (
               <div className="dock-head">
                 <span className="dock-tag">上下文</span><span className="dock-ctx" title={contextTitle}>{contextTitle}</span>
-                <button type="button" className="hbtn" onClick={closeForeground} title="关闭上下文" aria-label="关闭上下文"><IcClose size={14} /></button>
+                <button type="button" className="hbtn" onClick={closeForeground} title={foreground.kind === 'item_discussion' ? '结束讨论' : '关闭上下文'} aria-label={foreground.kind === 'item_discussion' ? '结束讨论' : '关闭上下文'}><IcClose size={14} /></button>
               </div>
             ) : null}
             {contextContent}

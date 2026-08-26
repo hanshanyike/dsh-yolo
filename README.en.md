@@ -4,7 +4,7 @@
 
 # YOLO
 
-**Turn important conversations into plans you can revisit and update.**
+**Say it once. Keep it on track.**
 
 *A personal assistant for deepseek-harness that organizes commitments from conversations, tracks changes, and reminds you when needed.*
 
@@ -31,8 +31,10 @@ how to do it. It can:
   while keeping a record of each update.
 - **Remind you when items are due** through YOLO notifications and its own
   conversation, without injecting messages into an active work conversation.
-- **Provide one place to review and act** from the sidebar dashboard, including
-  today, upcoming, completed, goals, and a low-noise daily progress digest.
+- **Provide one place to review and act** through Home for current attention,
+  Plans for organized commitments, and History for terminal items and recent changes.
+- **Preserve bounded source evidence** for newly extracted items, with a preview
+  before navigating back to the originating host conversation when supported.
 
 YOLO understands follow-up items in a conversation without requiring fixed
 keywords. It keeps items and rules that need continued management while filtering

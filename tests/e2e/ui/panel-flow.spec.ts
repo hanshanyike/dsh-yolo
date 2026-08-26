@@ -15,7 +15,7 @@ import {
   uid,
   openYoloPanel,
   todayStr,
-  yesterdayStr,
+  waitForDashboard,
   type Api,
 } from '../helpers.ts'
 
@@ -47,6 +47,13 @@ function todayRowFor(page: Page, title: string) {
 function localDateTime(date: Date): string {
   const pad = (value: number): string => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function localDateOffset(days: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
 async function openTaskHandling(page: Page, title: string): Promise<void> {
@@ -117,8 +124,15 @@ test('完成任务弹出撤销，4 秒内撤销后任务恢复原位（TA-3 / 5.
 test('逾期事项进入 v2 关注判断并保留可核验处理依据（TA-4）', async ({ page }) => {
   const overdueTitle = uid('把渠道预算缺口补上')
   const todayTitle = uid('给周会整理三点结论')
-  await fx.todo(overdueTitle, { due: yesterdayStr() })
+  const overdue = await fx.todo(overdueTitle, { due: localDateOffset(-100) })
+  await api.action({ action: 'update', kind: 'todo', id: overdue.id, priority: 'urgent' })
+  await api.action({ action: 'postpone', kind: 'todo', id: overdue.id, due_at: localDateOffset(-99) })
+  await api.action({ action: 'postpone', kind: 'todo', id: overdue.id, due_at: localDateOffset(-98) })
+  await fx.notification(`${overdueTitle} 的截止提醒`, { todoId: String(overdue.id), note: '请确认预算缺口的处理方案。' })
   await fx.todo(todayTitle, { due: todayStr() })
+  await waitForDashboard(api, (dashboard) => dashboard.attention?.[0]?.todo_id === String(overdue.id), {
+    label: 'overdue fixture to become the server-ranked primary judgment',
+  })
 
   await openYoloPanel(page)
   // Both remain visible, while v2 promotes the overdue fact into an explicit
@@ -160,17 +174,21 @@ test('捕获条快速记一条并落入看板（TA-2 快捷入口）', async ({ 
   await expect(taskFor(page, title)).toBeVisible()
 })
 
-test('卡片「聊一聊」打开侧栏对话并锚定该任务（TA-5）', async ({ page }) => {
+test('“讨论这项安排”打开 item discussion，并与“和助手聊聊”使用同一前景位置（TA-5）', async ({ page }) => {
   const title = uid('定稿本周直播的主题')
   await fx.todo(title, { due: todayStr() })
   await openYoloPanel(page)
 
   await openTaskHandling(page, title)
   const taskDialog = page.getByRole('dialog', { name: title })
-  await taskDialog.getByRole('button', { name: '和助手讨论' }).click()
+  await taskDialog.getByRole('button', { name: /快速记一条/u }).click()
   await expect(taskDialog).toHaveCount(0)
+  const source = page.locator(`section[aria-label="来源：${title}"]`)
+  await source.getByRole('button', { name: '讨论这项安排' }).click()
+  await expect(source).toHaveCount(0)
   await expect(page.locator('.dock')).toBeVisible()
-  await expect(page.locator('.dock-tag')).toHaveText('锚定')
+  await expect(page.locator('aside[data-foreground="item_discussion"]')).toHaveCount(1)
+  await expect(page.locator('.dock-tag')).toHaveText('上下文')
   await expect(page.locator('.dock-ctx')).toHaveText(title)
   const chatInput = page.getByRole('textbox', { name: '对 YOLO 说' })
   await expect(chatInput).toBeFocused()
@@ -186,19 +204,18 @@ test('卡片「聊一聊」打开侧栏对话并锚定该任务（TA-5）', asyn
   await expect(transcript.locator('.msg.ai').first()).toContainText(`我们来讨论「${title}」。现在进展怎么样，接下来需要调整什么？`)
 })
 
-test('Esc 逐级退出：全屏对话→侧栏→关闭面板（TA-6）', async ({ page }) => {
+test('Esc 逐级退出：assistant chat 前景→首页→关闭面板（TA-6）', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 760 })
   await openYoloPanel(page)
 
-  // side chat → expand fullscreen
-  await page.locator('.p-head .ctoggle').filter({ hasText: '对话' }).click()
+  await page.getByRole('button', { name: '和助手聊聊' }).click()
+  await expect(page.locator('aside[data-foreground="assistant_chat"]')).toHaveCount(1)
+  await expect(page.locator('.yolo-scope')).toHaveAttribute('data-presentation', 'split')
   await expect(page.locator('.dock')).toBeVisible()
-  await page.locator('.dact').filter({ hasText: '全屏' }).click()
-  await expect(page.locator('.p-head .ctoggle').filter({ hasText: '侧栏' })).toBeVisible()
 
-  // Esc 1: fullscreen → side dock (still open)
   await page.keyboard.press('Escape')
-  await expect(page.locator('.dock')).toBeVisible()
-  // Esc 2: a wide side dock closes the panel directly.
+  await expect(page.locator('aside[data-foreground]')).toHaveCount(0)
+  await expect(page.getByRole('tablist', { name: '助手页面' })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.locator('.yolo-scope')).toHaveCount(0)
 })

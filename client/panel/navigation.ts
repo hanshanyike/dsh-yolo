@@ -13,6 +13,7 @@ export interface PanelItemRef {
   id: string
   scopeCwd: string
   title: string
+  entity?: 'todo' | 'change' | 'context'
 }
 
 export interface ItemDetailForeground {

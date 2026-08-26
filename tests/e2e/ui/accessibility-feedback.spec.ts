@@ -16,6 +16,7 @@ test.afterAll(async () => {
 
 test('W2: a closed filter menu removes its controls from visibility and keyboard access', async ({ page }) => {
   await openYoloPanel(page)
+  await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^计划/ }).click()
 
   const filter = page.getByRole('button', { name: '筛选事项，未启用筛选条件', exact: true })
   await expect(filter).toHaveAttribute('aria-expanded', 'false')
@@ -52,7 +53,8 @@ test('W5: sending remains visibly in progress until an assistant reply arrives',
   })
 
   await openYoloPanel(page)
-  await page.getByRole('button', { name: '对话' }).click()
+  await page.getByRole('button', { name: '和助手聊聊' }).click()
+  await expect(page.locator('.yolo-scope')).toHaveAttribute('data-presentation', /split|focus/u)
   const input = page.getByRole('textbox', { name: '对 YOLO 说' })
   await input.fill('请提醒我明天下午把客户访谈纪要发给产品组')
   await input.press('Enter')

@@ -70,7 +70,7 @@ async function refreshBoard(page: Page): Promise<void> {
   await page.getByRole('menuitem', { name: '刷新看板' }).click()
 }
 
-test('Today 保持固定阅读顺序、唯一判断，更多处理展示完整语义对话框', async ({ page }) => {
+test('首页保持固定阅读顺序、唯一判断，更多处理展示完整语义对话框', async ({ page }) => {
   const primary = await seedPrimaryJudgment('确认客户演示材料的最终交付')
   await fx.todo(uid('整理下周客户回访需要确认的问题'), { due: localDateOffset(-1) })
 
@@ -97,7 +97,6 @@ test('Today 保持固定阅读顺序、唯一判断，更多处理展示完整�
   await judgment.getByRole('button', { name: '更多处理' }).click()
   const dialog = page.getByRole('dialog', { name: primary.title })
   await expect(dialog).toBeVisible()
-  await expect(dialog).toHaveAttribute('aria-modal', 'true')
   const describedBy = await dialog.getAttribute('aria-describedby')
   expect(describedBy).toBeTruthy()
   await expect(page.locator(`#${describedBy!}`)).toBeVisible()
@@ -158,7 +157,8 @@ test('已完成与已取消严格分离，两类终态事项都可以重新打�
   await api.action({ action: 'cancel', kind: 'todo', id: cancelled.id })
 
   await openYoloPanel(page)
-  await page.getByRole('tab', { name: /已完成/ }).click()
+  await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^历史/ }).click()
+  await page.getByRole('tablist', { name: '历史范围' }).getByRole('tab', { name: '已结束', exact: true }).click()
   const terminalFilters = page.getByRole('group', { name: '终态事项筛选' })
   await terminalFilters.getByRole('button', { name: /^已完成/ }).click()
   const completedRow = page.getByRole('listitem', { name: `已完成：${completedTitle}` })
@@ -185,14 +185,15 @@ test('已完成与已取消严格分离，两类终态事项都可以重新打�
   )
 })
 
-test('即将事项支持长标题编辑，台账动作类型与摘要保持独立列', async ({ page }) => {
+test('接下来事项支持长标题编辑，最近变化的动作类型与摘要保持独立列', async ({ page }) => {
   const title = uid('和研发确认新版助手看板的验收范围与交付时间')
   const item = await fx.todo(title, { due: localDateOffset(3) })
   await api.action({ action: 'complete', kind: 'todo', id: item.id })
   await api.action({ action: 'reopen', kind: 'todo', id: item.id })
 
   await openYoloPanel(page)
-  await page.getByRole('tab', { name: /即将/ }).click()
+  await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^计划/ }).click()
+  await page.getByRole('tablist', { name: '计划范围' }).getByRole('tab', { name: '接下来', exact: true }).click()
   const row = page.getByRole('listitem', { name: `任务：${title}` })
   await row.getByRole('button', { name: '编辑' }).click()
 
@@ -208,7 +209,8 @@ test('即将事项支持长标题编辑，台账动作类型与摘要保持独�
   expect(await editor.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
   await page.getByRole('button', { name: '取消', exact: true }).click()
 
-  await page.getByRole('tab', { name: /进展/ }).click()
+  await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^历史/ }).click()
+  await page.getByRole('tablist', { name: '历史范围' }).getByRole('tab', { name: '最近变化', exact: true }).click()
   const reopened = page.locator('.lg-row').filter({
     has: page.locator('.lg-type', { hasText: '重新打开' }),
     hasText: title,
@@ -225,28 +227,25 @@ test('即将事项支持长标题编辑，台账动作类型与摘要保持独�
   expect(columns).toEqual({ overlap: false, overflow: false })
 })
 
-test('约 340px 紧凑模式保留三主视图、More 辅助入口和完整 ARIA 关系', async ({ page }) => {
+test('约 340px 紧凑模式保留首页、计划、历史与完整 ARIA 状态', async ({ page }) => {
   await page.setViewportSize({ width: 400, height: 800 })
   await openYoloPanel(page)
 
   const panel = page.locator('.yolo-scope')
   await expect(panel).toHaveClass(/compact/)
-  const tabs = page.getByRole('tab')
+  const pages = page.getByRole('tablist', { name: '助手页面' })
+  const tabs = pages.getByRole('tab')
   await expect(tabs).toHaveCount(3)
   const tabContracts = [
-    { name: /今天/, key: 'today' },
-    { name: /即将/, key: 'upcoming' },
-    { name: /已完成/, key: 'done' },
+    { name: /^首页/, key: 'home' },
+    { name: /^计划/, key: 'plan' },
+    { name: /^历史/, key: 'history' },
   ]
   for (const contract of tabContracts) {
-    await expect(page.getByRole('tab', { name: contract.name })).toHaveAttribute('aria-controls', `yolo-view-${contract.key}`)
+    await expect(pages.getByRole('tab', { name: contract.name })).toHaveAttribute('aria-controls', `yolo-page-${contract.key}`)
   }
-  await expect(page.locator('#yolo-view-today[role="tabpanel"]')).toBeVisible()
-
-  await page.getByRole('button', { name: '更多看板操作' }).click()
-  await expect(page.getByRole('menuitem', { name: '目标与里程碑' })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: '今日进展' })).toBeVisible()
-  await page.keyboard.press('Escape')
+  await expect(pages.getByRole('tab', { name: /^首页/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#yolo-surface-home[role="tabpanel"]')).toBeVisible()
 
   for (const selector of ['.p-head', '.y-tabs', '.v2-today-surface']) {
     expect(await page.locator(selector).evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)

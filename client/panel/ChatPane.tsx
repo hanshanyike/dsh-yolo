@@ -46,6 +46,13 @@ interface ChatState extends ChatConversationSnapshot {
   loading: boolean
 }
 
+interface PresentationScrollMemory {
+  conversationKey: string
+  variant: 'side' | 'full'
+  scrollTop: number
+  nearBottom: boolean
+}
+
 /** Build the read URL for one chat surface. Anchored threads carry their
  * workspace explicitly; the resident thread deliberately keeps using the
  * server's current-workspace fallback. */
@@ -92,11 +99,12 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   const [newerAvailable, setNewerAvailable] = useState(false)
   const anchorRef = useRef<ChatAnchor | null>(anchor)
   const sentWithContext = useRef(false)
-  const scrollOwnerRef = useRef<HTMLDivElement>(null)
+  const scrollOwnerRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const inputEngagedRef = useRef(false)
   const restoreInputFocusRef = useRef(false)
   const nearBottomRef = useRef(true)
+  const presentationScrollRef = useRef<PresentationScrollMemory | null>(null)
   const layoutConversationRef = useRef<string | null>(null)
   const transcriptSignatureRef = useRef('')
   const suppressNextScrollDecisionRef = useRef(false)
@@ -213,16 +221,39 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     if (!owner) return
     owner.scrollTop = owner.scrollHeight
     nearBottomRef.current = true
+    presentationScrollRef.current = { conversationKey, variant, scrollTop: owner.scrollTop, nearBottom: true }
     setNewerAvailable(false)
-  }, [])
+  }, [conversationKey, variant])
 
   const observeScroll = useCallback((): void => {
     const owner = scrollOwnerRef.current
     if (!owner) return
     const nearBottom = isNearChatBottom(owner)
     nearBottomRef.current = nearBottom
+    presentationScrollRef.current = { conversationKey, variant, scrollTop: owner.scrollTop, nearBottom }
     if (nearBottom) setNewerAvailable(false)
-  }, [])
+  }, [conversationKey, variant])
+
+  // side/focus use different real scroll owners. Scroll events and explicit
+  // follow-to-latest actions continuously record semantic position while the
+  // current node is unquestionably live. The incoming owner consumes that
+  // memory; commit-time inspection of the outgoing ref is intentionally
+  // avoided because React may already have reused/reset the physical node.
+  const bindScrollOwner = useCallback((node: HTMLDivElement | null): void => {
+    scrollOwnerRef.current = node
+    if (!node) return
+    const previous = presentationScrollRef.current
+    if (!previous || previous.conversationKey !== conversationKey || previous.variant === variant) return
+    const maxTop = Math.max(0, node.scrollHeight - node.clientHeight)
+    node.scrollTop = previous.nearBottom ? node.scrollHeight : Math.min(previous.scrollTop, maxTop)
+    nearBottomRef.current = previous.nearBottom
+    presentationScrollRef.current = {
+      conversationKey,
+      variant,
+      scrollTop: node.scrollTop,
+      nearBottom: previous.nearBottom,
+    }
+  }, [conversationKey, variant])
 
   // First paint starts at the latest line. Later semantic additions follow
   // only while the user was already near the bottom; polling the same content
@@ -401,7 +432,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   if (variant === 'side') {
     return (
       <div className="chat-pane-shell chat-pane-shell--side" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div className="msgs dock-msgs" ref={scrollOwnerRef} onScroll={observeScroll} role="log" aria-live="polite" aria-label="对话记录">
+        <div className="msgs dock-msgs" ref={bindScrollOwner} onScroll={observeScroll} role="log" aria-live="polite" aria-label="对话记录">
           {stream}
         </div>
         <div className="chat-newest-slot">{newestControl}</div>
@@ -415,7 +446,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
 
   return (
     <div className="chat-pane-shell chat-pane-shell--full" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <div className="p-body" ref={scrollOwnerRef} onScroll={observeScroll}>
+      <div className="p-body" ref={bindScrollOwner} onScroll={observeScroll}>
         <div className="p-main p-main--chat">
           {anchor && (
             <div className="fs-anchor" title={anchor.detail ? `${anchor.title} · ${anchor.detail}` : anchor.title}>

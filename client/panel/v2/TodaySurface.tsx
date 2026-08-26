@@ -216,7 +216,7 @@ export function TodaySurface({
 
       {!model.pristine ? (
         <section aria-labelledby="v2-progress-title">
-          <h2 id="v2-progress-title">今天进展</h2>
+          <h2 id="v2-progress-title">最近变化</h2>
           <button type="button" onClick={() => { onIntent({ type: 'open_ledger' }) }}>
             已完成 {model.progress.completed} 项 · 变更 {model.progress.changes} 条 · 来自 {model.progress.sessions} 个会话
           </button>
