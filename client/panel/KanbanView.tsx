@@ -432,13 +432,17 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
     setTaskUndo(null)
   }, [])
 
-  const closeTaskPanel = useCallback((): void => {
+  const dismissTaskPanel = useCallback((restoreFocus: boolean): void => {
     setTaskPanel(null)
     setTaskDraft(null)
     setTaskReceipt(null)
     setTaskUndo(null)
-    window.setTimeout(() => { taskReturnFocus.current?.focus() }, 0)
+    if (restoreFocus) window.setTimeout(() => { taskReturnFocus.current?.focus() }, 0)
   }, [])
+
+  const closeTaskPanel = useCallback((): void => {
+    dismissTaskPanel(true)
+  }, [dismissTaskPanel])
 
   const openJudgmentPanel = useCallback((todo: YoloTodoRowV2, binding: JudgmentBinding): void => {
     const attention = data.attention?.find((row) =>
@@ -557,6 +561,10 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
   const handleTaskAction = useCallback((intent: TaskActionIntent): void => {
     if (!taskPanel) return
     if (intent.type === 'discuss') {
+      // The task dialog and anchored chat both own the right edge. Retire the
+      // modal first, without its delayed focus restoration stealing focus from
+      // ChatPane's autofocus input, so the chat is visible and interactive.
+      dismissTaskPanel(false)
       onOpenChat({
         title: taskPanel.item.title,
         detail: taskPanel.reason,
@@ -595,7 +603,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, view, onViewCha
       setTaskUndo(outcome.undo ?? null)
       setTaskPanel((current) => current ? { ...current, item: { ...current.item, ...outcome.item } } : current)
     })()
-  }, [act, onOpenChat, taskPanel])
+  }, [act, dismissTaskPanel, onOpenChat, taskPanel])
 
   const saveTaskPanel = useCallback((): void => {
     if (!taskPanel || !taskDraft) return
