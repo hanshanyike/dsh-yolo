@@ -7,7 +7,9 @@
 // audit row in the ledger — a denial must never be silent.
 
 import { test, expect } from '@playwright/test'
-import { connectApi, createFixtures, uid, type Api } from '../helpers.ts'
+import { buildDashboardSurfaces } from '../../../src/shared/dashboard-surfaces.ts'
+import type { YoloDashboardData } from '../../../src/shared/dashboard.ts'
+import { connectApi, createFixtures, uid, waitForDashboard, withWorkspaceDatabase, type Api } from '../helpers.ts'
 
 let api: Api
 let fx: ReturnType<typeof createFixtures>
@@ -25,7 +27,7 @@ test.afterEach(async () => {
   await fx.dispose()
 })
 
-test('合并两条待办：保留方继承字段、被并方退场、台账留痕（P35）', async () => {
+test('合并两条待办：保留方继承字段、被并方退场、审计保留且最近变化按白名单展示（P35）', async () => {
   const source = await fx.todo(uid('把演示稿发给研发'), { due: '2099-01-01' })
   const target = await fx.todo(uid('跟研发同步演示稿反馈'))
   // quick_add 默认今日到期；继承规则只在 target 无截止时触发，先清空它
@@ -49,19 +51,34 @@ test('合并两条待办：保留方继承字段、被并方退场、台账留�
   const ev = ledger.find((e) => e.kind === 'todo_consolidated')
   expect(ev).toBeTruthy()
   expect(ev?.summary).toContain('合并')
+  const surfaces = buildDashboardSurfaces(d as YoloDashboardData)
+  expect(surfaces.history.recentChanges.some((row) => row.kind === 'todo_consolidated' && row.summary.includes('合并'))).toBe(true)
 })
 
 test('非法动作被拒绝且落 action_denied 审计（P34）', async () => {
+  const anchor = await fx.todo(uid('确认异常动作不会改变发布安排'))
+  const dashboard = await waitForDashboard(api, (data) => (
+    (data.todos ?? []).some((row: Record<string, any>) => String(row.id) === String(anchor.id))
+  ), { label: 'audit fixture owner to appear' })
+  const owner = dashboard.todos.find((row: Record<string, any>) => String(row.id) === String(anchor.id))
+  const unknownAction = `fly-${Date.now()}`
   const r = await api.req.post('/yolo/actions', {
-    data: { action: 'fly', kind: 'todo', title: uid('不存在的动作') },
+    data: { action: unknownAction, kind: 'todo', title: uid('请求一个不存在的事项动作') },
   })
   expect(r.status()).toBe(400)
   const j = (await r.json()) as { ok: boolean }
   expect(j.ok).toBe(false)
 
+  const audit = withWorkspaceDatabase(owner, (db) => db.prepare(
+    `SELECT kind, summary, detail FROM events
+     WHERE kind = 'action_denied' AND summary LIKE ? ORDER BY occurred_at DESC LIMIT 1`,
+  ).get(`%${unknownAction}%`) as Record<string, unknown> | undefined)
+  expect(audit).toMatchObject({ kind: 'action_denied' })
+  expect(String(audit?.summary)).toContain(unknownAction)
+
   const d = await api.dashboard()
-  const ledger = (d.ledger ?? []) as { kind: string; summary: string }[]
-  const ev = ledger.find((e) => e.kind === 'action_denied')
-  expect(ev).toBeTruthy()
-  expect(ev?.summary).toContain('fly')
+  expect((d.ledger ?? []).some((row: Record<string, any>) => row.kind === 'action_denied')).toBe(false)
+  const surfaces = buildDashboardSurfaces(d as YoloDashboardData)
+  expect(surfaces.history.recentChanges.some((row) => row.kind === 'action_denied')).toBe(false)
+  expect(surfaces.home.recentChanges.some((row) => row.kind === 'action_denied')).toBe(false)
 })

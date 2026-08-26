@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import { buildDashboardSurfaces } from '../../../src/shared/dashboard-surfaces.ts'
+import type { YoloDashboardData } from '../../../src/shared/dashboard.ts'
 import { connectApi, createFixtures, todayStr, uid, waitForDashboard, type Api } from '../helpers.ts'
 
 let api: Api
@@ -49,4 +51,13 @@ test('mixed due_at semantics stay consistent across todo, attention, summary and
     (todo: Record<string, any>) => todo.overdue === true && todo.status !== 'done' && todo.status !== 'completed' && todo.status !== 'cancelled',
   ).length)
   expect(dashboard.notifications.filter((notification: Record<string, any>) => notification.todo_id === String(quick.id))).toHaveLength(0)
+
+  const surfaces = buildDashboardSurfaces(dashboard as YoloDashboardData)
+  expect(surfaces.plan.today.map((todo) => todo.id)).toEqual(expect.arrayContaining([String(quick.id), String(exactPast.id)]))
+  expect(surfaces.plan.all.map((todo) => todo.id)).not.toContain(String(terminal.id))
+  expect(surfaces.history.completed.map((todo) => todo.id)).toContain(String(terminal.id))
+  expect(surfaces.home.today.concat(
+    surfaces.home.needsAction.flatMap((row) => row.kind === 'todo' ? [row.todo] : []),
+    surfaces.home.primary ? [surfaces.home.primary.todo] : [],
+  ).map((todo) => todo.id)).toEqual(expect.arrayContaining([String(quick.id), String(exactPast.id)]))
 })

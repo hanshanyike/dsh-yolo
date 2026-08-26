@@ -54,6 +54,7 @@ export interface KanbanViewProps {
   /** Open a source preview in the shell's single foreground context. */
   onOpenSource?: (todo: YoloTodoRow, source: NonNullable<YoloTodoRow['source']>) => void
   onOpenChangeSource?: (change: YoloLedgerEntry, source: YoloItemSource) => void
+  onOpenItemDetail?: (todo: YoloTodoRow) => void
   /** Increments when the header bell jumps to today's notification cards. */
   notifFocusTick?: number
 }
@@ -226,7 +227,7 @@ function cleanNotificationText(value: string): string {
 
 const noop = (): void => {}
 
-export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, onOpenChat, onOpenSource, onOpenChangeSource, notifFocusTick = 0 }: KanbanViewProps): JSX.Element {
+export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail, notifFocusTick = 0 }: KanbanViewProps): JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [completing, setCompleting] = useState<Set<string>>(new Set())
@@ -412,6 +413,10 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
   }, [dismissTaskPanel])
 
   const openJudgmentPanel = useCallback((todo: YoloTodoRowV2, binding: JudgmentBinding): void => {
+    if (onOpenItemDetail) {
+      onOpenItemDetail(todo)
+      return
+    }
     const attention = data.attention?.find((row) =>
       (row.id === binding.id || row.todo_id === todo.id)
       && row.scope_cwd === (todo.scope_cwd ?? todo.ws?.cwd ?? data.cwd),
@@ -424,7 +429,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
       source: todo.source,
       binding,
     })
-  }, [data, openTaskPanel])
+  }, [data, onOpenItemDetail, openTaskPanel])
 
   const handleTodayIntent = useCallback((intent: TodaySurfaceIntent): void => {
     if (intent.type === 'quick_capture') return
@@ -452,6 +457,10 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
       return
     }
     if (intent.type === 'open_task') {
+      if (onOpenItemDetail) {
+        onOpenItemDetail(intent.todo)
+        return
+      }
       openTaskPanel({
         item: intent.todo,
         scopeCwd: intent.scopeCwd,
@@ -523,7 +532,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
         openJudgmentPanel(intent.todo, binding)
       }
     }
-  }, [act, completeTodo, data, onOpenChat, onOpenSource, onSurfaceChange, openJudgmentPanel, openTaskPanel])
+  }, [act, completeTodo, data, onOpenChat, onOpenItemDetail, onOpenSource, onSurfaceChange, openJudgmentPanel, openTaskPanel])
 
   const handleTaskAction = useCallback((intent: TaskActionIntent): void => {
     if (!taskPanel) return

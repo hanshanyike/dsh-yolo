@@ -27,6 +27,8 @@ export interface TaskActionPanelProps {
   onOpenSource?: (source: JudgmentSource) => void
   onUndoReceipt?: (receipt: LearningReceiptData) => void
   onOpenPreferences?: () => void
+  /** Focus presentation is modal; a wide dock remains non-modal. */
+  modal?: boolean
 }
 
 export function TaskActionPanel({
@@ -46,6 +48,7 @@ export function TaskActionPanel({
   onOpenSource,
   onUndoReceipt,
   onOpenPreferences,
+  modal = true,
 }: TaskActionPanelProps): JSX.Element {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
@@ -64,7 +67,7 @@ export function TaskActionPanel({
       ref={dialogRef}
       className="v2-task-action-panel"
       role="dialog"
-      aria-modal="true"
+      aria-modal={modal ? true : undefined}
       aria-labelledby={titleId}
       aria-describedby={reasonId}
       tabIndex={-1}
@@ -117,7 +120,7 @@ export function TaskActionPanel({
       {source ? (
         <section aria-label="来源">
           <h3>来源</h3>
-          {source.sessionId && onOpenSource ? (
+          {onOpenSource ? (
             <button type="button" onClick={() => { onOpenSource(source) }}>
               {source.label}{source.workspace ? ` · ${source.workspace.label}` : ''}
             </button>

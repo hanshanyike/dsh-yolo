@@ -547,6 +547,8 @@ export const YOLO_CSS = `
 
 /* Task action dialog: full-screen in compact mode, bounded side surface when wide. */
 .yolo-scope .v2-task-action-panel { position: absolute; inset: 0 0 0 auto; z-index: 80; width: min(380px, 100%); height: 100%; overflow-x: clip; overflow-y: auto; border-left: 1px solid var(--y-line-strong); background: var(--y-bg); box-shadow: var(--y-e1); animation: yolo-dock-in var(--y-dur-3) var(--y-ease-out); }
+.yolo-scope aside[data-foreground="item_detail"] { position: relative; }
+.yolo-scope aside[data-foreground="item_detail"] .v2-task-action-panel { position: relative; inset: auto; width: 100%; border-left: 0; box-shadow: none; }
 .yolo-scope .v2-task-action-panel > header { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; padding: 14px 14px 12px; border-bottom: 1px solid var(--y-line-strong); background: var(--y-bg); }
 .yolo-scope .v2-task-action-panel > header > div { min-width: 0; }
 .yolo-scope .v2-task-action-panel > header h2 { margin: 0; font-size: 18px; line-height: 1.35; }

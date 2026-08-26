@@ -80,14 +80,12 @@ function TodayTaskRow({ row, busy, onIntent }: {
           </p>
         ) : null}
         <div className="v2-today-row-meta">
-          {source.sessionId ? (
-            <button
-              type="button"
-              onClick={() => { onIntent({ type: 'open_source', source, todo: row.todo, scopeCwd: row.scopeCwd }) }}
-            >
-              {source.label}
-            </button>
-          ) : <span>{source.label}</span>}
+          <button
+            type="button"
+            onClick={() => { onIntent({ type: 'open_source', source, todo: row.todo, scopeCwd: row.scopeCwd }) }}
+          >
+            {source.label}
+          </button>
           {row.todo.ws ? <span title={row.todo.ws.label}>{row.todo.ws.label}</span> : null}
           {row.todo.due_at ? <time dateTime={row.todo.due_at}>{formatDueLabel(row.todo.due_at)}</time> : null}
         </div>

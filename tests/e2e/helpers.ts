@@ -7,6 +7,9 @@
 // is machine-labelled fixture data, not a realistic user sentence.
 
 import { request, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { DatabaseSync } from 'node:sqlite'
+import { join } from 'node:path'
+import { dbFileName } from '../../src/storage/scope.ts'
 
 export const E2E_PREFIX = '[E2E]'
 export const HOST = process.env.YOLO_E2E_HOST ?? 'http://127.0.0.1:3080'
@@ -37,6 +40,26 @@ export interface Api {
   /** GET /yolo/dashboard. */
   dashboard: () => Promise<Record<string, any>>
   close: () => Promise<void>
+}
+
+export interface WorkspaceOwnedRow {
+  id: string
+  scope_cwd?: string
+  ws?: { slug?: string; cwd?: string }
+}
+
+/** Resolve and open the real workspace SQLite store owning one dashboard row. */
+export function withWorkspaceDatabase<T>(row: WorkspaceOwnedRow, fn: (db: DatabaseSync) => T): T {
+  const cwd = row.scope_cwd ?? row.ws?.cwd
+  const scopeKey = row.ws?.slug
+  if (!cwd || !scopeKey) throw new Error(`row ${row.id} does not expose scope_cwd + ws.slug`)
+  const db = new DatabaseSync(join(cwd, '.dsh', 'yolo', dbFileName(scopeKey)))
+  try {
+    db.exec('PRAGMA busy_timeout=5000')
+    return fn(db)
+  } finally {
+    db.close()
+  }
 }
 
 /** Open the sidebar YOLO panel and wait for the board body to render. */
