@@ -502,6 +502,7 @@ export const YOLO_CSS = `
 .yolo-scope .v2-judgment h2 { margin: 10px 0 5px; font-size: 19px; line-height: 1.35; letter-spacing: -.01em; }
 .yolo-scope .v2-judgment--compact h2 { margin-top: 7px; font-size: 16px; }
 .yolo-scope .v2-judgment-reason { margin: 0; color: var(--y-text-2); font-size: 14px; line-height: 1.55; }
+.yolo-scope .v2-reminder-body { margin: 7px 0 0; color: var(--y-text-2); font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
 .yolo-scope .v2-judgment > section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--y-line); }
 .yolo-scope .v2-judgment > section h3 { margin: 0 0 7px; color: var(--y-text-2); font-size: 13px; font-weight: 650; }
 .yolo-scope .v2-judgment > section ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }

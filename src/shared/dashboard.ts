@@ -126,6 +126,8 @@ export interface YoloTodoRow {
     unhandled: boolean
     unhandled_count?: number
     last_fired_at?: number | null
+    title?: string
+    body?: string | null
   }
   /** v0.3.2 feedback track: times completed (good) vs cancelled (stale). */
   belief?: { good: number; stale: number }

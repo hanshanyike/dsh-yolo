@@ -42,6 +42,11 @@ LLM 标题会被静默丢弃，不会让整轮失败。
 derived-message fallback 仍可作为抽取输入，但不会被当作可引用证据写入。`source_turn` 目前只用于预览
 元数据；宿主只支持打开会话时，界面不得声称能够精确定位到该轮。
 
+若主 Agent 已在本轮同步调用 `memory_write`，tool 行会携带同一 session。后台任务在调用辅助模型前，
+只升级从本轮 accepted 时间到后台 started 时间之间创建的 provisional 行；因此辅助模型返回 new todo、
+update 或合法 empty 都能得到一致来源，同时后续轮次不会被前一轮摘录误绑定。对已经落到相同 due_at 的
+重复 postpone 是领域 no-op，不重复写最近变化。
+
 `extraction_log.status` 的现行 `hasContent` 判断只统计 todo、milestone、goal 与 `updates[]`；
 仅抽到 preference、event 或 session summary 的轮次仍会记为 `empty`。这是当前审计口径，不代表
 这些内容没有写入。

@@ -156,23 +156,53 @@ export function upsertTodo(
   },
 ): { row: Todo; created: boolean } {
   const dedupKey = `todo:${normalize(data.title)}`
-  const existing = db
+  const ts = now()
+  let existing = db
     .prepare('SELECT * FROM todos WHERE dedup_key = ? AND scope_key = ?')
     .get(dedupKey, data.scope_key) as Todo | undefined
-  const ts = now()
+  if (!existing && data.source === 'llm' && data.session_id) {
+    const incomingTitle = normalize(data.title)
+    const provisional = db.prepare(
+      `SELECT * FROM todos
+       WHERE scope_key = ? AND source = 'tool' AND session_id = ?
+         AND status NOT IN ('done','cancelled') AND source_excerpt IS NULL AND created_at >= ?
+       ORDER BY created_at DESC`,
+    ).all(data.scope_key, data.session_id, ts - 5 * 60_000) as Todo[]
+    existing = provisional.find((candidate) => {
+      const candidateTitle = normalize(candidate.title)
+      return Math.min(candidateTitle.length, incomingTitle.length) >= 6
+        && (candidateTitle.includes(incomingTitle) || incomingTitle.includes(candidateTitle))
+    })
+  }
+  const sourceEvidence = normalizeSourceEvidence(data)
   if (existing && existing.status !== 'done' && existing.status !== 'cancelled') {
     // update mutable fields (take non-null incoming)
     const due = data.due_at ?? existing.due_at
     const pri = data.priority ?? existing.priority ?? null
     const detail = data.detail ?? existing.detail ?? null
     const ms = data.milestone_id ?? existing.milestone_id ?? null
+    // The host agent may call memory_write before the independent post-turn
+    // extractor sees the same accepted input. Promote that same-session tool
+    // origin once to stronger direct-user evidence; unrelated later turns
+    // never replace the original source.
+    const promoteToolOrigin = existing.source === 'tool'
+      && !!existing.session_id
+      && existing.session_id === data.session_id
+      && data.source === 'llm'
+      && sourceEvidence.excerpt !== null
+      && existing.source_excerpt == null
+    const source = promoteToolOrigin ? 'llm' : existing.source
+    const sourceExcerpt = promoteToolOrigin ? sourceEvidence.excerpt : existing.source_excerpt ?? null
+    const sourceTurn = promoteToolOrigin ? sourceEvidence.turn : existing.source_turn ?? null
     db.prepare(
-      'UPDATE todos SET due_at = ?, priority = ?, detail = ?, milestone_id = ?, updated_at = ? WHERE id = ?',
-    ).run(due, pri, detail, ms, ts, existing.id)
+      'UPDATE todos SET due_at = ?, priority = ?, detail = ?, milestone_id = ?, source = ?, source_excerpt = ?, source_turn = ?, updated_at = ? WHERE id = ?',
+    ).run(due, pri, detail, ms, source, sourceExcerpt, sourceTurn, ts, existing.id)
     syncTodoFts(db, existing.id, existing.title, detail)
-    return { row: { ...existing, due_at: due, priority: pri, detail, milestone_id: ms, updated_at: ts }, created: false }
+    return {
+      row: { ...existing, due_at: due, priority: pri, detail, milestone_id: ms, source, source_excerpt: sourceExcerpt, source_turn: sourceTurn, updated_at: ts },
+      created: false,
+    }
   }
-  const sourceEvidence = normalizeSourceEvidence(data)
   const row: Todo = {
     id: genId(),
     title: data.title,
@@ -212,6 +242,29 @@ export function upsertTodo(
     row.updated_at,
   )
   return { row, created: true }
+}
+
+/** Bind direct-user evidence to synchronous memory_write rows from the same
+ * accepted turn. The caller supplies a closed creation-time window so later
+ * turns in the same session cannot be captured accidentally. */
+export function promoteToolTodoOrigins(
+  db: DB,
+  scopeKey: string,
+  data: { session_id: string; source_excerpt: string; source_turn: number; created_from: number; created_to: number },
+): number {
+  const evidence = normalizeSourceEvidence({
+    source: 'llm',
+    session_id: data.session_id,
+    source_excerpt: data.source_excerpt,
+    source_turn: data.source_turn,
+  })
+  if (evidence.excerpt === null || evidence.turn === null) return 0
+  return Number(db.prepare(
+    `UPDATE todos
+     SET source = 'llm', source_excerpt = ?, source_turn = ?
+     WHERE scope_key = ? AND source = 'tool' AND session_id = ?
+       AND source_excerpt IS NULL AND created_at >= ? AND created_at <= ?`,
+  ).run(evidence.excerpt, evidence.turn, scopeKey, data.session_id, data.created_from, data.created_to).changes)
 }
 
 export function setTodoStatus(db: DB, id: string, status: TodoStatus): void {
@@ -693,6 +746,7 @@ export function applyTodoAction(
       break
     case 'postpone': {
       if (!args?.due_at) return t
+      if (t.due_at === args.due_at) return t
       db.prepare('UPDATE todos SET due_at = ?, last_reminded_at = NULL, updated_at = ? WHERE id = ?').run(
         args.due_at,
         ts,

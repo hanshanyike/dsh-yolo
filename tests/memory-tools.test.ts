@@ -12,7 +12,7 @@ interface CapturedTool {
   name: string
   description: string
   parameters: Record<string, unknown>
-  execute(args: Record<string, unknown>): Promise<unknown>
+  execute(args: Record<string, unknown>, exec?: unknown): Promise<unknown>
 }
 
 let cwd: string
@@ -81,6 +81,15 @@ describe('memory_write + yolo_query', () => {
     // status filter excludes it
     const done = await tool('yolo_query').execute({ view: 'todos', status: 'done' }) as { rows: Array<{ id: string }> }
     expect(done.rows.some((t) => t.id === written.id)).toBe(false)
+  })
+
+  it('stamps the calling session on provisional tool-created todos', async () => {
+    const written = await tool('memory_write').execute(
+      { kind: 'todo', title: '同步客户访谈纪要' },
+      { agent: { session: { header: { id: 'session-tool-origin', cwd } } } },
+    ) as { id: string }
+    const row = yolo.listTodos(cwd).find((todo) => todo.id === written.id)
+    expect(row).toMatchObject({ source: 'tool', session_id: 'session-tool-origin' })
   })
 
   it('writes milestones, goals, preferences and events; reads each view', async () => {

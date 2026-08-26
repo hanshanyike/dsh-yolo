@@ -113,17 +113,19 @@ function postponedTitle(summary: string): string | undefined {
   return /^推迟：「(.+)」→\s/.exec(summary)?.[1]
 }
 
-function unhandledReminderMap(rows: readonly Notification[]): Map<string, { id: string; count: number; lastFiredAt: number }> {
-  const out = new Map<string, { id: string; count: number; lastFiredAt: number }>()
+function unhandledReminderMap(rows: readonly Notification[]): Map<string, { id: string; count: number; lastFiredAt: number; title: string; body: string | null }> {
+  const out = new Map<string, { id: string; count: number; lastFiredAt: number; title: string; body: string | null }>()
   for (const row of rows) {
     if (row.kind !== 'reminder' || !row.todo_id || row.handled_at != null) continue
     const current = out.get(row.todo_id)
-    if (!current) out.set(row.todo_id, { id: row.id, count: 1, lastFiredAt: row.created_at })
+    if (!current) out.set(row.todo_id, { id: row.id, count: 1, lastFiredAt: row.created_at, title: row.title, body: row.body ?? null })
     else {
       current.count += 1
       if (row.created_at >= current.lastFiredAt) {
         current.id = row.id
         current.lastFiredAt = row.created_at
+        current.title = row.title
+        current.body = row.body ?? null
       }
     }
   }
@@ -209,6 +211,8 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
             unhandled: true,
             unhandled_count: reminders.get(t.id)!.count,
             last_fired_at: reminders.get(t.id)!.lastFiredAt,
+            title: reminders.get(t.id)!.title,
+            body: reminders.get(t.id)!.body,
           },
         }
       : { reminder: { unhandled: false, unhandled_count: 0 } }),

@@ -143,6 +143,13 @@ export default class Yolo extends Service {
     const { row, created } = repo.upsertTodo(h.db, { ...data, scope_key: h.scopeKey })
     return { todo: row, created }
   }
+  promoteToolTodoOrigins(
+    cwd: string,
+    data: { session_id: string; source_excerpt: string; source_turn: number; created_from: number; created_to: number },
+  ): number {
+    const h = this.resolve(cwd)
+    return repo.promoteToolTodoOrigins(h.db, h.scopeKey, data)
+  }
   setTodoStatus(cwd: string, id: string, status: TodoStatus): void {
     repo.setTodoStatus(this.resolve(cwd).db, id, status)
   }

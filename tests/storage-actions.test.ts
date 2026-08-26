@@ -141,6 +141,14 @@ describe('applyTodoAction', () => {
     expect(repo.listDueTodos(db, SCOPE, '2026-08-26')).toHaveLength(1)
   })
 
+  it('postpone to the already persisted instant is a domain no-op', () => {
+    const due = '2026-08-28T16:00:00+08:00'
+    const { row: todo } = repo.upsertTodo(db, { title: '发送客户访谈纪要', due_at: due, scope_key: SCOPE })
+    repo.applyTodoAction(db, todo.id, 'postpone', { due_at: due, session_id: 'session-background' })
+    expect(repo.listEvents(db, SCOPE).filter((event) => event.kind === 'todo_postponed')).toHaveLength(0)
+    expect(repo.listTodos(db, SCOPE).find((row) => row.id === todo.id)?.due_at).toBe(due)
+  })
+
   it('postpone without a due_at no-ops', () => {
     const { row: t } = repo.upsertTodo(db, { title: '无日期任务', due_at: '2026-08-22', scope_key: SCOPE })
     const moved = repo.applyTodoAction(db, t.id, 'postpone')

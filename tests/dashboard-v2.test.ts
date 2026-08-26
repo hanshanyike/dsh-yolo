@@ -53,7 +53,7 @@ describe('dashboard v2 projection', () => {
     }
     const notification: Notification = {
       id: 'n1', kind: 'reminder', title: '季度材料', todo_id: 't1', scope_cwd: cwd,
-      created_at: NOW.getTime() - 2_000, handled_at: null, scope_key: 'quarterly/main',
+      body: '请及时处理', created_at: NOW.getTime() - 2_000, handled_at: null, scope_key: 'quarterly/main',
     }
 
     const data = buildDashboardData(yoloFor('quarterly/main', todo, notification), cwd, '2026-08-23')
@@ -68,7 +68,6 @@ describe('dashboard v2 projection', () => {
       session_id: 's1',
       scope_cwd: cwd,
       postpone_count: 1,
-      reminder: { id: 'n1', unhandled: true, unhandled_count: 1 },
       attention_reason: {
         code: 'reminder_due',
         short_reason: '有一条未处理提醒',
@@ -79,6 +78,7 @@ describe('dashboard v2 projection', () => {
         created_at: NOW.getTime() - 10_000,
       },
       ws: { slug: 'quarterly/main', label: 'quarterly', cwd },
+      reminder: { id: 'n1', unhandled: true, unhandled_count: 1, body: '请及时处理' },
     })
     for (const rows of [data.todos, data.goals, data.milestones, data.events, data.preferences, data.ledger, data.notifications]) {
       expect(rows[0]?.ws?.cwd).toBe(cwd)

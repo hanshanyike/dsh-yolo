@@ -360,6 +360,16 @@ export function apply(ctx: Context): void {
         try {
           if (last) await waitForSpacing(Math.max(0, last + spacingMs - Date.now()), controller.signal)
           started = Date.now()
+          const sourceExcerpt = sourceExcerptFromMessages(capturedMessages)
+          if (sourceExcerpt) {
+            yctx.yolo.promoteToolTodoOrigins(cwd, {
+              session_id: session.id,
+              source_excerpt: sourceExcerpt,
+              source_turn: turn,
+              created_from: acceptedAt ?? started,
+              created_to: started,
+            })
+          }
           const result = await llmExtract({
             llm: yctx.llm,
             provider: route.provider,
@@ -378,7 +388,7 @@ export function apply(ctx: Context): void {
             turn,
             // Compatibility fallback text is useful extraction input but is
             // not sufficiently strong provenance to persist as a quotation.
-            excerpt: sourceExcerptFromMessages(capturedMessages),
+            excerpt: sourceExcerpt,
           })
           const hasContent = result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0 || result.updates.length > 0
           yctx.yolo.logExtraction(cwd, {

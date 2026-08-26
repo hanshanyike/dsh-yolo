@@ -52,6 +52,10 @@ Markdown 快照只是可读、可 diff 的审阅投影；当前没有从快照�
 `session_id`、轮次有效且摘录非空时才写入；摘录规范化空白并按 Unicode code point 截断到 400 字符。
 manual/tool 调用即使传入伪造字段也会落为 NULL。语义去重命中已有事项时只更新可变计划字段，
 不会用后续对话覆盖首次来源。旧库迁移与 legacy scope 合并缺列时降级为 NULL，且可重复执行。
+主 Agent 可能在同一轮先调用 `memory_write`：这类 tool 行会带调用 session。后台抽取使用
+`acceptedAt..backgroundStartedAt` 的闭区间，将同 session、同轮创建的 provisional tool 行一次性升级为
+LLM 来源并补齐 excerpt/turn；即使辅助模型因已知事项而返回合法 `empty`，来源证据也不会丢失。
+不同 session、窗口外行和已有 LLM/manual 来源均不会被覆盖。
 
 ## 写入、状态与审计
 

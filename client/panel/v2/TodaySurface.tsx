@@ -24,6 +24,7 @@ export type TodaySurfaceIntent =
   | { type: 'complete_todo'; todo: YoloTodoRowV2; scopeCwd: string }
   | { type: 'open_task'; todo: YoloTodoRowV2; scopeCwd: string }
   | { type: 'open_source'; source: JudgmentSource; todo: YoloTodoRowV2; scopeCwd: string }
+  | { type: 'handle_notification'; notificationId: string; scopeCwd: string }
   | { type: 'open_ledger' }
   | { type: 'open_empty_chat' }
   | { type: 'review_changes' }
@@ -79,6 +80,7 @@ function TodayTaskRow({ row, busy, onIntent }: {
             {row.reason.evidence.length > 0 ? <> · {row.reason.evidence.join('，')}</> : null}
           </p>
         ) : null}
+        {row.todo.reminder?.body ? <p className="v2-reminder-body">{row.todo.reminder.body}</p> : null}
         <div className="v2-today-row-meta">
           <button
             type="button"
@@ -91,6 +93,9 @@ function TodayTaskRow({ row, busy, onIntent }: {
         </div>
       </div>
       <button type="button" disabled={busy} onClick={openTask}>处理</button>
+      {row.todo.reminder?.unhandled && row.todo.reminder.id ? (
+        <button type="button" disabled={busy} onClick={() => { onIntent({ type: 'handle_notification', notificationId: row.todo.reminder!.id!, scopeCwd: row.scopeCwd }) }}>知道了</button>
+      ) : null}
     </li>
   )
 }
@@ -208,6 +213,7 @@ export function TodaySurface({
             })
           }}
           onOpenSource={(source) => { onIntent({ type: 'open_source', source, todo: judgment.todo, scopeCwd: judgmentScopeCwd }) }}
+          onHandled={judgment.todo.reminder?.id ? () => { onIntent({ type: 'handle_notification', notificationId: judgment.todo.reminder!.id!, scopeCwd: judgmentScopeCwd }) } : undefined}
         />
       ) : null}
 

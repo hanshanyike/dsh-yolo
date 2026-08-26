@@ -170,6 +170,39 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     })
   })
 
+  it('promotes same-turn tool-created todos even when the extractor returns empty', async () => {
+    const title = '把客户访谈纪要发给产品组（验证编号 RH0826C）'
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
+    apply(ctx as never)
+    const session = sessionLike('s-tool-race', cwd)
+    const message = {
+      id: 'human-tool-race', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '[E2E] 明天下午三点提醒我把客户访谈纪要发给产品组，验证编号 RH0826C。' }],
+    }
+    Object.assign(session, { events: [{ type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } }] })
+    const agent = { id: session.id, options: {}, session, status: 'idle', whenIdle: async () => {} }
+
+    await handlers.get('agent/pre-step')!(
+      { agent, messages: [message], turn: 1, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [message] }),
+    )
+    // Mirrors the host agent's synchronous memory_write after pre-step and
+    // before the independent post-turn extractor starts.
+    yolo.addTodo(cwd, { title, due_at: '2026-08-27T15:00:00+08:00', source: 'tool', session_id: 's-tool-race' })
+    await handlers.get('agent/turn-stopping')!({ agent, turn: 1 })
+    await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(1))
+
+    const todos = yolo.listTodos(cwd)
+    expect(todos).toHaveLength(1)
+    expect(todos[0]).toMatchObject({
+      title,
+      source: 'llm',
+      session_id: 's-tool-race',
+      source_turn: 1,
+      source_excerpt: '[E2E] 明天下午三点提醒我把客户访谈纪要发给产品组，验证编号 RH0826C。',
+    })
+  })
+
   it('does not extract automatic Goal rounds that carry user-role goal messages', async () => {
     const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON)
     apply(ctx as never)

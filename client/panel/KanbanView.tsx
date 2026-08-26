@@ -356,7 +356,11 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
     [filter, surfaces.plan.all],
   )
 
-  const openNotifications = data.notifications.filter((n) => !n.handled)
+  const openNotifications = data.notifications.filter((notification) => {
+    if (notification.handled) return false
+    if (!notification.todo_id) return true
+    return !data.todos.some((todo) => todo.id === notification.todo_id && isTodoOpen(todo.status))
+  })
   const activeGoals = data.goals.filter((g) => g.status === 'active')
   const openMilestones = data.milestones.filter((m) => m.status === 'planned' || m.status === 'active')
   const avgGoalPct = Math.round(activeGoals.reduce((a, g) => a + g.progress, 0) / Math.max(activeGoals.length, 1))
@@ -469,7 +473,15 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
       return
     }
     if (intent.type === 'open_source') {
-      if (intent.todo.source) onOpenSource?.(intent.todo, intent.todo.source)
+      const rawTodo = data.todos.find((todo) => todo.id === intent.todo.id
+        && (todo.scope_cwd ?? todo.ws?.cwd ?? data.cwd) === intent.scopeCwd)
+      if (rawTodo?.source) onOpenSource?.(rawTodo, rawTodo.source)
+      return
+    }
+    if (intent.type === 'handle_notification') {
+      void act(`n-${intent.notificationId}`, {
+        action: 'handled', kind: 'notification', id: intent.notificationId, scope_cwd: intent.scopeCwd,
+      })
       return
     }
     if (intent.type === 'open_ledger' || intent.type === 'review_changes') {

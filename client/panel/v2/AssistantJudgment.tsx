@@ -15,6 +15,7 @@ export interface AssistantJudgmentProps {
   onIgnore?: () => void
   onFeedback?: (reason?: JudgmentFeedbackReason) => void
   onOpenSource?: (source: JudgmentSource) => void
+  onHandled?: () => void
 }
 
 function SourceLine({ source, onOpen }: {
@@ -49,6 +50,7 @@ export function AssistantJudgment({
   onIgnore,
   onFeedback,
   onOpenSource,
+  onHandled,
 }: AssistantJudgmentProps): JSX.Element {
   const titleId = `assistant-judgment-${judgment.id}`
   const compact = judgment.presentation === 'compact'
@@ -71,6 +73,7 @@ export function AssistantJudgment({
 
       <h2 id={titleId}>{judgment.todo.title}</h2>
       <p className="v2-judgment-reason">{judgment.reason}</p>
+      {judgment.todo.reminder?.body ? <p className="v2-reminder-body">{judgment.todo.reminder.body}</p> : null}
 
       {partialData
         ? <p role="status" className="v2-judgment-partial">部分工作区暂不可用，当前判断不代表全局最重要事项。</p>
@@ -97,12 +100,16 @@ export function AssistantJudgment({
 
       <div className="v2-judgment-actions" role="group" aria-label="处理助手判断">
         {compact ? (
-          <button type="button" disabled={busy} onClick={() => { onIntent('open_panel') }}>处理</button>
+          <>
+            <button type="button" disabled={busy} onClick={() => { onIntent('open_panel') }}>处理</button>
+            {judgment.todo.reminder?.unhandled && onHandled ? <button type="button" disabled={busy} onClick={onHandled}>知道了</button> : null}
+          </>
         ) : (
           <>
             <button type="button" disabled={busy} onClick={() => { onIntent('complete') }}>完成</button>
             <button type="button" disabled={busy} onClick={() => { onIntent('postpone_tomorrow') }}>推迟到明天</button>
             <button type="button" disabled={busy} onClick={() => { onIntent('discuss') }}>讨论</button>
+            {judgment.todo.reminder?.unhandled && onHandled ? <button type="button" disabled={busy} onClick={onHandled}>知道了</button> : null}
             <button type="button" disabled={busy} onClick={() => { onIntent('open_panel') }}>更多处理</button>
           </>
         )}

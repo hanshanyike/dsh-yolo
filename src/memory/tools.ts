@@ -76,12 +76,14 @@ export function registerYoloTools(ctx: YoloContext): void {
         const cwd = cwdOfExec(exec)
         switch (args.kind) {
           case 'todo': {
+            const originSessionId = sessionId(execSession(exec))
             const { todo } = y.addTodo(cwd, {
               title: args.title,
               detail: args.detail,
               due_at: args.due_at,
               priority: (args.priority ?? undefined) as Priority | undefined,
               source: 'tool',
+              session_id: originSessionId,
             })
             return json(todo)
           }

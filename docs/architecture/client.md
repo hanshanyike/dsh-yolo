@@ -42,8 +42,10 @@
 
 首读未见过的 attention 判断后提交 `seen`；同一证据刷新/重开后显示紧凑形态。suppress 与
 feedback 必须回传服务端给出的 `reason_version` 和 `evidence_fingerprint`。客户端不计算或
-覆盖 score、reason、fingerprint。Today 的次级“需要关注”行只呈现主理由和去重后的其余结构化
+覆盖 score、reason、fingerprint。首页的次级“需要关注”行只呈现主理由和去重后的其余结构化
 evidence；完整 explanation 只保留给主助手判断，避免同一事实在一行内复读。
+同一事项的判断、提醒与今日安排在首页合并为一个事项表面；侧栏 badge 仍按 notification 精确计数。
+“知道了”只处理目标 notification，事项保持开放；最新提醒正文随合并事项显示，不因去重丢失用户文本。
 
 ## 对话
 

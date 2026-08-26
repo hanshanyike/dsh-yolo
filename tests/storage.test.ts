@@ -119,6 +119,48 @@ describe('todos', () => {
     })
   })
 
+  it('promotes a same-session provisional tool write to direct-user extraction evidence once', () => {
+    const provisional = repo.upsertTodo(db, {
+      title: '把访谈纪要发给产品组（编号 RH0826B）', scope_key: SCOPE, source: 'tool', session_id: 'session-same',
+    })
+    const extracted = repo.upsertTodo(db, {
+      title: '把访谈纪要发给产品组', scope_key: SCOPE, source: 'llm', session_id: 'session-same',
+      source_excerpt: '明天下午三点把访谈纪要发给产品组', source_turn: 2,
+    })
+    expect(extracted).toMatchObject({
+      created: false,
+      row: {
+        id: provisional.row.id, source: 'llm', session_id: 'session-same',
+        source_excerpt: '明天下午三点把访谈纪要发给产品组', source_turn: 2,
+      },
+    })
+    expect(repo.listTodos(db, SCOPE)).toHaveLength(1)
+
+    const unrelated = repo.upsertTodo(db, {
+      title: '把访谈纪要发给产品组（编号 RH0826B）', scope_key: SCOPE, source: 'llm', session_id: 'session-later',
+      source_excerpt: '后来把它改到周五', source_turn: 9,
+    })
+    expect(unrelated.row).toMatchObject({
+      source: 'llm', session_id: 'session-same',
+      source_excerpt: '明天下午三点把访谈纪要发给产品组', source_turn: 2,
+    })
+  })
+
+  it('promotes provisional tool origins only inside the accepted turn window', () => {
+    const earlier = repo.upsertTodo(db, { title: '早一轮事项', scope_key: SCOPE, source: 'tool', session_id: 'session-window' }).row
+    const current = repo.upsertTodo(db, { title: '本轮事项', scope_key: SCOPE, source: 'tool', session_id: 'session-window' }).row
+    db.prepare('UPDATE todos SET created_at = ? WHERE id = ?').run(100, earlier.id)
+    db.prepare('UPDATE todos SET created_at = ? WHERE id = ?').run(200, current.id)
+
+    expect(repo.promoteToolTodoOrigins(db, SCOPE, {
+      session_id: 'session-window', source_excerpt: '本轮直接用户输入', source_turn: 4,
+      created_from: 150, created_to: 250,
+    })).toBe(1)
+    const rows = repo.listTodos(db, SCOPE)
+    expect(rows.find((row) => row.id === earlier.id)).toMatchObject({ source: 'tool', source_excerpt: null })
+    expect(rows.find((row) => row.id === current.id)).toMatchObject({ source: 'llm', source_excerpt: '本轮直接用户输入', source_turn: 4 })
+  })
+
   it('bounds source evidence at storage and rejects it for manual or tool rows', () => {
     const llm = repo.upsertTodo(db, {
       title: '核对发布窗口', scope_key: SCOPE, source: 'llm', session_id: 'session-source',

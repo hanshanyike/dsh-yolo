@@ -43,7 +43,7 @@ pnpm build              # 产物到 dist/（host 从 dist 加载插件）
 node scripts/clean-test-data.mjs   # 手动清理 [E2E] 测试夹具（e2e runner 拉起宿主前会自动做）
 npx @deepseek-ai/dsh plugin --profile web add .   # 一次性：把插件链接进 dsh web profile
 pnpm dsh web --no-open --port 4080    # 启动宿主（标准 dsh；`web` 已隐含 --profile web，默认端口 3080，本机被占故用 4080）
-node scripts/e2e.mjs                 # E2E：拉起/复用宿主后跑全套（当前 45 用例，约 5 分钟）
+node scripts/e2e.mjs                 # E2E：拉起/复用宿主后跑全套（当前 53 用例，约 3 分钟）
 node scripts/e2e.mjs --suite api     # 仅 api 套件（HTTP 接口测试，无浏览器，秒级反馈；改 src/** 后首选）
 node scripts/e2e.mjs --suite ui      # 仅 ui 套件（浏览器端到端测试）
 node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/<spec>.spec.ts）
