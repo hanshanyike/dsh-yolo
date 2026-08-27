@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+## [0.4.0-rc2] — 2026-08-27
+
+### Changed
+
+- 助手看板前端按照已评审原型收敛为带工作台外框的首页 / 计划 / 历史布局，统一顶部导航、日期结论、快速记录、首要判断、分组事项和最近变化的阅读层级。
+- 宽面板使用原型定义的 840px 内容列与单一 340px 上下文区；窄面板继续进入紧凑模式，不改变事项操作、来源预览和对话状态。
+- 安装文档与原型设计记录同步到本次实现和 `v0.4.0-rc2`。
+
+### Fixed
+
+- 修复原型视觉与宿主看板之间的外框、间距、Tab 图标/计数和强调色不一致问题。
+- 补充宽版原型外框、完整日期文案和来源前缀的自动化契约，并更新响应式前景测试以覆盖带边框工作台。
+
 ## [0.4.0-rc1] — 2026-08-27
 
 ### Added
@@ -158,7 +171,8 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc1...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc2...HEAD
+[0.4.0-rc2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc1...v0.4.0-rc2
 [0.4.0-rc1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.3...v0.4.0-rc1
 [0.3.1-rc.3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.2...v0.3.1-rc.3
 [0.3.1-rc.2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.1...v0.3.1-rc.2
