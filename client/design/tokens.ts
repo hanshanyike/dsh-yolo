@@ -188,7 +188,7 @@ export const YOLO_CSS = `
 
 /* capture-first command bar (below tabs, above the scroll face) */
 .yolo-scope .capture { flex: none; display: flex; align-items: center; padding: 12px 16px 10px; background: var(--y-bg); }
-.yolo-scope .capture--top { border-bottom: 1px solid var(--y-line); }
+.yolo-scope .capture--top { gap: 8px; border-bottom: 1px solid var(--y-line); }
 .yolo-scope .capture--foot { border-top: 1px solid var(--y-line); padding: 10px 16px; }
 .yolo-scope .capture-in { display: flex; align-items: center; gap: 9px; height: 44px; padding: 0 12px 0 14px; flex: 1; min-width: 0; background: var(--y-surface); border: 1.5px solid var(--y-line-strong); border-radius: var(--y-r-md); transition: border-color var(--y-dur-2), box-shadow var(--y-dur-2); }
 .yolo-scope .capture-in.focus { border-color: var(--y-accent); box-shadow: 0 0 0 3px var(--y-accent-soft); }
@@ -198,6 +198,9 @@ export const YOLO_CSS = `
 .yolo-scope .cap-input::placeholder { color: var(--y-text-3); }
 .yolo-scope .enter-hint { font-size: 11px; color: var(--y-text-3); transition: color var(--y-dur-1); font-family: var(--y-font-mono); }
 .yolo-scope .enter-hint.lit { color: var(--y-accent-text); }
+.yolo-scope .capture-submit { flex: none; height: 44px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); border-radius: var(--y-r-sm); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); color: var(--y-text-1); font-size: 13px; font-weight: 700; cursor: pointer; transition: background var(--y-dur-1), border-color var(--y-dur-1), opacity var(--y-dur-1); white-space: nowrap; }
+.yolo-scope .capture-submit:hover:not(:disabled) { background: color-mix(in srgb, var(--y-focus) 18%, var(--y-surface)); border-color: var(--y-focus); }
+.yolo-scope .capture-submit:disabled { opacity: .45; cursor: default; }
 /* full-chat footer keeps a boxed input */
 .yolo-scope .capture--foot .cap-input { height: 36px; padding: 0 12px; background: var(--y-surface-2); border: 1px solid transparent; border-radius: var(--y-r-md); transition: all var(--y-dur-2); }
 .yolo-scope .capture--foot .cap-input::placeholder { color: var(--y-text-3); }
@@ -205,7 +208,7 @@ export const YOLO_CSS = `
 
 /* ===== body / scroll face ===== */
 .yolo-scope .p-body { flex: 1; min-height: 0; overflow-y: auto; }
-.yolo-scope .p-main { max-width: 760px; margin: 0 auto; padding: 6px 28px 48px; }
+.yolo-scope .p-main { max-width: 840px; margin: 0 auto; padding: 6px 28px 48px; }
 .yolo-scope .p-main--chat { padding: 16px 28px 24px; animation: yolo-chat-in var(--y-dur-3) var(--y-ease-out); }
 @keyframes yolo-chat-in { from { opacity: 0; } }
 
@@ -623,6 +626,8 @@ export const YOLO_CSS = `
 .yolo-scope.compact .brand { gap: 5px; }
 .yolo-scope.compact .brand-name { font-size: 14px; }
 .yolo-scope.compact .p-head-acts { gap: 3px; }
+.yolo-scope.compact .capture--top { padding-inline: 12px; }
+.yolo-scope.compact .capture-submit { padding-inline: 10px; }
 .yolo-scope.compact .head-primary, .yolo-scope.compact .head-secondary { height: 34px; padding: 0 7px; gap: 4px; font-size: 12.5px; }
 .yolo-scope.compact .more-trigger { min-width: 55px; }
 .yolo-scope.compact .hbtn { width: 32px; height: 32px; }

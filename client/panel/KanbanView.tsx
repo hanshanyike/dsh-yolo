@@ -735,7 +735,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
                   scopeCwd: n.scope_cwd ?? n.ws?.cwd,
                 })
               }}>
-                <IcChat size={12} />{n.todo_id ? '讨论这项安排' : '和助手聊聊'}
+                <IcChat size={12} />{n.todo_id ? '讨论这项安排' : '讨论这条提醒'}
               </button>
               <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
                 知道了

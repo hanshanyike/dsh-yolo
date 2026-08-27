@@ -41,6 +41,14 @@ export function CaptureBar({ busy = false, onSubmit }: CaptureBarProps): JSX.Ele
         />
         <span className={`enter-hint mono${draft.trim() ? ' lit' : ''}`}>↵</span>
       </label>
+      <button
+        className="capture-submit"
+        type="button"
+        disabled={busy || !draft.trim()}
+        onClick={() => { void send() }}
+      >
+        快速记录
+      </button>
     </div>
   )
 }

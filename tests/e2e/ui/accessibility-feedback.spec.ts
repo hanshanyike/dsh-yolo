@@ -77,7 +77,7 @@ test('notification cards preserve all user-authored body lines', async ({ page }
     const card = page.locator('.notif').filter({ hasText: title })
     await expect(card).toBeVisible()
     await expect(card).toContainText(secondLine, { timeout: 1_000 })
-    await expect(card.getByRole('button', { name: '和助手聊聊' })).toBeVisible()
+    await expect(card.getByRole('button', { name: '讨论这条提醒' })).toBeVisible()
   } finally {
     await fx.dispose()
   }

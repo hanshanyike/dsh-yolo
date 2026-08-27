@@ -169,7 +169,7 @@ test('捕获条快速记一条并落入看板（TA-2 快捷入口）', async ({ 
   await openYoloPanel(page)
 
   await page.locator('.cap-input').fill(title)
-  await page.keyboard.press('Enter')
+  await page.locator('.capture--top').getByRole('button', { name: '快速记录', exact: true }).click()
   await expect(page.locator('.toast').filter({ hasText: '已记下' })).toBeVisible()
   await revealHomeItems(page)
   // this row was born in the browser, not through the API — look its id up
