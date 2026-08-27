@@ -53,11 +53,13 @@ test('视口虽宽于 960px、宿主让位后可用宽度不足时，详情、�
 
   const assertFocusFillsPanel = async (kind: string): Promise<void> => {
     await expect(panel).toHaveAttribute('data-presentation', 'focus')
-    const panelBox = await panel.boundingBox()
+    const panelBox = await page.locator('.panel-frame').boundingBox()
     const contextBox = await panel.locator(`aside[data-foreground="${kind}"]`).boundingBox()
     expect(contextBox).not.toBeNull()
     expect(panelBox).not.toBeNull()
-    expect(Math.abs(contextBox!.width - panelBox!.width)).toBeLessThan(2)
+    // The prototype frame owns a 1px border on each side; the foreground
+    // surface fills its content box, so compare the inner surface dimensions.
+    expect(Math.abs(contextBox!.width - panelBox!.width)).toBeLessThanOrEqual(2)
   }
 
   const row = page.locator('.v2-judgment, .v2-today-row').filter({ hasText: title })

@@ -77,7 +77,9 @@ test('首页保持固定阅读顺序、唯一判断，更多处理展示完整�
 
   await openYoloPanel(page, { refreshOnSlow: false })
   await revealHomeItems(page)
+  await expect(page.locator('.panel-frame')).toBeVisible()
   const surface = page.locator('.v2-today-surface')
+  await expect(surface.locator('header > p').first()).toContainText(`${new Date().getFullYear()} 年`)
   await expect(surface.getByRole('heading', { level: 1 })).toHaveText(/今天有 \d+ 件事需要你处理。/u)
   await expect(surface.getByRole('button', { name: '快速记录', exact: true })).toBeVisible()
   const judgment = surface.locator('.v2-judgment')

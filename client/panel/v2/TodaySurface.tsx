@@ -87,7 +87,7 @@ function TodayTaskRow({ row, busy, onIntent }: {
             data-yolo-focus-id={`home-source:${row.scopeCwd}:${row.todo.id}`}
             onClick={() => { onIntent({ type: 'open_source', source, todo: row.todo, scopeCwd: row.scopeCwd }) }}
           >
-            {source.label}
+            来源 · {source.label}
           </button>
           {row.todo.ws ? <span title={row.todo.ws.label}>{row.todo.ws.label}</span> : null}
           {row.todo.due_at ? <time dateTime={row.todo.due_at}>{formatDueLabel(row.todo.due_at)}</time> : null}

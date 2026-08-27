@@ -20,8 +20,7 @@ import {
 } from '../../src/shared/filters.ts'
 import { ensureYoloStyle, detectYoloTheme } from '../design/style.ts'
 import { yoloTokens } from '../design/tokens.ts'
-import { IcBell, IcChat, IcCheck, IcChevron, IcClose, IcFilter } from '../design/icons.tsx'
-import { YoloLogo } from '../YoloLogo.tsx'
+import { IcBell, IcCheck, IcChevron, IcClose, IcFilter } from '../design/icons.tsx'
 import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
 import { KanbanView, type BoardSurfaceKey } from './KanbanView.tsx'
 import { MoreMenu } from './MoreMenu.tsx'
@@ -433,9 +432,6 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   const rangeActive = filter.rangeFrom !== null || filter.rangeTo !== null
   const milestoneTitles = useMemo(() => state.data?.milestones.map((m) => m.title) ?? [], [state.data])
 
-  const d = new Date()
-  const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日 · 周${'日一二三四五六'[d.getDay()]}`
-
   const surface: BoardSurfaceKey = navigation.route.page === 'home'
     ? 'home'
     : navigation.route.page === 'plan'
@@ -755,21 +751,21 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
       data-presentation={presentation}
       style={{ position: 'fixed', left, right: 0, top: 0, bottom: 0, zIndex: 10000 }}
     >
+      <div className="panel-frame">
       <header className="p-head">
         <div className="brand">
           {presentation === 'focus' ? (
             <button type="button" className="hbtn" onClick={backForeground} aria-label={`返回${PAGE_LABELS[navigation.route.page]}`}>←</button>
-          ) : <span className="mark"><YoloLogo size={18} /></span>}
+          ) : <span className="mark">Y</span>}
           <span className="brand-name">YOLO</span>
-          <span className="surface-name brand-wide">{presentation === 'focus' ? contextTitle : PAGE_LABELS[navigation.route.page]}</span>
-          <span className="p-date mono">{dateLabel}</span>
+          <span className="surface-name brand-wide">{presentation === 'focus' ? contextTitle : '助手看板'}</span>
         </div>
         <div className="p-head-acts">
           {presentation === 'focus' && foreground.kind === 'item_discussion' ? (
             <button type="button" className="head-secondary" onClick={closeForeground}>结束讨论</button>
           ) : null}
           <button ref={chatToggleRef} type="button" className={`ctoggle head-primary${foreground.kind === 'assistant_chat' ? ' on' : ''}`} onClick={toggleAssistantChat} title="和助手聊聊">
-            <IcChat size={14} /><span>和助手聊聊</span>
+            <span>和助手聊聊</span>
           </button>
           <button
             type="button"
@@ -794,40 +790,41 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
         <span key={sweepTick} className={`sweep${sweepTick > 0 ? ' run' : ''}`} />
       </header>
 
-      {presentation !== 'focus' ? (
-        <>
-          <PageTabs page={navigation.route.page} counts={countState.counts} partial={countState.partial} onChange={setPage} />
-          {navigation.route.page === 'plan' ? <PlanTabs section={navigation.route.section} onChange={(section) => { setRoute({ page: 'plan', section }) }} /> : null}
-          {navigation.route.page === 'history' ? <HistoryTabs section={navigation.route.section} onChange={(section) => { setRoute({ page: 'history', section }) }} /> : null}
-          {listTools}
-        </>
-      ) : null}
-
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <div style={{ flex: 1, minWidth: 0, display: presentation === 'focus' ? 'none' : 'flex' }} aria-hidden={presentation === 'focus' ? true : undefined}>
-          {boardColumn}
-        </div>
-        {foreground.kind !== 'none' ? (
-          <aside
-            ref={contextRef}
-            data-foreground={foreground.kind}
-            className={presentation === 'split' ? 'dock' : undefined}
-            role={presentation === 'focus' && foreground.kind !== 'item_detail' ? 'dialog' : undefined}
-            aria-modal={presentation === 'focus' && foreground.kind !== 'item_detail' ? true : undefined}
-            aria-label={contextTitle}
-            style={presentation === 'split'
-              ? undefined
-              : { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}
-          >
-            {presentation === 'split' && (foreground.kind === 'assistant_chat' || foreground.kind === 'item_discussion') ? (
-              <div className="dock-head">
-                <span className="dock-tag">上下文</span><span className="dock-ctx" title={contextTitle}>{contextTitle}</span>
-                <button type="button" className="hbtn" onClick={closeForeground} title={foreground.kind === 'item_discussion' ? '结束讨论' : '关闭上下文'} aria-label={foreground.kind === 'item_discussion' ? '结束讨论' : '关闭上下文'}><IcClose size={14} /></button>
-              </div>
-            ) : null}
-            {contextContent}
-          </aside>
+        {presentation !== 'focus' ? (
+          <>
+            <PageTabs page={navigation.route.page} counts={countState.counts} partial={countState.partial} onChange={setPage} />
+            {navigation.route.page === 'plan' ? <PlanTabs section={navigation.route.section} onChange={(section) => { setRoute({ page: 'plan', section }) }} /> : null}
+            {navigation.route.page === 'history' ? <HistoryTabs section={navigation.route.section} onChange={(section) => { setRoute({ page: 'history', section }) }} /> : null}
+            {listTools}
+          </>
         ) : null}
+
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <div style={{ flex: 1, minWidth: 0, display: presentation === 'focus' ? 'none' : 'flex' }} aria-hidden={presentation === 'focus' ? true : undefined}>
+            {boardColumn}
+          </div>
+          {foreground.kind !== 'none' ? (
+            <aside
+              ref={contextRef}
+              data-foreground={foreground.kind}
+              className={presentation === 'split' ? 'dock' : undefined}
+              role={presentation === 'focus' && foreground.kind !== 'item_detail' ? 'dialog' : undefined}
+              aria-modal={presentation === 'focus' && foreground.kind !== 'item_detail' ? true : undefined}
+              aria-label={contextTitle}
+              style={presentation === 'split'
+                ? undefined
+                : { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}
+            >
+              {presentation === 'split' && (foreground.kind === 'assistant_chat' || foreground.kind === 'item_discussion') ? (
+                <div className="dock-head">
+                  <span className="dock-tag">上下文</span><span className="dock-ctx" title={contextTitle}>{contextTitle}</span>
+                  <button type="button" className="hbtn" onClick={closeForeground} title={foreground.kind === 'item_discussion' ? '结束讨论' : '关闭上下文'} aria-label={foreground.kind === 'item_discussion' ? '结束讨论' : '关闭上下文'}><IcClose size={14} /></button>
+                </div>
+              ) : null}
+              {contextContent}
+            </aside>
+          ) : null}
+        </div>
       </div>
     </div>
   )

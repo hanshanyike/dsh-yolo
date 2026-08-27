@@ -640,6 +640,61 @@ export const YOLO_CSS = `
 .yolo-scope.compact .lg-row { grid-template-areas: "status time type summary" ". . . source"; grid-template-columns: 12px 40px 64px minmax(0, 1fr); row-gap: 3px; padding: 7px 0; }
 .yolo-scope.compact .lg-src, .yolo-scope.compact .lg-src-btn { max-width: 100%; justify-self: start; }
 
+/* ===== prototype shell alignment =====
+   The host already owns the global session rail. Inside the space it gives
+   YOLO, keep the prototype's quiet workbench: one framed surface, generous
+   breathing room, indigo-only emphasis, and a content column capped at 840px.
+   The compact media rule below removes the frame when the host cannot spare
+   the workbench padding. */
+.yolo-scope.panel { display: block; height: 100%; min-height: 0; padding: 24px; background: var(--y-surface-2); animation: none; }
+.yolo-scope .panel-frame { display: flex; flex-direction: column; min-width: 0; height: 100%; min-height: 0; overflow: hidden; border: 1px solid var(--y-line-strong); border-radius: 18px; background: var(--y-surface); box-shadow: 0 12px 34px rgba(30,31,55,.08); }
+.yolo-scope .p-head { height: 70px; padding: 0 22px; border-bottom: 1px solid var(--y-line); }
+.yolo-scope .brand .mark { width: 28px; height: 28px; border-radius: 8px; background: var(--y-focus); color: #fff; font-size: 16px; font-weight: 800; line-height: 1; }
+.yolo-scope .surface-name { padding-left: 0; border-left: 0; color: var(--y-text-2); font-size: 12px; }
+.yolo-scope .p-date { display: none; }
+.yolo-scope .head-primary { border-color: var(--y-line-strong); background: var(--y-surface); color: var(--y-text-1); font-weight: 500; }
+.yolo-scope .head-primary:hover { opacity: 1; background: var(--y-surface-2); border-color: var(--y-focus); }
+.yolo-scope .head-secondary { background: var(--y-surface); }
+.yolo-scope .y-tabs { padding: 0 22px; }
+.yolo-scope .ytab svg, .yolo-scope .ytab .nnum { display: none; }
+.yolo-scope .ytab.on::after { background: var(--y-focus); }
+.yolo-scope .ytab.on .nnum { color: var(--y-focus); }
+.yolo-scope .page-subtabs { max-width: 840px; width: 100%; margin: 0 auto; padding: 16px 28px 0; border-bottom: 0; background: var(--y-surface); }
+.yolo-scope .list-tools { background: var(--y-surface); }
+.yolo-scope .p-main { padding: 30px 30px 70px; }
+.yolo-scope .v2-today-surface > header { padding: 0 0 14px; border-bottom: 0; }
+.yolo-scope .v2-today-surface > header h1 { font-size: 30px; }
+.yolo-scope .v2-today-surface > section[aria-label="快速记录"] { margin-top: 20px; }
+.yolo-scope .capture.capture--top { padding: 0; background: transparent; border-bottom: 0; }
+.yolo-scope .capture--top .capture-in { height: 36px; gap: 0; border: 1px solid var(--y-focus); border-radius: 9px; background: var(--y-surface); }
+.yolo-scope .capture--top .capture-in svg, .yolo-scope .capture--top .enter-hint { display: none; }
+.yolo-scope .capture--top .cap-input { height: 34px; padding: 0 12px; }
+.yolo-scope .capture--top .capture-submit { height: 36px; border-radius: 9px; }
+.yolo-scope .v2-judgment { margin: 22px 0; padding: 18px; border-color: var(--y-line-strong); border-left: 3px solid var(--y-focus); border-radius: 14px; box-shadow: 0 12px 34px rgba(30,31,55,.08); }
+.yolo-scope .v2-judgment-header { color: var(--y-text-2); }
+.yolo-scope .v2-judgment-header > span:first-child::after { content: " ·"; }
+.yolo-scope .v2-judgment-header > span:nth-child(2) { padding: 0; border: 0; background: transparent; color: var(--y-text-2); }
+.yolo-scope .v2-judgment-source { border-left-color: var(--y-line-strong); }
+.yolo-scope .v2-task-section { margin-top: 27px; }
+.yolo-scope .v2-task-section-head { margin-bottom: 9px; }
+.yolo-scope .v2-task-section-head > h2 { font-size: 16px; }
+.yolo-scope .v2-task-list { padding: 0 14px; border-radius: 14px; }
+.yolo-scope .v2-today-row { padding: 13px 0; }
+.yolo-scope .v2-today-row > button { min-height: 36px; align-self: center; }
+.yolo-scope .v2-today-row-meta button { color: var(--y-text-2); }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-progress-title"] { margin-top: 27px; }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-progress-title"] > button { border: 0; background: transparent; padding-inline: 0; }
+.yolo-scope .v2-today-surface > section[aria-labelledby="v2-closure-title"] { margin-top: 27px; }
+.yolo-scope.compact.panel { padding: 0; background: var(--y-bg); }
+.yolo-scope.compact .panel-frame { border: 0; border-radius: 0; box-shadow: none; }
+.yolo-scope.compact .p-head { height: 54px; gap: 5px; padding: 0 8px; }
+.yolo-scope.compact .p-main { padding: 6px 16px 32px; }
+.yolo-scope.compact .page-subtabs { padding: 8px 16px; }
+@media (max-width: 900px) {
+  .yolo-scope.panel { padding: 0; background: var(--y-bg); }
+  .yolo-scope .panel-frame { border: 0; border-radius: 0; box-shadow: none; }
+}
+
 /* reduced motion — everything degrades to instant swaps (6.3);
    the ROOT element itself is included so the panel entrance also stops */
 @media (prefers-reduced-motion: reduce) {

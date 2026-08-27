@@ -317,9 +317,9 @@ export function buildTodaySurfaceModel(
   )
 
   return {
-    dateLabel: `${now.getMonth() + 1}月${now.getDate()}日 · 周${'日一二三四五六'[now.getDay()]}`,
+    dateLabel: `${now.getFullYear()} 年 ${now.getMonth() + 1} 月 ${now.getDate()} 日 · 星期${'日一二三四五六'[now.getDay()]}`,
     headline: todayHeadline(openItemKeys.size),
-    description: `重点安排 ${openItemKeys.size} 件 · 全部挂起 ${summary.open} 件 · 今天到期 ${summary.dueToday} 件 · 逾期 ${summary.overdue} 件`,
+    description: `重点安排 ${openItemKeys.size} 件 · 全部挂起 ${summary.open} 件 · 今天到期 ${summary.dueToday} 件${summary.overdue > 0 ? ` · 逾期 ${summary.overdue} 件` : ''}`,
     partialMessage,
     judgment: primary?.view,
     judgmentScopeCwd: primary?.scopeCwd,

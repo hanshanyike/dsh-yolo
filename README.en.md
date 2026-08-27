@@ -47,7 +47,7 @@ line) or Node.js 24, and make sure `pnpm` is available. If needed, run
 `corepack enable` first. Then run:
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc1
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc2
 npx @deepseek-ai/dsh web
 ```
 
@@ -67,7 +67,7 @@ To install the current release candidate directly from source:
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.4.0-rc1
+git checkout v0.4.0-rc2
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build

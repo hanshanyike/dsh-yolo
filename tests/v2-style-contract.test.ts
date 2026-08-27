@@ -13,6 +13,15 @@ function v2Css(): string {
 }
 
 describe('dashboard v2 Mono style contract', () => {
+  it('keeps the reviewed prototype shell as the wide workbench surface', () => {
+    expect(YOLO_CSS).toContain('.yolo-scope .panel-frame')
+    expect(YOLO_CSS).toContain('padding: 24px')
+    expect(YOLO_CSS).toContain('border-radius: 18px')
+    expect(YOLO_CSS).toContain('.yolo-scope .ytab svg, .yolo-scope .ytab .nnum { display: none; }')
+    expect(YOLO_CSS).toContain('.yolo-scope .ytab.on::after { background: var(--y-focus); }')
+    expect(YOLO_CSS).toContain('.yolo-scope.compact .panel-frame')
+  })
+
   it('covers every v2 surface and its important semantic states', () => {
     const css = v2Css()
     const selectors = [
