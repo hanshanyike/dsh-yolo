@@ -1,7 +1,9 @@
 import { test, expect, type Page, type Locator } from '@playwright/test'
+import { dismissHostSetupDialogs } from '../helpers.ts'
 
 async function openYoloSettings(page: Page): Promise<Locator> {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await dismissHostSetupDialogs(page)
   await page.getByRole('button', { name: '设置' }).click()
   const dialog = page.getByRole('dialog', { name: '设置' })
   await expect(dialog).toBeVisible()

@@ -62,17 +62,45 @@ export function withWorkspaceDatabase<T>(row: WorkspaceOwnedRow, fn: (db: Databa
   }
 }
 
+/** Dismiss host onboarding modals when a clean browser context starts. */
+export async function dismissHostSetupDialogs(page: Page): Promise<void> {
+  // A fresh DSH_HOME shows the host's first-run disclosure and then an API
+  // setup prompt. Both are real modal layers and may mount after the sidebar,
+  // so wait for the dialog itself before opening YOLO; never force-click under
+  // its mask. Reused profiles simply pay the short dialog probe timeout.
+  const setupDialog = page.locator('[role="dialog"]:visible').first()
+  for (let step = 0; step < 2; step++) {
+    const shown = await setupDialog.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false)
+    if (!shown) break
+    const continueButton = setupDialog.locator('button').filter({ hasText: /^继续$/u }).first()
+    if (await continueButton.count() > 0) {
+      await continueButton.click()
+      await expect(continueButton).toBeHidden({ timeout: 5_000 })
+      continue
+    }
+    const postponeApiKey = setupDialog.locator('button').filter({ hasText: /^稍后配置$/u }).first()
+    if (await postponeApiKey.count() > 0) {
+      await postponeApiKey.click()
+      await expect(postponeApiKey).toBeHidden({ timeout: 5_000 })
+    }
+    break
+  }
+}
+
 /** Open the sidebar YOLO panel and wait for the board body to render. */
 export async function openYoloPanel(page: Page, opts: { refreshOnSlow?: boolean } = {}): Promise<void> {
   // domcontentloaded (not 'load'): the SPA may keep a long-lived resource open,
   // so waiting for full 'load' has budgeted out (60s) in this suite.
   await page.goto('/', { waitUntil: 'domcontentloaded' })
-  const btn = page.locator("button[title^='YOLO 助手看板']").first()
+  await dismissHostSetupDialogs(page)
+  const btn = page.locator("button[title^='YOLO ·']").first()
   // The host app boot + sidebar render can exceed the default 15s expect on a
   // cold machine — wait generously so a slow boot is not a flaky fail.
   await expect(btn).toBeVisible({ timeout: 30_000 })
   await btn.click()
   await expect(page.locator('.yolo-scope .brand-name')).toHaveText('YOLO')
+  await expect(page.locator('.yolo-scope .surface-name')).not.toHaveText('助手看板')
+  await expect(page.locator('.yolo-scope .p-head svg[aria-label="YOLO logo"]')).toBeVisible()
 
   // The board body (capture bar) renders only after the first dashboard payload
   // lands; the panel shows a skeleton until then. The endpoint is fast, but the

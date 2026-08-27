@@ -21,6 +21,7 @@ import {
 import { ensureYoloStyle, detectYoloTheme } from '../design/style.ts'
 import { yoloTokens } from '../design/tokens.ts'
 import { IcBell, IcCheck, IcChevron, IcClose, IcFilter } from '../design/icons.tsx'
+import { YoloLogo } from '../YoloLogo.tsx'
 import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
 import { KanbanView, type BoardSurfaceKey } from './KanbanView.tsx'
 import { MoreMenu } from './MoreMenu.tsx'
@@ -53,6 +54,8 @@ export interface YoloPanelProps {
   notificationFocusRequest?: number
   /** Host-owned durable theme preference. Optional only for isolated renders. */
   themeControl?: { set: (theme: 'dark' | 'light') => void }
+  /** Greeting selected by the sidebar for this panel opening. */
+  surfaceLabel?: string
 }
 
 interface LoadState {
@@ -93,7 +96,7 @@ function detailDraftFor(todo: YoloTodoRow): TaskEditDraft {
   }
 }
 
-export function YoloPanel({ left, onClose, openSession, notificationFocusRequest = 0, themeControl }: YoloPanelProps): JSX.Element {
+export function YoloPanel({ left, onClose, openSession, notificationFocusRequest = 0, themeControl, surfaceLabel = '一起把事情理顺' }: YoloPanelProps): JSX.Element {
   ensureYoloStyle()
   const [theme, setTheme] = useState<'dark' | 'light'>(() => detectYoloTheme())
 
@@ -756,9 +759,9 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
         <div className="brand">
           {presentation === 'focus' ? (
             <button type="button" className="hbtn" onClick={backForeground} aria-label={`返回${PAGE_LABELS[navigation.route.page]}`}>←</button>
-          ) : <span className="mark">Y</span>}
+          ) : <YoloLogo size={28} />}
           <span className="brand-name">YOLO</span>
-          <span className="surface-name brand-wide">{presentation === 'focus' ? contextTitle : '助手看板'}</span>
+          <span className="surface-name brand-wide">{presentation === 'focus' ? contextTitle : surfaceLabel}</span>
         </div>
         <div className="p-head-acts">
           {presentation === 'focus' && foreground.kind === 'item_discussion' ? (

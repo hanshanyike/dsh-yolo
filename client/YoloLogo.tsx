@@ -1,7 +1,6 @@
-// YOLO brand mark — inline reproduction of docs/logo.svg (target rings + a
-// captured memory bit), kept component-shaped so the UI can size it anywhere
-// without touching the asset pipeline. Stays in sync with docs/logo.svg.
-import { useId } from 'react'
+// YOLO brand mark — inline reproduction of docs/logo.svg (a friendly chat
+// bubble), kept component-shaped so the UI can size it anywhere without
+// touching the asset pipeline. Stays in sync with docs/logo.svg.
 import type { CSSProperties } from 'react'
 
 export interface YoloLogoProps {
@@ -10,9 +9,6 @@ export interface YoloLogoProps {
 }
 
 export function YoloLogo({ size = 18, style }: YoloLogoProps): JSX.Element {
-  // Unique per instance to avoid gradient-id collisions when several marks render.
-  const gid = useId().replace(/:/g, '')
-  const grad = `yolo-grad-${gid}`
   return (
     <svg
       viewBox="0 0 256 256"
@@ -22,18 +18,11 @@ export function YoloLogo({ size = 18, style }: YoloLogoProps): JSX.Element {
       aria-label="YOLO logo"
       style={{ flex: 'none', display: 'block', ...style }}
     >
-      <defs>
-        <linearGradient id={grad} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#6366F1" />
-          <stop offset="1" stopColor="#06B6D4" />
-        </linearGradient>
-      </defs>
-      <rect width="256" height="256" rx="56" fill={`url(#${grad})`} />
-      <circle cx="124" cy="132" r="62" fill="none" stroke="#FFFFFF" strokeWidth="13" opacity="0.95" />
-      <circle cx="124" cy="132" r="30" fill="none" stroke="#FFFFFF" strokeWidth="11" opacity="0.9" />
-      <circle cx="124" cy="132" r="10" fill="#FFFFFF" />
-      <circle cx="204" cy="74" r="15" fill="#FFFFFF" />
-      <path d="M 168 100 A 62 62 0 0 0 190 66" fill="none" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" opacity="0.55" />
+      <rect width="256" height="256" rx="60" fill="#5B5BD6" />
+      <path d="M52 76c0-13.255 10.745-24 24-24h104c30.928 0 56 25.072 56 56v16c0 30.928-25.072 56-56 56h-38l-38 25v-25H76c-13.255 0-24-10.745-24-24V76Z" fill="#FFFFFF" />
+      <circle cx="105" cy="108" r="10" fill="#5B5BD6" />
+      <circle cx="151" cy="108" r="10" fill="#5B5BD6" />
+      <path d="M96 137c8 12 19 18 32 18s24-6 32-18" fill="none" stroke="#5B5BD6" strokeWidth="10" strokeLinecap="round" />
     </svg>
   )
 }

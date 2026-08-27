@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="../logo.svg">
-<title>YOLO 助手看板 · 产品原型</title>
+<title>YOLO · 一起把事情理顺 · 产品原型</title>
 <style>
 :root{--bg:#f7f7fa;--s:#fff;--s2:#f0f1f7;--line:#dedfea;--ink:#1c1d2a;--muted:#6e7081;--focus:#5d55d9;--soft:#eeedff;--r:14px;--shadow:0 12px 34px #1e1f3714;font:14px/1.55 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:inherit}button{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:9px;background:var(--s);color:inherit;font:inherit;cursor:pointer}button:hover{border-color:var(--focus)}button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
@@ -15,7 +15,7 @@
 </head>
 <body>
 <div class="host"><aside class="rail" aria-label="宿主侧栏"><strong>deepseek-harness</strong><p>会话</p><div class="session active">客户回访安排</div><div class="session">发布准备讨论</div><div class="session">新会话</div><button class="entry" type="button"><span>YOLO 助手</span><span class="badge">2</span></button></aside>
-<main class="workbench"><div class="panel"><section class="board" aria-label="助手看板"><header class="bar"><div class="brand"><span class="mark">Y</span><strong>YOLO</strong><small>助手看板 · 原型</small></div><div class="bar-actions"><button type="button" id="assistant">和助手聊聊</button><button type="button">通知 <span class="badge">2</span></button></div></header><nav class="tabs" aria-label="助手页面"><button class="tab active" data-page="home" type="button">首页</button><button class="tab" data-page="plan" type="button">计划</button><button class="tab" data-page="history" type="button">历史</button></nav><div class="content" id="content"></div></section><aside class="context" id="context" aria-label="上下文" hidden></aside></div></main></div>
+<main class="workbench"><div class="panel"><section class="board" aria-label="YOLO，一起把事情理顺"><header class="bar"><div class="brand"><img class="mark" src="../logo.svg" alt="YOLO logo"><strong>YOLO</strong><small>一起把事情理顺 · 原型</small></div><div class="bar-actions"><button type="button" id="assistant">和助手聊聊</button><button type="button">通知 <span class="badge">2</span></button></div></header><nav class="tabs" aria-label="助手页面"><button class="tab active" data-page="home" type="button">首页</button><button class="tab" data-page="plan" type="button">计划</button><button class="tab" data-page="history" type="button">历史</button></nav><div class="content" id="content"></div></section><aside class="context" id="context" aria-label="上下文" hidden></aside></div></main></div>
 <script>
 const state={page:"home",context:null},items=[{title:"把客户回访材料发给研发",meta:"今天 · 客户回访安排",source:"客户回访会话"},{title:"确认发布说明中的升级步骤",meta:"明天 · 发布准备讨论",source:"发布准备讨论"},{title:"整理下月访谈计划",meta:"2026-09-12 · 研究项目",source:"研究项目会话"}],content=document.querySelector("#content"),context=document.querySelector("#context");
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

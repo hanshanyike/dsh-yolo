@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { IcBell, IcClose } from '../design/icons.tsx'
 import { detectYoloTheme, ensureYoloStyle } from '../design/style.ts'
+import { YOLO_SURFACE_LABELS } from '../brand.ts'
 import type { ReminderPopupCandidate } from './reminder-popup.ts'
 
 export interface ReminderPopupProps {
@@ -72,7 +73,7 @@ export function ReminderPopup({ popup, onOpen, onDismiss, durationMs = 10_000 }:
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false)
       }}
     >
-      <button type="button" className="yolo-reminder-popup__body" onClick={onOpen} aria-label={`${label}：${cleanText(notification.title)}，打开助手看板`}>
+      <button type="button" className="yolo-reminder-popup__body" onClick={onOpen} aria-label={`${label}：${cleanText(notification.title)}，打开${YOLO_SURFACE_LABELS[0]}`}>
         <span className="yolo-reminder-popup__icon"><IcBell size={15} /></span>
         <span className="yolo-reminder-popup__content">
           <span className="yolo-reminder-popup__kind">{label}</span>
