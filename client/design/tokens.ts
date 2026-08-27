@@ -464,10 +464,10 @@ export const YOLO_CSS = `
 .yolo-scope .v2-learning-receipt button:focus-visible { outline: 2px solid var(--y-focus); outline-offset: 2px; }
 
 /* Today title and quick-capture context. */
-.yolo-scope .v2-today-surface > header { padding: 20px 0 12px; border-bottom: 1px solid var(--y-line); }
+.yolo-scope .v2-today-surface > header { padding: 28px 0 16px; border-bottom: 1px solid var(--y-line); }
 .yolo-scope .v2-today-surface > header p { margin: 0; color: var(--y-text-2); font-size: 13px; }
 .yolo-scope .v2-today-surface > header p:first-child { color: var(--y-text-3); font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
-.yolo-scope .v2-today-surface > header h1 { margin: 3px 0 4px; font-size: 28px; line-height: 1.2; letter-spacing: -.02em; }
+.yolo-scope .v2-today-surface > header h1 { margin: 8px 0 7px; font-size: 28px; line-height: 1.2; letter-spacing: -.02em; }
 .yolo-scope .v2-today-surface > section[aria-label="快速记录"] { margin-top: 14px; }
 .yolo-scope .v2-today-surface > section[aria-label="快速记录"] > button { width: 100%; min-height: 42px; padding: 0 14px; text-align: left; border-color: var(--y-focus); background: color-mix(in srgb, var(--y-focus) 8%, var(--y-surface)); font-weight: 650; }
 .yolo-scope .v2-today-partial,
@@ -493,7 +493,7 @@ export const YOLO_CSS = `
 
 /* Full and compact assistant judgment. */
 .yolo-scope .v2-judgment { min-width: 0; margin: 16px 0 22px; padding: 17px 18px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); background: var(--y-surface); box-shadow: var(--y-e1); animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
-.yolo-scope .v2-judgment--full { border-top: 2px solid color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); }
+.yolo-scope .v2-judgment--full { border-left: 3px solid var(--y-focus); border-top: 1px solid var(--y-line-strong); }
 .yolo-scope .v2-judgment--compact { padding: 12px 14px; border-left: 3px solid var(--y-focus); box-shadow: none; }
 .yolo-scope .v2-judgment-header { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; color: var(--y-text-2); font-size: 13px; }
 .yolo-scope .v2-judgment-header > span:first-child { color: var(--y-text-1); font-weight: 700; }
@@ -515,16 +515,19 @@ export const YOLO_CSS = `
 .yolo-scope .v2-judgment-actions button { min-width: 82px; padding: 0 12px; }
 .yolo-scope .v2-judgment-actions button:first-child { border-color: color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); font-weight: 700; }
 .yolo-scope .v2-judgment--compact .v2-judgment-actions { margin-top: 11px; }
-.yolo-scope .v2-judgment--compact .v2-judgment-actions button { width: 100%; }
+.yolo-scope .v2-judgment--compact .v2-judgment-actions button { width: auto; }
 .yolo-scope .v2-judgment-secondary { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .yolo-scope .v2-judgment-secondary button { min-height: 32px; padding: 0 8px; border-color: transparent; background: none; color: var(--y-text-2); }
 .yolo-scope .v2-judgment-impact { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--y-line); color: var(--y-text-2); font-size: 13px; }
 
 /* Today sections, rows, progress and closure. */
 .yolo-scope .v2-today-surface > section[aria-labelledby] { min-width: 0; margin-top: 22px; }
-.yolo-scope .v2-today-surface > section[aria-labelledby] > h2 { margin: 0; padding-bottom: 8px; border-bottom: 1px solid var(--y-line-strong); font-size: 15px; line-height: 1.4; }
-.yolo-scope .v2-today-surface > section[aria-labelledby] > ul { margin: 0; padding: 0; list-style: none; }
-.yolo-scope .v2-today-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: start; gap: 10px; min-width: 0; padding: 12px 8px; border-bottom: 1px solid var(--y-line); transition: background var(--y-dur-1); }
+.yolo-scope .v2-task-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.yolo-scope .v2-task-section-head > h2 { margin: 0; font-size: 15px; line-height: 1.4; }
+.yolo-scope .v2-task-section-head > span { color: var(--y-text-3); font-family: var(--y-font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.yolo-scope .v2-task-list { margin: 0; padding: 0 14px; list-style: none; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); background: var(--y-surface); overflow: hidden; }
+.yolo-scope .v2-today-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: start; gap: 10px; min-width: 0; padding: 12px 0; border-bottom: 1px solid var(--y-line); transition: background var(--y-dur-1); }
+.yolo-scope .v2-today-row:last-child { border-bottom: 0; }
 .yolo-scope .v2-today-row:hover,
 .yolo-scope .v2-today-row:focus-within { background: var(--y-surface-2); }
 .yolo-scope .v2-today-row:focus-visible { outline: 2px solid var(--y-focus); outline-offset: -2px; border-radius: var(--y-r-sm); }
@@ -601,6 +604,7 @@ export const YOLO_CSS = `
 .yolo-scope.compact .v2-empty-copy h2 { font-size: 19px; }
 .yolo-scope.compact .v2-judgment { padding: 13px 12px; }
 .yolo-scope.compact .v2-judgment-header time { flex-basis: 100%; margin-left: 0; }
+.yolo-scope.compact .v2-judgment--compact .v2-judgment-actions button { width: 100%; }
 .yolo-scope.compact .v2-today-row { grid-template-columns: 22px minmax(0, 1fr); padding-inline: 4px; }
 .yolo-scope.compact .v2-today-row > button { grid-column: 2; justify-self: start; min-height: 32px; }
 .yolo-scope.compact .v2-task-action-panel { width: 100%; border-left: 0; box-shadow: none; }

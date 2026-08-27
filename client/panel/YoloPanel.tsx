@@ -207,28 +207,33 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
 
   const focusChatOpener = useCallback((returnFocusId = navigation.returnFocusId, todoId = chatReturnTodoIdRef.current): void => {
     window.setTimeout(() => {
-      if (returnFocusId) {
-        const exact = Array.from(document.querySelectorAll<HTMLElement>('[data-yolo-focus-id]'))
-          .find((element) => element.dataset.yoloFocusId === returnFocusId)
-        if (exact?.isConnected && exact.getClientRects().length > 0) {
-          exact.focus()
+      // Returning from source remounts the item panel, whose own initial
+      // focus effect runs during the commit. Restore the invoking control on
+      // the following frame so it remains the deterministic focus owner.
+      window.requestAnimationFrame(() => {
+        if (returnFocusId) {
+          const exact = Array.from(document.querySelectorAll<HTMLElement>('[data-yolo-focus-id]'))
+            .find((element) => element.dataset.yoloFocusId === returnFocusId)
+          if (exact?.isConnected && exact.getClientRects().length > 0) {
+            exact.focus()
+            return
+          }
+        }
+        const original = chatOpenerRef.current
+        if (original?.isConnected && original.getClientRects().length > 0) {
+          original.focus()
           return
         }
-      }
-      const original = chatOpenerRef.current
-      if (original?.isConnected && original.getClientRects().length > 0) {
-        original.focus()
-        return
-      }
-      if (todoId) {
-        const row = Array.from(document.querySelectorAll<HTMLElement>('[data-yolo-todo-id]'))
-          .find((element) => element.dataset.yoloTodoId === todoId)
-        if (row) {
-          row.focus()
-          return
+        if (todoId) {
+          const row = Array.from(document.querySelectorAll<HTMLElement>('[data-yolo-todo-id]'))
+            .find((element) => element.dataset.yoloTodoId === todoId)
+          if (row) {
+            row.focus()
+            return
+          }
         }
-      }
-      chatToggleRef.current?.focus()
+        chatToggleRef.current?.focus()
+      })
     }, 0)
   }, [navigation.returnFocusId])
 

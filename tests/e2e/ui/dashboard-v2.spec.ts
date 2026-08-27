@@ -78,6 +78,7 @@ test('首页保持固定阅读顺序、唯一判断，更多处理展示完整�
   await openYoloPanel(page, { refreshOnSlow: false })
   await revealHomeItems(page)
   const surface = page.locator('.v2-today-surface')
+  await expect(surface.getByRole('heading', { level: 1 })).toHaveText(/今天有 \d+ 件事需要你处理。/u)
   const judgment = surface.locator('.v2-judgment')
   await expect(judgment).toHaveCount(1)
   await expect(judgment).toHaveClass(/v2-judgment--full/)

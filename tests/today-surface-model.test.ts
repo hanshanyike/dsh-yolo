@@ -8,6 +8,7 @@ import type {
 import {
   buildTodaySurfaceModel,
   buildTodayTaskReason,
+  todayHeadline,
 } from '../client/panel/v2/today-surface-model.ts'
 import { todayTaskReasonText } from '../client/panel/v2/TodaySurface.tsx'
 
@@ -70,6 +71,15 @@ function secondaryReason(over: Partial<NonNullable<YoloTodoRow['attention_reason
 }
 
 describe('buildTodaySurfaceModel', () => {
+  it('leads Today with a concrete handling conclusion', () => {
+    expect(todayHeadline(0)).toBe('今天没有需要你处理的事。')
+    expect(todayHeadline(1)).toBe('今天有 1 件事需要你处理。')
+    expect(todayHeadline(3)).toBe('今天有 3 件事需要你处理。')
+
+    const model = buildTodaySurfaceModel(dashboard({ todos: [todo('today', { due_at: '2026-08-23' })] }), { now: NOW })
+    expect(model.headline).toBe('今天有 1 件事需要你处理。')
+  })
+
   it('reserves the branded first-run state for a genuinely pristine aggregate workspace', () => {
     expect(buildTodaySurfaceModel(dashboard(), { now: NOW }).pristine).toBe(true)
 

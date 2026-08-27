@@ -34,6 +34,8 @@ export interface TodayProgressView {
 
 export interface TodaySurfaceModel {
   dateLabel: string
+  /** The user-facing conclusion for the top of the Today page. */
+  headline: string
   description: string
   partialMessage?: string
   judgment?: AssistantJudgmentView
@@ -50,6 +52,11 @@ export interface TodaySurfaceModel {
   pristine: boolean
   progress: TodayProgressView
   showClosure: boolean
+}
+
+export function todayHeadline(openItemCount: number): string {
+  if (openItemCount === 0) return '今天没有需要你处理的事。'
+  return `今天有 ${openItemCount} 件事需要你处理。`
 }
 
 export interface BuildTodaySurfaceOptions {
@@ -311,6 +318,7 @@ export function buildTodaySurfaceModel(
 
   return {
     dateLabel: `${now.getMonth() + 1}月${now.getDate()}日 · 周${'日一二三四五六'[now.getDay()]}`,
+    headline: todayHeadline(openItemKeys.size),
     description: `重点安排 ${openItemKeys.size} 件 · 全部挂起 ${summary.open} 件 · 今天到期 ${summary.dueToday} 件 · 逾期 ${summary.overdue} 件`,
     partialMessage,
     judgment: primary?.view,

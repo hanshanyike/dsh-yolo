@@ -110,9 +110,12 @@ function TaskSection({ id, title, rows, busyTodoId, onIntent }: {
 }): JSX.Element | null {
   if (rows.length === 0) return null
   return (
-    <section aria-labelledby={id}>
-      <h2 id={id}>{title}</h2>
-      <ul>
+    <section className="v2-task-section" aria-labelledby={id}>
+      <div className="v2-task-section-head">
+        <h2 id={id}>{title}</h2>
+        <span>{rows.length} 件</span>
+      </div>
+      <ul className="v2-task-list">
         {rows.map((row) => (
           <TodayTaskRow
             key={row.key}
@@ -173,7 +176,7 @@ export function TodaySurface({
     <main className="v2-today-surface" aria-labelledby="v2-today-title">
       <header>
         <p>{model.dateLabel}</p>
-        <h1 id="v2-today-title">今天</h1>
+        <h1 id="v2-today-title">{model.headline}</h1>
         <p>{model.description}</p>
       </header>
 
