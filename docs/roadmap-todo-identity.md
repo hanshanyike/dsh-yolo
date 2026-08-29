@@ -36,16 +36,31 @@
 
 ## 后续阶段
 
+### 2026-08-30 路线复核
+
+- **R1 必须先于 R2。** 当前抽取仍依赖固定数量的标题摘要，缺少终态、历史别名与真实改写候选；没有
+  shadow 样本就无法知道“高置信”阈值对应的漏关联和误关联风险。先观察、后放权的顺序正确且必要。
+- **R2 只负责放权，不重复实现幂等。** 显式 id 和相同 source fingerprint 已由 rc5 的确定性链路处理；
+  R2 的新增风险面应收窄为“新的同 scope 提及是否可按 shadow 结果 LINK/UPDATE”，并以分层标注指标为门。
+- **R3 仍必要，但不应提前。** 当前显式 consolidate 已能保留目标业务状态并处理终态重复；剩余价值是
+  冲突确认、投影迁移和可审计撤销。在 R2 尚未产生安全候选前先做确认界面，用户收益有限。
+- **R4 方向正确但范围过宽。** occurrence、step 和跨工作区 owner 分别影响状态机、信息架构与权限路由；
+  到达该阶段时应拆成三个独立批准项，不以一个版本同时交付。
+
 ### R1：候选召回与 shadow resolver
 
-- [ ] 从当前输入召回相关开放项、终态项和历史别名，向模型提供稳定 id，而不是固定前 N 条标题摘要。
-- [ ] 输出 `LINK / UPDATE / REOPEN / NEW_OCCURRENCE / CREATE / ATTACH_STEP / ASK / NOOP`，先只记裁决日志，
+- [x] 从当前输入召回相关开放项、终态项和历史别名，向模型提供稳定 id，而不是固定前 N 条标题摘要。
+- [x] 输出 `LINK / UPDATE / REOPEN / NEW_OCCURRENCE / CREATE / ATTACH_STEP / ASK / NOOP`，先只记裁决日志，
   不改变现有写入结果。
-- [ ] 建立人工标注样本，分别统计漏关联和误关联；按表达改写、指代、省略、跨会话和同名异项分层。
+- [x] 建立人工标注样本，分别统计漏关联和误关联；按表达改写、指代、省略、跨会话和同名异项分层。
+
+R1 的 gold seed 位于 `tests/fixtures/todo-resolver-labeled-cases.jsonl`；真实 shadow log 通过
+`scripts/todo-resolver-eval.mjs export` 形成待标注 JSONL，补齐 `expected` 后用 `evaluate` 分别输出
+false-link / missed-link 及分层比率。完成 R1 只表示具备观察和评估闭环，不表示 R2 已获得自动写入授权。
 
 ### R2：高置信 LINK 与 UPDATE
 
-- [ ] 只对显式 id、相同来源指纹和同 scope 的高置信候选自动关联。
+- [ ] 保持显式 id / source fingerprint 的确定性幂等链路；只把经指标批准的同 scope 新提及自动关联。
 - [ ] 后续提及写 evidence；字段变化按稳定 id 走领域动作，禁止依赖标题静默选中多个候选之一。
 - [ ] 多候选、终态语义不明和助手自行拆出的顶层事项进入 `ASK`，不自动修改。
 

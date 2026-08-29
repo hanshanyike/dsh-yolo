@@ -5,6 +5,7 @@ export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'cancelled'
 export type TodoRecordStatus = 'canonical' | 'merged' | 'rejected'
 export type TodoEvidenceSourceKind = 'human' | 'assistant_action' | 'panel_action' | 'extraction'
 export type TodoEvidenceRelation = 'origin' | 'mention' | 'update' | 'correction' | 'completion_claim' | 'discussion'
+export type TodoResolutionDecision = 'LINK' | 'UPDATE' | 'REOPEN' | 'NEW_OCCURRENCE' | 'CREATE' | 'ATTACH_STEP' | 'ASK' | 'NOOP'
 export type GoalStatus = 'active' | 'achieved' | 'abandoned'
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
 // M8: state-flow kinds (todo_completed/postponed/…) have no CHECK constraint
@@ -114,6 +115,42 @@ export interface TodoEvidence {
   excerpt?: string | null
   occurred_at: number
   source_fingerprint: string
+}
+
+/** Stable-id candidate supplied to the extraction model's shadow resolver. */
+export interface TodoIdentityCandidate {
+  /** Canonical todo id. Merged aliases resolve to this id before leaving storage. */
+  id: string
+  title: string
+  status: TodoStatus
+  due_at?: string | null
+  /** Matched historical titles that now resolve to this canonical todo. */
+  aliases: string[]
+  /** Search rank retained for deterministic ordering and offline evaluation. */
+  rank: number
+}
+
+/** Append-only observation from the non-mutating todo identity resolver. */
+export interface TodoResolutionLog {
+  id?: number
+  scope_key: string
+  session_id: string
+  turn_seq: number
+  operation_id: string
+  input_fingerprint: string
+  /** Bounded local-only excerpt used for manual resolver labeling. */
+  input_excerpt: string
+  resolver_version: string
+  model_provider: string
+  model_name: string
+  status: 'ok' | 'empty' | 'error'
+  error?: string | null
+  candidates_json: string
+  resolutions_json: string
+  token_in?: number | null
+  token_out?: number | null
+  duration_ms?: number | null
+  created_at: number
 }
 
 export interface Goal {

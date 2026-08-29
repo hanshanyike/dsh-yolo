@@ -221,6 +221,33 @@ CREATE TABLE IF NOT EXISTS extraction_log (
 );
 CREATE INDEX IF NOT EXISTS idx_extlog_session ON extraction_log(session_id);
 
+-- R1 shadow resolver observations. These rows are deliberately append-only
+-- and have no domain-action columns: a shadow decision must never mutate a
+-- todo until a later rollout explicitly promotes a safe decision class.
+CREATE TABLE IF NOT EXISTS todo_resolution_log (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  scope_key         TEXT NOT NULL,
+  session_id        TEXT NOT NULL,
+  turn_seq          INTEGER NOT NULL,
+  operation_id      TEXT NOT NULL,
+  input_fingerprint TEXT NOT NULL,
+  input_excerpt     TEXT NOT NULL,
+  resolver_version  TEXT NOT NULL,
+  model_provider    TEXT NOT NULL,
+  model_name        TEXT NOT NULL,
+  status            TEXT NOT NULL,
+  error             TEXT,
+  candidates_json   TEXT NOT NULL,
+  resolutions_json  TEXT NOT NULL,
+  token_in          INTEGER,
+  token_out         INTEGER,
+  duration_ms       INTEGER,
+  created_at        INTEGER NOT NULL,
+  UNIQUE(session_id, turn_seq, resolver_version)
+);
+CREATE INDEX IF NOT EXISTS idx_todo_resolution_time ON todo_resolution_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_todo_resolution_scope ON todo_resolution_log(scope_key, created_at DESC);
+
 -- pending reminders queued while no active session (replayed on agent/session-start)
 CREATE TABLE IF NOT EXISTS pending_reminders (
   id           TEXT PRIMARY KEY,     -- ULID
@@ -265,11 +292,37 @@ CREATE VIRTUAL TABLE IF NOT EXISTS yolo_fts USING fts5(
   tokenize = 'trigram'
 );
 
+-- Resolver-only index. Unlike yolo_fts, it intentionally retains completed,
+-- cancelled and merged records so the candidate set can include terminal
+-- occurrences and historical aliases without changing ordinary recall.
+CREATE VIRTUAL TABLE IF NOT EXISTS todo_identity_fts USING fts5(
+  record_id UNINDEXED,
+  title,
+  body,
+  tokenize = 'trigram'
+);
+
 -- triggers keep FTS in sync with row writes (one direction: row -> fts).
 -- delete handled in repository.ts on update/delete to keep it explicit.
 CREATE TRIGGER IF NOT EXISTS trg_todos_ai AFTER INSERT ON todos BEGIN
   INSERT INTO yolo_fts(row_type, row_id, title, body)
   VALUES ('todo', new.id, new.title, COALESCE(new.detail,''));
+END;
+CREATE TRIGGER IF NOT EXISTS trg_todo_identity_ai AFTER INSERT ON todos BEGIN
+  INSERT INTO todo_identity_fts(record_id, title, body)
+  VALUES (new.id, new.title, COALESCE(new.detail, ''));
+END;
+CREATE TRIGGER IF NOT EXISTS trg_todo_identity_au AFTER UPDATE OF title, detail, record_status, merged_into_id ON todos BEGIN
+  DELETE FROM todo_identity_fts WHERE record_id = old.id;
+  INSERT INTO todo_identity_fts(record_id, title, body)
+  SELECT new.id, new.title,
+    trim(COALESCE(new.detail, '') || ' ' || COALESCE((
+      SELECT group_concat(excerpt, ' ') FROM todo_evidence
+      WHERE todo_id = new.id AND excerpt IS NOT NULL
+    ), ''));
+END;
+CREATE TRIGGER IF NOT EXISTS trg_todo_identity_ad AFTER DELETE ON todos BEGIN
+  DELETE FROM todo_identity_fts WHERE record_id = old.id;
 END;
 CREATE TRIGGER IF NOT EXISTS trg_milestones_ai AFTER INSERT ON milestones BEGIN
   INSERT INTO yolo_fts(row_type, row_id, title, body)
@@ -286,4 +339,14 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_events_ai AFTER INSERT ON events BEGIN
   INSERT INTO yolo_fts(row_type, row_id, title, body)
   VALUES ('event', new.id, new.summary, COALESCE(new.detail,''));
+END;
+CREATE TRIGGER IF NOT EXISTS trg_todo_evidence_identity_ai AFTER INSERT ON todo_evidence BEGIN
+  DELETE FROM todo_identity_fts WHERE record_id = new.todo_id;
+  INSERT INTO todo_identity_fts(record_id, title, body)
+  SELECT todos.id, todos.title,
+    trim(COALESCE(todos.detail, '') || ' ' || COALESCE((
+      SELECT group_concat(excerpt, ' ') FROM todo_evidence
+      WHERE todo_id = todos.id AND excerpt IS NOT NULL
+    ), ''))
+  FROM todos WHERE todos.id = new.todo_id;
 END;

@@ -13,11 +13,12 @@ tracking rules，并把新条目和既有条目的状态变化交给存储/统�
 | `index.ts` | 插件入口、turn 触发、配置读取、节流/配额、合并、质量闸门与失败隔离 |
 | `llm-extract.ts` | LLM 调用、内容折叠、JSON 解析和防御式校验 |
 | `prompt.ts` | 抽取提示词与已知记忆摘要 |
+| `todo-resolver.ts` | R1 稳定 ID 候选渲染、shadow 身份裁决与严格结果校验 |
 
 ## 数据流
 
 ```text
-agent/pre-step（只捕获本轮实际进入模型的 direct-human 消息）
+agent/pre-step（只捕获本轮实际进入模型的 direct-human 消息 + 工具执行前的 identity candidates）
   → agent/turn-stopping 仅排队，不等待辅助模型
   → agent.whenIdle() + durable turn/end completed|max-tokens
   → 跳过 YOLO 内部会话
@@ -32,6 +33,10 @@ agent/pre-step（只捕获本轮实际进入模型的 direct-human 消息）
   → runIdempotentAction 原子执行：先写 todos/milestones/goals/preferences/events
   → 再应用 updates[] 的状态变化并追加 todo_evidence
   → extraction_log / session summary 审计与 operation 结果同事务提交
+  → 从写入前快照召回 todo identity candidates（开放、终态、merged alias、evidence）
+  → 独立 shadow resolver 输出 LINK / UPDATE / REOPEN / NEW_OCCURRENCE / CREATE /
+    ATTACH_STEP / ASK / NOOP
+  → todo_resolution_log（只记录候选、裁决、路由、用量与失败；不执行任何领域动作）
 ```
 
 先新增、后更新保证“同一轮创建并完成”能够命中新条目。`updates[].match_title` 应复用 known
@@ -63,6 +68,20 @@ resolver 已经实现。对已经落到相同 due_at 的重复 postpone 是领�
 `extracted_json` 保存原始模型文本、归一化后的 `parsed`、finish reason、实际 provider/model 路由、
 输入规模和 token usage。不能只保存归一化结果，否则错误 schema 与真正空抽取无法区分。
 
+R1 的事项身份裁决使用**第二次、独立的辅助模型调用**。候选在 `agent/pre-step` 接受 direct-human 输入后、
+主 Agent 执行工具前快照，避免 resolver 看到本轮刚改写的 due/status，或让本轮新建事项成为自己的历史
+候选；缺少可靠 pre-step 的兼容宿主才在后台召回并排除同 session/turn 的 assistant-action origin。原有
+`llmExtract` 先完成并持久化，shadow resolver 才运行，因此 resolver 超时、错误
+schema 或模型失败都不能回滚、改写或阻止原抽取。候选来自 resolver 专用索引，先把 merged alias 解析为
+canonical id，再把稳定 id、业务状态、截止时间和历史别名交给模型。resolver 只能引用候选 id；它输出的
+`LINK / UPDATE / REOPEN / NEW_OCCURRENCE / CREATE / ATTACH_STEP / ASK / NOOP` 全部只进入
+`todo_resolution_log`。R2 之前不得根据这些日志自动关联、重开、创建 occurrence 或挂步骤。
+
+日志保存本轮输入的 1000 字符有界摘录和请求 fingerprint，供本机人工标注；不保存完整 transcript。
+`scripts/todo-resolver-eval.mjs` 可以导出 JSONL 标注队列，并按 paraphrase、pronoun、ellipsis、
+cross_session、same_name_distinct、terminal、step 等层统计 false-link 与 missed-link。人工标签和当前模型
+观测达到后续批准阈值前，shadow 结果不具备写入权限。
+
 ## 配置与运行约束
 
 - `extraction.enableLLM`：总开关。
@@ -72,6 +91,8 @@ resolver 已经实现。对已经落到相同 due_at 的重复 postpone 是领�
 - `extraction.minTurnChars`：短闲聊闸门，默认 4。
 - `extraction.maxRunsPerDay`：每日运行次数上限，默认 300。
 - 模型流量使用宿主允许的 `purpose: 'session-title'`；该联合类型没有自定义 purpose。
+- 每个通过现有抽取闸门的 turn 在主抽取成功提交后再运行一次 shadow resolver；它沿用同一 provider/model
+  路由，但独立记录 token 和耗时。每日上限仍按主抽取 turn 计数，不把第二次调用误算成第二个 turn。
 - provider/model 优先继承当前 agent 的完整路由，其次使用宿主 `agentDefaultModel`。历史 `extraction.model`
   只有在 DeepSeek provider 上覆盖模型，避免把 `deepseek-chat` 错配给其他 provider。
 - 模型以 `error`/`aborted` 结束或没有返回文本时记为抽取错误，不再伪装成 `empty`。

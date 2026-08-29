@@ -14,7 +14,7 @@ import type { LlmRuntime, Message, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type Yolo from '../storage/index.ts'
-import type { MilestoneStatus, Priority } from '../storage/types.ts'
+import type { MilestoneStatus, Priority, TodoIdentityCandidate } from '../storage/types.ts'
 import { DEFAULTS } from '../shared/constants.ts'
 import { shouldDropExtracted } from '../shared/quality.ts'
 import { sessionCwd } from '../shared/session.ts'
@@ -22,6 +22,7 @@ import { extractionTodoOperationId, todoEvidenceFingerprint, todoOperationReques
 import { isYoloSessionId } from '../ui/session.ts'
 import { contentBlocksToText, llmExtract, type ExtractionResult, type ExtractedUpdate, type LlmExtractionObservation } from './llm-extract.ts'
 import { buildKnownContext } from './prompt.ts'
+import { llmResolveTodoIdentity, TODO_RESOLVER_VERSION, type TodoResolverObservation } from './todo-resolver.ts'
 
 export const name = 'yolo-extract'
 export const inject = ['yolo', 'llm', 'sessions', 'settings'] as const
@@ -292,6 +293,7 @@ export function apply(ctx: Context): void {
   const settings = (ctx as { settings?: SettingsLike }).settings
   const captured = new Map<string, Map<number, UserMessage[]>>()
   const capturedAt = new Map<string, Map<number, number>>()
+  const capturedTodoCandidates = new Map<string, Map<number, TodoIdentityCandidate[]>>()
   const jobs = new Map<string, Promise<void>>()
   const scheduledTurns = new Set<string>()
   const controllers = new Set<AbortController>()
@@ -312,6 +314,28 @@ export function apply(ctx: Context): void {
       const clocks = capturedAt.get(payload.agent.id) ?? new Map<number, number>()
       if (!clocks.has(payload.turn)) clocks.set(payload.turn, Date.now())
       capturedAt.set(payload.agent.id, clocks)
+      // Identity candidates are facts from BEFORE the assistant can run tools
+      // in this turn. Capturing later at turn-stopping would let the shadow
+      // resolver see the due/status that the assistant just wrote and inflate
+      // offline accuracy by leaking the result into its input.
+      const snapshots = capturedTodoCandidates.get(payload.agent.id) ?? new Map<number, TodoIdentityCandidate[]>()
+      try {
+        const existing = snapshots.get(payload.turn) ?? []
+        const byId = new Map(existing.map((candidate) => [candidate.id, candidate]))
+        for (const candidate of yctx.yolo.recallTodoIdentityCandidates(
+          cwdOf(payload.agent.session),
+          humanMessagesToText(human),
+        )) {
+          // Late human steering may introduce another todo. Add new ids but
+          // never replace the first pre-tool snapshot of an existing id.
+          if (!byId.has(candidate.id)) byId.set(candidate.id, candidate)
+        }
+        snapshots.set(payload.turn, [...byId.values()])
+        capturedTodoCandidates.set(payload.agent.id, snapshots)
+      } catch {
+        // Candidate recall is observational. The durable extraction path
+        // remains available and can use a conservative background fallback.
+      }
     }
     return decision
   })
@@ -322,6 +346,7 @@ export function apply(ctx: Context): void {
     if (reason === 'completed' || reason === 'max-tokens') return
     captured.get(session.id)?.delete(event.data.turn)
     capturedAt.get(session.id)?.delete(event.data.turn)
+    capturedTodoCandidates.get(session.id)?.delete(event.data.turn)
     scheduledTurns.delete(`${session.id}:${event.data.turn}`)
   })
 
@@ -343,8 +368,10 @@ export function apply(ctx: Context): void {
         // turn-stopping boundary is included in the same extraction.
         const capturedMessages = captured.get(sessionId)?.get(turn) ?? []
         const acceptedAt = capturedAt.get(sessionId)?.get(turn)
+        const preStepTodoCandidates = capturedTodoCandidates.get(sessionId)?.get(turn)
         captured.get(sessionId)?.delete(turn)
         capturedAt.get(sessionId)?.delete(turn)
+        capturedTodoCandidates.get(sessionId)?.delete(turn)
         if (!completedTurn(agent.session, turn)) return
         const session = agent.session
         const cwd = cwdOf(session)
@@ -392,6 +419,17 @@ export function apply(ctx: Context): void {
           if (last) await waitForSpacing(Math.max(0, last + spacingMs - Date.now()), controller.signal)
           started = Date.now()
           const sourceExcerpt = sourceExcerptFromMessages(capturedMessages)
+          // Snapshot resolver candidates before the legacy extraction write.
+          // Otherwise a newly-created todo from this same turn would appear as
+          // its own prior candidate and invalidate the shadow observation.
+          const todoCandidates = (preStepTodoCandidates ?? yctx.yolo.recallTodoIdentityCandidates(cwd, turnText)).filter((candidate) =>
+            !yctx.yolo.listTodoEvidence(cwd, candidate.id).some((evidence) =>
+              evidence.session_id === session.id
+              && evidence.turn_seq === turn
+              && evidence.source_kind === 'assistant_action'
+              && evidence.relation === 'origin',
+            ),
+          )
           const result = await llmExtract({
             llm: yctx.llm,
             provider: route.provider,
@@ -451,6 +489,64 @@ export function apply(ctx: Context): void {
           })
           if (persisted.status === 'conflict') {
             ctx.logger?.warn?.('[yolo-extract] operation id reused with different input: %s', operationId)
+          } else {
+            // R1 shadow resolver: a separate model pass over stable-id
+            // candidates. It runs only after the existing extraction result is
+            // durably committed and writes observation logs, never domain data.
+            const resolverStarted = Date.now()
+            let resolverObservation: TodoResolverObservation | undefined
+            try {
+              const resolutions = await llmResolveTodoIdentity({
+                llm: yctx.llm,
+                provider: route.provider,
+                model: route.model,
+                turnText,
+                candidates: todoCandidates,
+                signal: controller.signal,
+                now: new Date(acceptedAt ?? started),
+                observe: (value) => { resolverObservation = value },
+              })
+              yctx.yolo.logTodoResolution(cwd, {
+                session_id: session.id,
+                turn_seq: turn,
+                operation_id: operationId,
+                input_fingerprint: requestHash,
+                input_excerpt: turnText.slice(-1000),
+                resolver_version: TODO_RESOLVER_VERSION,
+                model_provider: route.provider,
+                model_name: route.model,
+                status: resolutions.length ? 'ok' : 'empty',
+                candidates_json: JSON.stringify(todoCandidates),
+                resolutions_json: JSON.stringify(resolutions),
+                token_in: resolverObservation?.usage?.inputTokens ?? null,
+                token_out: resolverObservation?.usage?.outputTokens ?? null,
+                duration_ms: Date.now() - resolverStarted,
+              })
+            } catch (resolverError) {
+              try {
+                yctx.yolo.logTodoResolution(cwd, {
+                  session_id: session.id,
+                  turn_seq: turn,
+                  operation_id: operationId,
+                  input_fingerprint: requestHash,
+                  input_excerpt: turnText.slice(-1000),
+                  resolver_version: TODO_RESOLVER_VERSION,
+                  model_provider: route.provider,
+                  model_name: route.model,
+                  status: 'error',
+                  error: resolverError instanceof Error ? resolverError.message : String(resolverError),
+                  candidates_json: JSON.stringify(todoCandidates),
+                  resolutions_json: '[]',
+                  token_in: resolverObservation?.usage?.inputTokens ?? null,
+                  token_out: resolverObservation?.usage?.outputTokens ?? null,
+                  duration_ms: Date.now() - resolverStarted,
+                })
+              } catch {
+                // Storage failure is already isolated by the outer extraction
+                // handler. The completed extraction remains authoritative.
+              }
+              ctx.logger?.warn?.('[yolo-extract] shadow todo resolver failed: %s', resolverError instanceof Error ? resolverError.message : String(resolverError))
+            }
           }
         } catch (e) {
           try {
@@ -495,6 +591,7 @@ export function apply(ctx: Context): void {
     controllers.clear()
     captured.clear()
     capturedAt.clear()
+    capturedTodoCandidates.clear()
     scheduledTurns.clear()
   })
 

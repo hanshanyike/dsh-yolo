@@ -29,6 +29,24 @@ function comparable(value: unknown): unknown {
   return value === undefined ? null : value
 }
 
+function remapJsonTodoIds(value: unknown, todoMap: ReadonlyMap<string, string>): unknown {
+  if (typeof value === 'string') return todoMap.get(value) ?? value
+  if (Array.isArray(value)) return value.map((item) => remapJsonTodoIds(item, todoMap))
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, remapJsonTodoIds(item, todoMap)]))
+  }
+  return value
+}
+
+function remapJsonText(text: unknown, todoMap: ReadonlyMap<string, string>): string {
+  if (typeof text !== 'string') return '[]'
+  try {
+    return JSON.stringify(remapJsonTodoIds(JSON.parse(text), todoMap))
+  } catch {
+    return text
+  }
+}
+
 function sameRow(a: Record<string, unknown>, b: Record<string, unknown>, columns: readonly string[]): boolean {
   return columns.every((column) => comparable(a[column]) === comparable(b[column]))
 }
@@ -279,6 +297,42 @@ function importAttached(db: DB, scopeKey: string, cwd: string, source: string, w
        token_in=excluded.token_in,token_out=excluded.token_out,duration_ms=excluded.duration_ms,created_at=excluded.created_at
      WHERE excluded.created_at > extraction_log.created_at`,
   ).run()
+  const resolverRows = db.prepare(
+    `SELECT * FROM ${LEGACY_ALIAS}.todo_resolution_log ORDER BY created_at ASC, id ASC`,
+  ).all() as Array<Record<string, unknown>>
+  for (const row of resolverRows) {
+    db.prepare(
+      `INSERT INTO todo_resolution_log(
+         scope_key, session_id, turn_seq, operation_id, input_fingerprint, input_excerpt,
+         resolver_version, model_provider, model_name, status, error,
+         candidates_json, resolutions_json, token_in, token_out, duration_ms, created_at
+       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(session_id, turn_seq, resolver_version) DO UPDATE SET
+         scope_key=excluded.scope_key,operation_id=excluded.operation_id,input_fingerprint=excluded.input_fingerprint,input_excerpt=excluded.input_excerpt,
+         model_provider=excluded.model_provider,model_name=excluded.model_name,status=excluded.status,error=excluded.error,
+         candidates_json=excluded.candidates_json,resolutions_json=excluded.resolutions_json,
+         token_in=excluded.token_in,token_out=excluded.token_out,duration_ms=excluded.duration_ms,created_at=excluded.created_at
+       WHERE excluded.created_at > todo_resolution_log.created_at`,
+    ).run(
+      scopeKey,
+      row.session_id as SQLInputValue,
+      row.turn_seq as SQLInputValue,
+      row.operation_id as SQLInputValue,
+      row.input_fingerprint as SQLInputValue,
+      row.input_excerpt as SQLInputValue,
+      row.resolver_version as SQLInputValue,
+      row.model_provider as SQLInputValue,
+      row.model_name as SQLInputValue,
+      row.status as SQLInputValue,
+      row.error as SQLInputValue,
+      remapJsonText(row.candidates_json, todoMap),
+      remapJsonText(row.resolutions_json, todoMap),
+      row.token_in as SQLInputValue,
+      row.token_out as SQLInputValue,
+      row.duration_ms as SQLInputValue,
+      row.created_at as SQLInputValue,
+    )
+  }
   const reminderColumns = ['id', 'todo_id', 'milestone_id', 'fire_at', 'payload', 'scope_key', 'session_hint']
   mergeIdTable(db, source, 'pending_reminders', reminderColumns, reminderColumns.filter((c) => c !== 'scope_key'), (row) => ({
     ...row,

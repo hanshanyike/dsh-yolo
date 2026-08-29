@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { openDb, type DB } from '../src/storage/db.ts'
 import * as repo from '../src/storage/repository.ts'
-import { extractQueryTokens, ftsRecallSearch, ftsSearch } from '../src/storage/search.ts'
+import { extractQueryTokens, ftsRecallSearch, ftsSearch, recallTodoIdentityCandidates } from '../src/storage/search.ts'
 import {
   applyRecallPolicy,
   escapePromptTemplates,
@@ -208,5 +208,46 @@ describe('ftsRecallSearch (hybrid multi-path)', () => {
     repo.upsertTodo(db, { title: '把演示稿发给研发', scope_key: SCOPE })
     expect(ftsRecallSearch(db, '演示稿进展如何', 5, ['goal'])).toHaveLength(0)
     expect(ftsRecallSearch(db, '研发', 5, ['goal'])).toHaveLength(0)
+  })
+})
+
+describe('recallTodoIdentityCandidates (R1 shadow resolver)', () => {
+  it('recalls terminal todos without putting them back into ordinary memory recall', () => {
+    const { row } = repo.upsertTodo(db, { title: '把演示稿发给研发', scope_key: SCOPE })
+    repo.setTodoStatus(db, row.id, 'done')
+    expect(ftsRecallSearch(db, '演示稿进展如何', 5, ['todo'])).toHaveLength(0)
+    expect(recallTodoIdentityCandidates(db, '演示稿进展如何')).toEqual([
+      expect.objectContaining({ id: row.id, title: row.title, status: 'done', aliases: [] }),
+    ])
+  })
+
+  it('folds a matched merged title onto its canonical stable id as an alias', () => {
+    const { row: canonical } = repo.upsertTodo(db, { title: '发送研发演示材料', scope_key: SCOPE })
+    const { row: duplicate } = repo.upsertTodo(db, { title: '把最终 deck 给开发团队', scope_key: SCOPE })
+    expect(repo.applyTodoConsolidate(db, { id: duplicate.id }, { id: canonical.id }, null, SCOPE).ok).toBe(true)
+    const candidates = recallTodoIdentityCandidates(db, '最终 deck 给开发团队')
+    expect(candidates).toEqual([
+      expect.objectContaining({ id: canonical.id, title: canonical.title, aliases: [duplicate.title] }),
+    ])
+  })
+
+  it('uses immutable evidence wording to recall a rephrased canonical todo', () => {
+    const { row } = repo.upsertTodo(db, { title: '发送最终演示材料', scope_key: SCOPE })
+    repo.addTodoEvidence(db, {
+      todo_id: row.id,
+      source_scope_key: SCOPE,
+      source_kind: 'human',
+      relation: 'mention',
+      excerpt: '别忘了把那份 deck 给研发团队',
+      occurred_at: 1,
+      source_fingerprint: 'identity-evidence-1',
+    })
+    expect(recallTodoIdentityCandidates(db, '研发团队那份 deck 怎么样了')[0]).toMatchObject({ id: row.id })
+  })
+
+  it('uses the newest steering tail when a completed turn contains long earlier text', () => {
+    const { row } = repo.upsertTodo(db, { title: '周五发送最终演示稿', scope_key: SCOPE })
+    const query = `${'先讨论背景信息'.repeat(30)}\n不对，改成周五发送最终演示稿`
+    expect(recallTodoIdentityCandidates(db, query)[0]).toMatchObject({ id: row.id })
   })
 })
