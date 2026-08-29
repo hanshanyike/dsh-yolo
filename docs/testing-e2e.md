@@ -31,6 +31,7 @@
 | `api/dashboard-surfaces.spec.ts` | 首页安静/正常/高压和 partial；最多一个首要事项、跨区去重、计划与历史边界、最近变化过滤 | W2 / W11 / W13 / HOME / HIST |
 | `api/source-provenance.spec.ts` | 会话来源保存有界摘录、时间、工作区、session id 和可选 turn；manual/tool/legacy/旧数据降级；capability 与字段一致 | W8 / W16 / SRC-01～03 |
 | `api/due-semantics.spec.ts` | date-only、精确 datetime 与终态的 overdue/attention/summary 一致，并正确进入首页和计划投影；快速记录不会立即生成提醒 | W2 / W4 / W11 |
+| `api/notifications.spec.ts` | 未读与处理分离、20 条稳定分页、完整可达和已读基线 | W12 / W14 / NOTIF-API-01 |
 | `api/actions-consolidate.spec.ts` · P35 | 合并两条待办：保留方继承字段、被并方退场、审计保留；最近变化是否展示只按产品白名单 | W3 / HIST-01 |
 | `api/actions-consolidate.spec.ts` · P34 | 非法动作 400 且落 `action_denied` 审计——拒绝绝不静默，UI 不把内部审计伪装成用户进展 | W12 / W16 |
 
@@ -47,8 +48,8 @@
 | `ui/chat-scroll.spec.ts` | 单栏和双栏上下文各自真实 scroll owner；首载、发送、回复贴底，上翻后只提示新消息 | W5 / W7 / W10 |
 | `ui/chat-request-lifecycle.spec.ts` | 单/双栏、Esc 和 panel 重挂载保持 accepted/stale；POST 恰好一次，旧轮询不覆盖当前前景 | W5 / W7 / W10 / CHAT-02 |
 | `ui/dashboard-trust.spec.ts` | 服务端回执、撤销、partial scope、reason/evidence/source 与 payload 一致，首页不重复 | W11～W16 |
-| `ui/reminder-badge.spec.ts` | badge 按 notification 精确计数；首页按事项聚合；handled 只处理目标通知，不完成 todo | W12 / W14 / REM-HOME-01 |
-| `ui/reminder-popup.spec.ts` | 历史提醒不补弹、新提醒不抢前景、面板已开只刷新、点击定位首页正确事项 | W14 / REM-HOME-02 |
+| `ui/reminder-badge.spec.ts` | badge 按未读投递精确计数；通知记录逐条可达但不复制事项动作；首页按事项聚合且 handled 与已读分离 | W12 / W14 / REM-HOME-01 |
+| `ui/reminder-popup.spec.ts` | 历史通知不补弹、新通知不抢前景、面板已开只刷新、点击定位事项或通知记录 | W14 / REM-HOME-02 |
 | `ui/theme-narrow.spec.ts` | 新表面深浅主题、340px 和 `<480px` 单栏，无横向滚动或遮挡，reduced-motion 退化正确 | W6 / W7 |
 | `ui/accessibility-feedback.spec.ts` | 一级 Tab 键盘、单栏 focus trap/背景 inert、双栏非 modal、返回焦点、live region 和所有控件可读名 | W2 / W5 / W14 / A11Y |
 | `ui/dashboard-trust.spec.ts` · `api/dashboard-scope.spec.ts` · `tests/dashboard-aggregate.test.ts` | UI 中 partial 只提示一次且动作固定原 `scope_cwd`；API 验证真实 owner/未知 scope recovery；同 id 双 scope 与 all-fail recovery 由确定性聚合单测验证 | W13 / WS-01～03 |
@@ -118,8 +119,8 @@ TI-13 的已知缺口写成保守策略已经生效。
 |---|---|---|
 | HOME-01 | unit + api + ui | 普通无日期积压不为填空进入首页；判断、提醒、关注和今天事项按 `(scope,id)` 只出现一次；5 个待处理项只突出 1 个，其余可达 |
 | HOME-02 | unit + api + ui | partial 计数只代表已加载数据；reason/evidence 逐字段来自 payload，客户端不拼接推断；首页没有 Agent 任务入口或区块 |
-| REM-HOME-01 | unit + ui | 同 todo 两条未处理通知时 badge 为 2、首页事项为 1；处理一条后 badge 2→1、剩余 notification/card 仍存在、todo 仍开放、只有目标 `handled_at` 非空；历史未读首载不补弹 |
-| REM-HOME-02 | ui + host | 已打开 item/source/chat 前景时新提醒不抢占；panel 已开只刷新不弹；点击 popup 定位首页对应事项且 scope/source 正确 |
+| REM-HOME-01 | unit + api + ui | 同 todo 两条新提醒时 badge 为 2、首页事项为 1、通知记录为 2 行；打开记录后 badge 2→0 但两条仍未处理，首页“知道了”只改变目标 `handled_at`，todo 保持开放 |
+| REM-HOME-02 | ui + host | 已打开 item/source/chat 前景时新通知不抢占；panel 已开只刷新不弹；点击 reminder popup 定位首页事项，brief/独立提醒定位通知记录，scope/source 正确 |
 | HIST-01 | unit + api + ui | 混合 `completed / cancelled / reopened / postponed / todo_updated / reminder_fired / attention_seen / brief_generated`，断言最近变化白名单与噪声排除，摘要计数等于可见集合 |
 | HIST-02 | unit + ui | 跨工作区按全局时间排序；完成/取消分区且各自可 reopen；reopen 后退出终态集合；merged 副本不进入“已取消”或普通 reopen，partial 明示 |
 | CHAT-01 | unit + ui + host | resident、事项 A、事项 B 三类历史隔离；响应式返回/隐藏后再次打开 A 继续同一 episode；显式结束清除它，之后再次讨论 A 创建新 episode；A/B/resident 不串写 |
@@ -411,9 +412,9 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 
 - [ ] 👤 **TB-1 静默红线（核心）**：造 1 分钟后到期待办，另开工作会话等到期——工作会话全程无任何新增消息，提醒只出现在 YOLO 侧
 - [ ] 🤖 **TB-2 首页待处理**：面板开着等到期 → 首页“需要你处理”出现含标题、原因与快捷操作的卡片，不抢占已有详情/来源/讨论前景
-- [ ] 🤖 **TB-3 角标与聚合**：同一事项两条未处理通知时 badge 精确为 2、首页事项只显示一次；处理一条后 badge 2→1，剩余通知仍在、todo 仍开放、只有目标 `handled_at` 非空
+- [ ] 🤖 **TB-3 角标、记录与聚合**：同一事项两条新提醒时 badge 精确为 2、首页事项只显示一次、通知记录显示两次投递；打开记录后 badge 2→0 但提醒仍未处理，首页“知道了”只改变目标 `handled_at`
 - [ ] 👤 **TB-4 对话处理提醒**：从提醒卡“讨论这项安排”回复“推迟到明天”→ 待办改期、对应提醒处理、最近变化可追溯
-- [ ] 👤 **TB-5 重启恢复**：提醒已投递未处理时重启插件 → 未处理提醒回放（卡/角标仍可见）
+- [ ] 👤 **TB-5 重启恢复**：提醒已投递未处理时重启插件 → 首页仍保留提醒；若尚未查看，通知角标和记录也保持一致
 - [ ] 👤 **TB-6 并发到期**：同一 tick 两个不同事项到期 → 各自进入首页待处理且 badge 正确；多个提醒不会形成告警墙
 - [ ] 🤖 **TB-7 Popup 定位**：历史未读首载不补弹；panel 已开只刷新不弹；点击新 popup 打开首页正确事项并保持 `scope_cwd/source`
 
@@ -423,7 +424,7 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 - [ ] 👤 **TD-2 晚报内容**：到点出晚报卡，含今日完成/今日新增/未完成总数与逾期数/明日优先
 - [ ] 👤 **TD-3 开关生效**：关闭晚报开关后到点不再生成，日志有跳过原因
 - [ ] 👤 **TD-4 简报追问**：早报卡「和助手聊聊」→ 首条上下文携带简报全文可追问
-- [ ] 👤 **TD-5 面板未开**：简报生成时面板关闭 → 打开后通知卡可见、角标计入
+- [ ] 👤 **TD-5 面板未开**：简报生成时面板关闭 → badge 计入新投递，打开通知记录后简报正文可见且 badge 归零
 - [ ] 👤 **TD-6 空事项日**：无任何到期/完成/遗留 → 显示「今天没有到期事项」，不空白不报错
 
 ### 8.6 历史、最近变化与来源（TC）

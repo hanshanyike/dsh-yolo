@@ -64,6 +64,31 @@ describe('db + schema', () => {
     rmSync(root, { recursive: true, force: true })
   })
 
+  it('adds a seen baseline to legacy notifications without replaying history', () => {
+    const root = mkdtempSync(join(tmpdir(), 'yolo-old-notifications-'))
+    const path = join(root, 'old.db')
+    const old = new DatabaseSync(path)
+    old.exec(`CREATE TABLE notifications (
+      id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT,
+      todo_id TEXT, scope_cwd TEXT, created_at INTEGER NOT NULL,
+      handled_at INTEGER, scope_key TEXT NOT NULL
+    )`)
+    old.prepare('INSERT INTO notifications(id,kind,title,created_at,scope_key) VALUES(?,?,?,?,?)')
+      .run('legacy-notice', 'brief', '旧早报', 1, SCOPE)
+    old.close()
+
+    const migrated = openDb(path)
+    expect(migrated.prepare('SELECT seen_at,handled_at FROM notifications WHERE id=?').get('legacy-notice'))
+      .toMatchObject({ seen_at: expect.any(Number), handled_at: null })
+    expect(repo.countUnseenNotifications(migrated, SCOPE)).toBe(0)
+    migrated.close()
+
+    const reopened = openDb(path)
+    expect(repo.countUnseenNotifications(reopened, SCOPE)).toBe(0)
+    reopened.close()
+    rmSync(root, { recursive: true, force: true })
+  })
+
   it('commits successful transactions and rolls back failed ones', () => {
     withTransaction(db, () => {
       repo.upsertTodo(db, { title: '保留外层写入', scope_key: SCOPE })
@@ -92,6 +117,24 @@ describe('notification popup feed', () => {
     expect(repo.listRecentUnhandledReminders(db, SCOPE, 1).map((row) => row.id)).toEqual([newer.id])
     repo.markNotificationHandled(db, newer.id)
     expect(repo.listRecentUnhandledReminders(db, SCOPE, 5).map((row) => row.id)).toEqual([older.id])
+  })
+
+  it('keeps delivery seen state separate from reminder handling state', () => {
+    const reminder = repo.addNotification(db, { kind: 'reminder', title: '把演示稿发给研发', scope_key: SCOPE })
+    const brief = repo.addNotification(db, { kind: 'brief', title: '今日简报', scope_key: SCOPE })
+    expect(repo.countUnseenNotifications(db, SCOPE)).toBe(2)
+    expect(repo.listRecentUnseenNotifications(db, SCOPE, 5).map((row) => row.id)).toEqual(
+      expect.arrayContaining([brief.id, reminder.id]),
+    )
+
+    expect(repo.markNotificationSeen(db, SCOPE, reminder.id, 100)).toBe(true)
+    expect(repo.markNotificationSeen(db, SCOPE, reminder.id, 200)).toBe(false)
+    expect(repo.countUnseenNotifications(db, SCOPE)).toBe(1)
+    expect(repo.listUnhandledNotifications(db, SCOPE)).toHaveLength(2)
+
+    repo.markNotificationsSeenThrough(db, SCOPE, Date.now())
+    expect(repo.countUnseenNotifications(db, SCOPE)).toBe(0)
+    expect(repo.listUnhandledNotifications(db, SCOPE)).toHaveLength(2)
   })
 })
 

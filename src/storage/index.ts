@@ -362,6 +362,10 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.listNotifications(h.db, h.scopeKey, limit)
   }
+  listNotificationsUntil(cwd: string, openedAt: number, limit = 20): Notification[] {
+    const h = this.resolve(cwd)
+    return repo.listNotificationsUntil(h.db, h.scopeKey, openedAt, limit)
+  }
   listUnhandledNotifications(cwd: string): Notification[] {
     const h = this.resolve(cwd)
     return repo.listUnhandledNotifications(h.db, h.scopeKey)
@@ -373,6 +377,22 @@ export default class Yolo extends Service {
   countUnhandledNotifications(cwd: string): number {
     const h = this.resolve(cwd)
     return repo.countUnhandledNotifications(h.db, h.scopeKey)
+  }
+  countUnseenNotifications(cwd: string): number {
+    const h = this.resolve(cwd)
+    return repo.countUnseenNotifications(h.db, h.scopeKey)
+  }
+  listRecentUnseenNotifications(cwd: string, limit = 5): Notification[] {
+    const h = this.resolve(cwd)
+    return repo.listRecentUnseenNotifications(h.db, h.scopeKey, limit)
+  }
+  markNotificationSeen(cwd: string, id: string, seenAt?: number): boolean {
+    const h = this.resolve(cwd)
+    return repo.markNotificationSeen(h.db, h.scopeKey, id, seenAt)
+  }
+  markNotificationsSeenThrough(cwd: string, openedAt: number): number {
+    const h = this.resolve(cwd)
+    return repo.markNotificationsSeenThrough(h.db, h.scopeKey, openedAt)
   }
   markNotificationHandled(cwd: string, id: string): boolean {
     const h = this.resolve(cwd)

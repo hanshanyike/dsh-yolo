@@ -13,7 +13,8 @@
 | `index.ts` | 配置归一化、设置 section、latest cwd 跟踪和各端点装配 |
 | `config.ts` | schemastery `Config` 接口与默认值 |
 | `dashboard.ts` | 单工作区投影、跨工作区聚合、memory health 和 dashboard 端点 |
-| `badge.ts` | 不构建完整 dashboard 的轻量未处理数聚合 |
+| `badge.ts` | 不构建完整 dashboard 的轻量未读数与新通知预览聚合 |
+| `notifications.ts` | 完整通知记录分页、跨工作区聚合与已读动作 |
 | `actions.ts` | 工作区白名单、scope pin 和 `POST /yolo/actions` |
 | `session.ts` | `YoloSessions`、`YoloChatThreads` 与 messages/send 端点 |
 | `chat-requests.ts` | 宿主生命周期内的对话请求幂等、状态、TTL/cap 与 optimistic 合并 |
@@ -63,15 +64,18 @@ Dashboard v2 是同一个存储上的聚合读投影，没有 v1/v2 双写。每
 todo 行继续提供首来源 `source` 兼容字段，同时把 `todo_evidence` 投影为稳定排序的 `sources[]`、
 `source_count` 和去重后的 `related_session_count`；跨工作区聚合会为每条来源重标 owner workspace，
 不能只修正 todo 顶层标签。
-`GET /yolo/badge` 只聚合完整的未处理通知计数，不为角标构建 dashboard，也不能受 12 条卡片
-展示切片影响而少算。
+`GET /yolo/badge` 只聚合完整的未读投递计数，不为角标构建 dashboard，也不能受 dashboard 有限切片
+影响而少算。`GET /yolo/notifications` 使用稳定打开时间与 opaque cursor 分页聚合完整投递记录；
+`POST /yolo/notifications/seen` 只更新 `seen_at`，不改变 `handled_at` 或事项状态。
 
 ## 动作与会话端点
 
 | 端点 | 作用 |
 |---|---|
 | `GET /yolo/dashboard` | 全工作区 Dashboard v2 |
-| `GET /yolo/badge` | 轻量未处理角标 |
+| `GET /yolo/badge` | 轻量未读通知角标与新通知预览 |
+| `GET /yolo/notifications` | 跨工作区完整通知记录与分页 |
+| `POST /yolo/notifications/seen` | 标记单条或打开基线之前的通知已读 |
 | `POST /yolo/actions` | 经白名单与 scope pin 后调用 `applyYoloAction` |
 | `GET /yolo/session/messages` | 读取 resident 或 anchored 对话 |
 | `POST /yolo/session/send` | 发送并推进对应 YOLO agent |

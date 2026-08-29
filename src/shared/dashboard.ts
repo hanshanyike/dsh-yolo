@@ -199,6 +199,7 @@ export interface YoloNotificationRow {
   body?: string | null
   todo_id?: string | null
   created_at: number
+  seen?: boolean
   handled: boolean
   /** Owning cwd for routing notification actions in an aggregate projection. */
   scope_cwd?: string
@@ -261,8 +262,10 @@ export interface YoloDashboardData {
   ledgerSessions: number
   /** Notification cards for the panel top (newest first, handled included). */
   notifications: YoloNotificationRow[]
-  /** Unhandled notification count — the sidebar badge number (TB-3). */
+  /** Reminder-domain backlog count; retained separately from the unread badge. */
   unhandled: number
+  /** Notification deliveries not viewed yet. Owns the header/sidebar badge. */
+  unseen?: number
   /** Memory-health snapshot (v0.3.0). */
   health?: YoloMemoryHealth
   /** Default number of focus rows to surface before folding (R9; 0 = show all). */

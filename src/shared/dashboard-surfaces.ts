@@ -37,7 +37,7 @@ export interface HomeSurface {
   coverage: DashboardSurfaceCoverage
   /** At most one server-ranked judgment; never selected by the projection. */
   primary: HomePrimaryItem | null
-  /** Rows for which the server supplied a reason/reminder, plus unlinked cards. */
+  /** Rows for which the server supplied a reason/reminder. Notification history lives elsewhere. */
   needsAction: HomeActionItem[]
   /** Open rows explicitly scheduled for the dashboard's local day. */
   today: YoloTodoRow[]
@@ -112,16 +112,6 @@ export function dashboardTodoKey(row: YoloTodoRow, fallbackCwd: string): string 
 
 function attentionTodoKey(row: YoloAttentionRow): string {
   return `${row.scope_cwd}\u0000${row.todo_id}`
-}
-
-function notificationKey(row: YoloNotificationRow, fallbackCwd: string): string {
-  return `${row.scope_cwd ?? ownerKey(row.ws, fallbackCwd)}\u0000${row.id}`
-}
-
-function notificationTodoKey(row: YoloNotificationRow, fallbackCwd: string): string | null {
-  return row.todo_id
-    ? `${row.scope_cwd ?? ownerKey(row.ws, fallbackCwd)}\u0000${row.todo_id}`
-    : null
 }
 
 function genericRowKey(row: { id: string; ws?: WorkspaceTag }, fallbackCwd: string): string {
@@ -211,17 +201,6 @@ export function buildDashboardSurfaces(
     if (!todo.attention_reason && todo.reminder?.unhandled !== true) continue
     needsAction.push({ kind: 'todo', key, todo })
     usedHomeTodoKeys.add(key)
-  }
-
-  const unhandledNotifications = dedupeRows(
-    snapshot.notifications.filter((row) => !row.handled),
-    (row) => notificationKey(row, snapshot.cwd),
-  )
-  for (const notification of unhandledNotifications) {
-    const todoKey = notificationTodoKey(notification, snapshot.cwd)
-    if (todoKey && usedHomeTodoKeys.has(todoKey)) continue
-    needsAction.push({ kind: 'notification', key: notificationKey(notification, snapshot.cwd), notification })
-    if (todoKey) usedHomeTodoKeys.add(todoKey)
   }
 
   const today: YoloTodoRow[] = []

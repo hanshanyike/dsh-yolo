@@ -156,7 +156,8 @@ SQLite + FTS5 索引 ──► 每次状态变更同时写入时间线事件
                 ├─ 固定到各工作区的 v2 投影
                 ├─ 聚合数据行 + 全局排序出一项重点判断
                 └─ 跳过不可读工作区并标记 summary.partial
-ctx.yolo ──► GET /yolo/badge（轻量聚合未处理数）
+ctx.yolo ──► GET /yolo/badge（轻量聚合未读投递数）
+         └─► GET /yolo/notifications（完整通知记录分页）
          ──► POST /yolo/actions（白名单作用域路由 + 领域动作）
 YOLO agent ──► GET /yolo/session/messages + POST /yolo/session/send
 client ──► 340px 助手面板：今日 / 即将 / 已完成 + 对话界面
@@ -244,13 +245,13 @@ Dashboard v2 是**单一聚合读取投影**，以 `ui_contract_version: 2` 标�
 ### 提醒与简报路径——主动，但仅限 YOLO 侧
 
 ```
-调度 tick ──► 到期待办 ──► notifications 表（卡片 + 角标）
+调度 tick ──► 到期待办 ──► notifications 表（投递记录 + 未读角标）
                        └──► followup 到工作区的 YOLO 常驻线程
-简报 tick（每分钟）──► 按本地日期各生成一次早报/晚报 ──► 通知卡片
+简报 tick（每分钟）──► 按本地日期各生成一次早报/晚报 ──► 通知投递记录
                   └──► 存储查询事实；可选 LLM 润色；Markdown 降级文案
 ```
 
-工作会话保持**完全静默**：提醒和简报只通过 YOLO 面板（卡片 + 角标）与 YOLO 常驻线程
+工作会话保持**完全静默**：提醒和简报只通过 YOLO 面板（通知记录 + 角标）与 YOLO 常驻线程
 （`yolo-w-<sha1(cwd)/12>`，延迟创建，跨重启恢复）到达用户。旧版在 session-start 时将提醒重放到
 下一个启动的任意工作会话的机制已经移除；`pending_reminders` 仅为兼容性保留在 schema 中，
 不再有任何写入方。
@@ -275,7 +276,8 @@ data/
   `snapshotKeepDays` 目前只是常量，尚无自动清理任务消费它。
 - **会话归属与事项证据**——`todo_evidence` 是事项的多来源事实，支持一个 canonical 事项关联多个
   会话、轮次和助手/面板操作；`events.session_id/source` 保存状态动作审计，`session_summaries` 保存
-  提取时写入的每个会话单行摘要。`notifications` 保存提醒/简报卡片；侧栏角标显示未处理行数。
+  提取时写入的每个会话单行摘要。`notifications` 保存提醒/简报投递，`seen_at` 驱动未读角标，
+  `handled_at` 独立表示提醒是否已回应。
 - **判断信任状态**——`attention_feedback` 以
   `(scope_key, todo_id, reason_version, evidence_fingerprint)` 为键，只为对应的不可变判断版本保存
   已读、抑制和原因反馈。

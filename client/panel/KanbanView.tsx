@@ -18,9 +18,7 @@ import {
   type KanbanFilter,
 } from '../../src/shared/filters.ts'
 import { localDateStr } from '../../src/shared/text.ts'
-import {
-  IcBell, IcChat, IcCheck, IcChevron, IcDots, IcFlag, IcPin, IcPlusDay,
-} from '../design/icons.tsx'
+import { IcChat, IcCheck, IcDots, IcFlag, IcPin, IcPlusDay } from '../design/icons.tsx'
 import type { ChatAnchor } from './ChatPane.tsx'
 import { CaptureBar } from './CaptureBar.tsx'
 import {
@@ -53,8 +51,6 @@ export interface KanbanViewProps {
   onOpenSource?: (todo: YoloTodoRow, source: NonNullable<YoloTodoRow['source']>) => void
   onOpenChangeSource?: (change: YoloLedgerEntry, source: YoloItemSource) => void
   onOpenItemDetail?: (todo: YoloTodoRow) => void
-  /** Increments when the header bell jumps to today's notification cards. */
-  notifFocusTick?: number
 }
 
 export type BoardSurfaceKey =
@@ -92,9 +88,6 @@ interface OpenTaskPanel {
 
 const DAY_MS = 86_400_000
 
-/** Notification cards preview before a 查看全部 inbox fold (5.3, P0-1). */
-const NOTIF_PREVIEW = 4
-
 const FOCUS_LABEL: Record<FocusBucket, string> = {
   overdue: '逾期',
   today: '今日',
@@ -131,25 +124,6 @@ function fmtTime(ms: number): string {
   const d = new Date(ms)
   const p = (n: number): string => String(n).padStart(2, '0')
   return `${p(d.getHours())}:${p(d.getMinutes())}`
-}
-
-/** Relative "due" label for a reminder card header (5.3). */
-function dueMomentLabel(iso: string): string {
-  const day = iso.slice(0, 10)
-  const today = localDateStr()
-  const time = iso.length > 10 ? ` ${iso.slice(11, 16)}` : ''
-  if (day < today) {
-    const diff = Math.round((new Date(`${today}T00:00:00`).getTime() - new Date(`${day}T00:00:00`).getTime()) / DAY_MS)
-    return `逾期 ${diff} 天`
-  }
-  return fmtDue(iso) || `${day}${time}`
-}
-
-/** Local "M/D HH:MM" label for brief cards (they are dated, not due-ranked). */
-function localDayLabel(ms: number): string {
-  if (!ms) return ''
-  const d = new Date(ms)
-  return `${d.getMonth() + 1}/${d.getDate()} ${fmtTime(ms)}`
 }
 
 function dayOf(iso: string | null | undefined): string {
@@ -211,31 +185,9 @@ function dotPos(target: string | null | undefined): number {
   return Math.max(4, Math.min(96, 50 + (diff / 90) * 46))
 }
 
-function notifTypeLabel(kind: string, title: string): string {
-  if (kind === 'reminder') return '到期提醒'
-  if (kind === 'brief') return title.includes('早报') ? '早报' : title.includes('晚报') ? '晚报' : '简报'
-  return '通知'
-}
-
-/** Legacy brief/reminder rows may contain emoji or a replacement glyph from
- * old Windows encoding. Icons belong to the component chrome, not user text. */
-function cleanNotificationText(value: string): string {
-  return value.replace(/^[\uFFFD⏰☀🌙]\s*/u, '')
-}
-
-/** Older brief bodies included the card title as their first line. Keep those
- * cards readable after the backend stops repeating the title. */
-function cleanBriefBody(body: string | null | undefined, title: string): string {
-  const text = cleanNotificationText(body ?? '').trim()
-  if (!text) return ''
-  const lines = text.split('\n')
-  if (lines[0]?.trim() === title.trim()) lines.shift()
-  return lines.join('\n').trim()
-}
-
 const noop = (): void => {}
 
-export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail, notifFocusTick = 0 }: KanbanViewProps): JSX.Element {
+export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail }: KanbanViewProps): JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [completing, setCompleting] = useState<Set<string>>(new Set())
@@ -243,7 +195,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
   const [editor, setEditor] = useState<EditorDraft | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [quickBusy, setQuickBusy] = useState(false)
-  const [notifShowAll, setNotifShowAll] = useState(false)
   const [renameDraft, setRenameDraft] = useState<{ kind: 'goal' | 'milestone'; id: string; title: string } | null>(null)
   const [msPop, setMsPop] = useState<{ id: string; x: number } | null>(null)
   const [taskPanel, setTaskPanel] = useState<OpenTaskPanel | null>(null)
@@ -256,7 +207,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
   // before being removed, so nothing "jumps" out of the board.
   const [, setRetiring] = useState<YoloTodoRow[]>([])
   const bodyRef = useRef<HTMLDivElement>(null)
-  const notifRef = useRef<HTMLDivElement>(null)
   const taskReturnFocus = useRef<HTMLElement | null>(null)
 
   // Toast auto-retire (5.1): 2.4s; completion toasts hold the 4s undo window (5.4).
@@ -269,10 +219,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
   // Each face scrolls independently: switching tabs starts at the top.
   useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }) }, [surface])
 
-  // The header bell jumps to today's notification cards.
-  useEffect(() => {
-    if (notifFocusTick > 0 && surface === 'home') notifRef.current?.scrollIntoView({ block: 'start' })
-  }, [notifFocusTick, surface])
 
   // Map every board row to its owning workspace cwd so an action on an
   // all-workspaces row routes to that scope (the board is always scope=all).
@@ -366,11 +312,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
     [filter, surfaces.plan.all],
   )
 
-  const openNotifications = data.notifications.filter((notification) => {
-    if (notification.handled) return false
-    if (!notification.todo_id) return true
-    return !data.todos.some((todo) => todo.id === notification.todo_id && isTodoOpen(todo.status))
-  })
   const activeGoals = data.goals.filter((g) => g.status === 'active')
   const openMilestones = data.milestones.filter((m) => m.status === 'planned' || m.status === 'active')
   const avgGoalPct = Math.round(activeGoals.reduce((a, g) => a + g.progress, 0) / Math.max(activeGoals.length, 1))
@@ -707,66 +648,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
     </div>
   )
 
-  const notifCards = (
-    <div ref={notifRef} style={{ marginTop: 12 }}>
-      {(notifShowAll ? openNotifications : openNotifications.slice(0, NOTIF_PREVIEW)).map((n) => {
-        const dueFor = n.kind === 'reminder' && n.todo_id ? data.todos.find((td) => td.id === n.todo_id) : undefined
-        const timeLabel = dueFor?.due_at ? dueMomentLabel(dueFor.due_at) : n.kind === 'brief' ? localDayLabel(n.created_at) : fmtTime(n.created_at)
-        const title = cleanNotificationText(n.title)
-        const briefBody = n.kind === 'brief' ? cleanBriefBody(n.body, title) : ''
-        return (
-          <div key={n.id} className={`notif${n.kind === 'reminder' ? ' reminder' : ''}`}>
-            <div className="notif-head">
-              <IcBell size={13} />
-              <span className="notif-type">{notifTypeLabel(n.kind, n.title)}</span>
-              <span className="notif-time mono">{timeLabel}</span>
-            </div>
-            {(n.kind !== 'brief' || briefBody) && <div className={`notif-body${n.kind === 'brief' ? ' notif-body--brief' : ''}`}>
-              {n.kind !== 'brief' && <div style={{ fontWeight: 500 }}>{title}</div>}
-              {n.kind === 'brief'
-                ? <div className="notif-brief-text">{briefBody}</div>
-                : n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2, whiteSpace: 'pre-wrap' }}>{cleanNotificationText(n.body)}</div>}
-            </div>}
-            <div className="notif-acts">
-              {n.kind === 'reminder' && n.todo_id && (
-                <>
-                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'complete', kind: 'todo', id: n.todo_id!, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
-                    <IcCheck size={12} />完成
-                  </button>
-                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'postpone', kind: 'todo', id: n.todo_id!, due_at: nextDayStr(dueFor?.due_at ?? null), scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
-                    <IcPlusDay size={12} />推迟 1 天
-                  </button>
-                  <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'remind_again', kind: 'todo', id: n.todo_id!, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
-                    <IcBell size={12} />再提醒
-                  </button>
-                </>
-              )}
-              <button type="button" className="nact nact--chat" onClick={() => {
-                onOpenChat({
-                  title,
-                  detail: n.kind === 'brief' ? briefBody || null : n.body ?? null,
-                  todoId: n.todo_id ?? undefined,
-                  scopeCwd: n.scope_cwd ?? n.ws?.cwd,
-                })
-              }}>
-                <IcChat size={12} />{n.todo_id ? '讨论这项安排' : n.kind === 'brief' ? '讨论这份简报' : '讨论这条提醒'}
-              </button>
-              <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
-                知道了
-              </button>
-            </div>
-          </div>
-        )
-      })}
-      {openNotifications.length > NOTIF_PREVIEW && (
-        <button type="button" className="notif-more" onClick={() => { setNotifShowAll((v) => !v) }}>
-          {notifShowAll ? '收起' : `查看全部 ${openNotifications.length} 条`}
-          <IcChevron size={10} className={notifShowAll ? 'up' : ''} />
-        </button>
-      )}
-    </div>
-  )
-
   return (
     <div
       id={`yolo-surface-${surface}`}
@@ -792,7 +673,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
                 renderQuickCapture={() => <CaptureBar busy={quickBusy} onSubmit={sendQuickAdd} />}
                 onIntent={handleTodayIntent}
               />
-              {openNotifications.length > 0 && notifCards}
             </>
           )}
 

@@ -3,7 +3,7 @@ import type { YoloBadgeData, YoloBadgeNotification } from '../../src/shared/badg
 /** Browser-run baseline for deciding whether a polled reminder is genuinely new. */
 export interface ReminderObservationState {
   initialized: boolean
-  unhandled: number
+  unseen: number
   maxCreatedAt: number
   /** Bounded id history protects repeated polls and equal-timestamp rows. */
   seenKeys: readonly string[]
@@ -22,7 +22,7 @@ export interface ReminderObservation {
 
 export const INITIAL_REMINDER_OBSERVATION: ReminderObservationState = {
   initialized: false,
-  unhandled: 0,
+  unseen: 0,
   maxCreatedAt: 0,
   seenKeys: [],
 }
@@ -45,7 +45,7 @@ export function observeReminderBadge(
   // workspace might contain a newer reminder and must be retried intact.
   if (data.partial) return { state: previous }
 
-  const recent = (data.recentReminders ?? []).filter((row) => row.kind === 'reminder')
+  const recent = data.recentNotifications ?? data.recentReminders ?? []
   const unseen = recent.filter((row) => (
     !previous.seenKeys.includes(reminderKey(row)) && row.created_at >= previous.maxCreatedAt
   ))
@@ -56,7 +56,7 @@ export function observeReminderBadge(
   }
   const state: ReminderObservationState = {
     initialized: true,
-    unhandled: Math.max(0, data.unhandled),
+    unseen: Math.max(0, data.unseen ?? data.unhandled),
     maxCreatedAt: Math.max(previous.maxCreatedAt, ...recent.map((row) => row.created_at), 0),
     seenKeys: nextSeen.slice(-MAX_SEEN_IDS),
   }

@@ -27,7 +27,7 @@ test('新提醒弹出十秒、可暂停关闭并点击回到看板', async ({ pa
   await dismissHostSetupDialogs(page)
   await expect(page.locator("button[title^='YOLO ·']").first()).toBeVisible({ timeout: 30_000 })
   await baselineResponse
-  await expect(page.locator('[aria-label$="条未处理提醒"]').first()).toBeVisible()
+  await expect(page.locator('[aria-label$="条新通知"]').first()).toBeVisible()
   const popup = page.locator('.yolo-reminder-popup')
   await expect(popup).toHaveCount(0)
 
@@ -54,12 +54,12 @@ test('新提醒弹出十秒、可暂停关闭并点击回到看板', async ({ pa
   await expect(popup).toContainText(openTitle, { timeout: 8_000 })
   await popup.locator('.yolo-reminder-popup__body').click()
   await expect(page.locator('.yolo-scope .brand-name')).toHaveText('YOLO')
-  await expect(page.locator('.notif').filter({ hasText: openTitle })).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('.notification-log__item').filter({ hasText: openTitle })).toBeVisible({ timeout: 20_000 })
 
   const whileOpenTitle = uid('提醒我补充上线说明')
   await fx.notification(whileOpenTitle)
   await refreshBadgeAsForeground(page)
-  await expect(page.locator('.notif').filter({ hasText: whileOpenTitle })).toBeVisible({ timeout: 12_000 })
+  await expect(page.locator('.notification-log__item').filter({ hasText: whileOpenTitle })).toBeVisible({ timeout: 12_000 })
   await expect(popup).toHaveCount(0)
 })
 
@@ -72,7 +72,7 @@ test('精确到期事项由真实调度器驱动右下角提示与侧栏角标',
   await expect(page.locator("button[title^='YOLO ·']").first()).toBeVisible({ timeout: 30_000 })
   await baselineResponse
 
-  const baseline = (await api.dashboard()).unhandled ?? 0
+  const baseline = (await api.notifications()).unseen ?? 0
   const title = uid('提醒我喝水')
   const due = new Date(Date.now() + 5_000).toISOString()
   await fx.todo(title, { due })
@@ -80,7 +80,7 @@ test('精确到期事项由真实调度器驱动右下角提示与侧栏角标',
   const popup = page.locator('.yolo-reminder-popup')
   await expect(popup).toContainText(title, { timeout: 45_000 })
   await expect.poll(async () => {
-    const label = await page.locator('[aria-label$="条未处理提醒"]').first().getAttribute('aria-label')
+    const label = await page.locator('[aria-label$="条新通知"]').first().getAttribute('aria-label')
     return Number(label?.match(/^(\d+)/u)?.[1] ?? 0)
   }).toBeGreaterThan(baseline)
   await expect.poll(async () => {

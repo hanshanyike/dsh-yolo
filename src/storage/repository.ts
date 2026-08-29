@@ -759,12 +759,13 @@ export function addNotification(
     todo_id: data.todo_id ?? null,
     scope_cwd: data.scope_cwd ?? null,
     created_at: now(),
+    seen_at: null,
     handled_at: null,
     scope_key: data.scope_key,
   }
   db.prepare(
-    `INSERT INTO notifications(id, kind, title, body, todo_id, scope_cwd, created_at, handled_at, scope_key)
-     VALUES(?,?,?,?,?,?,?,NULL,?)`,
+    `INSERT INTO notifications(id, kind, title, body, todo_id, scope_cwd, created_at, seen_at, handled_at, scope_key)
+     VALUES(?,?,?,?,?,?,?,NULL,NULL,?)`,
   ).run(row.id, row.kind, row.title, row.body, row.todo_id, row.scope_cwd, row.created_at, row.scope_key)
   return row
 }
@@ -773,6 +774,13 @@ export function listNotifications(db: DB, scopeKey: string, limit = 20): Notific
   return db
     .prepare('SELECT * FROM notifications WHERE scope_key = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
     .all(scopeKey, limit) as Notification[]
+}
+
+/** Stable snapshot page source. The UI aggregates workspaces and applies its opaque offset cursor. */
+export function listNotificationsUntil(db: DB, scopeKey: string, openedAt: number, limit: number): Notification[] {
+  return db
+    .prepare('SELECT * FROM notifications WHERE scope_key = ? AND created_at <= ? ORDER BY created_at DESC, id DESC LIMIT ?')
+    .all(scopeKey, openedAt, limit) as Notification[]
 }
 
 export function listUnhandledNotifications(db: DB, scopeKey: string): Notification[] {
@@ -794,6 +802,37 @@ export function countUnhandledNotifications(db: DB, scopeKey: string): number {
     .prepare('SELECT COUNT(*) AS count FROM notifications WHERE scope_key = ? AND handled_at IS NULL')
     .get(scopeKey) as { count: number }
   return row.count
+}
+
+/** Count notification deliveries the user has not viewed yet. */
+export function countUnseenNotifications(db: DB, scopeKey: string): number {
+  const row = db
+    .prepare('SELECT COUNT(*) AS count FROM notifications WHERE scope_key = ? AND seen_at IS NULL')
+    .get(scopeKey) as { count: number }
+  return row.count
+}
+
+/** Bounded newest unseen deliveries for the lightweight popup feed. */
+export function listRecentUnseenNotifications(db: DB, scopeKey: string, limit = 5): Notification[] {
+  return db
+    .prepare('SELECT * FROM notifications WHERE scope_key = ? AND seen_at IS NULL ORDER BY created_at DESC, id DESC LIMIT ?')
+    .all(scopeKey, limit) as Notification[]
+}
+
+/** Mark one delivery as viewed; returns whether this call changed the row. */
+export function markNotificationSeen(db: DB, scopeKey: string, id: string, seenAt = now()): boolean {
+  const result = db.prepare(
+    'UPDATE notifications SET seen_at = ? WHERE scope_key = ? AND id = ? AND seen_at IS NULL',
+  ).run(seenAt, scopeKey, id)
+  return Number(result.changes) > 0
+}
+
+/** Mark the stable notification-log baseline as viewed. Newer arrivals remain unseen. */
+export function markNotificationsSeenThrough(db: DB, scopeKey: string, openedAt: number): number {
+  const result = db.prepare(
+    'UPDATE notifications SET seen_at = ? WHERE scope_key = ? AND seen_at IS NULL AND created_at <= ?',
+  ).run(now(), scopeKey, openedAt)
+  return Number(result.changes)
 }
 
 export function markNotificationHandled(db: DB, id: string): void {

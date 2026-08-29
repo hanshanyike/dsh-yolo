@@ -1,7 +1,7 @@
 // YOLO global sidebar entry (browser) — root-level footer action. The button
-// carries the unhandled-notification signal as a mono dot badge (TB-3, no
+// carries the unseen-notification signal as a mono dot badge (TB-3, no
 // breathing) and opens the full-width YOLO panel: the kanban body plus the
-// chat surface in its two sizes. The button keeps its own light 30s poll so
+// chat surface in its two sizes. The button keeps its own lightweight poll so
 // the badge follows reminders even while the panel is closed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -52,9 +52,14 @@ function useDismissOnOutsidePointer(
 
 export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: YoloSidebarDashboardProps): JSX.Element {
   const [open, setOpen] = useState(false)
-  const [unhandled, setUnhandled] = useState(0)
+  const [unseen, setUnseen] = useState(0)
+  const [notificationPartial, setNotificationPartial] = useState(false)
   const [popup, setPopup] = useState<ReminderPopupCandidate | null>(null)
-  const [notificationFocusRequest, setNotificationFocusRequest] = useState(0)
+  const [notificationRefreshRequest, setNotificationRefreshRequest] = useState(0)
+  const [notificationOpenRequest, setNotificationOpenRequest] = useState<{
+    sequence: number
+    notification: ReminderPopupCandidate['notification']
+  } | undefined>()
   const [surfaceLabel, setSurfaceLabel] = useState<string>(YOLO_SURFACE_LABELS[0])
   const surfaceOpenedRef = useRef(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -62,6 +67,7 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
   const openRef = useRef(open)
   const observationRef = useRef<ReminderObservationState>(INITIAL_REMINDER_OBSERVATION)
   const badgeRequestRef = useRef<Promise<void> | null>(null)
+  const badgeRevisionRef = useRef(0)
   const [anchorLeft, setAnchorLeft] = useState<number | undefined>()
   openRef.current = open
 
@@ -72,12 +78,17 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
       const r = await fetch('/yolo/badge', { headers: { accept: 'application/json' }, cache: 'no-store' })
       if (!r.ok) return
       const data = (await r.json()) as YoloBadgeData
-      setUnhandled(data.unhandled ?? 0)
+      const revision = data.revision ?? Date.now()
+      if (revision >= badgeRevisionRef.current) {
+        badgeRevisionRef.current = revision
+        setUnseen(data.unseen ?? data.unhandled ?? 0)
+        setNotificationPartial(data.partial === true)
+      }
       const observation = observeReminderBadge(observationRef.current, data)
       observationRef.current = observation.state
       if (observation.popup) {
         if (openRef.current) {
-          setNotificationFocusRequest((value) => value + 1)
+          setNotificationRefreshRequest((value) => value + 1)
         } else {
           setPopup(observation.popup)
         }
@@ -142,7 +153,8 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
 
   const close = useCallback(() => {
     setOpen(false)
-    setNotificationFocusRequest(0)
+    setNotificationRefreshRequest(0)
+    setNotificationOpenRequest(undefined)
   }, [])
   const openPanel = useCallback(() => {
     if (surfaceOpenedRef.current) setSurfaceLabel((current) => nextYoloSurfaceLabel(current))
@@ -151,10 +163,20 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
   }, [])
   const dismissPopup = useCallback(() => { setPopup(null) }, [])
   const openPopupReminder = useCallback(() => {
+    const notification = popup?.notification
+    if (!notification) return
     setPopup(null)
     openPanel()
-    setNotificationFocusRequest((value) => value + 1)
-  }, [openPanel])
+    setNotificationOpenRequest((current) => ({
+      sequence: (current?.sequence ?? 0) + 1,
+      notification,
+    }))
+  }, [openPanel, popup])
+  const handleUnseenChange = useCallback((nextUnseen: number, revision: number): void => {
+    if (revision < badgeRevisionRef.current) return
+    badgeRevisionRef.current = revision
+    setUnseen(nextUnseen)
+  }, [])
   useDismissOnOutsidePointer(buttonRef, panelRef, open, close)
 
   return (
@@ -169,7 +191,9 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
             openPanel()
           }
         }}
-        title={unhandled > 0 ? `${yoloSurfaceTitle(surfaceLabel)} · ${unhandled} 条未处理提醒` : yoloSurfaceTitle(surfaceLabel)}
+        title={unseen > 0
+          ? `${yoloSurfaceTitle(surfaceLabel)} · ${notificationPartial ? '至少 ' : ''}${unseen} 条新通知${notificationPartial ? '，部分工作区不可用' : ''}`
+          : yoloSurfaceTitle(surfaceLabel)}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -190,9 +214,9 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
       >
         <span style={{ position: 'relative', display: 'flex', flex: 'none' }}>
           <YoloLogo size={20} />
-          {unhandled > 0 && (
+          {unseen > 0 && (
             <span
-              aria-label={`${unhandled} 条未处理提醒`}
+              aria-label={`${notificationPartial ? '至少 ' : ''}${unseen} 条新通知${notificationPartial ? '，部分工作区不可用' : ''}`}
               style={{
                 position: 'absolute',
                 top: -2,
@@ -232,7 +256,9 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
               left={anchorLeft}
               onClose={close}
               openSession={openSession}
-              notificationFocusRequest={notificationFocusRequest}
+              notificationRefreshRequest={notificationRefreshRequest}
+              notificationOpenRequest={notificationOpenRequest}
+              onUnseenChange={handleUnseenChange}
               themeControl={setTheme ? { set: setTheme } : undefined}
               surfaceLabel={surfaceLabel}
             />

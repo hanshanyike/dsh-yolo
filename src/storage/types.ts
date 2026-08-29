@@ -175,6 +175,7 @@ export interface Notification {
   todo_id?: string | null
   scope_cwd?: string | null
   created_at: number
+  seen_at?: number | null
   handled_at?: number | null
   scope_key: string
 }

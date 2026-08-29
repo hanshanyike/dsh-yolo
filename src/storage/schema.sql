@@ -153,8 +153,8 @@ CREATE TABLE IF NOT EXISTS session_summaries (
   updated_at INTEGER NOT NULL
 );
 
--- kanban notification cards + sidebar badge (reminders & briefs, v0.3.0).
--- Handled = quick action applied, chat-processed (todo transitioned), or dismissed.
+-- notification delivery log + reminder handling state.
+-- Seen means the delivery has been viewed; handled remains a separate reminder-domain state.
 CREATE TABLE IF NOT EXISTS notifications (
   id         TEXT PRIMARY KEY,       -- ULID
   kind       TEXT NOT NULL,          -- reminder|brief
@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   todo_id    TEXT,
   scope_cwd  TEXT,                   -- workspace the item belongs to (action routing)
   created_at INTEGER NOT NULL,
+  seen_at    INTEGER,
   handled_at INTEGER,
   scope_key  TEXT NOT NULL
 );

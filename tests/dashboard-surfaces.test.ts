@@ -144,7 +144,7 @@ describe('buildDashboardSurfaces home', () => {
     expect(dashboardTodoKey(sameA, WS_A.cwd!)).not.toBe(dashboardTodoKey(sameB, WS_A.cwd!))
   })
 
-  it('folds a linked unhandled notification into its todo and retains standalone notification cards', () => {
+  it('folds reminder state into its todo and keeps notification records out of Home', () => {
     const linked = todo('send-notes', { reminder: { unhandled: true } })
     const surfaces = buildDashboardSurfaces(dashboard({
       todos: [linked],
@@ -155,8 +155,7 @@ describe('buildDashboardSurfaces home', () => {
       ],
     }))
 
-    expect(surfaces.home.needsAction.map((row) => row.kind)).toEqual(['todo', 'notification'])
-    expect(surfaces.home.needsAction[1]).toMatchObject({ kind: 'notification', notification: { id: 'standalone' } })
+    expect(surfaces.home.needsAction.map((row) => row.kind)).toEqual(['todo'])
   })
 
   it('obeys explicit compact-preview limits without changing Plan or History', () => {

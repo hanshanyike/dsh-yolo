@@ -15,6 +15,7 @@
 
 - [产品愿景](VISION.md)：YOLO 要解决的问题、产品边界和长期方向。
 - [助手看板原型与产品设计记录](design/assistant-dashboard-prototype.md)：已评审的首版信息架构、交互状态和可点击 HTML 原型。
+- [通知按钮与通知记录](design/notification-button-and-center.md)：未读计数、完整时间流，以及通知记录与首页、历史的职责边界。
 
 ## 开发与架构
 

@@ -44,4 +44,24 @@ describe('panel state', () => {
     first.discussionThreads['D:/ws/a\u0000todo-a'] = 'changed'
     expect(readPanelState().discussionThreads).toEqual({ 'D:/ws/a\u0000todo-a': 'thread-a' })
   })
+
+  it('clones notification-log return state defensively', () => {
+    writePanelState({
+      navigation: {
+        route: { page: 'home' }, presentation: 'auto',
+        foreground: {
+          kind: 'notification_log', targetId: 'notice-a',
+          returnTo: { kind: 'item_detail', item: { id: 'todo-a', scopeCwd: 'D:/ws/a', title: '发送纪要' } },
+        },
+      },
+    })
+    const first = readPanelState()
+    if (first.navigation.foreground.kind !== 'notification_log' || first.navigation.foreground.returnTo?.kind !== 'item_detail') {
+      throw new Error('expected notification log return state')
+    }
+    first.navigation.foreground.returnTo.item.title = '外部修改'
+    expect(readPanelState().navigation.foreground).toMatchObject({
+      kind: 'notification_log', returnTo: { kind: 'item_detail', item: { title: '发送纪要' } },
+    })
+  })
 })

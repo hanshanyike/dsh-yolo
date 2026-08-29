@@ -18,7 +18,7 @@
 | `src/storage/` | [存储服务](storage.md) | `ctx.yolo`、SQLite、作用域、搜索、快照与领域状态迁移 |
 | `src/extract/` | [语义提取](extract.md) | 对话结束后的 LLM 结构化抽取与状态更新 |
 | `src/memory/` | [记忆与召回](memory.md) | 模型工具、提示词注入、确定性召回与语义增强 |
-| `src/reminder/` | [提醒与简报](reminder.md) | 调度、通知卡、常驻线程投递、简报与快照节奏 |
+| `src/reminder/` | [提醒与简报](reminder.md) | 调度、通知投递、常驻线程投递、简报与快照节奏 |
 | `src/ui/` | [看板服务端](ui.md) | 设置、聚合投影、动作、角标和面板会话 API |
 | `client/` | [浏览器客户端](client.md) | 侧栏入口、助手面板、交互状态与 HTTP 消费端 |
 

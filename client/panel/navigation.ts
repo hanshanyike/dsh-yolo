@@ -21,8 +21,7 @@ export interface ItemDetailForeground {
   item: PanelItemRef
 }
 
-export type PanelForeground =
-  | { kind: 'none' }
+export type RestorableForeground =
   | { kind: 'assistant_chat' }
   | { kind: 'item_discussion'; item: PanelItemRef; threadKey: string }
   | ItemDetailForeground
@@ -32,6 +31,17 @@ export type PanelForeground =
       source: YoloItemSource
       returnTo?: ItemDetailForeground
       /** Focus target owned by the underlying detail after Source returns. */
+      returnToFocusId?: string
+    }
+
+export type PanelForeground =
+  | { kind: 'none' }
+  | RestorableForeground
+  | {
+      kind: 'notification_log'
+      targetId?: string
+      /** Closing the log restores the foreground it temporarily replaced. */
+      returnTo?: RestorableForeground
       returnToFocusId?: string
     }
 
@@ -84,6 +94,9 @@ export function openForeground(
 
 export function backFromForeground(state: PanelNavigationState): PanelNavigationState {
   if (state.foreground.kind === 'source_preview' && state.foreground.returnTo) {
+    return { ...state, foreground: state.foreground.returnTo, returnFocusId: state.foreground.returnToFocusId }
+  }
+  if (state.foreground.kind === 'notification_log' && state.foreground.returnTo) {
     return { ...state, foreground: state.foreground.returnTo, returnFocusId: state.foreground.returnToFocusId }
   }
   return { ...state, foreground: { kind: 'none' } }

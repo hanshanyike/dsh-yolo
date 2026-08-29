@@ -6,7 +6,7 @@
 
 - 自动抽取与合并由 `src/extract/` 负责。
 - SQLite、FTS5、作用域和领域动作由 `src/storage/` 与 `src/shared/actions.ts` 负责。
-- 到期扫描、通知卡和常驻线程投递由 `src/reminder/` 负责。
+- 到期扫描、通知投递和常驻线程投递由 `src/reminder/` 负责；通知已读由 `src/ui/` 管理。
 - `src/memory/` 只通过 `ctx.yolo` 使用存储服务，不另建一套记忆状态。
 
 ## 一、职责与依赖

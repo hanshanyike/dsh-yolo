@@ -6,7 +6,7 @@
 // M8: rows carry the plan context (milestone_title) and the "where is it
 // stuck" signals (overdue / stale).
 // v0.3.0: adds the day ledger (events joined with session-summaries as source
-// badges), notification cards, and the unhandled badge count.
+// attention projections, notification rows, and independent handled/unread counts.
 // v0.3.0 cross-workspace: `?scope=all` unions every known workspace (opt-in,
 // read-only) and tags each row with its owning workspace.
 
@@ -283,6 +283,7 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     body: n.body ?? null,
     todo_id: n.todo_id ?? null,
     created_at: n.created_at,
+    seen: n.seen_at != null,
     handled: n.handled_at != null,
     scope_cwd: cwd,
     ws: owner,
@@ -352,9 +353,11 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
     ledgerSessions,
     notifications,
     // v0.3.3 review fix: count ALL unhandled notifications, not just those that
-    // fit the 12-row display slice — the badge is a promise ("N 件未处理") and
-    // must not undercount when older cards are still open.
+    // fit the 12-row display slice — reminder handling still needs the complete
+    // domain count even though the product badge now belongs to `unseen`.
     unhandled: unhandledNotifications.length,
+    unseen: yolo.countUnseenNotifications?.(cwd)
+      ?? yolo.listNotifications(cwd, 100_000).filter((row) => row.seen_at == null).length,
     health: buildMemoryHealth(yolo, cwd),
     focusDefaultCount: 0,
   }
@@ -451,6 +454,7 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
     // per-workspace unhandled is already a full count (not the display slice) —
     // summing them keeps the aggregate badge exact.
     unhandled: list.reduce((n, d) => n + (d.unhandled ?? 0), 0),
+    unseen: list.reduce((n, d) => n + (d.unseen ?? 0), 0),
     ...(health !== undefined ? { health } : {}),
   }
 }

@@ -174,6 +174,14 @@ function migrate(db: DB): void {
   if (!todoCols.some((c) => c.name === 'merged_into_id')) {
     db.exec('ALTER TABLE todos ADD COLUMN merged_into_id TEXT')
   }
+  const notificationCols = db.prepare('PRAGMA table_info(notifications)').all() as { name: string }[]
+  if (!notificationCols.some((c) => c.name === 'seen_at')) {
+    db.exec('ALTER TABLE notifications ADD COLUMN seen_at INTEGER')
+    // Existing installations already exposed these rows through the old badge.
+    // Establish one baseline so upgrading does not replay the whole history as new.
+    db.prepare('UPDATE notifications SET seen_at = COALESCE(handled_at, ?) WHERE seen_at IS NULL').run(Date.now())
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_unseen ON notifications(scope_key, seen_at, created_at)')
   db.exec("UPDATE todos SET record_status = 'canonical' WHERE record_status IS NULL")
   db.exec('CREATE INDEX IF NOT EXISTS idx_todos_record_status ON todos(scope_key, record_status, status)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_todos_merged_into ON todos(merged_into_id) WHERE merged_into_id IS NOT NULL')

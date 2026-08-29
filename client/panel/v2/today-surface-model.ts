@@ -84,10 +84,6 @@ function scopeOf(todo: YoloTodoRow, data: YoloDashboardData): string {
   return todo.scope_cwd ?? todo.ws?.cwd ?? data.cwd
 }
 
-function scopedTodoKey(todo: YoloTodoRow, data: YoloDashboardData): string {
-  return `${scopeOf(todo, data)}\u0000${todo.id}`
-}
-
 function mapSource(
   source: YoloItemSource | undefined,
   todo: YoloTodoRow,
@@ -128,14 +124,6 @@ function mapTodo(
 
 function findJudgmentTodo(data: YoloDashboardData, attention: YoloAttentionRow): YoloTodoRow | undefined {
   return data.todos.find((todo) => todo.id === attention.todo_id && scopeOf(todo, data) === attention.scope_cwd)
-}
-
-function findNotificationTodo(data: YoloDashboardData, todoId: string, scopeCwd?: string): YoloTodoRow | undefined {
-  const matches = data.todos.filter((todo) => todo.id === todoId)
-  if (scopeCwd) return matches.find((todo) => scopeOf(todo, data) === scopeCwd)
-  // Legacy single-workspace notifications may have no explicit cwd. Never
-  // guess when the same todo id exists in more than one loaded workspace.
-  return matches.length === 1 ? matches[0] : undefined
 }
 
 function reasonLabelKey(value: string): string {
@@ -275,16 +263,6 @@ export function buildTodaySurfaceModel(
     const row = mapHomeRow(todo)
     upcomingRows.push(row)
     openItemKeys.add(row.key)
-  }
-
-  // Reminder cards render on Today after the task lists. A future/open todo
-  // with an unhandled reminder must therefore contribute to the tab count,
-  // while duplicate cards and todos already carried above remain one item.
-  for (const notification of data.notifications) {
-    if (notification.handled || notification.kind !== 'reminder' || !notification.todo_id) continue
-    const notificationScope = notification.scope_cwd ?? notification.ws?.cwd
-    const todo = findNotificationTodo(data, notification.todo_id, notificationScope)
-    if (todo && isOpen(todo.status)) openItemKeys.add(scopedTodoKey(todo, data))
   }
 
   const partial = serverSummary?.partial === true || (data.workspaceErrors?.length ?? 0) > 0

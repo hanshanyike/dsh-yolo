@@ -15,6 +15,7 @@ import { registerActionsEndpoint } from './actions.ts'
 import { Config, type Config as ConfigSchema } from './config.ts'
 import { registerDashboardEndpoint, type WebServerLike } from './dashboard.ts'
 import { registerBadgeEndpoint } from './badge.ts'
+import { registerNotificationsEndpoint } from './notifications.ts'
 import { YoloSessions, YoloChatThreads, registerSessionEndpoints, isYoloSessionId, type AgentsLike } from './session.ts'
 import { sessionCwd } from '../shared/session.ts'
 
@@ -70,6 +71,7 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
     focusDefaultCount: () => configSource().ui.focusDefaultCount,
   })
   registerBadgeEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
+  registerNotificationsEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
   // M8: in-place dashboard operations (complete/postpone/cancel + goal/milestone)
   // v0.3.0 E: + update/rename/abandon/quick_add/handled + snapshot sync
   registerActionsEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())

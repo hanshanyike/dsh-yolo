@@ -67,23 +67,24 @@ test('W5: sending remains visibly in progress until an assistant reply arrives',
   await expect(pending).toBeVisible({ timeout: 1_500 })
 })
 
-test('notification cards preserve all user-authored body lines', async ({ page }) => {
+test('notification record preserves all user-authored body lines without duplicating Home actions', async ({ page }) => {
   const fx = createFixtures(api)
   const title = `[E2E] ${Date.now()} 客户访谈纪要提醒`
   const secondLine = '请同时抄送负责用户研究的同事'
   await fx.notification(title, { note: `先发送给产品组\\n${secondLine}` })
   try {
     await openYoloPanel(page)
-    const card = page.locator('.notif').filter({ hasText: title })
+    await page.getByRole('button', { name: /^通知/u }).click()
+    const card = page.locator('.notification-log__item').filter({ hasText: title })
     await expect(card).toBeVisible()
     await expect(card).toContainText(secondLine, { timeout: 1_000 })
-    await expect(card.getByRole('button', { name: '讨论这条提醒' })).toBeVisible()
+    await expect(card.getByRole('button', { name: /完成|推迟|知道了|讨论/u })).toHaveCount(0)
   } finally {
     await fx.dispose()
   }
 })
 
-test('brief cards show the full digest without repeating the card title', async ({ page }) => {
+test('brief deliveries expand in the shared notification record without repeating the card title', async ({ page }) => {
   const fx = createFixtures(api)
   const title = `早报 · [E2E] ${Date.now()}`
   const firstLine = '- 优先处理：确认客户方案'
@@ -94,11 +95,13 @@ test('brief cards show the full digest without repeating the card title', async 
   })
   try {
     await openYoloPanel(page)
-    const card = page.locator('.notif').filter({ hasText: firstLine })
+    await page.getByRole('button', { name: /^通知/u }).click()
+    const card = page.locator('.notification-log__item').filter({ hasText: firstLine })
     await expect(card).toBeVisible()
-    await expect(card.locator('.notif-body')).toContainText(lastLine)
-    await expect(card.locator('.notif-body')).not.toContainText(title)
-    await expect(card.getByRole('button', { name: '讨论这份简报' })).toBeVisible()
+    await card.getByRole('button', { name: /展开/u }).click()
+    await expect(card.locator('p')).toContainText(lastLine)
+    await expect(card.locator('p')).not.toContainText(title)
+    await expect(card.getByRole('button', { name: /完成|推迟|知道了|讨论/u })).toHaveCount(0)
   } finally {
     await fx.dispose()
   }

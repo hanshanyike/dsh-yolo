@@ -123,7 +123,7 @@ export const YOLO_CSS = `
 .yolo-scope .head-secondary { border: 1px solid var(--y-line-strong); background: var(--y-surface); color: var(--y-text-2); }
 .yolo-scope .head-secondary:hover, .yolo-scope .head-secondary.on { background: var(--y-surface-2); color: var(--y-text-1); }
 
-/* bell — unhandled-notification signal + jump to today's cards */
+/* bell — unread delivery signal + notification record */
 .yolo-scope .bell { position: relative; }
 .yolo-scope .bell .bnum { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
 .yolo-scope .bell .bdot { position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 999px; background: var(--y-danger); border: 1.5px solid var(--y-surface); }
@@ -235,22 +235,36 @@ export const YOLO_CSS = `
 .yolo-scope .cap.on { background: var(--y-accent-soft); color: var(--y-accent-text); border-color: color-mix(in srgb, var(--y-accent) 40%, transparent); }
 .yolo-scope .cap .num { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 11px; }
 
-/* notification cards — the only surface above the canvas */
-.yolo-scope .notif { position: relative; background: var(--y-surface); border: 1px solid var(--y-line); border-radius: var(--y-r-md); box-shadow: var(--y-e1); padding: 12px 14px 11px 15px; margin-bottom: 8px; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
-.yolo-scope .notif::before { content: ""; position: absolute; left: -1px; top: 10px; bottom: 10px; width: 2px; border-radius: 2px; background: var(--y-accent); }
-.yolo-scope .notif.reminder::before { background: var(--y-danger); }
-.yolo-scope .notif-head { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; color: var(--y-text-2); }
-.yolo-scope .notif-head svg { color: var(--y-text-3); flex: none; }
-.yolo-scope .notif-type { font-size: 13px; font-weight: 650; color: var(--y-text-1); }
-.yolo-scope .notif-time { font-size: 12px; color: var(--y-text-3); margin-left: auto; }
-.yolo-scope .notif-body { font-size: 13.5px; line-height: 20px; color: var(--y-text-1); margin-bottom: 9px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.yolo-scope .notif-body--brief { display: block; overflow: visible; }
-.yolo-scope .notif-brief-text { color: var(--y-text-2); white-space: pre-wrap; }
-.yolo-scope .notif-acts { display: flex; gap: 6px; flex-wrap: wrap; }
-.yolo-scope .notif-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; margin-top: 2px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: none; color: var(--y-text-2); font-size: 12px; cursor: pointer; transition: all var(--y-dur-1); }
-.yolo-scope .notif-more:hover { background: var(--y-surface-2); color: var(--y-text-1); }
-.yolo-scope .notif-more svg { color: var(--y-text-3); transition: transform var(--y-dur-2) var(--y-ease-out); }
-.yolo-scope .notif-more svg.up { transform: rotate(180deg); }
+/* notification record — a chronological reading surface, never a second task board */
+.yolo-scope .notification-log { display: flex; flex-direction: column; min-width: 0; height: 100%; background: var(--y-surface); }
+.yolo-scope .notification-log__head { flex: none; min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--y-line); }
+.yolo-scope .notification-log__head > div { min-width: 0; flex: 1; }
+.yolo-scope .notification-log__head h2 { margin: 0; color: var(--y-text-1); font-size: 16px; line-height: 1.3; outline: none; }
+.yolo-scope .notification-log__head p { margin: 3px 0 0; color: var(--y-text-3); font-size: 11.5px; }
+.yolo-scope .notification-log__body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 24px; }
+.yolo-scope .notification-log__partial, .yolo-scope .notification-log__error { flex: none; margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--y-line); color: var(--y-text-2); background: var(--y-surface-2); font-size: 12px; }
+.yolo-scope .notification-log__error { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--y-danger); }
+.yolo-scope .notification-log__group > h3 { position: sticky; top: -8px; z-index: 1; margin: 0; padding: 10px 2px 6px; background: var(--y-surface); color: var(--y-text-3); font-size: 11px; font-weight: 600; }
+.yolo-scope .notification-log__group ol { list-style: none; margin: 0; padding: 0; }
+.yolo-scope .notification-log__item { position: relative; margin-bottom: 7px; padding: 11px 11px 10px; border: 1px solid var(--y-line); border-radius: var(--y-r-md); background: var(--y-surface); outline: none; }
+.yolo-scope .notification-log__item.is-new { border-left: 2px solid var(--y-accent); padding-left: 10px; }
+.yolo-scope .notification-log__item:focus-visible { box-shadow: 0 0 0 3px var(--y-accent-soft); border-color: var(--y-accent); }
+.yolo-scope .notification-log__meta { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--y-text-3); font-size: 11px; }
+.yolo-scope .notification-log__meta > span { display: inline-flex; align-items: center; gap: 5px; color: var(--y-text-2); font-weight: 600; }
+.yolo-scope .notification-log__meta b { padding: 1px 5px; border-radius: var(--y-r-pill); background: var(--y-accent-soft); color: var(--y-accent-text); font-size: 10px; }
+.yolo-scope .notification-log__meta time { margin-left: auto; font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
+.yolo-scope .notification-log__item > strong { display: block; color: var(--y-text-1); font-size: 13px; line-height: 1.45; }
+.yolo-scope .notification-log__item > p { margin: 5px 0 0; color: var(--y-text-2); font-size: 12px; line-height: 1.55; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.yolo-scope .notification-log__item > p.is-expanded { display: block; overflow: visible; }
+.yolo-scope .notification-log__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 9px; margin-top: 8px; color: var(--y-text-3); font-size: 10.5px; }
+.yolo-scope .notification-log__actions { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
+.yolo-scope .notification-log__more { width: 100%; min-height: 34px; margin-top: 8px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface-2); color: var(--y-text-2); font-size: 12px; }
+.yolo-scope .notification-log__empty { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--y-text-3); text-align: center; }
+.yolo-scope .notification-log__empty h3 { margin: 10px 0 4px; color: var(--y-text-1); font-size: 14px; }
+.yolo-scope .notification-log__empty p { margin: 0; font-size: 12px; }
+.yolo-scope .notification-log__skeleton { display: grid; gap: 8px; padding-top: 4px; }
+.yolo-scope .notification-log__skeleton span { display: block; height: 94px; border: 1px solid var(--y-line); border-radius: var(--y-r-md); background: var(--y-surface-2); animation: yolo-skel 1.2s ease-in-out infinite alternate; }
+@keyframes yolo-skel { from { opacity: .55; } to { opacity: 1; } }
 
 /* buttons */
 .yolo-scope .btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 12px; border-radius: var(--y-r-sm); border: 1px solid transparent; font-size: 12.5px; cursor: pointer; transition: all var(--y-dur-1); white-space: nowrap; }

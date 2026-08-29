@@ -13,7 +13,8 @@
 | `index.ts` | 注册 `settings.plugin.item` 与 `sidebar.footer.action` 两个 slot |
 | `settings/SettingsCard.tsx` / `model.ts` | 设置表单、校验、宿主持久化与回读 |
 | `sidebar/YoloSidebarDashboard.tsx` | 侧栏入口、轻量 badge 轮询和面板挂载 |
-| `panel/YoloPanel.tsx` | 首页/计划/历史 shell、单一前景状态、数据加载、主题与通知聚焦 |
+| `panel/YoloPanel.tsx` | 首页/计划/历史 shell、单一前景状态、数据加载、主题与通知记录入口 |
+| `panel/NotificationLog.tsx` | 完整通知时间流、分页、已读基线和事项跳转 |
 | `panel/navigation.ts` / `PageTabs.tsx` | 页面路由、focus/split 纯派生和一级/二级导航 |
 | `panel/ForegroundContext.tsx` | 来源预览、诚实降级和原会话导航反馈 |
 | `panel/KanbanView.tsx` | 三页面内容、计划筛选、动作编排和事项上下文入口 |
@@ -32,6 +33,7 @@
 - 打开面板时请求一次 `GET /yolo/dashboard`；动作成功与手动刷新后重新拉取。
 - 完整 dashboard 不做 30 秒轮询，避免持续重建跨工作区投影。
 - 侧栏角标独立请求 `GET /yolo/badge`，面板关闭时也可更新。
+- 通知记录独立请求 `GET /yolo/notifications` 并分页；dashboard 的有限通知投影不冒充完整历史。
 - 面板状态只保存视图、筛选和展示偏好；领域数据始终以服务端返回为准。
 
 ## 动作与信任交互
@@ -44,8 +46,10 @@
 feedback 必须回传服务端给出的 `reason_version` 和 `evidence_fingerprint`。客户端不计算或
 覆盖 score、reason、fingerprint。首页的次级“需要关注”行只呈现主理由和去重后的其余结构化
 evidence；完整 explanation 只保留给主助手判断，避免同一事实在一行内复读。
-同一事项的判断、提醒与今日安排在首页合并为一个事项表面；侧栏 badge 仍按 notification 精确计数。
-“知道了”只处理目标 notification，事项保持开放；最新提醒正文随合并事项显示，不因去重丢失用户文本。
+同一事项的判断、提醒与今日安排在首页合并为一个事项表面。“知道了”只处理目标 notification，事项
+保持开放；最新提醒正文随合并事项显示，不因去重丢失用户文本。顶部 badge 只表示 `seen_at IS NULL`
+的新投递；打开通知记录只改变已读状态，不改变提醒处理或事项状态。通知记录不复制完成、推迟、讨论和
+“知道了”，绑定提醒只提供“查看事项”。
 
 ## 对话
 

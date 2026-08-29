@@ -66,10 +66,11 @@ node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/
   保证状态迁移 + 审计事件一致。
 - **看板数据**：`GET /yolo/dashboard` 始终**聚合所有已知工作区**（不在看板中切换工作区）。
   打开时加载一次，动作与手动刷新才重新拉取（**打开时不 30s 轮询**）；侧栏角标独立轻量轮询（关闭时也能更新）。
-- **提醒**：调度器按 `checkIntervalSec` 产生**通知卡**（未处理角标 + 看板卡），并投递到
+- **提醒**：调度器按 `checkIntervalSec` 产生通知投递，并投递到
   **YOLO 常驻线程**（`ctx.yolo` 的 resident thread），**绝不注入或打扰工作会话**。
   页面加载后新到达的提醒还会显示一个右下角非模态提示：10 秒自动消失、点击打开看板、
   历史提醒不补弹、多条不堆叠。
+  顶部角标统计未读投递，完整记录通过独立分页端点读取；`seen_at` 与提醒 `handled_at`、事项状态分离。
   `完成` toast 带 4 秒「撤销」窗口（服务端 `reopen` 领域动作）；提醒正文只给用户可读文本，
   agent 处理规则放 system 段（`memory/recall.ts` 的 yolo-instructions）。
 - **动作归属**：聚合看板上的每一行都带其所在工作区（`ws.cwd`）；`POST /yolo/actions` 按该行

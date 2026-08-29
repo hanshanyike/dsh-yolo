@@ -38,6 +38,8 @@ how to do it. It can:
   conversation, without injecting messages into an active work conversation.
 - **Provide one place to review and act** through Home for current attention,
   Plans for organized commitments, and History for terminal items and recent changes.
+- **Keep notification deliveries traceable** with an unread badge and a paginated
+  notification record; viewing a delivery never changes the underlying item state.
 - **Preserve bounded source evidence** for newly extracted items, with a preview
   before navigating back to the originating host conversation when supported;
   items can retain evidence from multiple sessions, turns, and assistant actions.

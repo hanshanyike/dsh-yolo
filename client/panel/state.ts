@@ -28,6 +28,12 @@ const state: PanelUiState = {
 
 function cloneForeground(foreground: PanelForeground): PanelForeground {
   if (foreground.kind === 'none' || foreground.kind === 'assistant_chat') return { ...foreground }
+  if (foreground.kind === 'notification_log') {
+    return {
+      ...foreground,
+      returnTo: foreground.returnTo ? cloneForeground(foreground.returnTo) as typeof foreground.returnTo : undefined,
+    }
+  }
   if (foreground.kind === 'source_preview') {
     return {
       ...foreground,

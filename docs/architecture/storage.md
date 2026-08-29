@@ -46,6 +46,10 @@ Markdown 快照只是可读、可 diff 的审阅投影；当前没有从快照�
 `client_actions`、`extraction_log`、`pending_reminders`、`recall_log`、`todo_evidence`，以及 FTS5 虚表
 `yolo_fts`。`pending_reminders` 仅为兼容旧库保留，当前主动提醒不再向工作会话回放它。
 
+`notifications.seen_at` 表示投递是否已查看，驱动通知按钮；`handled_at` 表示提醒是否已经被用户回应或
+关联事项动作消解，驱动首页提醒投影。两者不能互相回填。旧库首次增加 `seen_at` 时以迁移时刻建立阅读
+基线，避免升级后把全部历史重放为新通知；跨 scope 导入的旧通知同样视为历史记录。
+
 单库 schema 迁移由 `db.ts` 使用 `PRAGMA table_info` 后执行 `ALTER TABLE`；跨分支库合并由
 `migrate-scope.ts` 负责。SQLite 不支持 `ADD COLUMN IF NOT EXISTS`，不能把列迁移简化成该语法。
 

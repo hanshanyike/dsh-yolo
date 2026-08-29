@@ -79,7 +79,7 @@ export function ReminderPopup({ popup, onOpen, onDismiss, durationMs = 10_000 }:
           <span className="yolo-reminder-popup__kind">{label}</span>
           <strong>{cleanText(notification.title)}</strong>
           {notification.body && <span className="yolo-reminder-popup__detail">{cleanText(notification.body)}</span>}
-          {popup.additional > 0 && <span className="yolo-reminder-popup__more">另有 {popup.additional} 条新提醒</span>}
+          {popup.additional > 0 && <span className="yolo-reminder-popup__more">另有 {popup.additional} 条新通知</span>}
         </span>
         <span className="yolo-reminder-popup__open">查看</span>
       </button>

@@ -55,6 +55,18 @@ describe('panel navigation state machine', () => {
     expect(escapePanel(first.state)).toEqual({ action: 'close_panel' })
   })
 
+  it('temporarily replaces and restores an existing foreground with the notification record', () => {
+    const detail = openForeground(DEFAULT_PANEL_NAVIGATION, { kind: 'item_detail', item: itemA }, 'todo-a')
+    const notifications = openForeground(detail, {
+      kind: 'notification_log', targetId: 'notice-a', returnTo: detail.foreground.kind === 'item_detail' ? detail.foreground : undefined,
+      returnToFocusId: detail.returnFocusId,
+    }, 'yolo-notifications')
+    expect(notifications.foreground).toMatchObject({ kind: 'notification_log', targetId: 'notice-a' })
+    expect(backFromForeground(notifications)).toMatchObject({
+      foreground: { kind: 'item_detail', item: itemA }, returnFocusId: 'todo-a',
+    })
+  })
+
   it('uses scope and id together for cross-workspace identity', () => {
     expect(samePanelItem(itemA, { ...itemA })).toBe(true)
     expect(samePanelItem(itemA, itemB)).toBe(false)

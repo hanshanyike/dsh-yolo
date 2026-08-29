@@ -9,15 +9,15 @@ function reminder(id: string, createdAt: number): YoloBadgeNotification {
   return { id, kind: 'reminder', title: `提醒 ${id}`, created_at: createdAt }
 }
 
-function badge(rows: YoloBadgeNotification[], unhandled = rows.length): YoloBadgeData {
-  return { unhandled, recentReminders: rows }
+function badge(rows: YoloBadgeNotification[], unseen = rows.length): YoloBadgeData {
+  return { unseen, unhandled: rows.length, recentNotifications: rows, recentReminders: rows.filter((row) => row.kind === 'reminder') }
 }
 
 describe('reminder popup observation', () => {
   it('uses the first complete poll as a baseline instead of replaying unread history', () => {
     const result = observeReminderBadge(INITIAL_REMINDER_OBSERVATION, badge([reminder('historical', 100)], 8))
     expect(result.popup).toBeUndefined()
-    expect(result.state).toMatchObject({ initialized: true, unhandled: 8, maxCreatedAt: 100 })
+    expect(result.state).toMatchObject({ initialized: true, unseen: 8, maxCreatedAt: 100 })
   })
 
   it('does not establish or advance a baseline from a partial aggregate', () => {
@@ -42,11 +42,11 @@ describe('reminder popup observation', () => {
     expect(afterHandled.popup).toBeUndefined()
   })
 
-  it('accepts unseen equal-timestamp rows and ignores non-reminder feed entries', () => {
+  it('accepts unseen equal-timestamp rows and surfaces brief deliveries', () => {
     const baseline = observeReminderBadge(INITIAL_REMINDER_OBSERVATION, badge([reminder('first', 200)])).state
     const brief: YoloBadgeNotification = { id: 'brief', kind: 'brief', title: '早报', created_at: 300 }
     const equalTimestamp = observeReminderBadge(baseline, badge([brief, reminder('second', 200), reminder('first', 200)]))
-    expect(equalTimestamp.popup).toEqual({ notification: reminder('second', 200), additional: 0 })
+    expect(equalTimestamp.popup).toEqual({ notification: brief, additional: 1 })
   })
 
   it('deduplicates by workspace and id rather than a raw id alone', () => {
@@ -56,7 +56,7 @@ describe('reminder popup observation', () => {
     expect(observeReminderBadge(baseline, badge([second, first])).popup?.notification).toEqual(second)
   })
 
-  it('surfaces a replacement reminder even when the total unhandled count is unchanged', () => {
+  it('surfaces a replacement delivery even when the total unseen count is unchanged', () => {
     const baseline = observeReminderBadge(INITIAL_REMINDER_OBSERVATION, badge([reminder('old', 100)], 3)).state
     const replacement = observeReminderBadge(baseline, badge([reminder('replacement', 200)], 3))
     expect(replacement.popup?.notification.id).toBe('replacement')

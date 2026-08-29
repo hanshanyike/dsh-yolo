@@ -39,6 +39,10 @@ export interface Api {
   action: (body: Record<string, unknown>) => Promise<Record<string, unknown>>
   /** GET /yolo/dashboard. */
   dashboard: () => Promise<Record<string, any>>
+  /** GET /yolo/notifications. */
+  notifications: (cursor?: string) => Promise<Record<string, any>>
+  /** POST /yolo/notifications/seen. */
+  seen: (body: Record<string, unknown>) => Promise<Record<string, any>>
   close: () => Promise<void>
 }
 
@@ -152,7 +156,18 @@ export async function connectApi(): Promise<Api> {
     if (!r.ok()) throw new Error(`dashboard failed: ${r.status()}`)
     return r.json()
   }
-  return { req, action, dashboard, close: () => req.dispose() }
+  const notifications = async (cursor?: string): Promise<Record<string, any>> => {
+    const r = await retry(() => req.get('/yolo/notifications', { params: cursor ? { cursor } : undefined }))
+    if (!r.ok()) throw new Error(`notifications failed: ${r.status()}`)
+    return r.json()
+  }
+  const seen = async (body: Record<string, unknown>): Promise<Record<string, any>> => {
+    const r = await retry(() => req.post('/yolo/notifications/seen', { data: body }))
+    const data = await r.json().catch(() => ({})) as Record<string, any>
+    if (!r.ok() || data.ok !== true) throw new Error(`seen failed: ${r.status()} ${JSON.stringify(data)}`)
+    return data
+  }
+  return { req, action, dashboard, notifications, seen, close: () => req.dispose() }
 }
 
 /** Create a todo via the real endpoint; returns its row. */
@@ -188,7 +203,7 @@ export async function authorNotification(
  */
 export function createFixtures(api: Api) {
   const todoIds: string[] = []
-  const notificationIds: string[] = []
+  const notifications: Array<{ id: string; scope_cwd?: string }> = []
   return {
     /** Create a todo through the real endpoint and track it. */
     async todo(title: string, opts: { due?: string } = {}): Promise<Record<string, any>> {
@@ -202,16 +217,19 @@ export function createFixtures(api: Api) {
       opts: { note?: string; notifKind?: 'reminder' | 'brief'; todoId?: string } = {},
     ): Promise<Record<string, any>> {
       const item = await authorNotification(api, title, opts)
-      notificationIds.push(String(item.id))
+      notifications.push({ id: String(item.id), scope_cwd: typeof item.scope_cwd === 'string' ? item.scope_cwd : undefined })
       return item
     },
     /** Register an id created outside this tracker (e.g. via browser UI). */
     trackTodo(id: string): void { todoIds.push(id) },
-    trackNotification(id: string): void { notificationIds.push(id) },
+    trackNotification(id: string): void { notifications.push({ id }) },
     /** Handle tracked notifications, then cancel tracked todos (reverse order). */
     async dispose(): Promise<void> {
-      for (const id of [...notificationIds].reverse()) {
-        await api.action({ action: 'handled', kind: 'notification', id }).catch(() => {})
+      for (const notification of [...notifications].reverse()) {
+        if (notification.scope_cwd) {
+          await api.seen({ notification: { id: notification.id, scope_cwd: notification.scope_cwd } }).catch(() => {})
+        }
+        await api.action({ action: 'handled', kind: 'notification', id: notification.id }).catch(() => {})
       }
       for (const id of [...todoIds].reverse()) {
         await api.action({ action: 'cancel', kind: 'todo', id }).catch(() => {})

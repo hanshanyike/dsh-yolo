@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData, YoloTodoRow } from '../../src/shared/dashboard.ts'
+import type { YoloBadgeNotification } from '../../src/shared/badge.ts'
 import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/shared/actions.ts'
 import { buildDashboardSurfaces } from '../../src/shared/dashboard-surfaces.ts'
 import {
@@ -24,6 +25,7 @@ import { IcBell, IcCheck, IcChevron, IcClose, IcFilter } from '../design/icons.t
 import { YoloLogo } from '../YoloLogo.tsx'
 import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
 import { KanbanView, type BoardSurfaceKey } from './KanbanView.tsx'
+import { NotificationLog } from './NotificationLog.tsx'
 import { MoreMenu } from './MoreMenu.tsx'
 import { HistoryTabs, PageTabs, PlanTabs } from './PageTabs.tsx'
 import { ForegroundContext, type SessionNavigationState } from './ForegroundContext.tsx'
@@ -50,8 +52,12 @@ export interface YoloPanelProps {
   onClose: () => void
   /** Jump to a dsh session (ledger source badges); no-op when unavailable. */
   openSession?: (sessionId: string) => void | Promise<void>
-  /** Increments when an external reminder signal asks to refresh and focus notifications. */
-  notificationFocusRequest?: number
+  /** Increments when a new delivery asks the open panel to refresh without stealing foreground. */
+  notificationRefreshRequest?: number
+  /** Explicit popup click: navigate to its todo or notification record. */
+  notificationOpenRequest?: { sequence: number; notification: YoloBadgeNotification }
+  /** Keep the always-on sidebar badge in sync with notification-log actions. */
+  onUnseenChange?: (unseen: number, revision: number) => void
   /** Host-owned durable theme preference. Optional only for isolated renders. */
   themeControl?: { set: (theme: 'dark' | 'light') => void }
   /** Greeting selected by the sidebar for this panel opening. */
@@ -96,7 +102,16 @@ function detailDraftFor(todo: YoloTodoRow): TaskEditDraft {
   }
 }
 
-export function YoloPanel({ left, onClose, openSession, notificationFocusRequest = 0, themeControl, surfaceLabel = '一起把事情理顺' }: YoloPanelProps): JSX.Element {
+export function YoloPanel({
+  left,
+  onClose,
+  openSession,
+  notificationRefreshRequest = 0,
+  notificationOpenRequest,
+  onUnseenChange,
+  themeControl,
+  surfaceLabel = '一起把事情理顺',
+}: YoloPanelProps): JSX.Element {
   ensureYoloStyle()
   const [theme, setTheme] = useState<'dark' | 'light'>(() => detectYoloTheme())
 
@@ -106,7 +121,6 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   const [navigation, setNavigation] = useState<PanelNavigationState>(initial.navigation)
   const [discussionThreads, setDiscussionThreads] = useState<Record<string, string>>(initial.discussionThreads)
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
-  const [notifFocusTick, setNotifFocusTick] = useState(0)
   const [sessionNavigation, setSessionNavigation] = useState<SessionNavigationState>({ status: 'idle' })
   const [detailDraft, setDetailDraft] = useState<TaskEditDraft | null>(null)
   const [detailBusy, setDetailBusy] = useState(false)
@@ -115,10 +129,13 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
   const [detailError, setDetailError] = useState<string | null>(null)
   const [sweepTick, setSweepTick] = useState(0)
   const lastSig = useRef<string | null>(null)
-  const previousNotificationFocusRequest = useRef<number | null>(null)
+  const previousNotificationRefreshRequest = useRef<number | null>(null)
+  const previousNotificationOpenSequence = useRef<number | null>(null)
+  const unseenRevisionRef = useRef(0)
   const fltBtnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const chatToggleRef = useRef<HTMLButtonElement>(null)
+  const notificationButtonRef = useRef<HTMLButtonElement>(null)
   const chatOpenerRef = useRef<HTMLElement | null>(null)
   const contextRef = useRef<HTMLElement>(null)
   const chatReturnTodoIdRef = useRef<string | undefined>(
@@ -163,11 +180,23 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
       const sig = dashboardSignature(data)
       if (lastSig.current !== null && sig !== lastSig.current) setSweepTick((t) => t + 1)
       lastSig.current = sig
+      if (data.unseen !== undefined) {
+        if (data.at >= unseenRevisionRef.current) {
+          unseenRevisionRef.current = data.at
+          onUnseenChange?.(data.unseen, data.at)
+        } else {
+          setState((current) => {
+            if (current.data?.unseen !== undefined) data.unseen = current.data.unseen
+            return { loading: false, error: null, data }
+          })
+          return
+        }
+      }
       setState({ loading: false, error: null, data })
     } catch (e) {
       setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
     }
-  }, [])
+  }, [onUnseenChange])
 
   // Persist view state so reopening keeps the filter and side chat (TA-6).
   useEffect(() => { writePanelState({ filter }) }, [filter])
@@ -194,18 +223,24 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
         : { page: 'history', section: 'completed' })
   }, [setRoute])
 
-  // One request owns both refresh and focus. Waiting for load prevents a tick
-  // against an old board whose notification section has not mounted yet.
+  useEffect(() => { void load() }, [load])
+
+  // New deliveries refresh the board but never change route or foreground.
   useEffect(() => {
-    const shouldFocus = notificationFocusRequest > 0 && previousNotificationFocusRequest.current !== notificationFocusRequest
-    previousNotificationFocusRequest.current = notificationFocusRequest
-    if (shouldFocus) setRoute({ page: 'home' })
-    let active = true
-    void load().then(() => {
-      if (active && shouldFocus) setNotifFocusTick((tick) => tick + 1)
-    })
-    return () => { active = false }
-  }, [load, notificationFocusRequest, setRoute])
+    const shouldRefresh = notificationRefreshRequest > 0
+      && previousNotificationRefreshRequest.current !== notificationRefreshRequest
+    previousNotificationRefreshRequest.current = notificationRefreshRequest
+    if (shouldRefresh) void load()
+  }, [load, notificationRefreshRequest])
+
+  const updateUnseen = useCallback((unseen: number, revision: number): void => {
+    if (revision < unseenRevisionRef.current) return
+    unseenRevisionRef.current = revision
+    setState((current) => current.data
+      ? { ...current, data: { ...current.data, unseen } }
+      : current)
+    onUnseenChange?.(unseen, revision)
+  }, [onUnseenChange])
 
   const focusChatOpener = useCallback((returnFocusId = navigation.returnFocusId, todoId = chatReturnTodoIdRef.current): void => {
     window.setTimeout(() => {
@@ -241,9 +276,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
 
   const closeForeground = useCallback((): void => {
     const returnFocusId = navigation.returnFocusId
-    const returnTodoId = navigation.foreground.kind === 'none' ? undefined : navigation.foreground.kind === 'assistant_chat'
-      ? undefined
-      : navigation.foreground.item.id
+    const returnTodoId = 'item' in navigation.foreground ? navigation.foreground.item.id : undefined
     setNavigation((current) => {
       if (current.foreground.kind === 'item_discussion') {
         const key = `${current.foreground.item.scopeCwd}\u0000${current.foreground.item.id}`
@@ -265,9 +298,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
 
   const backForeground = useCallback((): void => {
     const returnFocusId = navigation.returnFocusId
-    const returnTodoId = navigation.foreground.kind === 'none' || navigation.foreground.kind === 'assistant_chat'
-      ? undefined
-      : navigation.foreground.item.id
+    const returnTodoId = 'item' in navigation.foreground ? navigation.foreground.item.id : undefined
     setNavigation((current) => backFromForeground(current))
     setSessionNavigation({ status: 'idle' })
     if (navigation.foreground.kind === 'item_detail') {
@@ -376,6 +407,53 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     setNavigation((current) => openForeground(current, { kind: 'item_detail', item }, `todo-${todo.id}`))
   }, [state.data?.cwd])
 
+  const openNotificationLog = useCallback((targetId?: string): void => {
+    chatOpenerRef.current = notificationButtonRef.current
+    chatReturnTodoIdRef.current = undefined
+    setNavigation((current) => {
+      if (current.foreground.kind === 'notification_log') {
+        if (targetId && current.foreground.targetId !== targetId) {
+          return { ...current, foreground: { ...current.foreground, targetId } }
+        }
+        return backFromForeground(current)
+      }
+      const returnTo = current.foreground.kind === 'none' ? undefined : current.foreground
+      return openForeground(current, {
+        kind: 'notification_log',
+        targetId,
+        returnTo,
+        returnToFocusId: current.returnFocusId,
+      }, 'yolo-notifications')
+    })
+  }, [])
+
+  useEffect(() => {
+    const request = notificationOpenRequest
+    if (!request || !state.data || previousNotificationOpenSequence.current === request.sequence) return
+    previousNotificationOpenSequence.current = request.sequence
+    const notification = request.notification
+    void fetch('/yolo/notifications/seen', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ notification: { id: notification.id, scope_cwd: notification.scope_cwd } }),
+    }).then(async (response) => {
+      if (!response.ok) return
+      const outcome = await response.json() as { unseen: number; revision: number }
+      updateUnseen(outcome.unseen, outcome.revision)
+    }).catch(() => {})
+
+    if (notification.kind === 'reminder' && notification.todo_id) {
+      const todo = state.data.todos.find((row) => row.id === notification.todo_id
+        && (row.scope_cwd ?? row.ws?.cwd ?? state.data!.cwd) === notification.scope_cwd)
+      if (todo) {
+        setRoute({ page: 'home' })
+        openItemDetail(todo)
+        return
+      }
+    }
+    openNotificationLog(notification.id)
+  }, [notificationOpenRequest, openItemDetail, openNotificationLog, setRoute, state.data, updateUnseen])
+
   const navigateToSourceSession = useCallback((sessionId: string): void => {
     if (!openSession) {
       setSessionNavigation({ status: 'error', message: '当前宿主不支持打开会话。' })
@@ -431,7 +509,9 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
     }
   }, [state.data])
 
-  const unhandled = state.data?.unhandled ?? 0
+  const unseen = state.data?.unseen ?? 0
+  const notificationPartial = state.data?.summary?.partial === true
+    || (state.data?.workspaceErrors?.length ?? 0) > 0
   const rangeActive = filter.rangeFrom !== null || filter.rangeTo !== null
   const milestoneTitles = useMemo(() => state.data?.milestones.map((m) => m.title) ?? [], [state.data])
 
@@ -615,7 +695,6 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
                 entity: 'change',
               }, source)
             }}
-            notifFocusTick={notifFocusTick}
           />
         </div>
       )}
@@ -707,7 +786,9 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
       ? foreground.item.title
       : foreground.kind === 'item_detail'
         ? '事项详情'
-        : foreground.kind === 'source_preview' ? '来源' : ''
+        : foreground.kind === 'source_preview'
+          ? '来源'
+          : foreground.kind === 'notification_log' ? '通知' : ''
   const contextContent = foreground.kind === 'assistant_chat' || foreground.kind === 'item_discussion'
     ? <ChatPane variant={presentation === 'split' ? 'side' : 'full'} anchor={foreground.kind === 'item_discussion' ? chatAnchor : null} threadKey={chatThread} onDashboardRefresh={load} />
     : foreground.kind === 'item_detail' && foregroundTodo && detailDraft
@@ -745,6 +826,22 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
             onOpenSession={navigateToSourceSession}
           />
         )
+      : foreground.kind === 'notification_log'
+        ? (
+            <NotificationLog
+              targetId={foreground.targetId}
+              refreshRequest={notificationRefreshRequest}
+              onClose={backForeground}
+              onUnseenChange={updateUnseen}
+              onOpenTodo={(notification) => {
+                const todo = state.data?.todos.find((row) => row.id === notification.todo?.id
+                  && (row.scope_cwd ?? row.ws?.cwd ?? state.data!.cwd) === notification.scope_cwd)
+                if (!todo) return
+                setRoute({ page: 'home' })
+                openItemDetail(todo)
+              }}
+            />
+          )
       : null
 
   return (
@@ -771,15 +868,22 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
             <span>和助手聊聊</span>
           </button>
           <button
+            ref={notificationButtonRef}
             type="button"
-            className="head-secondary bell"
-            onClick={() => { setRoute({ page: 'home' }); setNotifFocusTick((tick) => tick + 1) }}
-            title={unhandled > 0 ? `${unhandled} 条未处理提醒，点击查看` : '通知'}
-            aria-label={unhandled > 0 ? `通知，${unhandled} 条未处理` : '通知，无未处理消息'}
+            className={`head-secondary bell${foreground.kind === 'notification_log' ? ' on' : ''}`}
+            aria-expanded={foreground.kind === 'notification_log'}
+            aria-controls="yolo-notification-log"
+            onClick={() => { openNotificationLog() }}
+            title={unseen > 0
+              ? notificationPartial ? `至少 ${unseen} 条新通知，部分工作区不可用` : `${unseen} 条新通知，点击查看`
+              : notificationPartial ? '通知，部分工作区不可用' : '通知'}
+            aria-label={unseen > 0
+              ? notificationPartial ? `通知，至少 ${unseen} 条新通知，部分工作区不可用` : `通知，${unseen} 条新通知`
+              : notificationPartial ? '通知，无新通知，部分工作区不可用' : '通知，无新通知'}
           >
             <IcBell size={13} /><span>通知</span>
-            {unhandled > 0 && <span className="bnum">{unhandled}</span>}
-            {unhandled > 0 && <span className="bdot" />}
+            {unseen > 0 && <span className="bnum">{unseen > 99 ? '99+' : notificationPartial ? `${unseen}+` : unseen}</span>}
+            {unseen > 0 && <span className="bdot" />}
           </button>
           <MoreMenu
             loading={state.loading}

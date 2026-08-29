@@ -219,11 +219,13 @@ function importAttached(db: DB, scopeKey: string, cwd: string, source: string, w
      WHERE excluded.updated_at > session_summaries.updated_at`,
   ).run(scopeKey)
 
-  const notificationColumns = ['id', 'kind', 'title', 'body', 'todo_id', 'scope_cwd', 'created_at', 'handled_at', 'scope_key']
+  const notificationColumns = ['id', 'kind', 'title', 'body', 'todo_id', 'scope_cwd', 'created_at', 'seen_at', 'handled_at', 'scope_key']
   mergeIdTable(db, source, 'notifications', notificationColumns, notificationColumns.filter((c) => c !== 'scope_key' && c !== 'scope_cwd'), (row) => ({
     ...row,
     todo_id: row.todo_id == null ? null : todoMap.get(String(row.todo_id)) ?? row.todo_id,
     scope_cwd: cwd,
+    // A legacy branch import is historical by definition. Never replay it as new.
+    seen_at: row.seen_at ?? row.handled_at ?? Date.now(),
     scope_key: scopeKey,
   }))
 
