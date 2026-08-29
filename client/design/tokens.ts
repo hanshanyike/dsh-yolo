@@ -201,6 +201,7 @@ export const YOLO_CSS = `
 .yolo-scope .cap-input::placeholder { color: var(--y-text-3); }
 .yolo-scope .enter-hint { font-size: 11px; color: var(--y-text-3); transition: color var(--y-dur-1); font-family: var(--y-font-mono); }
 .yolo-scope .enter-hint.lit { color: var(--y-accent-text); }
+.yolo-scope .chat-pane-shell .enter-hint { min-width: 18px; font-size: 16px; line-height: 1; text-align: center; }
 .yolo-scope .capture-submit { flex: none; height: 44px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); border-radius: var(--y-r-sm); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); color: var(--y-text-1); font-size: 13px; font-weight: 700; cursor: pointer; transition: background var(--y-dur-1), border-color var(--y-dur-1), opacity var(--y-dur-1); white-space: nowrap; }
 .yolo-scope .capture-submit:hover:not(:disabled) { background: color-mix(in srgb, var(--y-focus) 18%, var(--y-surface)); border-color: var(--y-focus); }
 .yolo-scope .capture-submit:disabled { opacity: .45; cursor: default; }

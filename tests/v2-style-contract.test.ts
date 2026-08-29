@@ -80,6 +80,11 @@ describe('dashboard v2 Mono style contract', () => {
     expect(YOLO_CSS).toContain('min-height: 0; overflow: hidden')
   })
 
+  it('keeps the assistant chat Enter affordance legible', () => {
+    expect(YOLO_CSS).toContain('.yolo-scope .chat-pane-shell .enter-hint')
+    expect(YOLO_CSS).toContain('font-size: 16px; line-height: 1')
+  })
+
   it('defines compact and fluid presentation layouts without a fixed viewport split', () => {
     const css = v2Css()
     expect(css).toContain('.yolo-scope.compact .v2-today-row')
