@@ -1,7 +1,7 @@
 // api 套件 · HTTP 接口测试（无浏览器）— domain-action contracts over plain HTTP, no browser.
 //
 // P35: two seeded todos → POST consolidate → target keeps merged fields,
-// source is cancelled (gone from the open board), one todo_consolidated event
+// source becomes a merged historical record (gone from the business board), one todo_consolidated event
 // lands in the day ledger.
 // P34: an invalid action is rejected with 400 and leaves an action_denied
 // audit row in the ledger — a denial must never be silent.
@@ -44,8 +44,12 @@ test('合并两条待办：保留方继承字段、被并方退场、审计保�
   const rows = (d.todos ?? []) as { id: string; title: string; status: string }[]
   const src = rows.find((t) => t.id === source.id)
   const dst = rows.find((t) => t.id === target.id)
-  expect(src?.status).toBe('cancelled')
+  expect(src).toBeUndefined()
   expect(dst?.status).toBe('pending')
+  const merged = withWorkspaceDatabase(dst!, (db) => db.prepare(
+    'SELECT status, record_status, merged_into_id FROM todos WHERE id = ?',
+  ).get(source.id) as Record<string, unknown> | undefined)
+  expect(merged).toMatchObject({ status: 'pending', record_status: 'merged', merged_into_id: target.id })
 
   const ledger = (d.ledger ?? []) as { kind: string; summary: string }[]
   const ev = ledger.find((e) => e.kind === 'todo_consolidated')

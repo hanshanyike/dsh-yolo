@@ -22,6 +22,14 @@ interface DashboardTodo {
     created_at?: number | null
     workspace?: { slug: string; label: string; cwd?: string }
   }
+  sources?: Array<{
+    type: 'session' | 'manual' | 'tool' | 'legacy'
+    session_id?: string | null
+    origin_kind?: 'human' | 'assistant_action' | 'panel_action' | 'extraction'
+    relation?: string
+  }>
+  source_count?: number
+  related_session_count?: number
 }
 
 let api: Api
@@ -80,6 +88,34 @@ test('SRC-01: 快速记录通过真实 HTTP/SQLite 保存为 manual，capability
     'SELECT source, session_id, source_excerpt, source_turn FROM todos WHERE id = ?',
   ).get(row.id) as Record<string, unknown>)
   expect(persisted).toEqual({ source: 'manual', session_id: null, source_excerpt: null, source_turn: null })
+})
+
+test('TI-02/TI-05: 同一事项累积面板与助手会话证据，稳定动作重放不重复', async () => {
+  const created = await fx.todo(uid('确认客户交付窗口'))
+  const sessionId = `e2e-assistant-action-${Date.now()}`
+  const action = {
+    action: 'complete', kind: 'todo', id: String(created.id),
+    session_id: sessionId, client_action_id: `e2e-complete-${created.id}`,
+  }
+
+  const first = await api.action(action)
+  const replay = await api.action(action)
+  expect(replay).toEqual(first)
+
+  const { row } = await dashboardTodo(String(created.id))
+  expect(row).toMatchObject({ source_count: 2, related_session_count: 1 })
+  expect(row.sources).toEqual(expect.arrayContaining([
+    expect.objectContaining({ origin_kind: 'panel_action', relation: 'origin', session_id: null }),
+    expect.objectContaining({ origin_kind: 'assistant_action', relation: 'completion_claim', session_id: sessionId }),
+  ]))
+  const evidence = withWorkspaceDatabase(row, (db) => db.prepare(
+    'SELECT source_kind, relation, session_id FROM todo_evidence WHERE todo_id = ? ORDER BY occurred_at, rowid',
+  ).all(row.id) as Array<Record<string, unknown>>)
+  expect(evidence).toHaveLength(2)
+  expect(evidence).toEqual(expect.arrayContaining([
+    expect.objectContaining({ source_kind: 'panel_action', relation: 'origin', session_id: null }),
+    expect.objectContaining({ source_kind: 'assistant_action', relation: 'completion_claim', session_id: sessionId }),
+  ]))
 })
 
 test('SRC-01/SRC-03: session 来源保留 Unicode 有界摘录、可选 turn、精确 workspace owner，并与 SQLite 一致', async () => {

@@ -63,7 +63,7 @@ test('视口虽宽于 960px、宿主让位后可用宽度不足时，详情、�
   }
 
   const row = page.locator('.v2-judgment, .v2-today-row').filter({ hasText: title })
-  await row.getByRole('button', { name: '处理', exact: true }).click()
+  await row.getByRole('button', { name: /^(?:处理|更多处理)$/u }).click()
   await assertFocusFillsPanel('item_detail')
 
   await page.getByRole('dialog', { name: title }).getByRole('button', { name: /^快速记一条/u }).click()

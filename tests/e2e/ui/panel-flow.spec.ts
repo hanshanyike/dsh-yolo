@@ -113,14 +113,17 @@ test('完成任务弹出撤销，4 秒内撤销后任务恢复原位（TA-3 / 5.
   // Complete from whichever approved v2 presentation owns the task.
   await completeTask(page, title)
   const toast = page.locator('.toast').filter({ hasText: '已完成' })
-  await expect(toast).toBeVisible()
-  await expect(toast.locator('button', { hasText: '撤销' })).toBeVisible()
+  const receiptUndo = page.getByRole('button', { name: '撤销变化', exact: true })
+  await expect(toast.or(receiptUndo)).toBeVisible()
   // the row retires from the open sections
   await expect(taskFor(page, title)).toHaveCount(0)
 
   // undo within the 4s window restores it
-  await toast.locator('button', { hasText: '撤销' }).click()
-  await expect(page.locator('.toast').filter({ hasText: '已撤销' })).toBeVisible()
+  if (await toast.isVisible()) await toast.locator('button', { hasText: '撤销' }).click()
+  else await receiptUndo.click()
+  await waitForDashboard(api, (dashboard) => (
+    (dashboard.todos ?? []).some((row: Record<string, unknown>) => row.title === title && row.status === 'pending')
+  ), { label: 'completed todo to reopen through the available undo receipt' })
   await expect(taskFor(page, title)).toBeVisible()
 })
 
@@ -156,10 +159,17 @@ test('W2/W11/W16: 同日精确 datetime 到时后进入逾期事实与摘要', a
   await fx.todo(title, { due: localDateTime(new Date(Date.now() - 60_000)) })
   const futureTitle = uid('稍后确认研发联调结果')
   await fx.todo(futureTitle, { due: localDateTime(new Date(Date.now() + 3_600_000)) })
+  await waitForDashboard(api, (dashboard) => {
+    const past = (dashboard.todos ?? []).find((row: Record<string, unknown>) => row.title === title)
+    const future = (dashboard.todos ?? []).find((row: Record<string, unknown>) => row.title === futureTitle)
+    return past?.overdue === true && future?.overdue === false
+  }, { label: 'same-day datetime overdue projection' })
 
   await openYoloPanel(page)
   await revealHomeItems(page)
-  await expect(taskFor(page, title)).toContainText(/逾期|已超过截止时间/)
+  // The reminder scheduler may fire before paint; reminder_due outranks the
+  // overdue judgment, while the row and summary still retain overdue=true.
+  await expect(taskFor(page, title)).toContainText(/逾期|已超过截止时间|未处理提醒/)
   await expect(taskFor(page, futureTitle)).not.toContainText(/逾期|已超过截止时间/)
   await expect(page.locator('.v2-today-surface > header')).toContainText(/逾期 \d+ 件/)
 })

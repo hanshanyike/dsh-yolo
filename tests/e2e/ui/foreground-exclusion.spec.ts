@@ -44,7 +44,7 @@ test('事项详情与来源预览共用前景，返回后保留编辑草稿', as
   await revealHomeItems(page)
 
   const homeRow = page.locator('.v2-judgment, .v2-today-row').filter({ hasText: title })
-  await homeRow.getByRole('button', { name: '处理', exact: true }).click()
+  await homeRow.getByRole('button', { name: /^(?:处理|更多处理)$/u }).click()
   const detail = page.getByRole('dialog', { name: title })
   await expect(detail).toBeVisible()
   await expect(page.locator('.panel-frame > div > aside')).toHaveCount(1)
