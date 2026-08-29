@@ -222,6 +222,18 @@ export function createFixtures(api: Api) {
     },
     /** Register an id created outside this tracker (e.g. via browser UI). */
     trackTodo(id: string): void { todoIds.push(id) },
+    /** Stop cleanup from issuing a cancelling action after a fixture was permanently deleted. */
+    untrackTodo(id: string): void {
+      for (let index = todoIds.length - 1; index >= 0; index--) {
+        if (todoIds[index] === id) todoIds.splice(index, 1)
+      }
+    },
+    /** Stop cleanup after a permanently deleted todo cascaded its notification. */
+    untrackNotification(id: string): void {
+      for (let index = notifications.length - 1; index >= 0; index--) {
+        if (notifications[index]?.id === id) notifications.splice(index, 1)
+      }
+    },
     trackNotification(id: string): void { notifications.push({ id }) },
     /** Handle tracked notifications, then cancel tracked todos (reverse order). */
     async dispose(): Promise<void> {

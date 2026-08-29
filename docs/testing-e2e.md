@@ -34,6 +34,7 @@
 | `api/notifications.spec.ts` | 未读与处理分离、20 条稳定分页、完整可达和已读基线 | W12 / W14 / NOTIF-API-01 |
 | `api/actions-consolidate.spec.ts` · P35 | 合并两条待办：保留方继承字段、被并方退场、审计保留；最近变化是否展示只按产品白名单 | W3 / HIST-01 |
 | `api/actions-consolidate.spec.ts` · P34 | 非法动作 400 且落 `action_denied` 审计——拒绝绝不静默，UI 不把内部审计伪装成用户进展 | W12 / W16 |
+| `api/actions-range.spec.ts` | 日期闭区间批量取消只处理开放规范事项；永久删除要求强确认并清除所有状态的事项与直接关联数据 | W3 / W12 / W13 / W15 |
 
 ### ui 套件 · 浏览器端到端测试
 
@@ -55,6 +56,7 @@
 | `ui/dashboard-trust.spec.ts` · `api/dashboard-scope.spec.ts` · `tests/dashboard-aggregate.test.ts` | UI 中 partial 只提示一次且动作固定原 `scope_cwd`；API 验证真实 owner/未知 scope recovery；同 id 双 scope 与 all-fail recovery 由确定性聚合单测验证 | W13 / WS-01～03 |
 | `ui/capture-composition.spec.ts` | 中文输入法组合态 Enter 不误提交，组合结束后只新增一次真实事项 | W4 |
 | `ui/settings-card.spec.ts` | 提醒与简报设置可保存并在刷新后回读；设置不泄漏内部实现入口 | W14 |
+| `ui/data-management.spec.ts` | 更多菜单进入日期范围预览；批量取消、强确认永久删除、区间外隔离和单条永久删除 | W3 / W12 / W13 / W15 |
 
 ### 事项身份与多会话关联验收矩阵（TI）
 
@@ -400,6 +402,7 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 - [ ] 👤 **W3 改标题**：改字回车即时刷新、快照同步、历史出现用户可读的改名变化且内部技术事件不暴露
 - [ ] 👤 **W3 改截止日**：逾期事项改到下周 → 移出首页到期区并进入计划“接下来”，计数与摘要同步
 - [ ] 👤 **W15 取消确认**：取消弹确认层；确认后退出开放计划并进入历史“已取消”，`todo_cancelled` 审计落库；完成与取消各自可重新打开
+- [ ] 🤖 **W3 日期范围管理**：按截止/创建日期预览单日或闭区间；批量取消仅处理开放规范事项；永久删除要求输入确认词，区间外事项不变，partial 时禁止全部工作区
 - [ ] 👤 **目标进度只读**：目标区无任何没有事实来源的手动进度编辑控件
 - [ ] 👤 **快照一致**：任意编辑后 Markdown 快照、SQLite、dashboard 和三个页面一致
 

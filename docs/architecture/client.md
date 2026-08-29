@@ -15,6 +15,7 @@
 | `sidebar/YoloSidebarDashboard.tsx` | 侧栏入口、轻量 badge 轮询和面板挂载 |
 | `panel/YoloPanel.tsx` | 首页/计划/历史 shell、单一前景状态、数据加载、主题与通知记录入口 |
 | `panel/NotificationLog.tsx` | 完整通知时间流、分页、已读基线和事项跳转 |
+| `panel/DataManagementDialog.tsx` | 日期范围预览、按工作区分组提交批量取消或永久删除 |
 | `panel/navigation.ts` / `PageTabs.tsx` | 页面路由、focus/split 纯派生和一级/二级导航 |
 | `panel/ForegroundContext.tsx` | 来源预览、诚实降级和原会话导航反馈 |
 | `panel/KanbanView.tsx` | 三页面内容、计划筛选、动作编排和事项上下文入口 |
@@ -41,6 +42,12 @@
 所有变更通过 `postYoloAction()` 调用 `POST /yolo/actions`。客户端生成 `client_action_id`，处理
 结构化错误，并只展示服务端返回的 `learning_receipt`。完成/推迟后的撤销使用服务端生成的
 `undo` descriptor，必须在 `expires_at` 前通过同一动作端点提交，不能做客户端私有回滚。
+
+数据管理使用 dashboard 当前快照做执行前预览，再按候选行的 `scope_cwd` 分组提交 `bulk_cancel` 或
+`bulk_delete`。服务端重新按日期范围选择真实候选，因此客户端预览不构成写入事实；每个工作区独立事务，
+跨区失败必须逐区报告。聚合载荷为 partial 时禁止“全部已知工作区”，永久删除还必须输入中文确认词，
+客户端才会发送服务端要求的 `PERMANENT_DELETE` 字面量。日期范围两端均包含，字段语义复用
+`shared/todo-range.ts`，不能在组件内另写字符串日期规则。
 
 首读未见过的 attention 判断后提交 `seen`；同一证据刷新/重开后显示紧凑形态。suppress 与
 feedback 必须回传服务端给出的 `reason_version` 和 `evidence_fingerprint`。客户端不计算或

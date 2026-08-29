@@ -57,6 +57,7 @@ export type TaskActionIntent =
   | { type: 'suppress' }
   | { type: 'feedback'; reason: JudgmentFeedbackReason }
   | { type: 'cancel' }
+  | { type: 'delete' }
 
 export interface TaskEditDraft {
   title: string

@@ -207,4 +207,54 @@ describe('todo action v2 receipts', () => {
     const cancelled = applyYoloAction(yolo, cwd, { action: 'cancel', kind: 'todo', id: cancelTodo.id })
     expect(cancelled).toMatchObject({ ok: true, learning_receipt: { type: 'feedback_count', reversible: false } })
   })
+
+  it('bulk-cancels only open todos in the inclusive due-date range', () => {
+    const inRange = yolo.addTodo(cwd, { title: '向客户发送确认邮件', due_at: '2026-08-29' }).todo
+    const done = yolo.addTodo(cwd, { title: '归档已经签署的合同', due_at: '2026-08-29' }).todo
+    const outside = yolo.addTodo(cwd, { title: '下周确认新需求', due_at: '2026-09-02' }).todo
+    applyYoloAction(yolo, cwd, { action: 'complete', kind: 'todo', id: done.id })
+
+    const result = applyYoloAction(yolo, cwd, {
+      action: 'bulk_cancel', kind: 'todo', range_field: 'due_at', range_from: '2026-08-29', range_to: '2026-08-29',
+    })
+
+    expect(result).toMatchObject({ ok: true, item: { affected: 1, ids: [inRange.id] }, learning_receipt: { reversible: true } })
+    expect(yolo.findTodo(cwd, { id: inRange.id })?.status).toBe('cancelled')
+    expect(yolo.findTodo(cwd, { id: done.id })?.status).toBe('done')
+    expect(yolo.findTodo(cwd, { id: outside.id })?.status).toBe('pending')
+  })
+
+  it('requires explicit confirmation and permanently deletes all statuses in a range', () => {
+    const open = yolo.addTodo(cwd, { title: '清理旧供应商联系人', due_at: '2026-08-29' }).todo
+    const done = yolo.addTodo(cwd, { title: '确认旧供应商尾款', due_at: '2026-08-29' }).todo
+    applyYoloAction(yolo, cwd, { action: 'complete', kind: 'todo', id: done.id })
+
+    const refused = applyYoloAction(yolo, cwd, {
+      action: 'bulk_delete', kind: 'todo', range_field: 'due_at', range_from: '2026-08-29', range_to: '2026-08-29',
+    })
+    expect(refused).toMatchObject({ ok: false, code: 'permanent_delete_confirmation_required' })
+
+    const request: YoloActionRequest = {
+      action: 'bulk_delete', kind: 'todo', range_field: 'due_at', range_from: '2026-08-29', range_to: '2026-08-29',
+      confirmation: 'PERMANENT_DELETE', client_action_id: 'delete-range-once',
+    }
+    const deleted = applyYoloAction(yolo, cwd, request)
+    expect(deleted).toMatchObject({ ok: true, item: { affected: 2 }, learning_receipt: { reversible: false } })
+    expect(yolo.listTodos(cwd)).toHaveLength(0)
+    expect(yolo.listEvents(cwd).filter((event) => event.kind === 'todo_deleted')).toHaveLength(1)
+    expect(applyYoloAction(yolo, cwd, request)).toEqual(deleted)
+    expect(yolo.listEvents(cwd).filter((event) => event.kind === 'todo_deleted')).toHaveLength(1)
+    expect(yolo.listTodoEvidence(cwd, open.id)).toHaveLength(0)
+  })
+
+  it('permanently deletes one todo only after the confirmation literal', () => {
+    const todo = yolo.addTodo(cwd, { title: '删除重复导入的安排' }).todo
+    expect(applyYoloAction(yolo, cwd, { action: 'delete', kind: 'todo', id: todo.id })).toMatchObject({
+      ok: false, code: 'permanent_delete_confirmation_required',
+    })
+    expect(applyYoloAction(yolo, cwd, {
+      action: 'delete', kind: 'todo', id: todo.id, confirmation: 'PERMANENT_DELETE', client_action_id: 'delete-one',
+    })).toMatchObject({ ok: true, item: { id: todo.id, deleted: true } })
+    expect(yolo.findTodo(cwd, { id: todo.id })).toBeNull()
+  })
 })
