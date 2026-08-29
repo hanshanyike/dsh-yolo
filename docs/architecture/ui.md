@@ -60,6 +60,9 @@ extraction、reminder、brief 与 storage 快照节奏采用暂存后显式保�
 错误进入 `workspaceErrors` 且 `summary.partial = true`；仅当全部工作区均失败时返回 500。
 
 Dashboard v2 是同一个存储上的聚合读投影，没有 v1/v2 双写。每行携带 `scope_cwd`/`ws`。
+todo 行继续提供首来源 `source` 兼容字段，同时把 `todo_evidence` 投影为稳定排序的 `sources[]`、
+`source_count` 和去重后的 `related_session_count`；跨工作区聚合会为每条来源重标 owner workspace，
+不能只修正 todo 顶层标签。
 `GET /yolo/badge` 只聚合完整的未处理通知计数，不为角标构建 dashboard，也不能受 12 条卡片
 展示切片影响而少算。
 

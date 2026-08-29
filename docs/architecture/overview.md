@@ -190,9 +190,27 @@ Dashboard v2 是**单一聚合读取投影**，以 `ui_contract_version: 2` 标�
 `applyYoloAction` 同时也是**拒绝闸门**（M9 / P34）：每次校验失败都会先写入一条
 `action_denied` 时间线事件，再返回 `{ok:false}`；唯一静默拒绝的是幂等的“已处理”空操作。
 唯一明确的合并路径是 `consolidate`（M9 / P35）：来源待办的出处会写入目标详情，确定性字段会按规则
-继承（补齐缺失的截止时间、采用更高优先级），来源待办会在相关通知处理完毕后取消，并由单条
+继承（补齐缺失的截止时间、采用更高优先级）。来源记录保留原业务状态，但改为
+`record_status=merged` 并指向目标；相关通知处理完毕，来源 evidence 和旧事件保持不可变，并由单条
 `todo_consolidated` 事件记录此次合并。`memory_forget` 也通过同一动作路径路由
 （cancel / set_status abandoned / abandon），因此没有任何变更可以绕过审计轨迹。
+
+### v0.4.0-rc5——事项身份与多会话来源
+
+- **来源指纹。** 每个 durable 抽取 turn 以 session + turn 生成 operation id，并用请求哈希检测同 id 不同
+  输入；事项 evidence 再绑定 operation + resolved canonical todo id。助手工具优先使用宿主提供的 call id。
+  相同操作重放不会重复生成事项、来源证据或状态事件。没有稳定宿主 id 的兼容路径只能依赖领域 no-op
+  与 open canonical 标题去重，不能承诺 exactly-once。
+- **多会话 evidence。** `todo_evidence` 不可变地保存事项与 scope、session/turn、助手/面板操作、关系和
+  有界摘录；一个事项可以关联多个会话。`todos.session_id/source_excerpt/source_turn` 继续作为首来源兼容
+  投影，旧库会幂等回填 origin evidence。dashboard 继续返回单个 `source` 兼容字段，并增加稳定排序的
+  `sources[]`、`source_count` 与 `related_session_count`；聚合时每条来源都重标其 owner workspace。
+- **记录状态。** 用户可见的 pending/in_progress/done/cancelled 与 canonical/merged/rejected 分离。
+  普通列表、搜索、提醒和 dashboard 只使用 canonical 事项；旧 merged id 解析到目标，普通 reopen 不会
+  复活副本。显式 consolidate 可处理业务终态重复，但目标业务状态保持权威。
+- **自动化边界。** 本版仍不进行语义近义自动 LINK/consolidate、跨工作区自动关联、REOPEN 与
+  NEW_OCCURRENCE 语义裁决，也没有父事项/step 模型。后续工作见
+  [事项身份、去重与会话关联路线](../roadmap-todo-identity.md)。
 
 ### v0.3.2——管理型助手能力细化
 
@@ -241,7 +259,7 @@ Dashboard v2 是**单一聚合读取投影**，以 `ui_contract_version: 2` 标�
 
 ```
 data/
-├── yolo-<scope>.db     # SQLite：todos、milestones、goals、preferences、events，
+├── yolo-<scope>.db     # SQLite：todos、todo_evidence、milestones、goals、preferences、events，
 │                       #   session_summaries, notifications, attention_feedback,
 │                       #   client_actions
 │                       #   + FTS5 虚拟表（trigram tokenizer）
@@ -255,14 +273,15 @@ data/
 - **SQLite 是运行事实源**：当前没有从 Markdown 解析并重建数据库的实现。快照按配置选择每天一次
   或每 10 个真实工作会话轮次一次，并采用临时文件加重命名的原子写入；
   `snapshotKeepDays` 目前只是常量，尚无自动清理任务消费它。
-- **会话归属（v0.3.0）**——`events.session_id`（来源 dsh 会话）与 `events.source`
-  （`llm|tool|manual`）共同生成事项来源标记；`session_summaries` 保存提取时写入的每个会话
-  单行摘要。`notifications` 保存提醒/简报卡片；侧栏角标显示未处理行数。
+- **会话归属与事项证据**——`todo_evidence` 是事项的多来源事实，支持一个 canonical 事项关联多个
+  会话、轮次和助手/面板操作；`events.session_id/source` 保存状态动作审计，`session_summaries` 保存
+  提取时写入的每个会话单行摘要。`notifications` 保存提醒/简报卡片；侧栏角标显示未处理行数。
 - **判断信任状态**——`attention_feedback` 以
   `(scope_key, todo_id, reason_version, evidence_fingerprint)` 为键，只为对应的不可变判断版本保存
   已读、抑制和原因反馈。
 - **变更幂等性**——`client_actions` 以 `(scope_key, client_action_id)` 为键，持久保存请求哈希与结果；
-  它不会复制领域数据行，也不会建立一条平行的看板写入路径。
+  事项写入另以 `todo_evidence.source_fingerprint` 防止同一抽取 turn 对同一 canonical 事项或同一工具
+  调用重放；二者都不会建立一条平行的看板写入路径。
 - **带事件审计的领域动作**——状态不再通过直接写列改变。待办通过 `applyTodoAction`
   （`complete` / `cancel` / `postpone` / `remind_again` / `start`），目标通过
   `applyGoalProgress`（0–100，达到 100 时自动完成），里程碑通过 `applyMilestoneStatus`；每次迁移都会
@@ -280,6 +299,7 @@ data/
 | 全局侧栏看板，而非单会话页签 | 记忆天然跨会话；为每个会话生成快照会把数据重复写入各会话日志 |
 | 服务端掌控的确定性重点判断 | 从可审计事实中选出的唯一、可解释候选项可在刷新间保持稳定；不可变指纹避免反馈绑定到已经变化的证据 |
 | 聚合读取，写入固定到工作区 | 用户看到一份跨工作区计划；同时将 `scope_cwd` 限制在 canonical cwd 注册表内，确保动作安全且等价路径不会生成幽灵库 |
+| 规范事项 + 不可变多来源 evidence | 同一事项可跨会话延续，输入重放可幂等返回；业务状态不再承担“记录已合并”的错误语义 |
 | 以 SQLite 为事实源、Markdown 为审阅投影 | SQLite 承担查询与事务；快照便于 git 比较和人工审阅，但当前不承担数据库恢复 |
 | 只按 canonical cwd 划分作用域 | 会话不一定属于 Git 仓库；同一工作区切分支仍是同一计划，且省去周期性 Git 子进程探测 |
 | 共享常量模块 | dsh 尚处 v0.1.0-rc；API 漂移应只需修改一处 |

@@ -55,6 +55,33 @@
 | `ui/capture-composition.spec.ts` | 中文输入法组合态 Enter 不误提交，组合结束后只新增一次真实事项 | W4 |
 | `ui/settings-card.spec.ts` | 提醒与简报设置可保存并在刷新后回读；设置不泄漏内部实现入口 | W14 |
 
+### 事项身份与多会话关联验收矩阵（TI）
+
+本矩阵是 v0.4.0-rc5 最小结构闭环的准入契约。它验证输入幂等、多会话 evidence 和记录状态分离，
+不把“标题相似”当作已经实现的语义自动合并。每项都必须检查 SQLite 和领域结果；只看助手回复或看板
+数量不足以证明通过。
+
+| 编号 | 层级 | 场景与硬断言 |
+|---|---|---|
+| TI-01 | unit + api | 同一 `source_fingerprint` 连续/并发重放：返回同一 canonical todo id；todo、evidence 和创建事件各只有一份 |
+| TI-02 | unit | 同一 session/turn 触及两个不同 canonical todo 时，各自获得 operation + canonical id evidence；一项不能吞掉另一项的来源 |
+| TI-03 | unit + api | 同一 tool operation 重试返回第一次结果；助手写入与后台抽取对齐到同一 canonical 事项，分别保留 assistant action 与 human evidence，不生成第二个事项 |
+| TI-04 | unit | 两个 session/turn 关联同一事项：一个 todo、两条不可变 evidence；origin 不被后续 mention/update 覆盖，排序稳定 |
+| TI-05 | unit + host | 在会话 A 创建，在会话 B 改期/开始/完成：始终操作同一 canonical id；每次关系和来源可追溯，提醒使用新状态 |
+| TI-06 | migration | fresh/current/缺少新表列的 legacy DB 各连续打开两次：origin 回填恰好一次、旧来源投影不丢、`integrity_check=ok` |
+| TI-07 | unit | 同 dedup key 同时存在终态、merged 与 open canonical：只命中 open canonical；若没有开放规范项则按明确新建契约处理 |
+| TI-08 | unit + api | consolidate 后副本 `record_status=merged` 且指向 canonical；原业务 status 不被改写为 cancelled，旧 id 可解析到 canonical |
+| TI-09 | unit + api | 旧 merged id 的 complete/cancel/postpone/update 路由到 canonical 且只作用一次；reopen 不复活 merged 副本，任何路径都不能让 alias 重新提醒 |
+| TI-10 | unit + api | 合并前后的来源、事件、通知、FTS、快照和 dashboard 一致：仅 canonical 可操作，merged 默认不进入业务列表 |
+| TI-11 | unit + host | YOLO 助手明确“记录这件事”后工具重试、刷新或慢回复不重复创建；证据标明 assistant action 和触发会话 |
+| TI-12 | unit + host | 两个普通会话近同时复述同一明确事项：当前仅确定性 id/fingerprint/dedup 关联；近义但无确定依据不得静默 consolidate |
+| TI-13 | future | 同标题不同项目、客户或明确不同日期 occurrence 保持两项；本轮 exact-title dedup 尚不能可靠区分，作为已知缺口留在路线中，不得记为 rc5 已通过 |
+| TI-14 | host | dashboard、SQLite `todos/todo_evidence`、events、`extraction_log`、来源会话列表、提醒和快照逐项一致 |
+
+发布候选至少执行 TI-01～12、TI-14。TI-12 验证当前不会自动 consolidate 近义候选；TI-13 是后续
+occurrence 准入契约，不计入 rc5 通过数。不得把“没有自动合并”写成已经实现语义身份裁决，也不得把
+TI-13 的已知缺口写成保守策略已经生效。
+
 ### 首页 / 计划 / 历史重构验收矩阵
 
 本矩阵是本轮信息架构、来源证据和宿主原生布局的准入契约。用例可以合并到同一个 spec，
@@ -77,7 +104,7 @@
 
 | 编号 | 层级 | 场景与硬断言 |
 |---|---|---|
-| SRC-01 | unit + api + ui | session 来源可预览并跳转；预览包含来源时间、workspace、session id 和有界 excerpt，Unicode/换行不损坏且不复制完整 transcript；capability 与字段实际可用性一致；manual/tool/legacy、`session_id=null` 和旧记录无 excerpt 明确降级；本期无精确 turn 导航时不得伪造 |
+| SRC-01 | unit + api + ui | session 来源可预览并跳转；预览包含来源时间、workspace、session id 和有界 excerpt，Unicode/换行不损坏且不复制完整 transcript；同一事项的主来源与多个关联会话保持稳定顺序；capability 与字段实际可用性一致；manual/tool/legacy、`session_id=null` 和旧记录无 excerpt 明确降级；本期无精确 turn 导航时不得伪造 |
 | SRC-02 | unit + ui | 宿主 `openSession` 不可用、抛错或目标不存在时不先关闭 YOLO，保留页面/事项/来源前景并显示可恢复反馈 |
 | SRC-03 | api + ui | 两个工作区使用相同 todo id 或 session id 时，来源和动作均按 `scope_cwd` 指向正确 owner；若宿主 API 无法消歧，测试必须失败而非跳过 |
 | SRC-04 | ui + host | 导航成功后 YOLO 收起；重新打开恢复原页面、事项和来源预览，返回一步到事项；不重复发送请求 |
@@ -94,7 +121,7 @@
 | REM-HOME-01 | unit + ui | 同 todo 两条未处理通知时 badge 为 2、首页事项为 1；处理一条后 badge 2→1、剩余 notification/card 仍存在、todo 仍开放、只有目标 `handled_at` 非空；历史未读首载不补弹 |
 | REM-HOME-02 | ui + host | 已打开 item/source/chat 前景时新提醒不抢占；panel 已开只刷新不弹；点击 popup 定位首页对应事项且 scope/source 正确 |
 | HIST-01 | unit + api + ui | 混合 `completed / cancelled / reopened / postponed / todo_updated / reminder_fired / attention_seen / brief_generated`，断言最近变化白名单与噪声排除，摘要计数等于可见集合 |
-| HIST-02 | unit + ui | 跨工作区按全局时间排序；完成/取消分区且各自可 reopen；reopen 后退出终态集合，partial 明示 |
+| HIST-02 | unit + ui | 跨工作区按全局时间排序；完成/取消分区且各自可 reopen；reopen 后退出终态集合；merged 副本不进入“已取消”或普通 reopen，partial 明示 |
 | CHAT-01 | unit + ui + host | resident、事项 A、事项 B 三类历史隔离；响应式返回/隐藏后再次打开 A 继续同一 episode；显式结束清除它，之后再次讨论 A 创建新 episode；A/B/resident 不串写 |
 | CHAT-02 | unit + ui | 慢回复和旧轮询不得写入当前 B；单/双栏切换、panel unmount/remount 后 POST 恰好一次，pending/draft/scroll 连续 |
 

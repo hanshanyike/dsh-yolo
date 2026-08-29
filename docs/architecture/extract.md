@@ -28,9 +28,10 @@ agent/pre-step（只捕获本轮实际进入模型的 direct-human 消息）
   → 独立 AbortController + llmExtract + 严格 JSON schema 入口 + validateExtraction
   → shouldDropExtracted 质量过滤
   → 只从 captured direct-human 消息生成有界来源摘录与 turn 元数据
-  → 先写 todos/milestones/goals/preferences/events
-  → 再应用 updates[] 的状态变化
-  → extraction_log / session summary 审计
+  → 生成 session + turn 稳定 operation id 与规范化请求哈希
+  → runIdempotentAction 原子执行：先写 todos/milestones/goals/preferences/events
+  → 再应用 updates[] 的状态变化并追加 todo_evidence
+  → extraction_log / session summary 审计与 operation 结果同事务提交
 ```
 
 先新增、后更新保证“同一轮创建并完成”能够命中新条目。`updates[].match_title` 应复用 known
@@ -40,12 +41,20 @@ LLM 标题会被静默丢弃，不会让整轮失败。
 来源摘录不是第二份 transcript：只使用本轮 `agent/pre-step` 捕获且 `source.kind=user` 的直接用户输入，
 不包含 system、assistant、tool、Goal continuation、模型提示词或完整会话历史。旧宿主缺少可靠捕获时，
 derived-message fallback 仍可作为抽取输入，但不会被当作可引用证据写入。`source_turn` 目前只用于预览
-元数据；宿主只支持打开会话时，界面不得声称能够精确定位到该轮。
+元数据和 tool/extraction 同轮对齐；宿主只支持打开会话时，界面不得声称能够精确定位到该轮。
+
+每个 durable `(session, turn)` 生成版本化 operation id，并与本轮输入的规范化请求哈希绑定。模型调用在
+崩溃恢复时仍可能重新发生，但存储副作用由 `runIdempotentAction` 原子保护：相同 operation 与请求重放原
+结果，不重复生成事项、状态事件或 `extraction_log`；同一 id 携带不同输入会报告 conflict。每个被该轮
+创建、复用或更新的事项再以 `(operation id, resolved canonical todo id)` 生成 evidence fingerprint，因此
+一轮可以关联多个事项，同一事项也可以累积多个会话/轮次的 evidence。
 
 若主 Agent 已在本轮同步调用 `memory_write`，tool 行会携带同一 session。后台任务在调用辅助模型前，
-只升级从本轮 accepted 时间到后台 started 时间之间创建的 provisional 行；因此辅助模型返回 new todo、
-update 或合法 empty 都能得到一致来源，同时后续轮次不会被前一轮摘录误绑定。对已经落到相同 due_at 的
-重复 postpone 是领域 no-op，不重复写最近变化。
+现代宿主优先要求 tool 行的 `source_turn` 等于当前抽取 turn；只有旧宿主缺少 turn 时，才退回本轮
+accepted 到后台 started 的闭区间。辅助模型返回 new todo、update 或合法 empty 都能补充本轮 direct-human
+evidence；tool call 自身仍保留独立的 assistant_action evidence。相同标题或有界包含匹配会复用同一 open
+canonical 行，同时后续轮次不会被前一轮摘录误绑定。该对齐仍是确定性标题/包含关系，不代表语义近义
+resolver 已经实现。对已经落到相同 due_at 的重复 postpone 是领域 no-op，不重复写最近变化。
 
 `extraction_log.status` 的现行 `hasContent` 判断只统计 todo、milestone、goal 与 `updates[]`；
 仅抽到 preference、event 或 session summary 的轮次仍会记为 `empty`。这是当前审计口径，不代表
@@ -75,6 +84,8 @@ update 或合法 empty 都能得到一致来源，同时后续轮次不会被前
   新的用户承诺，不能触发抽取。现代宿主有 durable event log 时，没有本轮 direct-human 捕获就直接跳过；
   只有无 event log 的兼容宿主可回退到 derived messages，且仍必须满足 `source.kind=user`。
 - Goal 执行期间新到达的真人 steering 仍由 `agent/pre-step` 捕获，只抽取该真人消息，不混入 Goal 文本。
+- 没有 durable turn 或稳定工具 call id 的兼容宿主只能依赖开放 canonical 标题去重和领域 no-op；不能承诺
+  exactly-once，也不能用时间窗或 payload hash 冒充宿主操作身份。
 - handler 必须隔离异常并写日志，不能把抽取失败抛回 agent 循环。
 
 ## 记忆范围
@@ -87,3 +98,4 @@ update 或合法 empty 都能得到一致来源，同时后续轮次不会被前
 - [记忆与召回](memory.md)
 - [存储服务](storage.md)
 - [共享质量闸门与动作入口](shared.md)
+- [事项身份、去重与会话关联路线](../roadmap-todo-identity.md)

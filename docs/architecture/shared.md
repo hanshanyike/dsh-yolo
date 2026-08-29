@@ -19,13 +19,15 @@
 | `quality.ts` | `shouldDropExtracted` 写入质量闸门 |
 | `session.ts` | 从 `session.header` 解析 cwd 与 session id |
 | `text.ts` | 内容块转文本、标题归一化、本地日期和日边界工具 |
+| `todo-identity.ts` | 抽取 turn、工具 call、事项 evidence 的版本化指纹与规范化请求哈希 |
 
 ## 关键契约
 
 `dashboard.ts` 是 host 与 client 的载荷事实源。`YoloDashboardData` 包含 todos、goals、
 milestones、events、preferences、ledger、notifications，以及 v2 的 attention、summary、
 capabilities、workspaces、workspaceErrors 和 memory health。聚合行携带 `scope_cwd`/`ws`，
-供服务端把动作安全地路由回原工作区。
+供服务端把动作安全地路由回原工作区；todo 行保留单个 `source` 兼容字段，并可携带不可变
+`sources[]`、`source_count` 和 `related_session_count`。
 
 `applyYoloAction(yolo, cwd, request)` 是统一动作入口，供模型工具、HTTP 端点和提取 updates
 复用。它负责参数校验、状态分发、拒绝审计、幂等、学习回执与短时撤销描述；失败返回带
@@ -51,6 +53,8 @@ capabilities、workspaces、workspaceErrors 和 memory health。聚合行携带 
   无时区 datetime 按本地精确时刻；看板、判断、筛选、摘要与提醒不得再自行切字符串比较。
 - `filters.ts` 定义的是产品语义，客户端只消费结果；修改时必须同步单测。
 - `shouldDropExtracted` 会拒绝确认词、裸元命令、空/单字标题和空偏好值，避免错误记忆触发错误提醒。
+- `todo-identity.ts` 的 operation id 只回答“哪一次宿主操作”，request hash 用来发现同 id 不同载荷，
+  evidence fingerprint 再绑定解析后的 canonical todo；三者不能用时间窗或普通 payload hash 相互替代。
 - `DEFAULTS` 当前包含 extraction、reminder、brief、recall、semantic 和 ui 默认值；完整用户配置
   以 [看板服务端的配置](ui.md#配置) 为准。
 

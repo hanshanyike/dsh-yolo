@@ -26,6 +26,7 @@
 | 自动化测试与真机验收 | [测试体系](testing.md) · [E2E 手册](testing-e2e.md) |
 | 如何发布候选版本 | [发布流程](release.md) |
 | 记忆生态调研后的落地结论 | [借鉴落地结论](research/18-adoption-verdict.md) |
+| 事项重复为何发生、后续如何治理 | [身份与去重分析](research/20-todo-identity-dedup-analysis.md) · [实施路线](roadmap-todo-identity.md) |
 
 架构文档描述当前实现与稳定工程契约；产品设计记录保存已评审的界面决策和原型，避免关键取舍只存在于聊天记录中。
 阶段计划、代码评审报告和验证快照仍不作为远端长期事实源；历史交付统一查看 [CHANGELOG](../CHANGELOG.md)。
