@@ -89,6 +89,38 @@ describe('db + schema', () => {
     rmSync(root, { recursive: true, force: true })
   })
 
+  it('adds structured subject columns after opening a real legacy events table', () => {
+    const root = mkdtempSync(join(tmpdir(), 'yolo-old-events-'))
+    const path = join(root, 'old.db')
+    const old = new DatabaseSync(path)
+    old.exec(`CREATE TABLE events (
+      id TEXT PRIMARY KEY, kind TEXT NOT NULL, summary TEXT NOT NULL, detail TEXT,
+      session_id TEXT, occurred_at INTEGER NOT NULL, scope_key TEXT NOT NULL
+    )`)
+    old.prepare('INSERT INTO events(id,kind,summary,occurred_at,scope_key) VALUES(?,?,?,?,?)')
+      .run('legacy-event', 'decision', '旧事件保持未关联', 10, SCOPE)
+    old.close()
+
+    const migrated = openDb(path)
+    const columns = migrated.prepare('PRAGMA table_info(events)').all() as Array<{ name: string }>
+    expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'source', 'subject_type', 'subject_id', 'subject_title',
+      'related_subject_type', 'related_subject_id', 'related_subject_title', 'change_json',
+    ]))
+    expect(repo.listEvents(migrated, SCOPE)[0]).toMatchObject({
+      id: 'legacy-event', subject_type: null, subject_id: null, subject_title: null, change: null,
+    })
+    expect(migrated.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_events_subject'").get())
+      .toEqual({ name: 'idx_events_subject' })
+    migrated.close()
+
+    const reopened = openDb(path)
+    expect(reopened.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
+    expect(repo.listEvents(reopened, SCOPE)).toHaveLength(1)
+    reopened.close()
+    rmSync(root, { recursive: true, force: true })
+  })
+
   it('commits successful transactions and rolls back failed ones', () => {
     withTransaction(db, () => {
       repo.upsertTodo(db, { title: '保留外层写入', scope_key: SCOPE })

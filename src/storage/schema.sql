@@ -151,8 +151,6 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_time ON events(occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_scope ON events(scope_key);
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id) WHERE session_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_events_subject ON events(scope_key, subject_type, subject_id, occurred_at DESC)
-  WHERE subject_id IS NOT NULL;
 
 -- one-line summary per originating session (ledger source badges, v0.3.0)
 CREATE TABLE IF NOT EXISTS session_summaries (
