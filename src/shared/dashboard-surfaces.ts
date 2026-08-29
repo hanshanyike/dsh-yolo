@@ -92,6 +92,7 @@ export const USER_VISIBLE_CHANGE_KINDS = new Set([
   'todo_updated',
   'todo_reopened',
   'todo_consolidated',
+  'todo_deleted',
   'goal_progress',
   'goal_status',
   'goal_updated',

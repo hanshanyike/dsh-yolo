@@ -26,6 +26,9 @@ function mockYolo(overrides: Record<string, unknown> = {}): Yolo {
   const milestone: Milestone = { id: 'm1', title: 'v0.3 发布', status: 'active', scope_key: 'k', created_at: now, updated_at: now }
   return {
     applyTodoAction: vi.fn(() => todo),
+    cancelTodosInRange: vi.fn(() => [todo]),
+    deleteTodosInRange: vi.fn(() => ({ ids: [todo.id], deleted_record_count: 1 })),
+    deleteTodoPermanently: vi.fn(() => ({ id: todo.id, deleted_record_count: 1 })),
     applyGoalProgress: vi.fn(() => goal),
     applyMilestoneStatus: vi.fn(() => milestone),
     ...overrides,
@@ -72,6 +75,44 @@ describe('POST /yolo/actions', () => {
     expect(r.status).toBe(200)
     expect(r.body.ok).toBe(true)
     expect(yolo.applyTodoAction).toHaveBeenCalledWith('/tmp/proj', { id: 't1' }, 'reopen', { session_id: null })
+  })
+
+  it('bulk-cancels an inclusive todo date range through the shared action endpoint', async () => {
+    const { server, yolo } = setup()
+    const r = await call(server, 'POST', JSON.stringify({
+      action: 'bulk_cancel', kind: 'todo', range_field: 'due_at', range_from: '2026-08-29', range_to: '2026-08-31',
+    }))
+    expect(r.status).toBe(200)
+    expect(r.body).toMatchObject({ ok: true, item: { affected: 1 } })
+    expect(yolo.cancelTodosInRange).toHaveBeenCalledWith('/tmp/proj', {
+      field: 'due_at', from: '2026-08-29', to: '2026-08-31',
+    }, { session_id: null })
+  })
+
+  it('rejects an invalid range and requires an explicit permanent-delete confirmation', async () => {
+    const { server, yolo } = setup()
+    const invalid = await call(server, 'POST', JSON.stringify({
+      action: 'bulk_cancel', kind: 'todo', range_field: 'due_at', range_from: '2026-08-31', range_to: '2026-08-29',
+    }))
+    expect(invalid.status).toBe(400)
+    expect(invalid.body.code).toBe('invalid_todo_range')
+    const unconfirmed = await call(server, 'POST', JSON.stringify({
+      action: 'bulk_delete', kind: 'todo', range_field: 'created_at', range_from: '2026-08-29', range_to: '2026-08-29',
+    }))
+    expect(unconfirmed.status).toBe(400)
+    expect(unconfirmed.body.code).toBe('permanent_delete_confirmation_required')
+    expect(yolo.deleteTodosInRange).not.toHaveBeenCalled()
+  })
+
+  it('permanently deletes a range only with the server confirmation literal', async () => {
+    const { server, yolo } = setup()
+    const r = await call(server, 'POST', JSON.stringify({
+      action: 'bulk_delete', kind: 'todo', range_field: 'created_at', range_from: '2026-08-29', range_to: '2026-08-29',
+      confirmation: 'PERMANENT_DELETE',
+    }))
+    expect(r.status).toBe(200)
+    expect(r.body).toMatchObject({ ok: true, item: { affected: 1, deleted_record_count: 1 } })
+    expect(yolo.deleteTodosInRange).toHaveBeenCalled()
   })
 
   it('goal set_progress and milestone set_status → 200', async () => {

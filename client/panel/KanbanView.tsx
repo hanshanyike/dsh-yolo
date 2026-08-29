@@ -492,10 +492,17 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
             : { feedback_reason: intent.reason }),
         }
       } else {
-        request = { action: intent.type, kind: 'todo', id: taskPanel.item.id, scope_cwd: taskPanel.scopeCwd }
+        request = intent.type === 'delete'
+          ? { action: 'delete', kind: 'todo', id: taskPanel.item.id, scope_cwd: taskPanel.scopeCwd, confirmation: 'PERMANENT_DELETE' }
+          : { action: intent.type, kind: 'todo', id: taskPanel.item.id, scope_cwd: taskPanel.scopeCwd }
       }
       const outcome = await act(`panel-${taskPanel.item.id}`, request)
       if (!outcome) return
+      if (intent.type === 'delete') {
+        dismissTaskPanel(false)
+        setToast({ text: '事项已永久删除' })
+        return
+      }
       setTaskReceipt(outcome.learningReceipt ?? null)
       setTaskUndo(outcome.undo ?? null)
       setTaskPanel((current) => current ? { ...current, item: { ...current.item, ...outcome.item } } : current)
@@ -942,12 +949,12 @@ function TodoEditor({ draft, milestones, busy, confirming, onChange, onSave, onC
         <button type="button" className="btn btn-ghost ef-btn" disabled={busy} onClick={onSave}>保存</button>
         <button type="button" className="btn btn-ghost ef-btn" disabled={busy} onClick={onCancel}>取消</button>
         <span style={{ flex: 1 }} />
-        <button type="button" className="btn btn-danger ef-btn" disabled={busy} onClick={onDelete}>删除…</button>
+        <button type="button" className="btn btn-danger ef-btn" disabled={busy} onClick={onDelete}>取消事项…</button>
         {confirming && (
-          <div className="confirm-strip" role="dialog" aria-label="确认删除">
-            <span style={{ flex: 1 }}>确认删除这条待办？（写入审计事件，可追溯）</span>
-            <button type="button" className="btn btn-danger ef-btn" disabled={busy} onClick={onConfirmDelete}>删除</button>
-            <button type="button" className="btn btn-ghost ef-btn" onClick={onCancel}>取消</button>
+          <div className="confirm-strip" role="dialog" aria-label="确认取消事项">
+            <span style={{ flex: 1 }}>取消后会移到“已取消”，可以重新打开。</span>
+            <button type="button" className="btn btn-danger ef-btn" disabled={busy} onClick={onConfirmDelete}>确认取消</button>
+            <button type="button" className="btn btn-ghost ef-btn" onClick={onCancel}>保留事项</button>
           </div>
         )}
       </div>

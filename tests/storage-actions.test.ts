@@ -377,6 +377,50 @@ describe('applyTodoConsolidate', () => {
   })
 })
 
+describe('permanent todo deletion', () => {
+  it('removes the canonical identity, merged aliases and directly-linked projections', () => {
+    const { row: target } = repo.upsertTodo(db, { title: '整理客户回访安排', due_at: '2026-08-29', scope_key: SCOPE })
+    const { row: alias } = repo.upsertTodo(db, { title: '整理客户回访的安排', scope_key: SCOPE })
+    expect(repo.applyTodoConsolidate(db, { id: alias.id }, { id: target.id }, null, SCOPE).ok).toBe(true)
+    repo.addTodoEvidence(db, {
+      todo_id: target.id,
+      source_scope_key: SCOPE,
+      source_kind: 'human',
+      relation: 'origin',
+      occurred_at: Date.now(),
+      source_fingerprint: `delete:${target.id}`,
+    })
+    repo.addNotification(db, { kind: 'reminder', title: '回访提醒', todo_id: target.id, scope_key: SCOPE })
+    repo.queuePendingReminder(db, { todo_id: target.id, fire_at: Date.now(), payload: '回访提醒', scope_key: SCOPE })
+    repo.recordAttentionFeedback(db, {
+      scope_key: SCOPE,
+      todo_id: target.id,
+      reason_version: 'v1',
+      evidence_fingerprint: 'e1',
+    }, { seen_at: Date.now() })
+    repo.saveClientAction(db, {
+      scope_key: SCOPE,
+      client_action_id: 'old-action',
+      request_hash: 'hash',
+      outcome_json: JSON.stringify({ ok: true, item: { ids: [target.id] } }),
+    })
+    db.prepare(
+      `INSERT INTO recall_log(scope_key, query, kept_keys, source, status, created_at)
+       VALUES(?,?,?,?,?,?)`,
+    ).run(SCOPE, '客户回访', JSON.stringify([`todo:${target.id}`]), 'user', 'ok', Date.now())
+
+    expect(repo.deleteTodoPermanently(db, target.id)).toEqual({ id: target.id, deleted_record_count: 2 })
+    expect(repo.listTodoRecords(db, SCOPE)).toHaveLength(0)
+    expect(repo.listTodoEvidence(db, target.id)).toHaveLength(0)
+    expect(repo.listNotifications(db, SCOPE)).toHaveLength(0)
+    expect(repo.listPendingReminders(db, SCOPE, Number.MAX_SAFE_INTEGER)).toHaveLength(0)
+    expect(repo.listAttentionFeedback(db, SCOPE)).toHaveLength(0)
+    expect(repo.getClientAction(db, SCOPE, 'old-action')).toBeUndefined()
+    expect((db.prepare('SELECT COUNT(*) AS n FROM recall_log').get() as { n: number }).n).toBe(0)
+    expect(ftsSearch(db, '客户回访', 5, ['todo'])).toHaveLength(0)
+  })
+})
+
 describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', () => {
   let cwd: string
   let yolo: Yolo

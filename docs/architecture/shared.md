@@ -21,6 +21,7 @@
 | `session.ts` | 从 `session.header` 解析 cwd 与 session id |
 | `text.ts` | 内容块转文本、标题归一化、本地日期和日边界工具 |
 | `todo-identity.ts` | 抽取 turn、工具 call、事项 evidence 的版本化指纹与规范化请求哈希 |
+| `todo-range.ts` | 截止/创建日期范围校验、候选选择和取消/删除资格规则 |
 
 ## 关键契约
 
@@ -40,7 +41,7 @@ capabilities、workspaces、workspaceErrors 和 memory health。聚合行携带 
 支持的动作覆盖：
 
 - todo：`complete`、`start`、`cancel`、`postpone`、`remind_again`、`reopen`、`update`、
-  `quick_add`、`consolidate`；
+  `quick_add`、`consolidate`、单条 `delete`、范围 `bulk_cancel` / `bulk_delete`；
 - goal/milestone：进度、状态、改名和放弃；
 - notification：处理和作者通知；
 - attention：`seen`、`suppress`、`feedback`。
@@ -48,6 +49,8 @@ capabilities、workspaces、workspaceErrors 和 memory health。聚合行携带 
 非空 `client_action_id` 最长 128 字符。同一 key 与同一规范化请求会重放原结果；同一 key
 配不同请求返回 `idempotency_conflict`。Attention 反馈必须携带当前
 `reason_version + evidence_fingerprint`，旧证据返回 `stale_attention`。
+永久删除必须携带 `confirmation=PERMANENT_DELETE`；该字段不暴露给模型工具。范围动作使用本地
+`YYYY-MM-DD` 的闭区间，按截止日期时通过统一 `due_at` 解析得到本地日，不能直接比较混合格式文本。
 
 ## 规则与不变量
 

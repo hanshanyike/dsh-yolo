@@ -22,6 +22,7 @@ export type EventKind =
   | 'todo_started'
   | 'todo_updated'
   | 'todo_reopened'
+  | 'todo_deleted'
   | 'goal_progress'
   | 'goal_status'
   | 'goal_updated'

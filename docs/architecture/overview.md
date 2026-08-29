@@ -197,6 +197,12 @@ Dashboard v2 是**单一聚合读取投影**，以 `ui_contract_version: 2` 标�
 `todo_consolidated` 事件记录此次合并。`memory_forget` 也通过同一动作路径路由
 （cancel / set_status abandoned / abandon），因此没有任何变更可以绕过审计轨迹。
 
+范围事项管理同样复用 `/yolo/actions`：`bulk_cancel` 只取消日期闭区间内的开放 canonical todo，
+`delete` / `bulk_delete` 则要求显式 `PERMANENT_DELETE` 确认并物理移除事项身份及直接关联投影。
+截止日期候选通过共享 `due_at` 语义换算到本地自然日；创建日期按本地 `created_at` 自然日。聚合客户端
+按 `scope_cwd` 分组提交，每个工作区独立事务，partial 状态禁止全局批量处理。永久删除不改写原始宿主
+会话或既有时间线；整库擦除仍是停机删除工作区 `.dsh/yolo/`。
+
 ### v0.4.0-rc5——事项身份与多会话来源
 
 - **来源指纹。** 每个 durable 抽取 turn 以 session + turn 生成 operation id，并用请求哈希检测同 id 不同

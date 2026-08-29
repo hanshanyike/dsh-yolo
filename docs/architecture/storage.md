@@ -84,11 +84,19 @@ turn 时才退回 `acceptedAt..backgroundStartedAt` 闭区间。即使辅助模�
 
 - `applyTodoAction`：start、complete、cancel、postpone、remind_again、reopen；
 - `applyTodoUpdate` / `applyTodoConsolidate`：编辑与显式合并；
+- `cancelTodosInRange` / `deleteTodoPermanently` / `deleteTodosInRange`：日期范围取消与不可逆删除；
 - `applyGoalProgress` / `applyGoalRename` / `applyGoalAbandon`；
 - `applyMilestoneStatus` / `applyMilestoneRename`。
 
 每次有效迁移写入 timeline event。拒绝事件、客户端幂等和学习/撤销编排由上层
 [`applyYoloAction`](shared.md) 统一处理。
+
+范围取消只选择 open canonical todo，并在单工作区事务中逐条复用 `applyTodoAction(cancel)`，因此
+FTS、提醒处理、反馈计数和每条 `todo_cancelled` 审计与单条操作一致。永久删除选择 canonical todo 的
+完整身份链，同时移除其 merged 别名、`todo_evidence`、notification、pending reminder、attention feedback、
+todo FTS 和直接保存该 id 的 client action / recall 投影；写入一条不包含事项正文的 `todo_deleted` 审计。
+既有 timeline 和原始宿主会话属于独立审计/来源边界，不随事项永久删除；需要全库擦除时仍须停机删除
+整个 `.dsh/yolo/` 数据目录。
 
 事项写入先用 `source_fingerprint` 查询 evidence；命中时解析并返回首次写入的 canonical 事项，不重复生成
 事项或证据；同一 fingerprint 若被要求绑定到另一个 canonical 事项则显式报冲突。未命中时，标题 dedup

@@ -27,6 +27,7 @@ import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
 import { KanbanView, type BoardSurfaceKey } from './KanbanView.tsx'
 import { NotificationLog } from './NotificationLog.tsx'
 import { MoreMenu } from './MoreMenu.tsx'
+import { DataManagementDialog } from './DataManagementDialog.tsx'
 import { HistoryTabs, PageTabs, PlanTabs } from './PageTabs.tsx'
 import { ForegroundContext, type SessionNavigationState } from './ForegroundContext.tsx'
 import { readPanelState, writePanelState } from './state.ts'
@@ -121,6 +122,7 @@ export function YoloPanel({
   const [navigation, setNavigation] = useState<PanelNavigationState>(initial.navigation)
   const [discussionThreads, setDiscussionThreads] = useState<Record<string, string>>(initial.discussionThreads)
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
+  const [dataManagementOpen, setDataManagementOpen] = useState(false)
   const [sessionNavigation, setSessionNavigation] = useState<SessionNavigationState>({ status: 'idle' })
   const [detailDraft, setDetailDraft] = useState<TaskEditDraft | null>(null)
   const [detailBusy, setDetailBusy] = useState(false)
@@ -295,6 +297,23 @@ export function YoloPanel({
     setDetailError(null)
     focusChatOpener(returnFocusId, returnTodoId)
   }, [focusChatOpener, navigation.foreground, navigation.returnFocusId])
+
+  const openDataManagement = useCallback((): void => {
+    setFilterMenuOpen(false)
+    setNavigation((current) => ({ ...current, foreground: { kind: 'none' }, returnFocusId: undefined }))
+    setSessionNavigation({ status: 'idle' })
+    setDetailDraft(null)
+    setDetailReceipt(null)
+    setDetailUndo(null)
+    setDetailError(null)
+    setDataManagementOpen(true)
+  }, [])
+  const closeDataManagement = useCallback((): void => {
+    setDataManagementOpen(false)
+    window.setTimeout(() => {
+      document.querySelector<HTMLElement>('.yolo-scope .more-trigger')?.focus()
+    }, 0)
+  }, [])
 
   const backForeground = useCallback((): void => {
     const returnFocusId = navigation.returnFocusId
@@ -623,7 +642,9 @@ export function YoloPanel({
     }
     const request: YoloActionRequest = intent.type === 'postpone'
       ? { action: 'postpone', kind: 'todo', id: foregroundTodo.id, scope_cwd: scopeCwd, due_at: intent.dueAt }
-      : { action: intent.type, kind: 'todo', id: foregroundTodo.id, scope_cwd: scopeCwd }
+      : intent.type === 'delete'
+        ? { action: 'delete', kind: 'todo', id: foregroundTodo.id, scope_cwd: scopeCwd, confirmation: 'PERMANENT_DELETE' }
+        : { action: intent.type, kind: 'todo', id: foregroundTodo.id, scope_cwd: scopeCwd }
     void runDetailAction(request)
   }, [detailAttention, foregroundTodo, navigation.foreground, openAnchoredChat, runDetailAction])
 
@@ -851,7 +872,7 @@ export function YoloPanel({
       data-presentation={presentation}
       style={{ position: 'fixed', left, right: 0, top: 0, bottom: 0, zIndex: 10000 }}
     >
-      <div className="panel-frame">
+      <div className="panel-frame" aria-hidden={dataManagementOpen ? true : undefined}>
       <header className="p-head">
         <div className="brand">
           {presentation === 'focus' ? (
@@ -889,6 +910,7 @@ export function YoloPanel({
             loading={state.loading}
             theme={theme}
             onOpenFilters={navigation.route.page === 'plan' ? () => { setFilterMenuOpen(true) } : undefined}
+            onOpenDataManagement={openDataManagement}
             onRefresh={() => { void load() }}
             onToggleTheme={toggleTheme}
           />
@@ -933,6 +955,13 @@ export function YoloPanel({
           ) : null}
         </div>
       </div>
+      {dataManagementOpen && state.data ? (
+        <DataManagementDialog
+          data={state.data}
+          onClose={closeDataManagement}
+          onRefresh={load}
+        />
+      ) : null}
     </div>
   )
 }

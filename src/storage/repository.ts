@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { normalizeTitle as normalize } from '../shared/text.ts'
 import { compareDueAt, isDueAtReached, parseDueAt } from '../shared/due.ts'
 import { todoEvidenceFingerprint } from '../shared/todo-identity.ts'
+import { selectTodosInRange, type TodoRangeAction, type TodoRangeSelector } from '../shared/todo-range.ts'
 import type { DB } from './db.ts'
 import type {
   ExtractionLog,
@@ -519,6 +520,61 @@ export function listTodoRecords(db: DB, scopeKey: string): Todo[] {
   return db.prepare(
     'SELECT * FROM todos WHERE scope_key = ? ORDER BY created_at DESC, id ASC',
   ).all(scopeKey) as Todo[]
+}
+
+/** Canonical todo candidates for an inclusive local-calendar range. */
+export function listTodosInRange(
+  db: DB,
+  scopeKey: string,
+  selector: TodoRangeSelector,
+  action: TodoRangeAction,
+): Todo[] {
+  return selectTodosInRange(listTodos(db, scopeKey), selector, action)
+}
+
+export interface PermanentTodoDeleteResult {
+  id: string
+  deleted_record_count: number
+}
+
+function todoIdentityIds(db: DB, canonicalId: string): string[] {
+  const rows = db.prepare(
+    `WITH RECURSIVE identity(id) AS (
+       SELECT id FROM todos WHERE id = ?
+       UNION
+       SELECT child.id FROM todos child JOIN identity parent ON child.merged_into_id = parent.id
+     )
+     SELECT id FROM identity`,
+  ).all(canonicalId) as Array<{ id: string }>
+  return rows.map((row) => row.id)
+}
+
+/**
+ * Permanently remove one canonical todo identity and its directly-linked
+ * projections. Timeline/session text is deliberately outside this boundary:
+ * it is an audit/source record, not an FK-owned todo projection.
+ */
+export function deleteTodoPermanently(db: DB, id: string): PermanentTodoDeleteResult | null {
+  const target = resolveCanonicalTodo(db, id)
+  if (!target || target.record_status !== 'canonical') return null
+  const ids = todoIdentityIds(db, target.id)
+  for (const recordId of ids) {
+    db.prepare("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id = ?").run(recordId)
+    db.prepare('DELETE FROM notifications WHERE todo_id = ?').run(recordId)
+    db.prepare('DELETE FROM pending_reminders WHERE todo_id = ?').run(recordId)
+    db.prepare('DELETE FROM attention_feedback WHERE todo_id = ?').run(recordId)
+    db.prepare('DELETE FROM todo_evidence WHERE todo_id = ?').run(recordId)
+    // Durable action/recall projections can otherwise retain the deleted id.
+    // IDs are generated opaque identifiers, so matching the id itself also
+    // covers bulk outcomes whose JSON stores it inside an ids array.
+    db.prepare('DELETE FROM client_actions WHERE outcome_json LIKE ?').run(`%${recordId}%`)
+    db.prepare(
+      `DELETE FROM recall_log
+       WHERE kept_keys LIKE ? OR drop_reasons LIKE ? OR rerank_outcome LIKE ?`,
+    ).run(`%todo:${recordId}%`, `%todo:${recordId}%`, `%todo:${recordId}%`)
+  }
+  for (const recordId of [...ids].reverse()) db.prepare('DELETE FROM todos WHERE id = ?').run(recordId)
+  return { id: target.id, deleted_record_count: ids.length }
 }
 
 export function listDueTodos(db: DB, scopeKey: string, before: string | number | Date): Todo[] {

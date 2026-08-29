@@ -136,6 +136,7 @@ export const YOLO_CSS = `
 .yolo-scope .more-menu button:hover, .yolo-scope .more-menu button:focus-visible, .yolo-scope .more-menu button.on { background: var(--y-surface-2); color: var(--y-text-1); }
 .yolo-scope .more-menu button:disabled { opacity: .55; cursor: wait; }
 .yolo-scope .more-menu button.refreshing svg { animation: yolo-spin var(--y-dur-3) linear; }
+.yolo-scope .more-menu button.danger { color: var(--y-danger); }
 .yolo-scope .more-separator { display: block; height: 1px; margin: 5px 4px; background: var(--y-line); }
 
 /* refresh sweep — the system's one signature motion: runs only when polled
@@ -679,6 +680,65 @@ export const YOLO_CSS = `
 .yolo-scope .v2-task-action-panel textarea:focus-visible { border-color: var(--y-focus); outline: 2px solid color-mix(in srgb, var(--y-focus) 28%, transparent); outline-offset: 0; }
 .yolo-scope .v2-task-action-panel fieldset > button { width: 100%; border-color: color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); font-weight: 700; }
 .yolo-scope .v2-task-action-panel > section[aria-label="危险操作"] > button { border-color: color-mix(in srgb, var(--y-danger) 45%, var(--y-line-strong)); color: var(--y-danger); text-align: center; }
+.yolo-scope .v2-task-action-panel > section[aria-label="危险操作"] { display: grid; gap: 9px; }
+.yolo-scope .v2-task-action-panel .permanent-delete-confirm { padding: 10px; border: 1px solid color-mix(in srgb, var(--y-danger) 45%, var(--y-line-strong)); border-radius: var(--y-r-sm); background: color-mix(in srgb, var(--y-danger) 5%, var(--y-surface)); }
+.yolo-scope .v2-task-action-panel .permanent-delete-confirm p { flex-basis: 100%; margin: 0; color: var(--y-text-2); font-size: 13px; line-height: 1.55; }
+.yolo-scope .v2-task-action-panel .permanent-delete-confirm label { flex: 1 1 100%; }
+.yolo-scope .v2-task-action-panel .permanent-delete-confirm button:not(:last-child),
+.yolo-scope .v2-task-action-panel button.permanent-delete { color: var(--y-danger); }
+
+/* Date-range cancellation and permanent deletion. Kept as one quiet modal so
+   destructive maintenance never competes with the normal planning surface. */
+.yolo-scope .data-manager-backdrop { position: absolute; inset: 0; z-index: 120; display: grid; place-items: center; padding: 18px; background: color-mix(in srgb, var(--y-bg) 72%, transparent); backdrop-filter: blur(3px); }
+.yolo-scope .data-manager { display: flex; flex-direction: column; width: min(620px, 100%); max-height: min(760px, calc(100vh - 36px)); overflow: hidden; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-lg); background: var(--y-bg); box-shadow: var(--y-e1); animation: yolo-dock-in var(--y-dur-3) var(--y-ease-out); }
+.yolo-scope .data-manager > header,
+.yolo-scope .data-manager > footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--y-line-strong); }
+.yolo-scope .data-manager > footer { justify-content: flex-end; border-top: 1px solid var(--y-line-strong); border-bottom: 0; }
+.yolo-scope .data-manager > header h2 { margin: 2px 0 0; font-size: 18px; }
+.yolo-scope .data-manager .eyebrow { color: var(--y-text-3); font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.yolo-scope .data-manager button,
+.yolo-scope .data-manager input,
+.yolo-scope .data-manager select { min-height: 38px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface); color: var(--y-text-1); font: inherit; }
+.yolo-scope .data-manager button { padding: 0 12px; cursor: pointer; }
+.yolo-scope .data-manager button:disabled { opacity: .48; cursor: not-allowed; }
+.yolo-scope .data-manager button.primary { border-color: color-mix(in srgb, var(--y-focus) 58%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 14%, var(--y-surface)); font-weight: 700; }
+.yolo-scope .data-manager button.danger { border-color: color-mix(in srgb, var(--y-danger) 52%, var(--y-line-strong)); color: var(--y-danger); font-weight: 700; }
+.yolo-scope .data-manager button:focus-visible,
+.yolo-scope .data-manager input:focus-visible,
+.yolo-scope .data-manager select:focus-visible { outline: 2px solid color-mix(in srgb, var(--y-focus) 34%, transparent); outline-offset: 1px; }
+.yolo-scope .data-manager-body { min-height: 0; overflow-y: auto; padding: 16px; }
+.yolo-scope .data-manager fieldset { margin: 0; padding: 0; border: 0; }
+.yolo-scope .data-manager legend,
+.yolo-scope .data-manager h3 { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+.yolo-scope .data-manager-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.yolo-scope .data-manager-modes legend { grid-column: 1 / -1; }
+.yolo-scope .data-manager-modes > label { display: flex; align-items: flex-start; gap: 9px; min-width: 0; padding: 11px; border: 1px solid var(--y-line); border-radius: var(--y-r-md); background: var(--y-surface); cursor: pointer; }
+.yolo-scope .data-manager-modes > label.on { border-color: color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 7%, var(--y-surface)); }
+.yolo-scope .data-manager-modes > label.danger.on { border-color: color-mix(in srgb, var(--y-danger) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-danger) 6%, var(--y-surface)); }
+.yolo-scope .data-manager-modes input { flex: none; min-height: auto; margin-top: 2px; accent-color: var(--y-focus); }
+.yolo-scope .data-manager-modes span { display: grid; gap: 3px; min-width: 0; }
+.yolo-scope .data-manager-modes small { color: var(--y-text-3); font-size: 13px; line-height: 1.45; }
+.yolo-scope .data-manager-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; margin-top: 15px; }
+.yolo-scope .data-manager-grid label,
+.yolo-scope .data-manager-confirm label { display: grid; gap: 5px; min-width: 0; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .data-manager-grid input,
+.yolo-scope .data-manager-grid select,
+.yolo-scope .data-manager-confirm input { width: 100%; min-width: 0; padding: 0 9px; }
+.yolo-scope .data-manager-preview,
+.yolo-scope .data-manager-confirm { margin-top: 15px; padding: 12px; border: 1px solid var(--y-line); border-radius: var(--y-r-md); background: var(--y-surface-2); }
+.yolo-scope .data-manager-preview > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.yolo-scope .data-manager-preview h3 { margin: 0; }
+.yolo-scope .data-manager-preview strong { font-size: 18px; }
+.yolo-scope .data-manager-preview p,
+.yolo-scope .data-manager-confirm p { margin: 7px 0 0; color: var(--y-text-3); font-size: 13px; line-height: 1.5; }
+.yolo-scope .data-manager-preview ul { display: grid; gap: 0; max-height: 210px; margin: 9px 0 0; padding: 0; overflow-y: auto; list-style: none; }
+.yolo-scope .data-manager-preview li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 7px 0; border-top: 1px solid var(--y-line); font-size: 13px; }
+.yolo-scope .data-manager-preview li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yolo-scope .data-manager-preview li small { flex: none; color: var(--y-text-3); }
+.yolo-scope .data-manager-confirm.danger { border-color: color-mix(in srgb, var(--y-danger) 42%, var(--y-line)); }
+.yolo-scope .data-manager-confirm label { margin-top: 10px; }
+.yolo-scope .data-manager-error { margin: 11px 0 0; color: var(--y-danger); font-size: 13px; }
+.yolo-scope .data-manager-result { margin: 11px 0 0; color: var(--y-text-1); font-size: 13px; font-weight: 700; }
 
 /* Learning receipt is evidence, not a celebratory card. */
 .yolo-scope .v2-learning-receipt { margin-top: 8px; padding: 11px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface-2); }
@@ -713,6 +773,10 @@ export const YOLO_CSS = `
 .yolo-scope:not(.compact) .v2-today-surface > header h1, .yolo-scope:not(.compact) .v2-today-surface > header p:last-child { grid-column: 1 / -1; }
 .yolo-scope[data-presentation="split"] .v2-today-surface { max-width: 820px; margin-inline: auto; }
 .yolo-scope[data-presentation="split"] .v2-task-action-panel { width: 100%; }
+.yolo-scope.compact .data-manager-backdrop { place-items: stretch; padding: 0; background: var(--y-bg); backdrop-filter: none; }
+.yolo-scope.compact .data-manager { width: 100%; max-height: 100%; border: 0; border-radius: 0; box-shadow: none; }
+.yolo-scope.compact .data-manager-modes,
+.yolo-scope.compact .data-manager-grid { grid-template-columns: 1fr; }
 
 /* narrow panel (4.3 Compact) */
 .yolo-scope.compact .p-date { display: none; }

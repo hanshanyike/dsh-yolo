@@ -3,17 +3,18 @@
 // this labelled menu instead of competing with chat and notifications.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IcDots, IcFilter, IcMoon, IcRefresh, IcSun } from '../design/icons.tsx'
+import { IcDots, IcFilter, IcMoon, IcRefresh, IcSun, IcTrash } from '../design/icons.tsx'
 
 export interface MoreMenuProps {
   loading: boolean
   theme: 'dark' | 'light'
   onOpenFilters?: () => void
+  onOpenDataManagement: () => void
   onRefresh: () => void
   onToggleTheme: () => void
 }
 
-export function MoreMenu({ loading, theme, onOpenFilters, onRefresh, onToggleTheme }: MoreMenuProps): JSX.Element {
+export function MoreMenu({ loading, theme, onOpenFilters, onOpenDataManagement, onRefresh, onToggleTheme }: MoreMenuProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -94,6 +95,10 @@ export function MoreMenu({ loading, theme, onOpenFilters, onRefresh, onToggleThe
           <button type="button" role="menuitem" onClick={() => { run(onToggleTheme) }}>
             {theme === 'dark' ? <IcSun size={15} /> : <IcMoon size={15} />}
             <span>{theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'}</span>
+          </button>
+          <span className="more-separator" role="separator" />
+          <button type="button" role="menuitem" className="danger" onClick={() => { run(onOpenDataManagement, false) }}>
+            <IcTrash size={15} /><span>事项数据管理</span>
           </button>
         </div>
       )}

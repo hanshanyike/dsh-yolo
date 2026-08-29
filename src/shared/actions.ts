@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto'
 import { localDateStr } from './text.ts'
 import { todoEvidenceFingerprint } from './todo-identity.ts'
 import { buildDashboardData } from '../ui/dashboard.ts'
+import { validateTodoRange, type TodoRangeField, type TodoRangeSelector } from './todo-range.ts'
 
 const PRIORITIES: readonly Priority[] = ['low', 'medium', 'high', 'urgent']
 
@@ -45,6 +46,12 @@ export interface YoloActionRequest {
   evidence_fingerprint?: string
   feedback_reason?: AttentionFeedbackReason
   suppressed_until?: number
+  /** Inclusive local-calendar selector for bulk todo maintenance. */
+  range_field?: TodoRangeField
+  range_from?: string
+  range_to?: string
+  /** Required literal for irreversible deletion; intentionally absent from model tools. */
+  confirmation?: string
 }
 
 export type AttentionFeedbackReason =
@@ -381,7 +388,64 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
     return { ok: true, item: todo as unknown as Record<string, unknown> }
   }
 
+  // ---- date-range todo maintenance ----
+  if (action === 'bulk_cancel' || action === 'bulk_delete') {
+    if (kind !== 'todo') return deny(yolo, cwd, r, `${action} requires kind=todo`, 400)
+    const selector: TodoRangeSelector = {
+      field: r.range_field as TodoRangeField,
+      from: typeof r.range_from === 'string' ? r.range_from : '',
+      to: typeof r.range_to === 'string' ? r.range_to : '',
+    }
+    const rangeError = validateTodoRange(selector)
+    if (rangeError) return deny(yolo, cwd, r, rangeError, 400, 'invalid_todo_range')
+    if (action === 'bulk_delete' && r.confirmation !== 'PERMANENT_DELETE') {
+      return deny(yolo, cwd, r, 'bulk_delete requires permanent-delete confirmation', 400, 'permanent_delete_confirmation_required')
+    }
+    if (action === 'bulk_cancel') {
+      const items = yolo.cancelTodosInRange(cwd, selector, { session_id: sessionId ?? null })
+      return {
+        ok: true,
+        item: { action, affected: items.length, ids: items.map((item) => item.id), ...selector },
+        learning_receipt: {
+          type: items.length > 0 ? 'state_change' : 'no_learning',
+          summary: items.length > 0 ? `已取消 ${items.length} 项` : '范围内没有可取消的开放事项',
+          scope: 'workspace',
+          reversible: items.length > 0,
+        },
+      }
+    }
+    const deleted = yolo.deleteTodosInRange(cwd, selector, { session_id: sessionId ?? null })
+    return {
+      ok: true,
+      item: { action, affected: deleted.ids.length, ids: deleted.ids, deleted_record_count: deleted.deleted_record_count, ...selector },
+      ...(deleted.audit_event_id ? { audit_event_id: deleted.audit_event_id } : {}),
+      learning_receipt: {
+        type: deleted.ids.length > 0 ? 'state_change' : 'no_learning',
+        summary: deleted.ids.length > 0 ? `已永久删除 ${deleted.ids.length} 项` : '范围内没有可永久删除的事项',
+        scope: 'workspace',
+        reversible: false,
+      },
+    }
+  }
+
   if (!ref.id && !ref.title) return deny(yolo, cwd, r, 'pass id or title', 400)
+
+  if (action === 'delete') {
+    if (kind !== 'todo' || !ref.id) return deny(yolo, cwd, r, 'delete requires kind=todo and id', 400)
+    if (r.confirmation !== 'PERMANENT_DELETE') {
+      return deny(yolo, cwd, r, 'delete requires permanent-delete confirmation', 400, 'permanent_delete_confirmation_required')
+    }
+    const deleted = yolo.deleteTodoPermanently(cwd, ref.id, { session_id: sessionId ?? null })
+    return deleted
+      ? {
+          ok: true,
+          item: { id: deleted.id, deleted: true, deleted_record_count: deleted.deleted_record_count },
+          learning_receipt: {
+            type: 'state_change', summary: '事项已永久删除', scope: 'item', reversible: false,
+          },
+        }
+      : deny(yolo, cwd, r, 'todo not found', 404)
+  }
 
   // ---- goal / milestone maintenance (v0.3.0 E) ----
   if (action === 'rename') {
@@ -522,6 +586,10 @@ export function hashYoloActionRequest(r: YoloActionRequest): string {
     evidence_fingerprint: r.evidence_fingerprint ?? null,
     feedback_reason: r.feedback_reason ?? null,
     suppressed_until: r.suppressed_until ?? null,
+    range_field: r.range_field ?? null,
+    range_from: r.range_from ?? null,
+    range_to: r.range_to ?? null,
+    confirmation: r.confirmation ?? null,
   }
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
 }
@@ -545,7 +613,7 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
       const todoId = outcome.ok && r.kind === 'todo' && typeof outcome.item?.id === 'string'
         ? outcome.item.id
         : undefined
-      if (todoId) {
+      if (todoId && r.action !== 'delete') {
         const relation = r.action === 'quick_add'
           ? 'origin'
           : r.action === 'complete'

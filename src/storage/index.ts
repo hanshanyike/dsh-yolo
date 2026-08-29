@@ -16,6 +16,7 @@ import { migrateLegacyScopeDatabases } from './migrate-scope.ts'
 import * as repo from './repository.ts'
 import { ftsRecallSearch } from './search.ts'
 import { renderSnapshot, writeSnapshot } from './snapshot.ts'
+import type { TodoRangeSelector } from '../shared/todo-range.ts'
 import type { DuplicateTodoPair } from './types.ts'
 import type {
   Goal,
@@ -176,6 +177,10 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.listTodoRecords(h.db, h.scopeKey)
   }
+  listTodosInRange(cwd: string, selector: TodoRangeSelector, action: 'bulk_cancel' | 'bulk_delete'): Todo[] {
+    const h = this.resolve(cwd)
+    return repo.listTodosInRange(h.db, h.scopeKey, selector, action)
+  }
   addTodoEvidence(cwd: string, todoId: string, data: TodoEvidenceWrite): { evidence: TodoEvidence; created: boolean }
   addTodoEvidence(cwd: string, data: TodoEvidenceWrite & { todo_id: string }): { evidence: TodoEvidence; created: boolean }
   addTodoEvidence(
@@ -225,6 +230,65 @@ export default class Yolo extends Service {
     const id = ref.id ?? (ref.title ? repo.findTodoByTitle(h.db, h.scopeKey, ref.title)?.id : undefined)
     if (!id) return null
     return repo.applyTodoAction(h.db, id, action, args)
+  }
+  cancelTodosInRange(
+    cwd: string,
+    selector: TodoRangeSelector,
+    args?: { session_id?: string | null },
+  ): Todo[] {
+    const h = this.resolve(cwd)
+    return withTransaction(h.db, () => repo.listTodosInRange(h.db, h.scopeKey, selector, 'bulk_cancel')
+      .map((todo) => repo.applyTodoAction(h.db, todo.id, 'cancel', args))
+      .filter((todo): todo is Todo => todo !== null))
+  }
+  deleteTodoPermanently(
+    cwd: string,
+    id: string,
+    args?: { session_id?: string | null },
+  ): repo.PermanentTodoDeleteResult | null {
+    const h = this.resolve(cwd)
+    return withTransaction(h.db, () => {
+      const deleted = repo.deleteTodoPermanently(h.db, id)
+      if (!deleted) return null
+      repo.addEvent(h.db, {
+        kind: 'todo_deleted',
+        summary: '永久删除 1 项',
+        detail: null,
+        session_id: args?.session_id ?? null,
+        source: args?.session_id ? null : 'manual',
+        scope_key: h.scopeKey,
+      })
+      return deleted
+    })
+  }
+  deleteTodosInRange(
+    cwd: string,
+    selector: TodoRangeSelector,
+    args?: { session_id?: string | null },
+  ): { ids: string[]; deleted_record_count: number; audit_event_id?: string } {
+    const h = this.resolve(cwd)
+    return withTransaction(h.db, () => {
+      const candidates = repo.listTodosInRange(h.db, h.scopeKey, selector, 'bulk_delete')
+      const results = candidates
+        .map((todo) => repo.deleteTodoPermanently(h.db, todo.id))
+        .filter((result): result is repo.PermanentTodoDeleteResult => result !== null)
+      const deletedRecordCount = results.reduce((sum, result) => sum + result.deleted_record_count, 0)
+      const audit = results.length > 0
+        ? repo.addEvent(h.db, {
+            kind: 'todo_deleted',
+            summary: `永久删除 ${results.length} 项`,
+            detail: `${selector.field === 'due_at' ? '截止日期' : '创建日期'} ${selector.from} 至 ${selector.to}`,
+            session_id: args?.session_id ?? null,
+            source: args?.session_id ? null : 'manual',
+            scope_key: h.scopeKey,
+          })
+        : null
+      return {
+        ids: results.map((result) => result.id),
+        deleted_record_count: deletedRecordCount,
+        ...(audit ? { audit_event_id: audit.id } : {}),
+      }
+    })
   }
   /** Merge a duplicate todo into its keeper (M9 P35); one todo_consolidated event. */
   applyTodoConsolidate(

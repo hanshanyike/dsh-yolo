@@ -52,6 +52,8 @@ export function TaskActionPanel({
 }: TaskActionPanelProps): JSX.Element {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const dialogRef = useRef<HTMLElement>(null)
   const titleId = `task-action-title-${item.id}`
   const reasonId = `task-action-reason-${item.id}`
@@ -216,7 +218,24 @@ export function TaskActionPanel({
             <button type="button" disabled={busy} onClick={() => { setCancelConfirmOpen(false) }}>保留事项</button>
           </div>
         ) : (
-          <button type="button" disabled={busy} onClick={() => { setCancelConfirmOpen(true) }}>取消事项</button>
+          <button type="button" disabled={busy} onClick={() => { setCancelConfirmOpen(true); setDeleteConfirmOpen(false) }}>取消事项</button>
+        )}
+        {deleteConfirmOpen ? (
+          <div role="group" aria-label="确认永久删除事项" className="permanent-delete-confirm">
+            <p>事项、来源证据、关联提醒、判断记录和搜索投影会被删除，且不能撤销。原始宿主会话与既有时间线不在本次范围内。</p>
+            <label>
+              <span>输入“永久删除”继续</span>
+              <input value={deleteConfirmation} disabled={busy} autoComplete="off" onChange={(event) => { setDeleteConfirmation(event.target.value) }} />
+            </label>
+            <button
+              type="button"
+              disabled={busy || deleteConfirmation !== '永久删除'}
+              onClick={() => { onAction({ type: 'delete' }); setDeleteConfirmOpen(false); setDeleteConfirmation('') }}
+            >永久删除</button>
+            <button type="button" disabled={busy} onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmation('') }}>保留事项</button>
+          </div>
+        ) : (
+          <button type="button" className="permanent-delete" disabled={busy} onClick={() => { setDeleteConfirmOpen(true); setCancelConfirmOpen(false) }}>永久删除事项</button>
         )}
       </section>
     </aside>
