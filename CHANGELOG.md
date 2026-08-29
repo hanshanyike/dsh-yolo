@@ -4,7 +4,11 @@
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.4.0-rc4] — 2026-08-29
+
+### Fixed
+
+- 修复助手对话面板底部输入栏占用过多高度、消息长文本不换行，以及对话生成新待办后看板不自动刷新的问题。
 
 ## [0.4.0-rc3] — 2026-08-28
 
@@ -182,7 +186,8 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc3...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc4...HEAD
+[0.4.0-rc4]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc3...v0.4.0-rc4
 [0.4.0-rc3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc2...v0.4.0-rc3
 [0.4.0-rc2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc1...v0.4.0-rc2
 [0.4.0-rc1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.3...v0.4.0-rc1
