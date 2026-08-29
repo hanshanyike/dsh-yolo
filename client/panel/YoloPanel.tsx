@@ -709,7 +709,7 @@ export function YoloPanel({ left, onClose, openSession, notificationFocusRequest
         ? '事项详情'
         : foreground.kind === 'source_preview' ? '来源' : ''
   const contextContent = foreground.kind === 'assistant_chat' || foreground.kind === 'item_discussion'
-    ? <ChatPane variant={presentation === 'split' ? 'side' : 'full'} anchor={foreground.kind === 'item_discussion' ? chatAnchor : null} threadKey={chatThread} />
+    ? <ChatPane variant={presentation === 'split' ? 'side' : 'full'} anchor={foreground.kind === 'item_discussion' ? chatAnchor : null} threadKey={chatThread} onDashboardRefresh={load} />
     : foreground.kind === 'item_detail' && foregroundTodo && detailDraft
       ? (
           <>

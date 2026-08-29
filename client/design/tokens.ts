@@ -79,6 +79,9 @@ export const YOLO_CSS = `
   line-height: 1.4;
   color: var(--y-text-1);
   background: var(--y-bg);
+  /* The drawer root is fixed with top/bottom bounds. Include its workbench
+     padding in that height so the surface cannot extend below the viewport. */
+  box-sizing: border-box;
 }
 .yolo-scope *, .yolo-scope *::before, .yolo-scope *::after { box-sizing: border-box; }
 .yolo-scope [hidden] { display: none !important; }
@@ -397,12 +400,15 @@ export const YOLO_CSS = `
 @keyframes yolo-shimmer { to { background-position: -200% 0; } }
 
 /* messages (chat) */
-.yolo-scope .msgs { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 16px; }
-.yolo-scope .msg { max-width: 78%; font-size: 13.5px; line-height: 20px; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
-.yolo-scope .msg.ai { align-self: flex-start; color: var(--y-text-1); white-space: pre-wrap; word-break: break-word; }
-.yolo-scope .msg.me { align-self: flex-end; background: var(--y-surface-2); border-radius: var(--y-r-md); padding: 8px 11px; white-space: pre-wrap; word-break: break-word; }
+.yolo-scope .msgs { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 16px; min-width: 0; }
+.yolo-scope .msg { min-width: 0; max-width: 78%; font-size: 13.5px; line-height: 20px; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.yolo-scope .msg.ai { align-self: flex-start; color: var(--y-text-1); }
+.yolo-scope .msg.me { align-self: flex-end; background: var(--y-surface-2); border-radius: var(--y-r-md); padding: 8px 11px; }
 .yolo-scope .msg .who { font-size: 10px; color: var(--y-text-3); margin-bottom: 3px; }
-.yolo-scope .chat-pane-shell { position: relative; }
+.yolo-scope .chat-pane-shell { position: relative; height: 100%; min-height: 0; overflow: hidden; }
+.yolo-scope .chat-pane-shell--full, .yolo-scope .chat-pane-shell--side { flex: 1 1 0; }
+.yolo-scope .chat-pane-shell--full > .p-body, .yolo-scope .chat-pane-shell--side > .dock-msgs { flex: 1 1 0; min-height: 0; }
+.yolo-scope .chat-pane-shell--full > .capture--foot, .yolo-scope .chat-pane-shell--side > .dock-input { flex: 0 0 auto; min-height: 52px; }
 .yolo-scope .chat-newest { position: absolute; z-index: 3; right: 18px; bottom: 62px; min-height: 32px; padding: 0 11px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-pill); background: var(--y-surface); color: var(--y-accent-text); box-shadow: var(--y-e1); font-size: 12px; }
 .yolo-scope .chat-newest--full { right: max(18px, calc((100% - 760px) / 2 + 28px)); }
 
