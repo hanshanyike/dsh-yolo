@@ -4,7 +4,28 @@
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.4.0-rc5] — 2026-08-29
+
+### Added
+
+- 新增不可变的事项来源证据链：一个规范事项可以关联多个会话、轮次、助手操作和看板操作；看板 payload
+  同时提供主来源、完整来源列表、来源数与关联会话数。
+- 新增事项身份与去重实施路线，持续跟踪候选召回、语义裁决、合并撤销、周期实例和跨工作区关联等后续能力。
+
+### Changed
+
+- 事项的待处理、进行中、完成、取消等业务状态与 canonical / merged 记录状态分离；显式合并保留原业务事实、
+  历史事件和来源证据，普通列表、搜索、提醒与看板只暴露规范事项。
+- `develop` 推送现在执行 Linux、Windows 与 coverage CI，匹配本地功能分支合入 `develop` 后仅推送该长期分支的流程。
+
+### Fixed
+
+- 修复同一抽取轮次重放、同一助手工具调用重试或看板动作重试可能重复创建事项、来源或状态事件的问题；
+  operation id、请求哈希与 evidence fingerprint 现在分层持久化并在同一事务内提交。
+- 修复同一事项在不同会话被再次创建或改期时只能保留一个来源的问题；助手动作会保存真实 session、turn 和
+  operation evidence，真实多会话改期始终落到同一个事项 ID。
+- 修复重复项合并曾借用 cancelled 表示记录退场、终态重复项无法合并，以及 merged 副本可能重新进入提醒、
+  全文搜索或普通 reopen 流程的问题。
 
 ## [0.4.0-rc4] — 2026-08-29
 
@@ -188,7 +209,8 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc4...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc5...HEAD
+[0.4.0-rc5]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc4...v0.4.0-rc5
 [0.4.0-rc4]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc3...v0.4.0-rc4
 [0.4.0-rc3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc2...v0.4.0-rc3
 [0.4.0-rc2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc1...v0.4.0-rc2
