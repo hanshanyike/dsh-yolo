@@ -68,6 +68,10 @@ todo 行继续提供首来源 `source` 兼容字段，同时把 `todo_evidence` 
 影响而少算。`GET /yolo/notifications` 使用稳定打开时间与 opaque cursor 分页聚合完整投递记录；
 `POST /yolo/notifications/seen` 只更新 `seen_at`，不改变 `handled_at` 或事项状态。
 
+`GET /yolo/history` 使用相同的稳定打开时间与 opaque cursor。`view=timeline` 返回跨工作区全局时间流；
+`view=items` 在服务端按稳定主体聚合并在分页前应用状态/关键词筛选；`view=subject` 只接受已登记
+`scope_cwd`，按需读取一个事项的完整变化。内部审计事件不进入该产品端点。
+
 ## 动作与会话端点
 
 | 端点 | 作用 |
@@ -75,6 +79,7 @@ todo 行继续提供首来源 `source` 兼容字段，同时把 `todo_evidence` 
 | `GET /yolo/dashboard` | 全工作区 Dashboard v2 |
 | `GET /yolo/badge` | 轻量未读通知角标与新通知预览 |
 | `GET /yolo/notifications` | 跨工作区完整通知记录与分页 |
+| `GET /yolo/history` | 按时间、按事项或单事项读取用户可见的分页历史 |
 | `POST /yolo/notifications/seen` | 标记单条或打开基线之前的通知已读 |
 | `POST /yolo/actions` | 经白名单与 scope pin 后调用 `applyYoloAction` |
 | `GET /yolo/session/messages` | 读取 resident 或 anchored 对话 |

@@ -12,6 +12,7 @@
 |---|---|
 | `constants.ts` | namespace、service 名、UI slot、prompt 顺序和代码默认值 |
 | `dashboard.ts` | Dashboard v2 跨边界载荷、工作区标签、健康度和 todo 判定函数 |
+| `history.ts` | 分页历史的时间线、事项摘要、单事项事件和工作区载荷 |
 | `due.ts` | date-only / datetime 的统一解析、到期、逾期、本地日期和排序事实 |
 | `badge.ts` | 轻量角标载荷 `YoloBadgeData` |
 | `actions.ts` | `YoloActionRequest`、结果/回执/撤销类型与 `applyYoloAction` |
@@ -28,6 +29,9 @@ milestones、events、preferences、ledger、notifications，以及 v2 的 atten
 capabilities、workspaces、workspaceErrors 和 memory health。聚合行携带 `scope_cwd`/`ws`，
 供服务端把动作安全地路由回原工作区；todo 行保留单个 `source` 兼容字段，并可携带不可变
 `sources[]`、`source_count` 和 `related_session_count`。
+
+`history.ts` 是独立 `/yolo/history` 端点的跨边界事实源。时间线只返回用户可理解的事件白名单；
+事项投影以 `scope_cwd + subject type + subject id` 作为身份并按最后变化排序，终态是筛选条件而非另一份数据。
 
 `applyYoloAction(yolo, cwd, request)` 是统一动作入口，供模型工具、HTTP 端点和提取 updates
 复用。它负责参数校验、状态分发、拒绝审计、幂等、学习回执与短时撤销描述；失败返回带

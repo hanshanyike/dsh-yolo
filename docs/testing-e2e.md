@@ -32,6 +32,7 @@
 | `api/source-provenance.spec.ts` | 会话来源保存有界摘录、时间、工作区、session id 和可选 turn；manual/tool/legacy/旧数据降级；capability 与字段一致 | W8 / W16 / SRC-01～03 |
 | `api/due-semantics.spec.ts` | date-only、精确 datetime 与终态的 overdue/attention/summary 一致，并正确进入首页和计划投影；快速记录不会立即生成提醒 | W2 / W4 / W11 |
 | `api/notifications.spec.ts` | 未读与处理分离、20 条稳定分页、完整可达和已读基线 | W12 / W14 / NOTIF-API-01 |
+| `api/history.spec.ts` | 完整时间线分页、内部审计排除、稳定事项身份、改名连续、终态筛选和结构化字段变化 | W8 / W15 / HIST-03～04 |
 | `api/actions-consolidate.spec.ts` · P35 | 合并两条待办：保留方继承字段、被并方退场、审计保留；最近变化是否展示只按产品白名单 | W3 / HIST-01 |
 | `api/actions-consolidate.spec.ts` · P34 | 非法动作 400 且落 `action_denied` 审计——拒绝绝不静默，UI 不把内部审计伪装成用户进展 | W12 / W16 |
 
@@ -40,7 +41,7 @@
 | spec · 用例 | 场景 | 验收来源 |
 |---|---|---|
 | `ui/panel-flow.spec.ts` | 默认首页、快速记录、完成/取消/推迟、四秒撤销和跨首页/计划/历史同步 | W1～W4 / W12 / W15 |
-| `ui/home-plan-history.spec.ts` | 首页安静/正常/高压；计划“今天/接下来/目标/全部”；历史“已完成/最近变化”；没有“进展”或“Agent 任务”入口 | W2 / W11 / W15 / HOME / HIST |
+| `ui/home-plan-history.spec.ts` | 首页安静/正常/高压；计划“今天/接下来/目标/全部”；历史“按时间/按事项”、状态筛选与事项展开；没有“进展”或“Agent 任务”入口 | W2 / W8 / W11 / W15 / HOME / HIST |
 | `ui/source-navigation.spec.ts` | 首页、计划、历史和详情使用同一来源行为；预览、失败不关闭、成功打开宿主会话、重开恢复；旧数据降级 | W8 / W9 / SRC-01～04 |
 | `ui/foreground-exclusion.spec.ts` | 助手对话、事项讨论、详情、来源预览互斥；返回、Esc、焦点和单/双栏语义一致 | W5 / SM-01～03 / A11Y-01 |
 | `ui/context-responsive.spec.ts` | 可用容器宽度 340、479 和阈值两侧；宿主侧栏展开/收起；resize 保留 thread/draft/pending/scroll/focus，至多一个上下文区 | W7 / RSP-01～02 |
@@ -123,6 +124,8 @@ TI-13 的已知缺口写成保守策略已经生效。
 | REM-HOME-02 | ui + host | 已打开 item/source/chat 前景时新通知不抢占；panel 已开只刷新不弹；点击 reminder popup 定位首页事项，brief/独立提醒定位通知记录，scope/source 正确 |
 | HIST-01 | unit + api + ui | 混合 `completed / cancelled / reopened / postponed / todo_updated / reminder_fired / attention_seen / brief_generated`，断言最近变化白名单与噪声排除，摘要计数等于可见集合 |
 | HIST-02 | unit + ui | 跨工作区按全局时间排序；完成/取消分区且各自可 reopen；reopen 后退出终态集合；merged 副本不进入“已取消”或普通 reopen，partial 明示 |
+| HIST-03 | unit + api + ui | 独立 `/yolo/history` 按打开时刻稳定分页；时间线跨工作区全局排序，用户可见白名单排除内部审计，结构化前后值与 SQLite 一致 |
+| HIST-04 | unit + api + ui | 按事项使用 `(scope,type,id)` 聚合；改名前后保持一项，同名不同 id 不合并；状态筛选在分页前生效，展开按需读取单事项历史，旧未关联事件只留在时间线 |
 | CHAT-01 | unit + ui + host | resident、事项 A、事项 B 三类历史隔离；响应式返回/隐藏后再次打开 A 继续同一 episode；显式结束清除它，之后再次讨论 A 创建新 episode；A/B/resident 不串写 |
 | CHAT-02 | unit + ui | 慢回复和旧轮询不得写入当前 B；单/双栏切换、panel unmount/remount 后 POST 恰好一次，pending/draft/scroll 连续 |
 
@@ -429,8 +432,8 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 
 ### 8.6 历史、最近变化与来源（TC）
 
-- [ ] 👤 **TC-1 完成与取消**：完成、取消和重新打开分别进入正确历史分区；重新打开后退出终态集合，历史更正轨迹不被静默改写
-- [ ] 👤 **TC-2 最近变化**：工作会话新增、改期、完成、取消、合并和目标变化进入“最近变化”；提醒扫描、简报生成、已读和反馈等操作型审计不显示
+- [ ] 👤 **TC-1 完成与取消**：按事项筛选严格区分完成、取消和重新打开；重新打开后退出终态筛选，历史更正轨迹不被静默改写
+- [ ] 👤 **TC-2 历史双视图**：工作会话新增、改期、完成、取消、合并和目标变化进入按时间视图，并按稳定事项 ID 聚合；提醒扫描、简报生成、已读和反馈等操作型审计不显示
 - [ ] 👤 **TC-3 来源一致**：同一事项在首页、计划、历史和详情显示相同“来自：会话名 · 工作区”行为；点击先打开来源预览
 - [ ] 👤 **TC-4 来源数据边界**：预览显示来源时间、工作区、session id 和有界来源摘录；Unicode/换行不损坏，不复制或泄露完整 transcript；capability 与真实字段一致
 - [ ] 👤 **TC-5 来源降级**：manual/tool/legacy、无 session 和旧行无 excerpt 均有明确文案且不伪造可点击按钮或精确 turn 定位

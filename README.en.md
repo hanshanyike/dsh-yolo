@@ -37,7 +37,7 @@ how to do it. It can:
 - **Remind you when items are due** through YOLO notifications and its own
   conversation, without injecting messages into an active work conversation.
 - **Provide one place to review and act** through Home for current attention,
-  Plans for organized commitments, and History for terminal items and recent changes.
+  Plans for organized commitments, and History grouped either by time or by item.
 - **Keep notification deliveries traceable** with an unread badge and a paginated
   notification record; viewing a delivery never changes the underlying item state.
 - **Preserve bounded source evidence** for newly extracted items, with a preview

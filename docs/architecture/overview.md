@@ -158,9 +158,10 @@ SQLite + FTS5 索引 ──► 每次状态变更同时写入时间线事件
                 └─ 跳过不可读工作区并标记 summary.partial
 ctx.yolo ──► GET /yolo/badge（轻量聚合未读投递数）
          └─► GET /yolo/notifications（完整通知记录分页）
+         └─► GET /yolo/history（完整变化按时间或事项分页）
          ──► POST /yolo/actions（白名单作用域路由 + 领域动作）
 YOLO agent ──► GET /yolo/session/messages + POST /yolo/session/send
-client ──► 340px 助手面板：今日 / 即将 / 已完成 + 对话界面
+client ──► 340px 助手面板：首页 / 计划 / 历史 + 单一上下文
 ```
 
 面板是**全局界面，而不是单会话界面**：记忆的寿命长于任何一次对话，因此入口位于侧栏底部，

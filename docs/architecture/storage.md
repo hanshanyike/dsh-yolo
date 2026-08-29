@@ -67,6 +67,11 @@ completion claim 或 discussion，后续提及不会覆盖首条来源。
 （canonical/merged/rejected），`merged_into_id` 指向规范事项。业务状态与记录身份相互独立：合并不会把
 来源事项伪装成 cancelled，也不会改写目标的完成/取消状态。
 
+`events` 是追加式历史事实。新领域事件写入 `subject_type + subject_id + subject_title`，并把字段前后值保存到
+`change_json`；合并等关系还保存 related subject。主体列不设置级联外键，保证事项删除或合并后历史仍可读。
+旧事件没有稳定主体时保持 NULL，只进入时间线，不按摘要标题回填。按事项查询使用
+`(scope_key, subject_type, subject_id, occurred_at)` 索引；跨工作区身份始终包含 owner scope。
+
 主 Agent 可能在同一轮先调用 `memory_write`：这类 tool 行会带调用 session。后台抽取使用
 相同 `source_turn` 将同 session 的 provisional tool 行升级为 LLM 来源并补齐 excerpt/turn；旧宿主没有
 turn 时才退回 `acceptedAt..backgroundStartedAt` 闭区间。即使辅助模型因已知事项而返回合法 `empty`，

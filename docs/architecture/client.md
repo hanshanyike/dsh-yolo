@@ -15,6 +15,7 @@
 | `sidebar/YoloSidebarDashboard.tsx` | 侧栏入口、轻量 badge 轮询和面板挂载 |
 | `panel/YoloPanel.tsx` | 首页/计划/历史 shell、单一前景状态、数据加载、主题与通知记录入口 |
 | `panel/NotificationLog.tsx` | 完整通知时间流、分页、已读基线和事项跳转 |
+| `panel/HistoryView.tsx` | 独立分页的按时间 / 按事项历史、状态筛选、事项展开和来源入口 |
 | `panel/navigation.ts` / `PageTabs.tsx` | 页面路由、focus/split 纯派生和一级/二级导航 |
 | `panel/ForegroundContext.tsx` | 来源预览、诚实降级和原会话导航反馈 |
 | `panel/KanbanView.tsx` | 三页面内容、计划筛选、动作编排和事项上下文入口 |
@@ -34,6 +35,7 @@
 - 完整 dashboard 不做 30 秒轮询，避免持续重建跨工作区投影。
 - 侧栏角标独立请求 `GET /yolo/badge`，面板关闭时也可更新。
 - 通知记录独立请求 `GET /yolo/notifications` 并分页；dashboard 的有限通知投影不冒充完整历史。
+- 完整历史独立请求 `GET /yolo/history`：时间线跨工作区分页，事项视图按稳定主体聚合，展开时再按需读取单事项事件；dashboard 的 `ledger` 仍只服务首页当天摘要。
 - 面板状态只保存视图、筛选和展示偏好；领域数据始终以服务端返回为准。
 
 ## 动作与信任交互
