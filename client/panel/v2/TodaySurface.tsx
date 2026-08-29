@@ -196,7 +196,7 @@ export function TodaySurface({
           <div className="v2-empty-copy">
             <p className="v2-empty-kicker">管理工作与生活的助手</p>
             <h2 id="v2-empty-title">今天没有挂起的事</h2>
-            <p>说一句要继续跟进的事，助手会把它留在轨道上；还没想清楚，也可以先聊聊。</p>
+            <p>说一句要继续跟进的事，助手会帮你记下并继续跟进；还没想清楚，也可以先聊聊。</p>
             <button type="button" onClick={() => { onIntent({ type: 'open_empty_chat' }) }}>和助手聊聊</button>
           </div>
         </section>

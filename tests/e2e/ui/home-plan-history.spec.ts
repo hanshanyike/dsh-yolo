@@ -67,6 +67,15 @@ async function isolateDashboardToTodos(page: Page, ids: ReadonlySet<string>, for
   })
 }
 
+test('首次使用空状态不使用轨道话术', async ({ page }) => {
+  await isolateDashboardToTodos(page, new Set())
+
+  await openYoloPanel(page)
+  const empty = page.locator('.v2-today-empty')
+  await expect(empty).toContainText('助手会帮你记下并继续跟进')
+  await expect(empty).not.toContainText('轨道')
+})
+
 test('一级信息架构只有首页、计划、历史，计划提供四个明确分区', async ({ page }) => {
   const todayTitle = uid('今天确认客户回访安排')
   const upcomingTitle = uid('下月提交差旅报销材料')

@@ -174,22 +174,22 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
           display: 'flex',
           alignItems: 'center',
           justifyContent: wide ? 'flex-start' : 'center',
-          gap: 8,
+          gap: 10,
           width: '100%',
-          padding: '6px 10px',
-          borderRadius: 6,
+          padding: '8px 12px',
+          borderRadius: 8,
           border: '1px solid transparent',
           background: open ? 'var(--background-hover, rgba(0,0,0,0.05))' : 'transparent',
           color: 'var(--foreground-secondary, #666)',
           cursor: 'pointer',
-          fontSize: 13,
-          fontWeight: 600,
+          fontSize: 15,
+          fontWeight: 650,
           letterSpacing: '.02em',
           whiteSpace: 'nowrap',
         }}
       >
         <span style={{ position: 'relative', display: 'flex', flex: 'none' }}>
-          <YoloLogo size={16} />
+          <YoloLogo size={20} />
           {unhandled > 0 && (
             <span
               aria-label={`${unhandled} 条未处理提醒`}
