@@ -1,5 +1,6 @@
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import packageJson from '../../package.json' with { type: 'json' }
 import { YoloLogo } from '../YoloLogo.tsx'
 import { saveSettingsDraft, settingsDraftFrom, validateSettingsDraft, type YoloSettings, type YoloSettingsDraft } from './model.ts'
 
@@ -10,6 +11,7 @@ const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minm
 const labelStyle = { display: 'grid', gap: 5, fontSize: 13 } as const
 const hintStyle = { color: 'var(--foreground-secondary, #666)', fontSize: 12 } as const
 const inputStyle = { minWidth: 0, padding: '7px 9px', color: 'inherit', background: 'var(--background, transparent)', border: '1px solid var(--border, rgba(127, 127, 127, .35))', borderRadius: 7 } as const
+const PACKAGE_VERSION = packageJson.version
 
 function baseSettings(snapshot: SettingsScopeSnapshot<YoloSettings>): Partial<YoloSettings> {
   return snapshot.base && typeof snapshot.base === 'object' ? snapshot.base as Partial<YoloSettings> : {}
@@ -64,7 +66,13 @@ export function SettingsCard({ scope }: SettingsCardProps): JSX.Element {
 
   return (
     <form className="yolo-settings-card" style={{ padding: '12px 0', display: 'grid', gap: 14 }} onSubmit={(event) => { event.preventDefault(); void save() }}>
-      <header><h3 style={{ margin: '0 0 6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}><YoloLogo size={20} />YOLO — 管理工作与生活的助手</h3><p style={{ margin: 0, ...hintStyle }}>配置对话提取、低打扰提醒、早晚报与本地快照。当前值由宿主保存，刷新后仍会保留。</p></header>
+      <header>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <h3 style={{ margin: '0 0 6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}><YoloLogo size={20} />YOLO — 管理工作与生活的助手</h3>
+          <span aria-label={`发布版本 ${PACKAGE_VERSION}`} style={{ marginBottom: 6, padding: '2px 7px', border: '1px solid var(--border, rgba(127, 127, 127, .35))', borderRadius: 999, color: 'var(--foreground-secondary, #666)', fontSize: 11, fontWeight: 700, letterSpacing: '.04em' }}>v{PACKAGE_VERSION}</span>
+        </div>
+        <p style={{ margin: 0, ...hintStyle }}>配置对话提取、低打扰提醒、早晚报与本地快照。当前值由宿主保存，刷新后仍会保留。</p>
+      </header>
       <fieldset style={sectionStyle}>
         <legend>LLM 提取</legend>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={draft.extractionEnabled} onChange={(event) => patch('extractionEnabled', event.target.checked)} />启用 LLM 提取 <span style={hintStyle}>{defaultHint(defaults.extraction?.enableLLM)}</span></label>
