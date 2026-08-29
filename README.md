@@ -27,7 +27,8 @@ YOLO 负责整理信息和提醒进度；是否执行、如何执行仍由你决
 - **同步变化**：当你说「完成了」「推迟到周五」或「已经进行一半」，对应事项会更新并留下记录。
 - **按时提醒**：到期提醒进入 YOLO 的通知和专属对话，不会插入正在进行的工作会话；dsh 再次运行后会补上离线期间到期的提醒。
 - **集中查看和处理**：从侧栏打开助手看板，在首页处理当下关注，在计划中组织全部安排，在历史中回看终态与最近变化。
-- **保留来源证据**：从会话整理出的新事项会保存有界的用户原话摘录，可先预览来源，再按宿主能力打开原会话。
+- **保留来源证据**：事项会保存有界的用户原话、关联会话、轮次和助手操作证据，可先预览来源，再按宿主能力打开原会话。
+- **抑制重复记录**：同一轮抽取、同一次助手调用或同一个看板动作重试不会重复创建事项；已合并的历史副本不会重新进入提醒。
 - **连接 Agent（规划中）**：未来支持带有明确权限、结果和验收标准的 Agent 任务；当前版本不会自动执行外部操作。
 
 YOLO 会理解对话里的计划信息，而不是要求你使用固定关键词。它只保留需要管理的事项和规则，
@@ -39,7 +40,7 @@ YOLO 会理解对话里的计划信息，而不是要求你使用固定关键词
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc3
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc5
 npx @deepseek-ai/dsh web
 ```
 
@@ -62,7 +63,7 @@ npx @deepseek-ai/dsh web --no-open
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.4.0-rc3
+git checkout v0.4.0-rc5
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build

@@ -9,7 +9,7 @@ YOLO 会把对话中需要继续跟进的事项整理成计划，并在到期时
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc3
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc5
 npx @deepseek-ai/dsh web
 ```
 
@@ -19,7 +19,7 @@ npx @deepseek-ai/dsh web
 也可以从固定的 GitHub 标签安装：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.4.0-rc3
+npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.4.0-rc5
 npx @deepseek-ai/dsh web
 ```
 
@@ -32,7 +32,7 @@ GitHub 安装会在本机完成构建。如果安装过程要求批准构建脚�
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.4.0-rc3
+git checkout v0.4.0-rc5
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
@@ -89,7 +89,8 @@ YOLO 只保留与持续跟进有关的信息：
 标准宽度下替换主面，空间足够时才在主面右侧显示一个 340px 上下文区，不会形成三栏。
 改变宿主侧栏或窗口宽度只改变呈现，不会更换页面、线程、等待中的请求、草稿或滚动位置。
 
-点击来源先打开预览。新提取事项可显示有界的用户原话摘录、工作区、会话和记录时间；手动、工具、
+点击来源先打开预览。新提取事项可显示有界的用户原话摘录、工作区、会话和记录时间；同一事项还可以
+关联多个会话、轮次与助手操作，并在来源列表中分别核对。手动、工具、
 早期记录或缺少摘录的数据会明确降级，不伪造跳转。只有成功打开原会话后 YOLO 才会收起；再次
 打开 YOLO 会恢复原页面、事项和来源预览。宿主导航失败时预览保持可见，可直接重试。
 

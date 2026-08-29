@@ -39,7 +39,10 @@ how to do it. It can:
 - **Provide one place to review and act** through Home for current attention,
   Plans for organized commitments, and History for terminal items and recent changes.
 - **Preserve bounded source evidence** for newly extracted items, with a preview
-  before navigating back to the originating host conversation when supported.
+  before navigating back to the originating host conversation when supported;
+  items can retain evidence from multiple sessions, turns, and assistant actions.
+- **Prevent duplicate writes** when an extraction turn, assistant tool call, or
+  dashboard action is retried; merged historical records do not re-enter reminders.
 - **Connect agents (planned)** with explicit permissions, results, and verification;
   the current release does not execute external actions automatically.
 
@@ -54,7 +57,7 @@ line) or Node.js 24, and make sure `pnpm` is available. If needed, run
 `corepack enable` first. Then run:
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc2
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc5
 npx @deepseek-ai/dsh web
 ```
 
@@ -74,7 +77,7 @@ To install the current release candidate directly from source:
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.4.0-rc2
+git checkout v0.4.0-rc5
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
