@@ -17,19 +17,19 @@
 本轮批准并实现以下范围；只有代码、迁移、测试和真实宿主证据全部通过后，才能在架构文档和
 `CHANGELOG.md` 中标为已交付。
 
-- [ ] **输入幂等**：direct-human 抽取 turn 与助手工具调用具有稳定 operation id；请求哈希检测 id 冲突，
+- [x] **输入幂等**：direct-human 抽取 turn 与助手工具调用具有稳定 operation id；请求哈希检测 id 冲突，
   evidence 指纹再绑定规范事项；相同操作重放不重复创建事项、证据或状态事件。
-- [ ] **多会话证据**：新增不可变 `todo_evidence`；一个事项可关联多个 session/turn，分别记录 origin、
+- [x] **多会话证据**：新增不可变 `todo_evidence`；一个事项可关联多个 session/turn，分别记录 origin、
   mention、update、correction、completion claim 或 discussion。
-- [ ] **旧数据兼容**：现有 `todos.session_id/source_excerpt/source_turn` 保留为兼容投影，并幂等回填首条
+- [x] **旧数据兼容**：现有 `todos.session_id/source_excerpt/source_turn` 保留为兼容投影，并幂等回填首条
   origin evidence；旧库连续打开不得重复回填。
-- [ ] **状态分离**：`todos` 增加记录状态与规范事项指向；合并副本标为 merged，不再伪装成业务 cancelled。
-- [ ] **规范事项解析**：旧 id 可以解析到 canonical id；merged 副本不能通过普通 reopen 重新进入开放集合。
-- [ ] **确定性标题防重**：标题 dedup 只在 open canonical 候选中生效，并使用稳定排序；终态项和 merged
+- [x] **状态分离**：`todos` 增加记录状态与规范事项指向；合并副本标为 merged，不再伪装成业务 cancelled。
+- [x] **规范事项解析**：旧 id 可以解析到 canonical id；merged 副本不能通过普通 reopen 重新进入开放集合。
+- [x] **确定性标题防重**：标题 dedup 只在 open canonical 候选中生效，并使用稳定排序；终态项和 merged
   副本不能抢占候选。
-- [ ] **助手操作纳入同一证据链**：助手工具写入记录触发它的会话/轮次和 operation fingerprint；工具重试
+- [x] **助手操作纳入同一证据链**：助手工具写入记录触发它的会话/轮次和 operation fingerprint；工具重试
   不产生新事项。
-- [ ] **审计与投影一致**：dashboard、SQLite、事件、来源列表、提醒和快照都只把 canonical 事项作为可操作项。
+- [x] **审计与投影一致**：dashboard、SQLite、事件、来源列表、提醒和快照都只把 canonical 事项作为可操作项。
 
 本轮明确不开放：基于向量或 LLM 相似度的自动 consolidate、跨工作区自动改 owner、周期 occurrence、
 父事项/步骤模型，以及带冲突裁决的自动终态合并。

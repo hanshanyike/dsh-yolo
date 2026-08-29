@@ -9,7 +9,7 @@
   `publishConfig.access` 已设为 `public`）。
 - 发布凭据通过环境变量注入 npm Access Token；不得把 token 写进仓库、脚本参数或提交记录。
   环境中没有可用凭据时停止发布并向维护者确认。
-- main 分支上的 `pnpm build`、`pnpm check` 和 `pnpm test:run` 均通过；
+- develop 分支上的 `pnpm build`、`pnpm check` 和 `pnpm test:run` 均通过；
   CI 会在 Linux 和 Windows 上确认这些检查。
 - 如果发布内容涉及界面，必须基于当前构建完成一次面板真机端到端走查
   （见 [testing.md 第八节](testing.md#八真机端到端验证)）。
@@ -27,11 +27,12 @@
 
 ### 1. 冻结发布候选并完成门禁
 
-只从最新的 `main` 发布。先确认没有混入其他人的改动，并验证目标版本和标签尚未占用：
+只从最新的 `develop` 发布。功能分支只保留在本地，合入 `develop` 后仅推送 `develop`；远程长期分支保持
+`main` 与 `develop`。先确认没有混入其他人的改动，并验证目标版本和标签尚未占用：
 
 ```bash
-git checkout main
-git pull --ff-only origin main
+git checkout develop
+git pull --ff-only origin develop
 git status --short --branch
 git ls-remote --tags origin refs/tags/<new-tag>
 npm view dsh-plugin-yolo@<new-version> version
@@ -52,7 +53,7 @@ pnpm build
 
 涉及界面或 API payload 时，还必须通过对应 E2E 套件和
 [W1–W16 真机场景](testing.md#八真机端到端验证)。发布所包含的每个修复都应已经作为独立逻辑提交
-推送到 `main`，且当前 `main` 的 Linux、Windows 和 coverage CI 全部成功。
+推送到 `develop`，且当前 `develop` 的 Linux、Windows 和 coverage CI 全部成功。
 
 ### 2. 独立提交发布说明
 
@@ -69,7 +70,7 @@ pnpm build
 git add CHANGELOG.md
 git diff --cached --check
 git commit -m "docs: prepare <new-version> release notes"
-git push origin main
+git push origin develop
 git status --short
 ```
 
@@ -115,10 +116,10 @@ git status --short
 
 ### 5. 先推版本提交并等待 CI，再推标签
 
-先只推 `main`，让远端 CI 验证将要被标签指向的确切版本提交：
+先只推 `develop`，让远端 CI 验证将要被标签指向的确切版本提交：
 
 ```bash
-git push origin main
+git push origin develop
 ```
 
 CI 全部成功后，确认本地 `HEAD` 没有变化、`<new-tag>` 仍指向 `HEAD`，再显式推送这一个标签：
@@ -127,11 +128,11 @@ CI 全部成功后，确认本地 `HEAD` 没有变化、`<new-tag>` 仍指向 `H
 git rev-parse HEAD
 git rev-list -n 1 <new-tag>
 git push origin refs/tags/<new-tag>
-git ls-remote origin refs/heads/main "refs/tags/<new-tag>*"
+git ls-remote origin refs/heads/develop "refs/tags/<new-tag>*"
 ```
 
 对于 annotated tag，`git ls-remote` 会显示标签对象和带 `^{}` 的 peeled commit；peeled commit
-必须与远端 `main` 的提交相同。不要使用会捎带其他本地标签的 `git push --follow-tags`。
+必须与远端 `develop` 的提交相同。不要使用会捎带其他本地标签的 `git push --follow-tags`。
 
 ### 6. 发布并验证 npm dist-tag
 
@@ -156,7 +157,7 @@ npm view dsh-plugin-yolo dist-tags --json
 git add CHANGELOG.md
 git diff --cached --check
 git commit -m "docs: reopen changelog after <new-version>"
-git push origin main
+git push origin develop
 ```
 
 ## 失败恢复与幂等重试
