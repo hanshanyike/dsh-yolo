@@ -134,7 +134,7 @@ test('已有工作区的安静首页不拿无日期积压填充，也不退回�
   await expect(page.getByRole('heading', { name: '最近变化', exact: true })).toBeVisible()
 })
 
-test('历史严格拆分已结束与最近变化', async ({ page }) => {
+test('历史支持按时间和按事项查看同一条变化事实', async ({ page }) => {
   const completedTitle = uid('把采购确认结果同步给财务')
   const completed = await fx.todo(completedTitle, { due: todayStr() })
   await api.action({ action: 'complete', kind: 'todo', id: completed.id })
@@ -143,16 +143,20 @@ test('历史严格拆分已结束与最近变化', async ({ page }) => {
   await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^历史/ }).click()
   const history = page.getByRole('tablist', { name: '历史范围' })
   await expect(history.getByRole('tab')).toHaveCount(2)
-  await expect(history.getByRole('tab', { name: '已结束', exact: true })).toHaveAttribute('aria-selected', 'true')
-  await expect(history.getByRole('tab', { name: '最近变化', exact: true })).toBeVisible()
-  await expect(page.getByRole('listitem', { name: `已完成：${completedTitle}` })).toBeVisible()
+  await expect(history.getByRole('tab', { name: '按时间', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(history.getByRole('tab', { name: '按事项', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '时间线', exact: true })).toBeVisible()
+  await expect(page.locator('.history-event').filter({
+    has: page.locator('.history-event__kind', { hasText: '完成' }),
+    hasText: completedTitle,
+  })).toBeVisible()
 
-  await history.getByRole('tab', { name: '最近变化', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '最近变化' })).toBeVisible()
-  const completedChange = page.locator('.lg-row.is-done').filter({ hasText: completedTitle })
-  await expect(completedChange).toHaveCount(1)
-  await expect(completedChange).toBeVisible()
-  await expect(page.getByRole('heading', { name: '今日进展' })).toHaveCount(0)
+  await history.getByRole('tab', { name: '按事项', exact: true }).click()
+  await page.getByRole('group', { name: '历史事项状态' }).getByRole('button', { name: '已完成', exact: true }).click()
+  const completedRow = page.getByRole('listitem', { name: `已完成：${completedTitle}` })
+  await expect(completedRow).toBeVisible()
+  await completedRow.getByRole('button').filter({ hasText: completedTitle }).click()
+  await expect(completedRow.locator('.history-event').filter({ hasText: completedTitle })).toHaveCount(2)
 })
 
 test('首页在五项压力下只突出一个主项，其余默认收束并保持可达', async ({ page }) => {

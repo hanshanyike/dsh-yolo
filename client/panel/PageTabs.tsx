@@ -4,7 +4,7 @@ import type { BoardPage, HistorySection, PlanSection } from './navigation.ts'
 
 export interface PageTabsProps {
   page: BoardPage
-  counts: Record<BoardPage, number>
+  counts: Record<BoardPage, number | null>
   partial?: boolean
   onChange: (page: BoardPage) => void
 }
@@ -53,7 +53,9 @@ export function PageTabs({ page, counts, partial = false, onChange }: PageTabsPr
           aria-selected={page === entry.key}
           tabIndex={page === entry.key || (activeIndex < 0 && index === 0) ? 0 : -1}
           className={`ytab${page === entry.key ? ' on' : ''}`}
-          aria-label={`${entry.label}，${partial ? '已加载' : ''}${counts[entry.key]} 项`}
+          aria-label={counts[entry.key] === null
+            ? entry.label
+            : `${entry.label}，${partial ? '已加载' : ''}${counts[entry.key]} 项`}
           onClick={() => { onChange(entry.key) }}
           onKeyDown={(event) => {
             if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
@@ -61,7 +63,7 @@ export function PageTabs({ page, counts, partial = false, onChange }: PageTabsPr
             move(index, event.key)
           }}
         >
-          {entry.icon}<span>{entry.label}</span><span className="nnum">{counts[entry.key]}</span>
+          {entry.icon}<span>{entry.label}</span>{counts[entry.key] === null ? null : <span className="nnum">{counts[entry.key]}</span>}
         </button>
       ))}
     </nav>
@@ -76,7 +78,7 @@ export function PlanTabs({ section, onChange }: { section: PlanSection; onChange
 
 export function HistoryTabs({ section, onChange }: { section: HistorySection; onChange: (section: HistorySection) => void }): JSX.Element {
   return <SectionTabs label="历史范围" value={section} entries={[
-    ['completed', '已结束'], ['changes', '最近变化'],
+    ['timeline', '按时间'], ['items', '按事项'],
   ]} onChange={(value) => { onChange(value as HistorySection) }} />
 }
 

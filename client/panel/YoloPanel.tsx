@@ -220,7 +220,7 @@ export function YoloPanel({
       ? { page: 'home' }
       : page === 'plan'
         ? { page: 'plan', section: 'today' }
-        : { page: 'history', section: 'completed' })
+        : { page: 'history', section: 'timeline' })
   }, [setRoute])
 
   useEffect(() => { void load() }, [load])
@@ -503,7 +503,7 @@ export function YoloPanel({
       counts: {
         home: todayModel?.openItemCount ?? 0,
         plan: surfaces?.plan.all.length ?? 0,
-        history: (surfaces?.history.completed.length ?? 0) + (surfaces?.history.cancelled.length ?? 0),
+        history: null,
       },
       partial: surfaces?.home.coverage.partial ?? false,
     }
@@ -519,12 +519,12 @@ export function YoloPanel({
     ? 'home'
     : navigation.route.page === 'plan'
       ? `plan-${navigation.route.section}`
-      : navigation.route.section === 'completed' ? 'history-terminal' : 'history-changes'
+      : navigation.route.section === 'timeline' ? 'history-timeline' : 'history-items'
 
   const setSurface = useCallback((next: BoardSurfaceKey): void => {
     if (next === 'home') setRoute({ page: 'home' })
     else if (next.startsWith('plan-')) setRoute({ page: 'plan', section: next.slice(5) as 'today' | 'upcoming' | 'goals' | 'all' })
-    else setRoute({ page: 'history', section: next === 'history-changes' ? 'changes' : 'completed' })
+    else setRoute({ page: 'history', section: next === 'history-items' ? 'items' : 'timeline' })
   }, [setRoute])
 
   useEffect(() => {

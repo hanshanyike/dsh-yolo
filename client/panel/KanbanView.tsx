@@ -6,7 +6,8 @@
 // + audit events.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { YoloDashboardData, YoloItemSource, YoloLedgerEntry, YoloMilestoneRow, YoloTodoRow } from '../../src/shared/dashboard.ts'
+import type { YoloDashboardData, YoloItemSource, YoloMilestoneRow, YoloTodoRow } from '../../src/shared/dashboard.ts'
+import type { YoloHistoryEvent } from '../../src/shared/history.ts'
 import { isTodoOpen } from '../../src/shared/dashboard.ts'
 import { buildDashboardSurfaces } from '../../src/shared/dashboard-surfaces.ts'
 import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/shared/actions.ts'
@@ -21,6 +22,7 @@ import { localDateStr } from '../../src/shared/text.ts'
 import { IcChat, IcCheck, IcDots, IcFlag, IcPin, IcPlusDay } from '../design/icons.tsx'
 import type { ChatAnchor } from './ChatPane.tsx'
 import { CaptureBar } from './CaptureBar.tsx'
+import { HistoryView } from './HistoryView.tsx'
 import {
   TaskActionPanel,
   TodaySurface,
@@ -49,7 +51,7 @@ export interface KanbanViewProps {
   onOpenChat: (anchor: ChatAnchor) => void
   /** Open a source preview in the shell's single foreground context. */
   onOpenSource?: (todo: YoloTodoRow, source: NonNullable<YoloTodoRow['source']>) => void
-  onOpenChangeSource?: (change: YoloLedgerEntry, source: YoloItemSource) => void
+  onOpenChangeSource?: (change: YoloHistoryEvent, source: YoloItemSource) => void
   onOpenItemDetail?: (todo: YoloTodoRow) => void
 }
 
@@ -59,8 +61,8 @@ export type BoardSurfaceKey =
   | 'plan-upcoming'
   | 'plan-goals'
   | 'plan-all'
-  | 'history-terminal'
-  | 'history-changes'
+  | 'history-timeline'
+  | 'history-items'
 
 interface EditorDraft {
   id: string
@@ -93,37 +95,6 @@ const FOCUS_LABEL: Record<FocusBucket, string> = {
   today: '今日',
   week: '未来7天',
   stale: '滞留',
-}
-
-const LEDGER_KIND_LABEL: Record<string, string> = {
-  todo_completed: '完成',
-  todo_created: '新增',
-  todo_started: '开始',
-  todo_cancelled: '取消',
-  todo_postponed: '推迟',
-  todo_updated: '更新',
-  todo_remind_again: '再提醒',
-  todo_reopened: '重新打开',
-  reminder_fired: '提醒',
-  brief_generated: '简报',
-  goal_progress: '目标',
-  goal_status: '目标',
-  milestone_status: '里程碑',
-  note: '记录',
-  decision: '决策',
-  milestone_reached: '里程碑',
-  attention_seen: '已查看',
-  attention_suppressed: '已忽略',
-  attention_feedback: '反馈',
-  action_denied: '未执行',
-  todo_consolidated: '合并',
-}
-
-function fmtTime(ms: number): string {
-  if (!ms) return ''
-  const d = new Date(ms)
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 function dayOf(iso: string | null | undefined): string {
@@ -185,8 +156,6 @@ function dotPos(target: string | null | undefined): number {
   return Math.max(4, Math.min(96, 50 + (diff / 90) * 46))
 }
 
-const noop = (): void => {}
-
 export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail }: KanbanViewProps): JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
@@ -202,7 +171,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
   const [taskReceipt, setTaskReceipt] = useState<LearningReceiptData | null>(null)
   const [taskUndo, setTaskUndo] = useState<YoloUndoDescriptor | null>(null)
   const [judgmentExpanded, setJudgmentExpanded] = useState(false)
-  const [terminalView, setTerminalView] = useState<'completed' | 'cancelled'>('completed')
   // v0.3.2: completion/处理 animations — rows retire with a height collapse
   // before being removed, so nothing "jumps" out of the board.
   const [, setRetiring] = useState<YoloTodoRow[]>([])
@@ -291,14 +259,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
 
   // Per-face filtered sets — the shared filter functions stay the source of
   // truth: the face only picks the preset the tab maps to.
-  const visibleDone = useMemo(
-    () => sortForKanban(applyKanbanFilter(data.todos, { ...filter, preset: 'done' })),
-    [data.todos, filter],
-  )
-  const visibleCancelled = useMemo(
-    () => sortForKanban(data.todos.filter((todo) => todo.status === 'cancelled')),
-    [data.todos],
-  )
   const visiblePlanToday = useMemo(
     () => sortForKanban(applyKanbanFilter(surfaces.plan.today, { ...filter, preset: 'all' })),
     [filter, surfaces.plan.today],
@@ -436,7 +396,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
       return
     }
     if (intent.type === 'open_ledger' || intent.type === 'review_changes') {
-      onSurfaceChange('history-changes')
+      onSurfaceChange('history-timeline')
       return
     }
     if (intent.type === 'discuss_closure') {
@@ -719,39 +679,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
             </>
           )}
 
-          {surface === 'history-terminal' && (
-            <>
-              <div className="heading"><h2>{terminalView === 'completed' ? '已完成' : '已取消'}</h2><span className="hint">{terminalView === 'completed' ? visibleDone.length : visibleCancelled.length} 件</span></div>
-              <div className="caps" role="group" aria-label="终态事项筛选">
-                <button type="button" className={`cap${terminalView === 'completed' ? ' on' : ''}`} onClick={() => { setTerminalView('completed') }}>已完成 <span className="num">{visibleDone.length}</span></button>
-                <button type="button" className={`cap${terminalView === 'cancelled' ? ' on' : ''}`} onClick={() => { setTerminalView('cancelled') }}>已取消 <span className="num">{visibleCancelled.length}</span></button>
-              </div>
-              {(terminalView === 'completed' ? visibleDone : visibleCancelled).length === 0 ? (
-                <div className="empty">
-                  <h4>{terminalView === 'completed' ? '还没有完成的事' : '没有已取消事项'}</h4>
-                  <p>{terminalView === 'completed' ? '完成的事项会出现在这里。' : '取消的事项会单独保留在这里。'}</p>
-                </div>
-              ) : (
-                <div className="sec">
-                  {(terminalView === 'completed' ? visibleDone : visibleCancelled).map((t) => (
-                    <TodoRowView
-                      key={`${t.scope_cwd ?? t.ws?.cwd ?? ''}:${t.id}`}
-                      t={t}
-                      busy={busyKey === `reopen-${t.id}`}
-                      completing={false}
-                      onComplete={noop}
-                      onAct={noop}
-                      onEdit={noop}
-                      onChat={noop}
-                      onSource={t.source ? () => { onOpenSource?.(t, t.source!) } : undefined}
-                      onReopen={() => { void act(`reopen-${t.id}`, { action: 'reopen', kind: 'todo', id: t.id, scope_cwd: t.scope_cwd ?? t.ws?.cwd }) }}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
           {surface === 'plan-goals' && (
             <>
               <div className="heading"><h2>目标与里程碑</h2><span className="hint">{activeGoals.length} 目标 · 平均 {avgGoalPct}% · 进度只读</span></div>
@@ -804,46 +731,14 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
             </>
           )}
 
-          {surface === 'history-changes' && (
-            <>
-              <div className="heading">
-                <h2>最近变化</h2>
-                <span className="hint">{surfaces.history.recentChanges.length} 条用户可见变化</span>
-              </div>
-              {surfaces.history.recentChanges.length === 0 ? (
-                <div className="empty">
-                  <h4>还没有可展示的变化</h4>
-                  <p>新增、改期、完成与取消会按时间保留在这里。</p>
-                </div>
-              ) : (
-                <div style={{ marginTop: 8 }}>
-                  {surfaces.history.recentChanges.map((e) => (
-                    <div key={e.id} className={`lg-row${e.kind === 'todo_completed' ? ' is-done' : ''}`}>
-                      <span className="lg-status" aria-hidden="true">
-                        {e.kind === 'todo_completed' ? <IcCheck className="ic-ok" size={12} /> : null}
-                      </span>
-                      <span className="lg-time">{fmtTime(e.occurred_at)}</span>
-                      <span className="lg-type">{LEDGER_KIND_LABEL[e.kind] ?? e.kind}</span>
-                      <span className="lg-sum" title={e.summary}>{e.summary}</span>
-                      {e.label && (e.session_id && onOpenChangeSource ? (
-                        <button
-                          type="button"
-                          className="lg-src-btn"
-                          title="查看来源"
-                          onClick={() => { onOpenChangeSource(e, {
-                            type: 'session', label: e.label, session_id: e.session_id, workspace: e.ws,
-                          }) }}
-                        >
-                          <span>{e.label}</span>↗
-                        </button>
-                      ) : (
-                        <span className="lg-src" title={e.label}><IcPin size={10} /><span>{e.label}</span></span>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
+          {(surface === 'history-timeline' || surface === 'history-items') && (
+            <HistoryView
+              mode={surface === 'history-timeline' ? 'timeline' : 'items'}
+              dashboard={data}
+              refreshDashboard={refresh}
+              onOpenItemDetail={onOpenItemDetail}
+              onOpenChangeSource={onOpenChangeSource}
+            />
           )}
         </main>
       </div>

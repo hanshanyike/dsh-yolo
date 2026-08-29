@@ -12,7 +12,7 @@ describe('panel state', () => {
   it('retains route and source preview without exposing mutable state', () => {
     writePanelState({
       navigation: {
-        route: { page: 'history', section: 'changes', day: '2026-08-26' },
+        route: { page: 'history', section: 'timeline', day: '2026-08-26' },
         presentation: 'auto',
         foreground: {
           kind: 'source_preview',
@@ -27,7 +27,7 @@ describe('panel state', () => {
 
     const first = readPanelState()
     expect(first.navigation).toMatchObject({
-      route: { page: 'history', section: 'changes' },
+      route: { page: 'history', section: 'timeline' },
       foreground: { kind: 'source_preview', item: { id: 'todo-a' } },
     })
     if (first.navigation.foreground.kind !== 'source_preview') throw new Error('expected source preview')

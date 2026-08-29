@@ -2,7 +2,7 @@ import type { YoloItemSource } from '../../src/shared/dashboard.ts'
 
 export type BoardPage = 'home' | 'plan' | 'history'
 export type PlanSection = 'today' | 'upcoming' | 'goals' | 'all'
-export type HistorySection = 'completed' | 'changes'
+export type HistorySection = 'timeline' | 'items'
 
 export type BoardRoute =
   | { page: 'home' }

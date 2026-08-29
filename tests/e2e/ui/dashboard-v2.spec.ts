@@ -164,20 +164,20 @@ test('已完成与已取消严格分离，两类终态事项都可以重新打�
 
   await openYoloPanel(page)
   await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^历史/ }).click()
-  await page.getByRole('tablist', { name: '历史范围' }).getByRole('tab', { name: '已结束', exact: true }).click()
-  const terminalFilters = page.getByRole('group', { name: '终态事项筛选' })
-  await terminalFilters.getByRole('button', { name: /^已完成/ }).click()
+  await page.getByRole('tablist', { name: '历史范围' }).getByRole('tab', { name: '按事项', exact: true }).click()
+  const terminalFilters = page.getByRole('group', { name: '历史事项状态' })
+  await terminalFilters.getByRole('button', { name: '已完成', exact: true }).click()
   const completedRow = page.getByRole('listitem', { name: `已完成：${completedTitle}` })
   await expect(completedRow).toBeVisible()
   await expect(page.getByRole('listitem', { name: `已取消：${cancelledTitle}` })).toHaveCount(0)
-  await completedRow.getByRole('button', { name: `重新打开：${completedTitle}` }).click()
+  await completedRow.getByRole('button', { name: '重新打开', exact: true }).click()
   await expect(completedRow).toHaveCount(0)
 
-  await terminalFilters.getByRole('button', { name: /^已取消/ }).click()
+  await terminalFilters.getByRole('button', { name: '已取消', exact: true }).click()
   const cancelledRow = page.getByRole('listitem', { name: `已取消：${cancelledTitle}` })
   await expect(cancelledRow).toBeVisible()
   await expect(page.getByRole('listitem', { name: `已完成：${completedTitle}` })).toHaveCount(0)
-  await cancelledRow.getByRole('button', { name: `重新打开：${cancelledTitle}` }).click()
+  await cancelledRow.getByRole('button', { name: '重新打开', exact: true }).click()
   await expect(cancelledRow).toHaveCount(0)
 
   await waitForDashboard(
@@ -191,7 +191,7 @@ test('已完成与已取消严格分离，两类终态事项都可以重新打�
   )
 })
 
-test('接下来事项支持长标题编辑，最近变化的动作类型与摘要保持独立列', async ({ page }) => {
+test('接下来事项支持长标题编辑，时间线的动作类型与摘要保持清晰', async ({ page }) => {
   const title = uid('和研发确认新版助手看板的验收范围与交付时间')
   const item = await fx.todo(title, { due: localDateOffset(3) })
   await api.action({ action: 'complete', kind: 'todo', id: item.id })
@@ -216,21 +216,14 @@ test('接下来事项支持长标题编辑，最近变化的动作类型与摘�
   await page.getByRole('button', { name: '取消', exact: true }).click()
 
   await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^历史/ }).click()
-  await page.getByRole('tablist', { name: '历史范围' }).getByRole('tab', { name: '最近变化', exact: true }).click()
-  const reopened = page.locator('.lg-row').filter({
-    has: page.locator('.lg-type', { hasText: '重新打开' }),
+  await page.getByRole('tablist', { name: '历史范围' }).getByRole('tab', { name: '按时间', exact: true }).click()
+  const reopened = page.locator('.history-event').filter({
+    has: page.locator('.history-event__kind', { hasText: '重新打开' }),
     hasText: title,
   }).first()
   await expect(reopened).toBeVisible()
-  const columns = await reopened.evaluate((element) => {
-    const type = element.querySelector('.lg-type')!.getBoundingClientRect()
-    const summary = element.querySelector('.lg-sum')!.getBoundingClientRect()
-    return {
-      overlap: type.right > summary.left,
-      overflow: element.scrollWidth > element.clientWidth + 1,
-    }
-  })
-  expect(columns).toEqual({ overlap: false, overflow: false })
+  await expect(reopened.locator('.history-event__kind')).toHaveText('重新打开')
+  expect(await reopened.evaluate((element) => element.scrollWidth > element.clientWidth + 1)).toBe(false)
 })
 
 test('约 340px 紧凑模式保留首页、计划、历史与完整 ARIA 状态', async ({ page }) => {

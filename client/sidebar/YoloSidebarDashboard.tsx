@@ -147,9 +147,22 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
       setAnchorLeft(rect.right)
     }
     place()
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(place)
+    let observed: Element | null = buttonRef.current
+    // The host collapses its sidebar by resizing/moving ancestors while the
+    // footer button itself may already be at its compact width. Observe the
+    // short ancestor chain so the panel follows the final visible right edge,
+    // not an intermediate position from the window resize event.
+    for (let depth = 0; observed && depth < 8; depth++) {
+      observer?.observe(observed)
+      observed = observed.parentElement
+    }
     window.addEventListener('resize', place)
-    return () => { window.removeEventListener('resize', place) }
-  }, [open])
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', place)
+    }
+  }, [open, wide])
 
   const close = useCallback(() => {
     setOpen(false)

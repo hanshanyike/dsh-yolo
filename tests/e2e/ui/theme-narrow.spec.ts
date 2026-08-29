@@ -60,6 +60,27 @@ test('窄屏面板为紧凑态，单一对话前景进入 focus（W7）', async 
   await expect(page.locator('.yolo-scope')).toHaveCount(0)
 })
 
+test('W7: 面板打开时宿主侧栏折叠会重新锚定左边界并保留历史页面', async ({ page }) => {
+  await openPanelUnderBackground(page, '#ffffff', { width: 1440, height: 900 })
+  await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^历史/ }).click()
+  await page.getByRole('tablist', { name: '历史范围' }).getByRole('tab', { name: '按事项', exact: true }).click()
+
+  await page.setViewportSize({ width: 400, height: 800 })
+  const panel = page.locator('.yolo-scope')
+  const button = page.locator("button[title^='YOLO']").first()
+  await expect.poll(async () => {
+    const [panelBox, buttonBox] = await Promise.all([panel.boundingBox(), button.boundingBox()])
+    if (!panelBox || !buttonBox) return false
+    return buttonBox.width < 100
+      && panelBox.width >= 300
+      && Math.abs(panelBox.x - (buttonBox.x + buttonBox.width)) < 2
+  }).toBe(true)
+  const box = await panel.boundingBox()
+  expect(box?.width).toBeGreaterThanOrEqual(300)
+  await expect(page.getByRole('tab', { name: '按事项', exact: true })).toHaveAttribute('aria-selected', 'true')
+  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+})
+
 test('计划页提供筛选，更多菜单只承载通用操作并在 Esc 后恢复焦点', async ({ page }) => {
   await openPanelUnderBackground(page, '#ffffff')
   await expect(page.locator('.p-head .flt')).toHaveCount(0)

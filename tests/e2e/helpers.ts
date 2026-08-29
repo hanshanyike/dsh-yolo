@@ -41,6 +41,8 @@ export interface Api {
   dashboard: () => Promise<Record<string, any>>
   /** GET /yolo/notifications. */
   notifications: (cursor?: string) => Promise<Record<string, any>>
+  /** GET /yolo/history with the supplied query parameters. */
+  history: (params?: Record<string, string | number>) => Promise<Record<string, any>>
   /** POST /yolo/notifications/seen. */
   seen: (body: Record<string, unknown>) => Promise<Record<string, any>>
   close: () => Promise<void>
@@ -161,13 +163,18 @@ export async function connectApi(): Promise<Api> {
     if (!r.ok()) throw new Error(`notifications failed: ${r.status()}`)
     return r.json()
   }
+  const history = async (params?: Record<string, string | number>): Promise<Record<string, any>> => {
+    const r = await retry(() => req.get('/yolo/history', { params }))
+    if (!r.ok()) throw new Error(`history failed: ${r.status()} ${await r.text()}`)
+    return r.json()
+  }
   const seen = async (body: Record<string, unknown>): Promise<Record<string, any>> => {
     const r = await retry(() => req.post('/yolo/notifications/seen', { data: body }))
     const data = await r.json().catch(() => ({})) as Record<string, any>
     if (!r.ok() || data.ok !== true) throw new Error(`seen failed: ${r.status()} ${JSON.stringify(data)}`)
     return data
   }
-  return { req, action, dashboard, notifications, seen, close: () => req.dispose() }
+  return { req, action, dashboard, notifications, history, seen, close: () => req.dispose() }
 }
 
 /** Create a todo via the real endpoint; returns its row. */
