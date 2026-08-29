@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { YoloBadgeData } from '../../src/shared/badge.ts'
 import { YoloLogo } from '../YoloLogo.tsx'
+import { nextYoloSurfaceLabel, YOLO_SURFACE_LABELS, yoloSurfaceTitle } from '../brand.ts'
 import { YoloPanel } from '../panel/YoloPanel.tsx'
 import { ReminderPopup } from './ReminderPopup.tsx'
 import {
@@ -54,6 +55,8 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
   const [unhandled, setUnhandled] = useState(0)
   const [popup, setPopup] = useState<ReminderPopupCandidate | null>(null)
   const [notificationFocusRequest, setNotificationFocusRequest] = useState(0)
+  const [surfaceLabel, setSurfaceLabel] = useState<string>(YOLO_SURFACE_LABELS[0])
+  const surfaceOpenedRef = useRef(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const openRef = useRef(open)
@@ -141,12 +144,17 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
     setOpen(false)
     setNotificationFocusRequest(0)
   }, [])
+  const openPanel = useCallback(() => {
+    if (surfaceOpenedRef.current) setSurfaceLabel((current) => nextYoloSurfaceLabel(current))
+    else surfaceOpenedRef.current = true
+    setOpen(true)
+  }, [])
   const dismissPopup = useCallback(() => { setPopup(null) }, [])
   const openPopupReminder = useCallback(() => {
     setPopup(null)
-    setOpen(true)
+    openPanel()
     setNotificationFocusRequest((value) => value + 1)
-  }, [])
+  }, [openPanel])
   useDismissOnOutsidePointer(buttonRef, panelRef, open, close)
 
   return (
@@ -158,10 +166,10 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
           if (open) close()
           else {
             setPopup(null)
-            setOpen(true)
+            openPanel()
           }
         }}
-        title={unhandled > 0 ? `YOLO 助手看板 · ${unhandled} 条未处理提醒` : 'YOLO 助手看板'}
+        title={unhandled > 0 ? `${yoloSurfaceTitle(surfaceLabel)} · ${unhandled} 条未处理提醒` : yoloSurfaceTitle(surfaceLabel)}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -226,6 +234,7 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
               openSession={openSession}
               notificationFocusRequest={notificationFocusRequest}
               themeControl={setTheme ? { set: setTheme } : undefined}
+              surfaceLabel={surfaceLabel}
             />
           </div>
         </div>

@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+## [0.4.0-rc3] — 2026-08-28
+
+### Changed
+
+- YOLO 侧栏与助手面板统一使用新版亲和的聊天气泡 Logo，保持同一品牌识别。
+- 助手面板标题改为五句亲切提示轮换显示，每次重新打开都会自然换一句。
+
+### Fixed
+
+- 补齐干净浏览器环境下宿主首次声明、API Key 引导层的 E2E 启动处理，并收紧主题、响应式场景的真实按钮定位。
+
 ## [0.4.0-rc2] — 2026-08-27
 
 ### Changed
@@ -171,7 +182,8 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc2...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc3...HEAD
+[0.4.0-rc3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc2...v0.4.0-rc3
 [0.4.0-rc2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc1...v0.4.0-rc2
 [0.4.0-rc1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.3...v0.4.0-rc1
 [0.3.1-rc.3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.3.1-rc.2...v0.3.1-rc.3

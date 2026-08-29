@@ -73,6 +73,13 @@ describe('dashboard v2 Mono style contract', () => {
     expect(css).toContain('outline: 2px solid var(--y-focus)')
   })
 
+  it('keeps the chat drawer inside the viewport and wraps long replies', () => {
+    expect(YOLO_CSS).toContain('box-sizing: border-box')
+    expect(YOLO_CSS).toContain('overflow-wrap: anywhere')
+    expect(YOLO_CSS).toContain('.yolo-scope .chat-pane-shell--full > .p-body')
+    expect(YOLO_CSS).toContain('min-height: 0; overflow: hidden')
+  })
+
   it('defines compact and fluid presentation layouts without a fixed viewport split', () => {
     const css = v2Css()
     expect(css).toContain('.yolo-scope.compact .v2-today-row')

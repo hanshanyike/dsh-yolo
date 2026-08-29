@@ -27,7 +27,7 @@ test('来源、事项讨论和助手对话互斥复用同一个前景位置', as
   await expect(page.getByRole('textbox', { name: '对 YOLO 说' })).toBeVisible()
   await expect(page.locator('.panel-frame > div > aside')).toHaveCount(1)
 
-  await page.getByRole('button', { name: '和助手聊聊' }).click()
+  await page.locator('.p-head').getByRole('button', { name: '和助手聊聊' }).click()
   await expect(page.locator('.fs-anchor')).toHaveCount(0)
   await expect(page.getByRole('textbox', { name: '对 YOLO 说' })).toBeVisible()
   await expect(page.locator('.panel-frame > div > aside')).toHaveCount(1)

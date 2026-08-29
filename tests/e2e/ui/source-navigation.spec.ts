@@ -148,7 +148,7 @@ test('SRC-04: 打开来源成功后收起，重开恢复来源并返回事项详
   await expect(page.locator('.yolo-scope')).toHaveCount(0)
   expect(await page.evaluate(() => (window as unknown as { __yoloOpenedSessionIds?: string[] }).__yoloOpenedSessionIds)).toEqual(['session-source-e2e'])
 
-  await page.locator("button[title^='YOLO 助手看板']").first().click()
+  await page.locator("button[title^='YOLO ·']").first().click()
   await expect(page.locator('.yolo-scope')).toBeVisible()
   await expect(page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^首页/ })).toHaveAttribute('aria-selected', 'true')
   await expect(preview).toBeVisible()

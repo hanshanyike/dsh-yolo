@@ -6,7 +6,7 @@
 
 **交代一次，持续跟进。**
 
-*为 deepseek-harness 打造的个人助手：从对话中整理事项、跟踪变化，并在需要时提醒你。*
+*为 deepseek-harness 打造的个人智能助理：从对话中整理事项、跟踪变化，并在需要时提醒你。*
 
 [English](README.en.md) · [文档中心](docs/README.md)
 
@@ -18,6 +18,8 @@
 
 待办、截止时间和阶段目标经常散落在不同对话里。会话一多，你很难记住哪些事情还没完成、哪些安排已经变化。**YOLO** 会从对话中识别需要继续跟进的内容，整理成跨会话可查看、可更新、会提醒的计划。
 
+长期方向是成为面向工作与生活的个人智能助理：在用户授权范围内持续理解会话中的事项、决定和约束，并逐步连接用户与受托 Agent。当前版本先专注于跨会话整理、提醒和用户控制。
+
 YOLO 负责整理信息和提醒进度；是否执行、如何执行仍由你决定。它会：
 
 - **自动整理**：从包含明确后续安排的对话中识别待办、目标、里程碑和提醒规则。
@@ -26,6 +28,7 @@ YOLO 负责整理信息和提醒进度；是否执行、如何执行仍由你决
 - **按时提醒**：到期提醒进入 YOLO 的通知和专属对话，不会插入正在进行的工作会话；dsh 再次运行后会补上离线期间到期的提醒。
 - **集中查看和处理**：从侧栏打开助手看板，在首页处理当下关注，在计划中组织全部安排，在历史中回看终态与最近变化。
 - **保留来源证据**：从会话整理出的新事项会保存有界的用户原话摘录，可先预览来源，再按宿主能力打开原会话。
+- **连接 Agent（规划中）**：未来支持带有明确权限、结果和验收标准的 Agent 任务；当前版本不会自动执行外部操作。
 
 YOLO 会理解对话里的计划信息，而不是要求你使用固定关键词。它只保留需要管理的事项和规则，
 并过滤「好的」「收到」等寒暄、人物画像与通用知识，减少无关内容进入长期记录。
@@ -36,7 +39,7 @@ YOLO 会理解对话里的计划信息，而不是要求你使用固定关键词
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc2
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.4.0-rc3
 npx @deepseek-ai/dsh web
 ```
 
@@ -59,7 +62,7 @@ npx @deepseek-ai/dsh web --no-open
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.4.0-rc2
+git checkout v0.4.0-rc3
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build

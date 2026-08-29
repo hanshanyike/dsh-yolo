@@ -64,9 +64,9 @@ test('W5/W7/W10: assistant chat 慢回复跨 split/focus 与面板重挂载保�
   await expect(page.getByRole('log', { name: '对话记录' }).getByText('等待时间较长，回复可能仍在处理中')).toBeVisible()
 
   // Closing/reopening the host panel remounts the same foreground and request.
-  await page.locator("button[title^='YOLO 助手看板']").first().click()
+  await page.locator("button[title^='YOLO ·']").first().click()
   await expect(page.locator('.yolo-scope')).toHaveCount(0)
-  await page.locator("button[title^='YOLO 助手看板']").first().click()
+  await page.locator("button[title^='YOLO ·']").first().click()
   await expect(page.locator('aside[data-foreground="assistant_chat"]')).toHaveCount(1)
   await expect(page.locator('.yolo-scope')).toHaveAttribute('data-presentation', 'focus')
   await expect(page.getByRole('log', { name: '对话记录' }).getByText('等待时间较长，回复可能仍在处理中')).toBeVisible()
@@ -139,8 +139,8 @@ test('W10/CHAT-01: resident、事项 A、事项 B 隔离；隐藏继续 episode�
     await expect(page.getByText('已提交，等待助手回复')).toBeVisible()
     expect(postCount).toBe(1)
 
-    await page.locator("button[title^='YOLO 助手看板']").first().click()
-    await page.locator("button[title^='YOLO 助手看板']").first().click()
+    await page.locator("button[title^='YOLO ·']").first().click()
+    await page.locator("button[title^='YOLO ·']").first().click()
     await expect(page.locator('.dock-ctx')).toHaveText(titleA)
     await expect(page.getByText('已提交，等待助手回复')).toBeVisible()
     expect(postCount).toBe(1)

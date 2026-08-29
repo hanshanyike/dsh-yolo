@@ -18,7 +18,7 @@ test('上下文按导出的最小宽度切换 split/focus，并在变化中保�
   const left = (await panel.boundingBox())?.x
   expect(left).not.toBeUndefined()
 
-  await page.getByRole('button', { name: '和助手聊聊' }).click()
+  await page.locator('.p-head').getByRole('button', { name: '和助手聊聊' }).click()
   await expect(panel).toHaveAttribute('data-presentation', 'split')
   await expect(page.locator('.dock')).toBeVisible()
   const input = page.getByRole('textbox', { name: '对 YOLO 说' })
@@ -70,6 +70,6 @@ test('视口虽宽于 960px、宿主让位后可用宽度不足时，详情、�
   await assertFocusFillsPanel('source_preview')
 
   await page.getByRole('button', { name: '返回首页' }).click()
-  await page.getByRole('button', { name: '和助手聊聊' }).click()
+  await page.locator('.p-head').getByRole('button', { name: '和助手聊聊' }).click()
   await assertFocusFillsPanel('assistant_chat')
 })

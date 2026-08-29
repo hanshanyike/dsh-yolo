@@ -38,6 +38,8 @@ export interface ChatPaneProps {
   variant?: 'side' | 'full'
   /** Anchored (聊一聊) thread key; a fresh value starts a brand-new conversation. */
   threadKey?: string
+  /** Refresh the parent dashboard after a chat turn has completed. */
+  onDashboardRefresh?: () => void | Promise<void>
 }
 
 const POLL_MS = 4_000
@@ -85,7 +87,7 @@ function stripAnchorPrefix(text: string): string {
   return text.replace(/^【关于「[^」]*」[^】]*】\n?/, '')
 }
 
-export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPaneProps): JSX.Element {
+export function ChatPane({ anchor = null, variant = 'full', threadKey, onDashboardRefresh }: ChatPaneProps): JSX.Element {
   const anchoredScopeCwd = threadKey ? anchor?.scopeCwd : undefined
   const conversationKey = threadKey ? `${anchoredScopeCwd ?? ''}\u0000${threadKey}` : ''
   // Only the first request for a conversation is a blocking load. Background
@@ -113,6 +115,8 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
   const sendLockedRef = useRef(false)
   const controllersRef = useRef(new Set<AbortController>())
   const replyRefreshTimerRef = useRef<number | null>(null)
+  const dashboardRefreshTimerRef = useRef<number | null>(null)
+  const dashboardRefreshRequestRef = useRef<string | null>(null)
   // Live mirror of the anchored thread + workspace identity: async callbacks
   // compare against it so a response from a conversation the user already left
   // can never overwrite the new view (v0.3.3: cross-thread/scope bleed).
@@ -123,6 +127,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     return () => {
       mountedRef.current = false
       if (replyRefreshTimerRef.current !== null) window.clearTimeout(replyRefreshTimerRef.current)
+      if (dashboardRefreshTimerRef.current !== null) window.clearTimeout(dashboardRefreshTimerRef.current)
       for (const controller of controllersRef.current) controller.abort()
       controllersRef.current.clear()
     }
@@ -162,6 +167,25 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
     setDraftState(cached.draft)
   }, [conversationKey])
 
+  const refreshDashboardAfterReply = useCallback((request: ChatRequestSnapshot): void => {
+    const requestId = request.client_request_id || request.request_id
+    if (!onDashboardRefresh || dashboardRefreshRequestRef.current === requestId) return
+    dashboardRefreshRequestRef.current = requestId
+    void Promise.resolve(onDashboardRefresh()).catch(() => {
+      // The chat remains usable when a dashboard refresh fails; its next open
+      // or manual refresh can still recover the latest projection.
+    })
+    if (dashboardRefreshTimerRef.current !== null) window.clearTimeout(dashboardRefreshTimerRef.current)
+    // Extraction runs after the durable turn/end event. A second read gives
+    // that background pass time to persist a newly created todo.
+    dashboardRefreshTimerRef.current = window.setTimeout(() => {
+      dashboardRefreshTimerRef.current = null
+      if (mountedRef.current) {
+        void Promise.resolve(onDashboardRefresh()).catch(() => {})
+      }
+    }, 2_000)
+  }, [onDashboardRefresh])
+
   // A new thread (or a jump between resident and anchored) must clear the
   // visible history — 聊一聊 always starts fresh. The [load] effect below
   // re-fetches when the thread/scope identity changes; here we drop old lines.
@@ -189,6 +213,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       const body = (await r.json()) as Partial<ChatMessagesPayload>
       if (!mountedRef.current || conversationRef.current !== keyForCall) return // user switched threads/scopes or unmounted mid-flight
       if (!r.ok || !body.ok) throw new Error(body.error ?? `HTTP ${r.status}`)
+      const previous = chatConversationController.get(keyForCall)
       const snapshot = chatConversationController.applyMessages(keyForCall, {
         ok: true,
         messages: body.messages ?? [],
@@ -200,13 +225,17 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey }: ChatPan
       restoreInputFocusRef.current = inputEngagedRef.current
       sendLockedRef.current = isChatWaiting(snapshot)
       setState({ ...snapshot, loading: false })
+      const replyCompleted = (previous.local !== null || previous.request?.status === 'accepted' || previous.request?.status === 'stale')
+        && snapshot.request?.status === 'completed'
+        && snapshot.messages.some((message) => message.role === 'ai')
+      if (replyCompleted && snapshot.request) refreshDashboardAfterReply(snapshot.request)
     } catch (e) {
       if (!mountedRef.current || conversationRef.current !== keyForCall || controller.signal.aborted) return
       setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
     } finally {
       controllersRef.current.delete(controller)
     }
-  }, [anchoredScopeCwd, conversationKey, threadKey])
+  }, [anchoredScopeCwd, conversationKey, refreshDashboardAfterReply, threadKey])
 
   useEffect(() => { void load() }, [load])
   useEffect(() => {

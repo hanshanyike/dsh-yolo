@@ -4,15 +4,17 @@
 // variable before the panel mounts, then asserts the resolved data-y-theme.
 
 import { test, expect, type Page } from '@playwright/test'
+import { dismissHostSetupDialogs } from '../helpers.ts'
 
 /** Set the host --background variable, load the app, then open the panel. */
 async function openPanelUnderBackground(page: Page, background: string, viewport: { width: number; height: number } = { width: 1440, height: 900 }): Promise<void> {
   await page.setViewportSize(viewport)
   await page.goto('/')
+  await dismissHostSetupDialogs(page)
   await page.evaluate((bg) => {
     document.documentElement.style.setProperty('--background', bg)
   }, background)
-  const btn = page.locator("button[title^='YOLO 助手看板']").first()
+  const btn = page.locator("button[title^='YOLO ·']").first()
   // The host app boot + sidebar render can exceed the default expect on a
   // cold machine — wait generously so a slow boot is not a flaky fail.
   await expect(btn).toBeVisible({ timeout: 30_000 })
@@ -45,7 +47,7 @@ test('窄屏面板为紧凑态，单一对话前景进入 focus（W7）', async 
   await expect(pages.getByRole('tab', { name: /^历史/ })).toBeVisible()
   expect(await page.locator('.p-head').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   expect(await page.locator('.y-tabs').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-  await page.getByRole('button', { name: '和助手聊聊' }).click()
+  await page.locator('.p-head').getByRole('button', { name: '和助手聊聊' }).click()
   await expect(page.locator('.yolo-scope')).toHaveAttribute('data-presentation', 'focus')
   await expect(page.getByRole('dialog', { name: '助手对话' })).toBeVisible()
   await expect(page.locator('.dock')).toHaveCount(0)
@@ -53,7 +55,7 @@ test('窄屏面板为紧凑态，单一对话前景进入 focus（W7）', async 
   // Esc returns to the same page, then closes the panel.
   await page.keyboard.press('Escape')
   await expect(page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^首页/ })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('button', { name: '和助手聊聊' })).toBeVisible()
+  await expect(page.locator('.p-head').getByRole('button', { name: '和助手聊聊' })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.locator('.yolo-scope')).toHaveCount(0)
 })
