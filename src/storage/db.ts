@@ -168,6 +168,52 @@ function migrate(db: DB): void {
   if (!todoCols.some((c) => c.name === 'source_turn')) {
     db.exec('ALTER TABLE todos ADD COLUMN source_turn INTEGER')
   }
+  if (!todoCols.some((c) => c.name === 'record_status')) {
+    db.exec("ALTER TABLE todos ADD COLUMN record_status TEXT NOT NULL DEFAULT 'canonical'")
+  }
+  if (!todoCols.some((c) => c.name === 'merged_into_id')) {
+    db.exec('ALTER TABLE todos ADD COLUMN merged_into_id TEXT')
+  }
+  db.exec("UPDATE todos SET record_status = 'canonical' WHERE record_status IS NULL")
+  db.exec('CREATE INDEX IF NOT EXISTS idx_todos_record_status ON todos(scope_key, record_status, status)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_todos_merged_into ON todos(merged_into_id) WHERE merged_into_id IS NOT NULL')
+  // Rebuild the two hot partial indexes now that record identity is available;
+  // merged historical rows must not participate in reminders or upsert lookup.
+  const dueIndex = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_todos_due'").get() as
+    | { sql: string | null }
+    | undefined
+  if (!dueIndex?.sql?.includes('record_status')) {
+    db.exec('DROP INDEX IF EXISTS idx_todos_due')
+    db.exec("CREATE INDEX idx_todos_due ON todos(due_at) WHERE due_at IS NOT NULL AND record_status = 'canonical' AND status IN ('pending','in_progress')")
+  }
+  const dedupIndex = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_todos_dedup'").get() as
+    | { sql: string | null }
+    | undefined
+  if (!dedupIndex?.sql?.includes('record_status')) {
+    db.exec('DROP INDEX IF EXISTS idx_todos_dedup')
+    db.exec("CREATE INDEX idx_todos_dedup ON todos(scope_key, dedup_key, created_at, id) WHERE dedup_key IS NOT NULL AND record_status = 'canonical' AND status IN ('pending','in_progress')")
+  }
+  // Older rows exposed only one source on todos. Preserve that compatibility
+  // projection and seed it once into the new immutable multi-source ledger.
+  db.exec(`
+    INSERT OR IGNORE INTO todo_evidence(
+      id, todo_id, source_scope_key, session_id, turn_seq,
+      source_kind, relation, excerpt, occurred_at, source_fingerprint
+    )
+    SELECT
+      'legacy-' || id, id, scope_key, session_id, source_turn,
+      CASE
+        WHEN source = 'tool' THEN 'assistant_action'
+        WHEN source = 'manual' THEN 'panel_action'
+        ELSE 'extraction'
+      END,
+      'origin', source_excerpt, created_at, 'legacy:todo:' || id || ':origin'
+    FROM todos
+    WHERE NOT EXISTS (
+      SELECT 1 FROM todo_evidence e
+      WHERE e.todo_id = todos.id AND e.relation = 'origin'
+    )
+  `)
 }
 
 export function setMeta(db: DB, key: string, value: string): void {

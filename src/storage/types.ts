@@ -2,6 +2,9 @@
 
 export type MilestoneStatus = 'planned' | 'active' | 'done' | 'abandoned'
 export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'cancelled'
+export type TodoRecordStatus = 'canonical' | 'merged' | 'rejected'
+export type TodoEvidenceSourceKind = 'human' | 'assistant_action' | 'panel_action' | 'extraction'
+export type TodoEvidenceRelation = 'origin' | 'mention' | 'update' | 'correction' | 'completion_claim' | 'discussion'
 export type GoalStatus = 'active' | 'achieved' | 'abandoned'
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
 // M8: state-flow kinds (todo_completed/postponed/…) have no CHECK constraint
@@ -82,6 +85,24 @@ export interface Todo {
   /** v0.3.2 feedback: times the user completed it (good) vs cancelled it (stale). */
   good_count?: number
   stale_count?: number
+  /** Record identity state, independent from the user-facing business status. */
+  record_status?: TodoRecordStatus
+  /** Canonical record when this row is a merged historical alias. */
+  merged_into_id?: string | null
+}
+
+/** Immutable evidence connecting a todo record to a session, turn or action. */
+export interface TodoEvidence {
+  id: string
+  todo_id: string
+  source_scope_key: string
+  session_id?: string | null
+  turn_seq?: number | null
+  source_kind: TodoEvidenceSourceKind
+  relation: TodoEvidenceRelation
+  excerpt?: string | null
+  occurred_at: number
+  source_fingerprint: string
 }
 
 export interface Goal {

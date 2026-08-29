@@ -136,17 +136,69 @@ function normalizeCanonicalRows(db: DB, scopeKey: string, cwd: string): void {
     .run(scopeKey, cwd, scopeKey, cwd)
   db.prepare('UPDATE attention_feedback SET scope_key = ? WHERE scope_key <> ?').run(scopeKey, scopeKey)
   db.prepare('UPDATE client_actions SET scope_key = ? WHERE scope_key <> ?').run(scopeKey, scopeKey)
+  db.prepare('UPDATE todo_evidence SET source_scope_key = ? WHERE source_scope_key <> ?').run(scopeKey, scopeKey)
 }
 
 function importAttached(db: DB, scopeKey: string, cwd: string, source: string, warnings: string[]): void {
   const milestoneColumns = ['id', 'title', 'description', 'target_date', 'status', 'scope_key', 'source', 'created_at', 'updated_at']
   const milestoneMap = mergeIdTable(db, source, 'milestones', milestoneColumns, milestoneColumns.filter((c) => c !== 'scope_key'), (row) => ({ ...row, scope_key: scopeKey }))
-  const todoColumns = ['id', 'title', 'detail', 'status', 'priority', 'due_at', 'milestone_id', 'scope_key', 'dedup_key', 'source', 'session_id', 'source_excerpt', 'source_turn', 'created_at', 'updated_at', 'completed_at', 'last_reminded_at', 'good_count', 'stale_count']
-  const todoMap = mergeIdTable(db, source, 'todos', todoColumns, todoColumns.filter((c) => c !== 'scope_key'), (row) => ({
+  const todoColumns = ['id', 'title', 'detail', 'status', 'priority', 'due_at', 'milestone_id', 'scope_key', 'dedup_key', 'source', 'session_id', 'source_excerpt', 'source_turn', 'created_at', 'updated_at', 'completed_at', 'last_reminded_at', 'good_count', 'stale_count', 'record_status', 'merged_into_id']
+  const todoMap = mergeIdTable(db, source, 'todos', todoColumns, todoColumns.filter((c) => c !== 'scope_key' && c !== 'merged_into_id'), (row) => ({
     ...row,
     milestone_id: row.milestone_id == null ? null : milestoneMap.get(String(row.milestone_id)) ?? row.milestone_id,
+    // Remap self-references only after every todo id has been allocated.
+    merged_into_id: null,
     scope_key: scopeKey,
   }))
+  const mergedRows = db.prepare(`SELECT id, merged_into_id FROM ${LEGACY_ALIAS}.todos WHERE merged_into_id IS NOT NULL`).all() as
+    Array<{ id: string; merged_into_id: string }>
+  for (const row of mergedRows) {
+    const id = todoMap.get(String(row.id))
+    const intoId = todoMap.get(String(row.merged_into_id))
+    if (id && intoId) {
+      db.prepare('UPDATE todos SET merged_into_id = ? WHERE id = ?').run(intoId, id)
+      db.prepare("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id = ?").run(id)
+    }
+  }
+  const evidenceRows = db.prepare(`SELECT * FROM ${LEGACY_ALIAS}.todo_evidence ORDER BY occurred_at ASC, rowid ASC`).all() as
+    Array<Record<string, unknown>>
+  for (const sourceEvidence of evidenceRows) {
+    const fingerprint = String(sourceEvidence.source_fingerprint)
+    const incomingTodoId = todoMap.get(String(sourceEvidence.todo_id)) ?? String(sourceEvidence.todo_id)
+    const fingerprintOwner = db.prepare('SELECT id,todo_id FROM todo_evidence WHERE source_fingerprint = ?').get(fingerprint) as
+      | { id: string; todo_id: string }
+      | undefined
+    if (fingerprintOwner) {
+      if (fingerprintOwner.todo_id !== incomingTodoId) {
+        warnings.push(`${source}: todo evidence fingerprint conflict ${fingerprint}; kept canonical evidence`)
+      }
+      continue
+    }
+    const oldId = String(sourceEvidence.id)
+    const idOwner = db.prepare('SELECT source_fingerprint FROM todo_evidence WHERE id = ?').get(oldId) as
+      | { source_fingerprint: string }
+      | undefined
+    const id = idOwner && idOwner.source_fingerprint !== fingerprint
+      ? remappedId(source, 'todo_evidence', oldId)
+      : oldId
+    db.prepare(
+      `INSERT INTO todo_evidence(
+         id, todo_id, source_scope_key, session_id, turn_seq,
+         source_kind, relation, excerpt, occurred_at, source_fingerprint
+       ) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      id,
+      incomingTodoId,
+      scopeKey,
+      sourceEvidence.session_id as SQLInputValue,
+      sourceEvidence.turn_seq as SQLInputValue,
+      sourceEvidence.source_kind as SQLInputValue,
+      sourceEvidence.relation as SQLInputValue,
+      sourceEvidence.excerpt as SQLInputValue,
+      sourceEvidence.occurred_at as SQLInputValue,
+      fingerprint,
+    )
+  }
   const goalColumns = ['id', 'title', 'description', 'progress', 'status', 'milestone_id', 'scope_key', 'created_at', 'updated_at']
   mergeIdTable(db, source, 'goals', goalColumns, goalColumns.filter((c) => c !== 'scope_key'), (row) => ({
     ...row,

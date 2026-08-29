@@ -58,13 +58,33 @@ CREATE TABLE IF NOT EXISTS todos (
   completed_at  INTEGER,
   last_reminded_at INTEGER,          -- reminder dedup stamp (M3)
   good_count    INTEGER NOT NULL DEFAULT 0,  -- v0.3.2 feedback: times the user completed it
-  stale_count   INTEGER NOT NULL DEFAULT 0   -- v0.3.2 feedback: times it was cancelled/abandoned
+  stale_count   INTEGER NOT NULL DEFAULT 0,  -- v0.3.2 feedback: times it was cancelled/abandoned
+  record_status TEXT NOT NULL DEFAULT 'canonical', -- canonical|merged|rejected (independent of business status)
+  merged_into_id TEXT                -- canonical todo id when record_status=merged
 );
 CREATE INDEX IF NOT EXISTS idx_todos_due      ON todos(due_at) WHERE due_at IS NOT NULL AND status IN ('pending','in_progress');
 CREATE INDEX IF NOT EXISTS idx_todos_status   ON todos(status);
 CREATE INDEX IF NOT EXISTS idx_todos_dedup    ON todos(dedup_key) WHERE dedup_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_todos_milestone ON todos(milestone_id);
 CREATE INDEX IF NOT EXISTS idx_todos_scope   ON todos(scope_key);
+
+-- Immutable provenance for every occurrence, mention and assistant/panel
+-- action related to a todo. The legacy source columns on todos remain the
+-- compatibility projection of its first origin evidence.
+CREATE TABLE IF NOT EXISTS todo_evidence (
+  id                 TEXT PRIMARY KEY,
+  todo_id            TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  source_scope_key   TEXT NOT NULL,
+  session_id         TEXT,
+  turn_seq           INTEGER,
+  source_kind        TEXT NOT NULL, -- human|assistant_action|panel_action|extraction
+  relation           TEXT NOT NULL, -- origin|mention|update|correction|completion_claim|discussion
+  excerpt            TEXT,
+  occurred_at        INTEGER NOT NULL,
+  source_fingerprint TEXT NOT NULL UNIQUE
+);
+CREATE INDEX IF NOT EXISTS idx_todo_evidence_todo ON todo_evidence(todo_id, occurred_at ASC);
+CREATE INDEX IF NOT EXISTS idx_todo_evidence_session ON todo_evidence(session_id, turn_seq) WHERE session_id IS NOT NULL;
 
 -- goals
 CREATE TABLE IF NOT EXISTS goals (

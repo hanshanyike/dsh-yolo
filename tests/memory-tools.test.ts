@@ -92,6 +92,26 @@ describe('memory_write + yolo_query', () => {
     expect(row).toMatchObject({ source: 'tool', session_id: 'session-tool-origin' })
   })
 
+  it('replays one durable tool call without duplicating its todo or evidence', async () => {
+    const session = {
+      header: { id: 'session-tool-replay', cwd },
+      events: [{ type: 'tool/call', data: { callId: 'call-stable-1', turn: 3 } }],
+    }
+    const exec = { callId: 'call-stable-1', agent: { session } }
+    const args = { kind: 'todo', title: '把验收清单发给项目组', due_at: '2026-09-01' }
+
+    const first = await tool('memory_write').execute(args, exec) as { id: string }
+    const replay = await tool('memory_write').execute(args, exec) as { id: string }
+
+    expect(replay.id).toBe(first.id)
+    expect(yolo.listTodos(cwd).filter((todo) => todo.title === args.title)).toHaveLength(1)
+    expect(yolo.listTodoEvidence(cwd, first.id)).toEqual([
+      expect.objectContaining({ session_id: 'session-tool-replay', turn_seq: 3, source_kind: 'assistant_action', relation: 'origin' }),
+    ])
+    await expect(tool('memory_write').execute({ ...args, title: '同一调用却换了内容' }, exec))
+      .rejects.toThrow(/reused with different memory_write arguments/)
+  })
+
   it('writes milestones, goals, preferences and events; reads each view', async () => {
     await tool('memory_write').execute({ kind: 'milestone', title: 'M5 完成', target_date: '2026-09-01' })
     await tool('memory_write').execute({ kind: 'goal', title: '发布 v0.1', detail: '让社区用上' })
@@ -131,6 +151,25 @@ describe('yolo_action', () => {
     expect(res.ok).toBe(true)
     expect(res.item.due_at).toBe('2026-08-25')
     expect(yolo.listTodos(cwd)[0].due_at).toBe('2026-08-25')
+  })
+
+  it('records assistant actions against the durable call turn exactly once', async () => {
+    const { todo } = yolo.addTodo(cwd, { title: '确认客户演示时间', source: 'llm' })
+    const session = {
+      header: { id: 'session-action-evidence', cwd },
+      events: [{ type: 'tool/call', data: { callId: 'action-call-1', turn: 6 } }],
+    }
+    const exec = { callId: 'action-call-1', agent: { session } }
+    const args = { action: 'complete', kind: 'todo', id: todo.id }
+
+    expect(await tool('yolo_action').execute(args, exec)).toMatchObject({ ok: true })
+    expect(await tool('yolo_action').execute(args, exec)).toMatchObject({ ok: true })
+    expect(yolo.listTodoEvidence(cwd, todo.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        session_id: 'session-action-evidence', source_kind: 'assistant_action', relation: 'completion_claim',
+      }),
+    ]))
+    expect(yolo.listTodoEvidence(cwd, todo.id).filter((row) => row.source_kind === 'assistant_action')).toHaveLength(1)
   })
 
   it('start / cancel / remind_again work and set_goal progress flips achieved', async () => {

@@ -123,6 +123,36 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(yolo.listEvents(cwd).some((e) => e.summary === 'LLM 决策')).toBe(true)
   })
 
+  it('persists one extraction operation only once when the same session turn is replayed', async () => {
+    const llmJson = JSON.stringify({
+      todos: [{ title: '确认发布前的回归结果', due_at: '2026-09-02' }],
+      milestones: [], goals: [], preferences: [], events: [], updates: [],
+    })
+    const settings = { get: () => ({ extraction: { minIntervalSec: 0 } }) }
+    const { ctx, handlers, stream } = makeCtx(yolo, llmJson, settings)
+    apply(ctx as never)
+    const session = sessionLike('s-replayed-turn', cwd)
+    const agent = { id: session.id, session }
+    const message = {
+      id: 'human-replayed-turn', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '请提醒我确认发布前的回归结果' }],
+    }
+
+    for (let replay = 0; replay < 2; replay++) {
+      await handlers.get('agent/pre-step')!(
+        { agent, messages: [message], turn: 7, step: 1, signal: new AbortController().signal },
+        async () => ({ kind: 'enter', messages: [message] }),
+      )
+      await handlers.get('agent/turn-stopping')!({ agent, turn: 7 })
+    }
+
+    expect(stream).toHaveBeenCalledTimes(2)
+    const todo = yolo.listTodos(cwd).find((row) => row.title === '确认发布前的回归结果')
+    expect(todo).toBeTruthy()
+    expect(yolo.listTodoEvidence(cwd, todo!.id)).toHaveLength(1)
+    expect(yolo.countExtractionsSince(cwd, 0)).toBe(1)
+  })
+
   it('captures the exact human message and extracts the explicit today commitment after idle', async () => {
     const llmJson = JSON.stringify({
       todos: [{ title: '完成针对 dsh-yolo 的分析报告', due_at: '2026-08-25' }],
@@ -201,6 +231,11 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
       source_turn: 1,
       source_excerpt: '[E2E] 明天下午三点提醒我把客户访谈纪要发给产品组，验证编号 RH0826C。',
     })
+    expect(yolo.listTodoEvidence(cwd, todos[0]!.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source_kind: 'assistant_action', relation: 'origin' }),
+      expect.objectContaining({ session_id: 's-tool-race', turn_seq: 1, source_kind: 'human', relation: 'origin' }),
+    ]))
+    expect(yolo.listTodoEvidence(cwd, todos[0]!.id)).toHaveLength(2)
   })
 
   it('does not extract automatic Goal rounds that carry user-role goal messages', async () => {

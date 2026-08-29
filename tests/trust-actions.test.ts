@@ -113,6 +113,26 @@ describe('attention trust actions and durable idempotency', () => {
     })
   })
 
+  it('records one panel-action evidence entry and replays it without duplication', () => {
+    const created = applyYoloAction(yolo, cwd, {
+      action: 'quick_add', kind: 'todo', title: '确认下周评审时间', client_action_id: 'panel-create-once',
+    })
+    expect(created.ok).toBe(true)
+    const todoId = created.ok ? String(created.item?.id) : ''
+    expect(yolo.listTodoEvidence(cwd, todoId)).toEqual([
+      expect.objectContaining({ source_kind: 'panel_action', relation: 'origin' }),
+    ])
+
+    const complete = { action: 'complete', kind: 'todo', id: todoId, client_action_id: 'panel-complete-once' }
+    expect(applyYoloAction(yolo, cwd, complete)).toMatchObject({ ok: true })
+    expect(applyYoloAction(yolo, cwd, complete)).toMatchObject({ ok: true })
+    expect(yolo.listTodoEvidence(cwd, todoId)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source_kind: 'panel_action', relation: 'origin' }),
+      expect.objectContaining({ source_kind: 'panel_action', relation: 'completion_claim' }),
+    ]))
+    expect(yolo.listTodoEvidence(cwd, todoId)).toHaveLength(2)
+  })
+
   it('strictly binds feedback to the current judgment version and suppresses it from projection', () => {
     const { attention } = createJudgment()
     const stale = applyYoloAction(yolo, cwd, {

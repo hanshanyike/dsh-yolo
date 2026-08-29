@@ -26,6 +26,10 @@ export interface YoloItemSource {
   /** Item creation time; the host does not expose a separate source-message timestamp. */
   created_at?: number | null
   workspace?: WorkspaceTag
+  /** What produced this evidence, independent from its navigation surface. */
+  origin_kind?: 'human' | 'assistant_action' | 'panel_action' | 'extraction'
+  /** Why this evidence is attached to the canonical todo. */
+  relation?: 'origin' | 'mention' | 'update' | 'correction' | 'completion_claim' | 'discussion'
 }
 
 export type YoloAttentionReasonCode =
@@ -108,6 +112,10 @@ export interface YoloTodoRow {
   session_id?: string | null
   /** Structured dashboard-v2 provenance. */
   source?: YoloItemSource
+  /** Immutable provenance entries, including sessions linked after creation. */
+  sources?: YoloItemSource[]
+  source_count?: number
+  related_session_count?: number
   /** Owning cwd duplicated explicitly for action routing without parsing labels. */
   scope_cwd?: string
   /** Conservatively derived from auditable todo_postponed events. */

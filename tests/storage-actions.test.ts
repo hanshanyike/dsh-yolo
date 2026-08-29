@@ -243,7 +243,7 @@ describe('fuzzy title finders', () => {
 })
 
 describe('applyTodoConsolidate', () => {
-  it('merges a duplicate into its keeper: detail note, due inherited, priority raised, source cancelled + out of FTS, one event, source cards settled', () => {
+  it('merges a duplicate into its keeper: source status preserved as merged history, target enriched, one event, source cards settled', () => {
     const { row: source } = repo.upsertTodo(db, {
       title: '把演示稿发给研发',
       detail: '含附录数据',
@@ -262,7 +262,10 @@ describe('applyTodoConsolidate', () => {
     expect(merged.detail).toContain('（已并入「把演示稿发给研发」，原截止 2026-08-30）')
     expect(merged.due_at).toBe('2026-08-30') // keeper had none -> inherits the source's
     expect(merged.priority).toBe('high') // higher of low/high wins
-    expect(repo.listTodos(db, SCOPE, 'cancelled').some((t) => t.id === source.id)).toBe(true)
+    expect(repo.listTodos(db, SCOPE).some((t) => t.id === source.id)).toBe(false)
+    expect(repo.listTodoRecords(db, SCOPE).find((t) => t.id === source.id)).toMatchObject({
+      status: 'pending', record_status: 'merged', merged_into_id: target.id,
+    })
     expect(merged.id).toBe(target.id)
 
     // source left the index; only the keeper still matches
@@ -301,7 +304,9 @@ describe('applyTodoConsolidate', () => {
     expect(res.ok).toBe(true)
     if (!res.ok) return
     expect(res.target.id).toBe(target.id)
-    expect(repo.listTodos(db, SCOPE, 'cancelled').some((t) => t.id === source.id)).toBe(true)
+    expect(repo.listTodoRecords(db, SCOPE).find((t) => t.id === source.id)).toMatchObject({
+      status: 'pending', record_status: 'merged', merged_into_id: target.id,
+    })
   })
 
   it('refuses when source and target are the same row', () => {
@@ -311,23 +316,46 @@ describe('applyTodoConsolidate', () => {
     expect(repo.listEvents(db, SCOPE)).toHaveLength(0)
   })
 
-  it('refuses when either side is in a terminal state', () => {
+  it('allows terminal/open consolidation while keeping the target business status authoritative', () => {
     const { row: doneSrc } = repo.upsertTodo(db, { title: '已完成的旧任务', scope_key: SCOPE })
     const { row: openA } = repo.upsertTodo(db, { title: '把演示稿发给研发', scope_key: SCOPE })
     repo.applyTodoAction(db, doneSrc.id, 'complete')
 
     const res = repo.applyTodoConsolidate(db, { id: doneSrc.id }, { id: openA.id })
-    expect(res.ok).toBe(false)
-    if (res.ok) return
-    expect(res.kind).toBe('terminal')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.target.status).toBe('pending')
+    expect(repo.listTodoRecords(db, SCOPE).find((row) => row.id === doneSrc.id)).toMatchObject({
+      status: 'done', record_status: 'merged', merged_into_id: openA.id,
+    })
 
     const { row: openB } = repo.upsertTodo(db, { title: '跟运营对齐双周排期', scope_key: SCOPE })
     repo.setTodoStatus(db, openA.id, 'cancelled')
     const res2 = repo.applyTodoConsolidate(db, { id: openB.id }, { id: openA.id })
-    expect(res2.ok).toBe(false)
-    if (res2.ok) return
-    expect(res2.kind).toBe('terminal')
-    expect(repo.listEvents(db, SCOPE).every((e) => e.kind !== 'todo_consolidated')).toBe(true)
+    expect(res2.ok).toBe(true)
+    if (!res2.ok) return
+    expect(res2.target.status).toBe('cancelled')
+    expect(repo.listTodoRecords(db, SCOPE).find((row) => row.id === openB.id)).toMatchObject({
+      status: 'pending', record_status: 'merged', merged_into_id: openA.id,
+    })
+    expect(repo.listEvents(db, SCOPE).filter((e) => e.kind === 'todo_consolidated')).toHaveLength(2)
+  })
+
+  it('does not reopen a merged historical record and resolves its evidence through the keeper', () => {
+    const source = repo.upsertTodo(db, {
+      title: '准备季度复盘材料', scope_key: SCOPE, source: 'llm', session_id: 'session-source',
+      source_excerpt: '准备季度复盘材料', source_turn: 2, source_fingerprint: 'source-origin',
+    }).row
+    const target = repo.upsertTodo(db, {
+      title: '整理季度复盘材料', scope_key: SCOPE, source: 'llm', session_id: 'session-target',
+      source_excerpt: '整理季度复盘材料', source_turn: 4, source_fingerprint: 'target-origin',
+    }).row
+    expect(repo.applyTodoConsolidate(db, { id: source.id }, { id: target.id }).ok).toBe(true)
+
+    const unchanged = repo.applyTodoAction(db, source.id, 'reopen')
+    expect(unchanged).toMatchObject({ id: source.id, status: 'pending', record_status: 'merged', merged_into_id: target.id })
+    expect(repo.resolveCanonicalTodo(db, source.id)?.id).toBe(target.id)
+    expect(repo.listTodoEvidence(db, target.id).map((row) => row.session_id)).toEqual(['session-source', 'session-target'])
   })
 
   it('refuses with not-found for unknown ids or unmatched titles', () => {
@@ -356,6 +384,24 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
   afterEach(() => {
     yolo.close()
     rmSync(cwd, { recursive: true, force: true })
+  })
+
+  it('exposes evidence append/list and canonical-id resolution through the Yolo service', () => {
+    const { todo: source } = yolo.addTodo(cwd, { title: '准备客户回访', source: 'manual' })
+    const { todo: target } = yolo.addTodo(cwd, { title: '整理客户回访安排', source: 'manual' })
+    const appended = yolo.addTodoEvidence(cwd, source.id, {
+      session_id: 'session-followup', turn_seq: 3, source_kind: 'human', relation: 'mention',
+      excerpt: '继续准备客户回访', source_fingerprint: 'human/session-followup/3/todo-0',
+    })
+    expect(appended.created).toBe(true)
+    expect(yolo.addTodoEvidence(cwd, source.id, {
+      session_id: 'session-followup', turn_seq: 3, source_kind: 'human', relation: 'mention',
+      excerpt: '继续准备客户回访', source_fingerprint: 'human/session-followup/3/todo-0',
+    }).created).toBe(false)
+
+    expect(yolo.applyTodoConsolidate(cwd, { id: source.id }, { id: target.id }).ok).toBe(true)
+    expect(yolo.resolveCanonicalTodo(cwd, source.id)?.id).toBe(target.id)
+    expect(yolo.listTodoEvidence(cwd, target.id).some((row) => row.id === appended.evidence.id)).toBe(true)
   })
 
   it('audits an unsupported action as action_denied', () => {
@@ -424,7 +470,10 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
     })
     expect(res.ok).toBe(true)
     expect(yolo.listEvents(cwd).some((e) => e.kind === 'todo_consolidated')).toBe(true)
-    expect(yolo.listTodos(cwd, 'cancelled').some((t) => t.id === source.id)).toBe(true)
+    expect(yolo.listTodos(cwd).some((t) => t.id === source.id)).toBe(false)
+    expect(yolo.listTodoRecords(cwd).find((t) => t.id === source.id)).toMatchObject({
+      status: 'pending', record_status: 'merged', merged_into_id: target.id,
+    })
     expect(yolo.listTodos(cwd, 'pending').some((t) => t.id === target.id)).toBe(true)
 
     const denied = applyYoloAction(yolo, cwd, { action: 'consolidate', kind: 'todo', id: target.id })

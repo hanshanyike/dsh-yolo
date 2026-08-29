@@ -7,6 +7,7 @@ import type Yolo from '../storage/index.ts'
 import type { MilestoneStatus, Priority, RowType, TodoStatus, GoalStatus } from '../storage/types.ts'
 import { applyYoloAction } from '../shared/actions.ts'
 import { sessionCwd, sessionId } from '../shared/session.ts'
+import { toolTodoActionId, toolTodoFingerprint, todoOperationRequestHash } from '../shared/todo-identity.ts'
 
 /** Context augmented with the yolo service (register via inject ['yolo']). */
 export interface YoloContext extends Context {
@@ -16,6 +17,32 @@ export interface YoloContext extends Context {
 /** The calling agent's session, when the host attached one to this execution. */
 function execSession(exec: unknown): unknown {
   return (exec as { agent?: { session?: unknown } } | undefined)?.agent?.session
+}
+
+interface ToolOrigin {
+  sessionId?: string
+  callId?: string
+  turn?: number
+}
+
+/** Recover the durable host call identity and owning turn. Older hosts without
+ * callId deliberately degrade to the existing domain/title no-op behavior; a
+ * wall-clock or payload-only pseudo id would swallow a later legitimate call. */
+function toolOrigin(exec: unknown): ToolOrigin {
+  const session = execSession(exec) as { events?: ReadonlyArray<{ type?: string; data?: unknown }> } | undefined
+  const sessionIdValue = sessionId(session)
+  const rawCallId = (exec as { callId?: unknown; rootCallId?: unknown } | undefined)?.callId
+    ?? (exec as { rootCallId?: unknown } | undefined)?.rootCallId
+  const callId = typeof rawCallId === 'string' && rawCallId ? rawCallId : undefined
+  if (!callId) return { sessionId: sessionIdValue }
+  const call = [...(session?.events ?? [])].reverse().find((event) => {
+    if (event.type !== 'tool/call' || typeof event.data !== 'object' || event.data === null) return false
+    return (event.data as { callId?: unknown }).callId === callId
+  })
+  const turn = typeof (call?.data as { turn?: unknown } | undefined)?.turn === 'number'
+    ? (call!.data as { turn: number }).turn
+    : undefined
+  return { sessionId: sessionIdValue, callId, turn }
 }
 
 /**
@@ -76,16 +103,29 @@ export function registerYoloTools(ctx: YoloContext): void {
         const cwd = cwdOfExec(exec)
         switch (args.kind) {
           case 'todo': {
-            const originSessionId = sessionId(execSession(exec))
-            const { todo } = y.addTodo(cwd, {
+            const origin = toolOrigin(exec)
+            const fingerprint = origin.callId ? toolTodoFingerprint(origin.sessionId, origin.callId) : undefined
+            const write = (): { todo: { id: string }; created: boolean } => y.addTodo(cwd, {
               title: args.title,
               detail: args.detail,
               due_at: args.due_at,
               priority: (args.priority ?? undefined) as Priority | undefined,
               source: 'tool',
-              session_id: originSessionId,
+              session_id: origin.sessionId,
+              source_turn: origin.turn,
+              source_fingerprint: fingerprint,
+              evidence_source_kind: 'assistant_action',
             })
-            return json(todo)
+            if (!fingerprint) return json(write().todo)
+            const result = y.runIdempotentAction(
+              cwd,
+              fingerprint,
+              todoOperationRequestHash(args),
+              () => JSON.stringify(write()),
+            )
+            if (result.status === 'conflict') throw new Error('tool call id was reused with different memory_write arguments')
+            const stored = JSON.parse(result.outcome_json) as { todo: { id: string }; created: boolean }
+            return json(stored.todo)
           }
           case 'milestone':
             return json(y.addMilestone(cwd, { title: args.title, target_date: args.target_date, description: args.detail, source: 'tool' }))
@@ -119,15 +159,17 @@ export function registerYoloTools(ctx: YoloContext): void {
         const cwd = cwdOfExec(exec)
         // M9 P34: forget must land on the same audited domain actions as every
         // other entrance — bare setXxxStatus calls bypassed the event ledger.
-        const session_id = sessionId(execSession(exec))
+        const origin = toolOrigin(exec)
+        const client_action_id = origin.callId ? toolTodoActionId(origin.sessionId, origin.callId) : undefined
         if (args.kind === 'todo') {
-          return json(applyYoloAction(y, cwd, { action: 'cancel', kind: 'todo', id: args.id, session_id }))
+          const outcome = applyYoloAction(y, cwd, { action: 'cancel', kind: 'todo', id: args.id, session_id: origin.sessionId, client_action_id })
+          return json(outcome)
         }
         if (args.kind === 'milestone') {
-          return json(applyYoloAction(y, cwd, { action: 'set_status', kind: 'milestone', id: args.id, status: 'abandoned', session_id }))
+          return json(applyYoloAction(y, cwd, { action: 'set_status', kind: 'milestone', id: args.id, status: 'abandoned', session_id: origin.sessionId, client_action_id }))
         }
         if (args.kind === 'goal') {
-          return json(applyYoloAction(y, cwd, { action: 'abandon', kind: 'goal', id: args.id, session_id }))
+          return json(applyYoloAction(y, cwd, { action: 'abandon', kind: 'goal', id: args.id, session_id: origin.sessionId, client_action_id }))
         }
         return json({ ok: false, error: 'unsupported kind' })
       },
@@ -160,7 +202,10 @@ export function registerYoloTools(ctx: YoloContext): void {
       async execute(args, exec) {
         // shared validation + dispatch (same path as POST /yolo_actions);
         // the calling session is stamped on the audit event for traceability
-        return json(applyYoloAction(y, cwdOfExec(exec), {
+        const cwd = cwdOfExec(exec)
+        const origin = toolOrigin(exec)
+        const client_action_id = origin.callId ? toolTodoActionId(origin.sessionId, origin.callId) : undefined
+        const outcome = applyYoloAction(y, cwd, {
           action: args.action,
           kind: args.kind,
           id: args.id,
@@ -171,8 +216,10 @@ export function registerYoloTools(ctx: YoloContext): void {
           progress: args.progress,
           status: args.status,
           note: args.note,
-          session_id: sessionId(execSession(exec)),
-        }))
+          session_id: origin.sessionId,
+          client_action_id,
+        })
+        return json(outcome)
       },
     }),
   )

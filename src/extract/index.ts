@@ -18,6 +18,7 @@ import type { MilestoneStatus, Priority } from '../storage/types.ts'
 import { DEFAULTS } from '../shared/constants.ts'
 import { shouldDropExtracted } from '../shared/quality.ts'
 import { sessionCwd } from '../shared/session.ts'
+import { extractionTodoOperationId, todoEvidenceFingerprint, todoOperationRequestHash } from '../shared/todo-identity.ts'
 import { isYoloSessionId } from '../ui/session.ts'
 import { contentBlocksToText, llmExtract, type ExtractionResult, type ExtractedUpdate, type LlmExtractionObservation } from './llm-extract.ts'
 import { buildKnownContext } from './prompt.ts'
@@ -170,7 +171,7 @@ function mergeExtraction(
   yolo: Yolo,
   cwd: string,
   r: ExtractionResult,
-  source: { sessionId: string; turn: number; excerpt: string | null },
+  source: { sessionId: string; turn: number; excerpt: string | null; operationId: string; occurredAt: number },
 ): void {
   const { sessionId } = source
   // Write-quality gate (v0.3.2 / B3): junk acknowledgements and bare meta
@@ -192,6 +193,9 @@ function mergeExtraction(
       session_id: sessionId,
       source_excerpt: source.excerpt,
       source_turn: source.excerpt ? source.turn : null,
+      evidence_operation_key: source.operationId,
+      evidence_source_kind: source.excerpt ? 'human' : 'extraction',
+      evidence_occurred_at: source.occurredAt,
     })
     if (created) {
       yolo.addEvent(cwd, {
@@ -219,21 +223,39 @@ function mergeExtraction(
     yolo.addEvent(cwd, { kind: e.kind, summary: e.summary, occurred_at: e.occurred_at ? Date.parse(e.occurred_at) || undefined : undefined, session_id: sessionId, source: 'llm' })
   }
   if (r.session_summary) yolo.upsertSessionSummary(cwd, sessionId, r.session_summary)
-  applyUpdates(yolo, cwd, r.updates, sessionId)
+  applyUpdates(yolo, cwd, r.updates, source)
 }
 
 const MILESTONE_STATUSES: readonly MilestoneStatus[] = ['planned', 'active', 'done', 'abandoned']
 
 /** Route LLM state-change updates onto the storage domain actions (M8).
  * v0.3.0: carries session_id so ledger events stay attributed to their origin. */
-function applyUpdates(yolo: Yolo, cwd: string, updates: readonly ExtractedUpdate[], sessionId: string): void {
+function applyUpdates(
+  yolo: Yolo,
+  cwd: string,
+  updates: readonly ExtractedUpdate[],
+  source: { sessionId: string; turn: number; excerpt: string | null; operationId: string; occurredAt: number },
+): void {
+  const { sessionId } = source
   for (const u of updates) {
     if (u.kind === 'todo') {
       const args = { session_id: sessionId }
-      if (u.status === 'done') yolo.applyTodoAction(cwd, { title: u.match_title }, 'complete', args)
-      else if (u.status === 'cancelled') yolo.applyTodoAction(cwd, { title: u.match_title }, 'cancel', args)
-      else if (u.status === 'in_progress') yolo.applyTodoAction(cwd, { title: u.match_title }, 'start', args)
-      else if (u.due_at) yolo.applyTodoAction(cwd, { title: u.match_title }, 'postpone', { due_at: u.due_at, ...args })
+      let todo = null
+      if (u.status === 'done') todo = yolo.applyTodoAction(cwd, { title: u.match_title }, 'complete', args)
+      else if (u.status === 'cancelled') todo = yolo.applyTodoAction(cwd, { title: u.match_title }, 'cancel', args)
+      else if (u.status === 'in_progress') todo = yolo.applyTodoAction(cwd, { title: u.match_title }, 'start', args)
+      else if (u.due_at) todo = yolo.applyTodoAction(cwd, { title: u.match_title }, 'postpone', { due_at: u.due_at, ...args })
+      if (todo) {
+        yolo.addTodoEvidence(cwd, todo.id, {
+          session_id: sessionId,
+          turn_seq: source.turn,
+          source_kind: source.excerpt ? 'human' : 'extraction',
+          relation: u.status === 'done' ? 'completion_claim' : 'update',
+          excerpt: source.excerpt,
+          occurred_at: source.occurredAt,
+          source_fingerprint: todoEvidenceFingerprint(source.operationId, todo.id),
+        })
+      }
     } else if (u.kind === 'goal') {
       if (typeof u.progress === 'number') yolo.applyGoalProgress(cwd, { title: u.match_title }, u.progress, u.note ?? undefined, sessionId)
     } else if (u.kind === 'milestone' && u.status && MILESTONE_STATUSES.includes(u.status as MilestoneStatus)) {
@@ -355,21 +377,14 @@ export function apply(ctx: Context): void {
         controllers.add(controller)
         const last = yctx.yolo.lastExtractionAt(cwd, session.id, 'llm')
         const spacingMs = (config?.minIntervalSec ?? DEFAULTS.extractionMinIntervalSec) * 1000
+        const operationId = extractionTodoOperationId(session.id, turn)
+        const requestHash = todoOperationRequestHash({ turnText, messages: capturedMessages.length || 1 })
         let started = Date.now()
         let observation: LlmExtractionObservation | undefined
         try {
           if (last) await waitForSpacing(Math.max(0, last + spacingMs - Date.now()), controller.signal)
           started = Date.now()
           const sourceExcerpt = sourceExcerptFromMessages(capturedMessages)
-          if (sourceExcerpt) {
-            yctx.yolo.promoteToolTodoOrigins(cwd, {
-              session_id: session.id,
-              source_excerpt: sourceExcerpt,
-              source_turn: turn,
-              created_from: acceptedAt ?? started,
-              created_to: started,
-            })
-          }
           const result = await llmExtract({
             llm: yctx.llm,
             provider: route.provider,
@@ -382,36 +397,54 @@ export function apply(ctx: Context): void {
             now: new Date(acceptedAt ?? started),
             observe: (value) => { observation = value },
           })
-
-          mergeExtraction(yctx.yolo, cwd, result, {
-            sessionId: session.id,
-            turn,
-            // Compatibility fallback text is useful extraction input but is
-            // not sufficiently strong provenance to persist as a quotation.
-            excerpt: sourceExcerpt,
-          })
           const hasContent = result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0 || result.updates.length > 0
-          yctx.yolo.logExtraction(cwd, {
-            session_id: session.id,
-            turn_seq: turn,
-            strategy: 'llm',
-            status: hasContent ? 'ok' : 'empty',
-            extracted_json: JSON.stringify({
-              raw: observation?.rawText ?? null,
-              parsed: result,
-              finish: observation?.finish ?? null,
-              route,
-              input: {
-                chars: turnText.length,
-                messages: capturedMessages.length || 1,
-                last_user_chars: lastUserText.length,
-                accepted_at: acceptedAt ? new Date(acceptedAt).toISOString() : null,
-              },
-            }),
-            token_in: observation?.usage?.inputTokens ?? null,
-            token_out: observation?.usage?.outputTokens ?? null,
-            duration_ms: Date.now() - started,
+          const persisted = yctx.yolo.runIdempotentAction(cwd, operationId, requestHash, () => {
+            if (sourceExcerpt) {
+              yctx.yolo.promoteToolTodoOrigins(cwd, {
+                session_id: session.id,
+                source_excerpt: sourceExcerpt,
+                source_turn: turn,
+                created_from: acceptedAt ?? started,
+                created_to: started,
+                evidence_operation_key: operationId,
+                evidence_occurred_at: acceptedAt ?? started,
+              })
+            }
+            mergeExtraction(yctx.yolo, cwd, result, {
+              sessionId: session.id,
+              turn,
+              // Compatibility fallback text is useful extraction input but is
+              // not sufficiently strong provenance to persist as a quotation.
+              excerpt: sourceExcerpt,
+              operationId,
+              occurredAt: acceptedAt ?? started,
+            })
+            yctx.yolo.logExtraction(cwd, {
+              session_id: session.id,
+              turn_seq: turn,
+              strategy: 'llm',
+              status: hasContent ? 'ok' : 'empty',
+              extracted_json: JSON.stringify({
+                raw: observation?.rawText ?? null,
+                parsed: result,
+                finish: observation?.finish ?? null,
+                route,
+                input: {
+                  chars: turnText.length,
+                  messages: capturedMessages.length || 1,
+                  last_user_chars: lastUserText.length,
+                  accepted_at: acceptedAt ? new Date(acceptedAt).toISOString() : null,
+                },
+              }),
+              token_in: observation?.usage?.inputTokens ?? null,
+              token_out: observation?.usage?.outputTokens ?? null,
+              duration_ms: Date.now() - started,
+            })
+            return JSON.stringify({ status: hasContent ? 'ok' : 'empty' })
           })
+          if (persisted.status === 'conflict') {
+            ctx.logger?.warn?.('[yolo-extract] operation id reused with different input: %s', operationId)
+          }
         } catch (e) {
           try {
             yctx.yolo.logExtraction(cwd, {

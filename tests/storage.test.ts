@@ -25,7 +25,7 @@ describe('db + schema', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[]
     const tableNames = names.map((t) => t.name)
-    for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'goals', 'preferences', 'preference_history', 'events', 'extraction_log', 'pending_reminders', 'yolo_fts']) {
+    for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'todo_evidence', 'goals', 'preferences', 'preference_history', 'events', 'extraction_log', 'pending_reminders', 'yolo_fts']) {
       expect(tableNames).toContain(t)
     }
   })
@@ -48,13 +48,19 @@ describe('db + schema', () => {
 
     const migrated = openDb(path)
     const columns = migrated.prepare('PRAGMA table_info(todos)').all() as Array<{ name: string }>
-    expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining(['source_excerpt', 'source_turn']))
-    expect(migrated.prepare('SELECT source_excerpt,source_turn FROM todos WHERE id=?').get('old-1'))
-      .toEqual({ source_excerpt: null, source_turn: null })
+    expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'source_excerpt', 'source_turn', 'record_status', 'merged_into_id',
+    ]))
+    expect(migrated.prepare('SELECT source_excerpt,source_turn,record_status,merged_into_id FROM todos WHERE id=?').get('old-1'))
+      .toEqual({ source_excerpt: null, source_turn: null, record_status: 'canonical', merged_into_id: null })
+    expect(migrated.prepare('SELECT todo_id,relation,source_fingerprint FROM todo_evidence WHERE todo_id=?').get('old-1'))
+      .toEqual({ todo_id: 'old-1', relation: 'origin', source_fingerprint: 'legacy:todo:old-1:origin' })
     migrated.close()
 
-    // A second open proves the PRAGMA-gated ALTERs are idempotent.
-    expect(() => openDb(path).close()).not.toThrow()
+    // A second open proves both the ALTERs and evidence backfill are idempotent.
+    const reopened = openDb(path)
+    expect(reopened.prepare('SELECT COUNT(*) AS n FROM todo_evidence WHERE todo_id=?').get('old-1')).toEqual({ n: 1 })
+    reopened.close()
     rmSync(root, { recursive: true, force: true })
   })
 
@@ -97,6 +103,52 @@ describe('todos', () => {
     expect(todos).toHaveLength(1)
     expect(todos[0].due_at).toBe('2026-08-21')
     expect(todos[0].priority).toBe('high')
+  })
+
+  it('chooses the open canonical duplicate deterministically instead of a terminal row', () => {
+    const terminal = repo.upsertTodo(db, { title: '核对发布清单', scope_key: SCOPE }).row
+    repo.setTodoStatus(db, terminal.id, 'done')
+    const open = repo.upsertTodo(db, { title: '核对发布清单', scope_key: SCOPE }).row
+    const replay = repo.upsertTodo(db, { title: '核对发布清单', due_at: '2026-09-01', scope_key: SCOPE })
+
+    expect(replay).toMatchObject({ created: false, row: { id: open.id, due_at: '2026-09-01' } })
+    expect(repo.listTodoRecords(db, SCOPE)).toHaveLength(2)
+  })
+
+  it('stores multiple session evidences and makes a source fingerprint idempotent', () => {
+    const first = repo.upsertTodo(db, {
+      title: '把演示稿发给研发', scope_key: SCOPE, source: 'llm', session_id: 'session-a',
+      source_excerpt: '明天把演示稿发给研发', source_turn: 2, source_fingerprint: 'extract/a/2/todo/0',
+    })
+    const second = repo.upsertTodo(db, {
+      title: '把演示稿发给研发', scope_key: SCOPE, source: 'llm', session_id: 'session-b',
+      source_excerpt: '研发那份演示稿别忘了', source_turn: 7, source_fingerprint: 'extract/b/7/todo/0',
+      evidence_relation: 'mention',
+    })
+    const replay = repo.upsertTodo(db, {
+      title: '模型重试时文案发生变化', scope_key: SCOPE, source: 'llm', session_id: 'session-b',
+      source_excerpt: '研发那份演示稿别忘了', source_turn: 7, source_fingerprint: 'extract/b/7/todo/0',
+    })
+
+    expect(second.row.id).toBe(first.row.id)
+    expect(replay).toMatchObject({ created: false, row: { id: first.row.id } })
+    expect(repo.listTodoEvidence(db, first.row.id).map((row) => [row.session_id, row.relation])).toEqual([
+      ['session-a', 'origin'],
+      ['session-b', 'mention'],
+    ])
+  })
+
+  it('rejects reuse of one evidence fingerprint for different canonical todos', () => {
+    const a = repo.upsertTodo(db, { title: '事项 A', scope_key: SCOPE }).row
+    const b = repo.upsertTodo(db, { title: '事项 B', scope_key: SCOPE }).row
+    repo.addTodoEvidence(db, {
+      todo_id: a.id, source_scope_key: SCOPE, source_kind: 'assistant_action', relation: 'update',
+      source_fingerprint: 'tool/same-call',
+    })
+    expect(() => repo.addTodoEvidence(db, {
+      todo_id: b.id, source_scope_key: SCOPE, source_kind: 'assistant_action', relation: 'update',
+      source_fingerprint: 'tool/same-call',
+    })).toThrow('todo evidence fingerprint conflict')
   })
 
   it('keeps the original source evidence when a later upsert updates the todo', () => {
@@ -148,20 +200,31 @@ describe('todos', () => {
 
   it('promotes provisional tool origins only inside the accepted turn window', () => {
     const earlier = repo.upsertTodo(db, { title: '早一轮事项', scope_key: SCOPE, source: 'tool', session_id: 'session-window' }).row
-    const current = repo.upsertTodo(db, { title: '本轮事项', scope_key: SCOPE, source: 'tool', session_id: 'session-window' }).row
+    const wrongTurn = repo.upsertTodo(db, { title: '相邻轮事项', scope_key: SCOPE, source: 'tool', session_id: 'session-window', source_turn: 3 }).row
+    const current = repo.upsertTodo(db, { title: '本轮事项', scope_key: SCOPE, source: 'tool', session_id: 'session-window', source_turn: 4 }).row
     db.prepare('UPDATE todos SET created_at = ? WHERE id = ?').run(100, earlier.id)
+    db.prepare('UPDATE todos SET created_at = ? WHERE id = ?').run(200, wrongTurn.id)
     db.prepare('UPDATE todos SET created_at = ? WHERE id = ?').run(200, current.id)
 
     expect(repo.promoteToolTodoOrigins(db, SCOPE, {
       session_id: 'session-window', source_excerpt: '本轮直接用户输入', source_turn: 4,
-      created_from: 150, created_to: 250,
+      created_from: 150, created_to: 250, evidence_operation_key: 'extract/accepted/session-window/4',
     })).toBe(1)
     const rows = repo.listTodos(db, SCOPE)
     expect(rows.find((row) => row.id === earlier.id)).toMatchObject({ source: 'tool', source_excerpt: null })
+    expect(rows.find((row) => row.id === wrongTurn.id)).toMatchObject({ source: 'tool', source_excerpt: null, source_turn: 3 })
     expect(rows.find((row) => row.id === current.id)).toMatchObject({ source: 'llm', source_excerpt: '本轮直接用户输入', source_turn: 4 })
+    expect(repo.listTodoEvidence(db, earlier.id).map((row) => row.source_kind)).toEqual(['assistant_action'])
+    const currentEvidenceKinds = repo.listTodoEvidence(db, current.id).map((row) => row.source_kind)
+    expect(currentEvidenceKinds).toHaveLength(2)
+    expect(currentEvidenceKinds).toEqual(expect.arrayContaining(['assistant_action', 'human']))
+    expect(repo.promoteToolTodoOrigins(db, SCOPE, {
+      session_id: 'session-window', source_excerpt: '本轮直接用户输入', source_turn: 4,
+      created_from: 150, created_to: 250, evidence_operation_key: 'extract/accepted/session-window/4',
+    })).toBe(0)
   })
 
-  it('bounds source evidence at storage and rejects it for manual or tool rows', () => {
+  it('bounds direct-user excerpts while preserving only durable tool turn metadata', () => {
     const llm = repo.upsertTodo(db, {
       title: '核对发布窗口', scope_key: SCOPE, source: 'llm', session_id: 'session-source',
       source_excerpt: `核对  ${'😀'.repeat(450)}`, source_turn: 5,
@@ -169,13 +232,16 @@ describe('todos', () => {
     expect(Array.from(llm.source_excerpt ?? '')).toHaveLength(400)
     expect(llm.source_turn).toBe(5)
 
-    for (const source of ['manual', 'tool'] as const) {
-      const row = repo.upsertTodo(db, {
-        title: `${source} 来源`, scope_key: SCOPE, source, session_id: 'forged-session',
-        source_excerpt: '不应保存', source_turn: 9,
-      }).row
-      expect(row).toMatchObject({ source_excerpt: null, source_turn: null })
-    }
+    const manual = repo.upsertTodo(db, {
+      title: 'manual 来源', scope_key: SCOPE, source: 'manual', session_id: 'forged-session',
+      source_excerpt: '不应保存', source_turn: 9,
+    }).row
+    expect(manual).toMatchObject({ source_excerpt: null, source_turn: null })
+    const tool = repo.upsertTodo(db, {
+      title: 'tool 来源', scope_key: SCOPE, source: 'tool', session_id: 'tool-session',
+      source_excerpt: '不应保存', source_turn: 9,
+    }).row
+    expect(tool).toMatchObject({ source_excerpt: null, source_turn: 9 })
   })
 
   it('keeps the persisted todo title and its FTS projection identical after a normalized-title upsert', () => {

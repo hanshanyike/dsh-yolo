@@ -11,7 +11,7 @@
 // read-only) and tags each row with its owning workspace.
 
 import type Yolo from '../storage/index.ts'
-import type { Notification, TimelineEvent, Todo } from '../storage/types.ts'
+import type { Notification, TimelineEvent, Todo, TodoEvidence } from '../storage/types.ts'
 import type {
   YoloDashboardData,
   YoloLedgerEntry,
@@ -109,6 +109,39 @@ function itemSource(todo: Todo, sessions: Map<string, string>, ws: WorkspaceTag)
   return { type: 'legacy', label: '早期记录', session_id: null, workspace: ws }
 }
 
+function evidenceSource(evidence: TodoEvidence, sessions: Map<string, string>, ws: WorkspaceTag): YoloItemSource {
+  if (evidence.session_id) {
+    return {
+      type: 'session',
+      label: sessions.get(evidence.session_id)
+        ?? (evidence.source_kind === 'assistant_action' ? '助手操作所在会话' : '关联会话'),
+      session_id: evidence.session_id,
+      excerpt: evidence.excerpt ?? null,
+      turn: evidence.turn_seq ?? null,
+      created_at: evidence.occurred_at,
+      workspace: ws,
+      origin_kind: evidence.source_kind,
+      relation: evidence.relation,
+    }
+  }
+  const type = evidence.source_kind === 'panel_action'
+    ? 'manual'
+    : evidence.source_kind === 'assistant_action'
+      ? 'tool'
+      : 'legacy'
+  return {
+    type,
+    label: type === 'manual' ? '看板操作' : type === 'tool' ? '助手操作' : '会话记录',
+    session_id: null,
+    excerpt: evidence.excerpt ?? null,
+    turn: evidence.turn_seq ?? null,
+    created_at: evidence.occurred_at,
+    workspace: ws,
+    origin_kind: evidence.source_kind,
+    relation: evidence.relation,
+  }
+}
+
 function postponedTitle(summary: string): string | undefined {
   return /^推迟：「(.+)」→\s/.exec(summary)?.[1]
 }
@@ -179,47 +212,54 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
   const unhandledNotifications = yolo.listUnhandledNotifications(cwd)
   const reminders = unhandledReminderMap(unhandledNotifications)
 
-  const todos: YoloTodoRow[] = storageTodos.map((t) => ({
-    id: t.id,
-    title: t.title,
-    detail: t.detail ?? null,
-    status: t.status,
-    priority: t.priority,
-    due_at: t.due_at,
-    milestone_title: t.milestone_id ? msTitle.get(t.milestone_id) ?? null : null,
-    milestone_id: t.milestone_id ?? null,
-    milestone_status: t.milestone_id ? msStatus.get(t.milestone_id) ?? null : null,
-    milestone_open_todo_count: t.milestone_id ? openByMilestone.get(t.milestone_id) ?? 0 : 0,
-    updated_at: t.updated_at,
-    created_at: t.created_at,
-    completed_at: t.completed_at ?? null,
-    overdue: isTodoOverdue(t.due_at, t.status, new Date(now)),
-    stale: isTodoStale(t.status, t.updated_at, now),
-    session_label: t.session_id
-      ? sessions.get(t.session_id) ?? '来源会话'
-      : t.source === 'manual'
-        ? '快速记一条'
-        : null,
-    session_id: t.session_id ?? null,
-    source: itemSource(t, sessions, owner),
-    scope_cwd: cwd,
-    postpone_count: postponeByTitle.get(t.title) ?? 0,
-    ...(reminders.has(t.id)
-      ? {
-          reminder: {
-            id: reminders.get(t.id)!.id,
-            unhandled: true,
-            unhandled_count: reminders.get(t.id)!.count,
-            last_fired_at: reminders.get(t.id)!.lastFiredAt,
-            title: reminders.get(t.id)!.title,
-            body: reminders.get(t.id)!.body,
-          },
-        }
-      : { reminder: { unhandled: false, unhandled_count: 0 } }),
-    // v0.3.2 feedback signal (P/B1): how the user's history treats this commitment
-    belief: { good: t.good_count ?? 0, stale: t.stale_count ?? 0 },
-    ws: owner,
-  }))
+  const todos: YoloTodoRow[] = storageTodos.map((t) => {
+    const sources = (yolo.listTodoEvidence?.(cwd, t.id) ?? []).map((evidence) => evidenceSource(evidence, sessions, owner))
+    const relatedSessionCount = new Set(sources.map((source) => source.session_id).filter((id): id is string => !!id)).size
+    return {
+      id: t.id,
+      title: t.title,
+      detail: t.detail ?? null,
+      status: t.status,
+      priority: t.priority,
+      due_at: t.due_at,
+      milestone_title: t.milestone_id ? msTitle.get(t.milestone_id) ?? null : null,
+      milestone_id: t.milestone_id ?? null,
+      milestone_status: t.milestone_id ? msStatus.get(t.milestone_id) ?? null : null,
+      milestone_open_todo_count: t.milestone_id ? openByMilestone.get(t.milestone_id) ?? 0 : 0,
+      updated_at: t.updated_at,
+      created_at: t.created_at,
+      completed_at: t.completed_at ?? null,
+      overdue: isTodoOverdue(t.due_at, t.status, new Date(now)),
+      stale: isTodoStale(t.status, t.updated_at, now),
+      session_label: t.session_id
+        ? sessions.get(t.session_id) ?? '来源会话'
+        : t.source === 'manual'
+          ? '快速记一条'
+          : null,
+      session_id: t.session_id ?? null,
+      source: itemSource(t, sessions, owner),
+      sources,
+      source_count: sources.length,
+      related_session_count: relatedSessionCount,
+      scope_cwd: cwd,
+      postpone_count: postponeByTitle.get(t.title) ?? 0,
+      ...(reminders.has(t.id)
+        ? {
+            reminder: {
+              id: reminders.get(t.id)!.id,
+              unhandled: true,
+              unhandled_count: reminders.get(t.id)!.count,
+              last_fired_at: reminders.get(t.id)!.lastFiredAt,
+              title: reminders.get(t.id)!.title,
+              body: reminders.get(t.id)!.body,
+            },
+          }
+        : { reminder: { unhandled: false, unhandled_count: 0 } }),
+      // v0.3.2 feedback signal (P/B1): how the user's history treats this commitment
+      belief: { good: t.good_count ?? 0, stale: t.stale_count ?? 0 },
+      ws: owner,
+    }
+  })
 
   const { from, to } = dayBounds(day)
   const dayEvents = yolo.listEventsBetween(cwd, from, to)
@@ -342,10 +382,13 @@ export function aggregateDashboards(list: readonly YoloDashboardData[]): YoloDas
   if (!base) throw new Error('aggregateDashboards: empty dashboard list')
   const labels = disambiguateWorkspaceLabels(list.map((d) => ({ cwd: d.cwd, scopeKey: d.scopeKey })))
   const labelOf = (d: YoloDashboardData): string => labels.get(workspaceIdentity(d.cwd)) ?? workspaceLabel(d.cwd, d.scopeKey)
-  const labelRow = <T extends { ws?: WorkspaceTag; source?: YoloItemSource }>(row: T, label: string): T => ({
+  const labelRow = <T extends { ws?: WorkspaceTag; source?: YoloItemSource; sources?: YoloItemSource[] }>(row: T, label: string): T => ({
     ...row,
     ...(row.ws ? { ws: { ...row.ws, label } } : {}),
     ...(row.source?.workspace ? { source: { ...row.source, workspace: { ...row.source.workspace, label } } } : {}),
+    ...(row.sources ? { sources: row.sources.map((source) => source.workspace
+      ? { ...source, workspace: { ...source.workspace, label } }
+      : source) } : {}),
   })
   const allTodos = mergeRows(list.flatMap((d) => d.todos.map((row) => labelRow(row, labelOf(d)))))
   const allGoals = mergeRows(list.flatMap((d) => d.goals.map((row) => labelRow(row, labelOf(d)))))

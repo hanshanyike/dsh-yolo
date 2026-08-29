@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto'
 import { normalizeTitle as normalize } from '../shared/text.ts'
 import { compareDueAt, isDueAtReached, parseDueAt } from '../shared/due.ts'
+import { todoEvidenceFingerprint } from '../shared/todo-identity.ts'
 import type { DB } from './db.ts'
 import type {
   ExtractionLog,
@@ -26,6 +27,9 @@ import type {
   TimelineEvent,
   Todo,
   TodoAction,
+  TodoEvidence,
+  TodoEvidenceRelation,
+  TodoEvidenceSourceKind,
   TodoStatus,
   EventKind,
   DuplicateTodoPair,
@@ -121,23 +125,149 @@ export function findMilestoneByTitle(db: DB, scopeKey: string, title: string): M
 
 const SOURCE_EXCERPT_LIMIT = 400
 
+function normalizeEvidenceExcerpt(value?: string | null): string | null {
+  const text = value?.replace(/\s+/gu, ' ').trim() ?? ''
+  return text ? Array.from(text).slice(0, SOURCE_EXCERPT_LIMIT).join('') : null
+}
+
 function normalizeSourceEvidence(data: {
   source?: Source
   session_id?: string | null
   source_excerpt?: string | null
   source_turn?: number | null
 }): { excerpt: string | null; turn: number | null } {
-  // Only the semantic extraction path has direct-user evidence. Manual/tool
-  // callers cannot turn arbitrary text into a quotation by filling these fields.
+  // A durable tool call may carry its owning host turn, but never a direct-user
+  // quotation. Manual callers carry neither. Only extraction may persist the
+  // bounded excerpt used as direct-human evidence.
+  if (data.source === 'tool' && data.session_id && Number.isInteger(data.source_turn)) {
+    return { excerpt: null, turn: data.source_turn as number }
+  }
   if (data.source !== 'llm' || !data.session_id || !Number.isInteger(data.source_turn)) {
     return { excerpt: null, turn: null }
   }
-  const text = data.source_excerpt?.replace(/\s+/gu, ' ').trim() ?? ''
-  if (!text) return { excerpt: null, turn: null }
+  const excerpt = normalizeEvidenceExcerpt(data.source_excerpt)
+  if (!excerpt) return { excerpt: null, turn: null }
   return {
-    excerpt: Array.from(text).slice(0, SOURCE_EXCERPT_LIMIT).join(''),
+    excerpt,
     turn: data.source_turn as number,
   }
+}
+
+export interface AddTodoEvidenceInput {
+  todo_id: string
+  source_scope_key: string
+  session_id?: string | null
+  turn_seq?: number | null
+  source_kind: TodoEvidenceSourceKind
+  relation: TodoEvidenceRelation
+  excerpt?: string | null
+  occurred_at?: number
+  source_fingerprint: string
+}
+
+/** Append immutable provenance. A repeated fingerprint returns the first row
+ * without moving or rewriting it, making host/tool retries safe. */
+export function addTodoEvidence(
+  db: DB,
+  data: AddTodoEvidenceInput,
+): { row: TodoEvidence; created: boolean } {
+  const fingerprint = data.source_fingerprint.trim()
+  if (!fingerprint) throw new Error('todo evidence requires source_fingerprint')
+  const existing = db.prepare('SELECT * FROM todo_evidence WHERE source_fingerprint = ?').get(fingerprint) as TodoEvidence | undefined
+  if (existing) {
+    const existingTodo = resolveCanonicalTodo(db, existing.todo_id)
+    const requestedTodo = resolveCanonicalTodo(db, data.todo_id)
+    if (!existingTodo || !requestedTodo || existingTodo.id !== requestedTodo.id) {
+      throw new Error(`todo evidence fingerprint conflict: ${fingerprint}`)
+    }
+    return { row: existing, created: false }
+  }
+  const row: TodoEvidence = {
+    id: genId(),
+    todo_id: data.todo_id,
+    source_scope_key: data.source_scope_key,
+    session_id: data.session_id ?? null,
+    turn_seq: Number.isInteger(data.turn_seq) ? data.turn_seq as number : null,
+    source_kind: data.source_kind,
+    relation: data.relation,
+    excerpt: normalizeEvidenceExcerpt(data.excerpt),
+    occurred_at: data.occurred_at ?? now(),
+    source_fingerprint: fingerprint,
+  }
+  const inserted = db.prepare(
+    `INSERT OR IGNORE INTO todo_evidence(
+       id, todo_id, source_scope_key, session_id, turn_seq,
+       source_kind, relation, excerpt, occurred_at, source_fingerprint
+     ) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    row.id,
+    row.todo_id,
+    row.source_scope_key,
+    row.session_id,
+    row.turn_seq,
+    row.source_kind,
+    row.relation,
+    row.excerpt,
+    row.occurred_at,
+    row.source_fingerprint,
+  )
+  if (Number(inserted.changes) > 0) return { row, created: true }
+  const concurrent = db.prepare('SELECT * FROM todo_evidence WHERE source_fingerprint = ?').get(fingerprint) as TodoEvidence
+  const concurrentTodo = resolveCanonicalTodo(db, concurrent.todo_id)
+  const requestedTodo = resolveCanonicalTodo(db, data.todo_id)
+  if (!concurrentTodo || !requestedTodo || concurrentTodo.id !== requestedTodo.id) {
+    throw new Error(`todo evidence fingerprint conflict: ${fingerprint}`)
+  }
+  return {
+    row: concurrent,
+    created: false,
+  }
+}
+
+/** Resolve a historical merged id to its canonical row. Corrupt cycles fail
+ * closed instead of looping forever. Rejected rows remain self-resolving. */
+export function resolveCanonicalTodo(db: DB, id: string): Todo | undefined {
+  const seen = new Set<string>()
+  let currentId: string | null = id
+  while (currentId && !seen.has(currentId)) {
+    seen.add(currentId)
+    const row = db.prepare('SELECT * FROM todos WHERE id = ?').get(currentId) as Todo | undefined
+    if (!row) return undefined
+    if (row.record_status !== 'merged' || !row.merged_into_id) return row
+    currentId = row.merged_into_id
+  }
+  return undefined
+}
+
+/** Evidence for the canonical todo plus every historical record merged into
+ * it. Rows themselves remain immutable; the recursive projection supplies the
+ * multi-session view without rewriting provenance. */
+export function listTodoEvidence(db: DB, todoId: string): TodoEvidence[] {
+  const canonical = resolveCanonicalTodo(db, todoId)
+  if (!canonical) return []
+  return db.prepare(
+    `WITH RECURSIVE related(id) AS (
+       SELECT ?
+       UNION ALL
+       SELECT todos.id FROM todos JOIN related ON todos.merged_into_id = related.id
+     )
+     SELECT e.* FROM todo_evidence e
+     JOIN related ON related.id = e.todo_id
+     ORDER BY e.occurred_at ASC, e.rowid ASC`,
+  ).all(canonical.id) as TodoEvidence[]
+}
+
+function defaultEvidenceSourceKind(source?: Source): TodoEvidenceSourceKind {
+  if (source === 'tool') return 'assistant_action'
+  if (source === 'manual') return 'panel_action'
+  return 'extraction'
+}
+
+function fallbackEvidenceFingerprint(
+  data: { scope_key: string; session_id?: string | null; source_turn?: number | null; source?: Source; title: string },
+): string | null {
+  if (!data.session_id || !Number.isInteger(data.source_turn)) return null
+  return `todo:${data.scope_key}:${data.session_id}:${data.source_turn}:${data.source ?? 'unknown'}:${normalize(data.title)}`
 }
 
 export function upsertTodo(
@@ -153,29 +283,62 @@ export function upsertTodo(
     session_id?: string | null
     source_excerpt?: string | null
     source_turn?: number | null
+    /** Stable host/tool operation identity. Replays resolve to the first todo. */
+    source_fingerprint?: string | null
+    /** Stable enclosing operation; evidence is bound to the resolved canonical id. */
+    evidence_operation_key?: string
+    evidence_source_kind?: TodoEvidenceSourceKind
+    evidence_relation?: TodoEvidenceRelation
+    evidence_occurred_at?: number
   },
 ): { row: Todo; created: boolean } {
   const dedupKey = `todo:${normalize(data.title)}`
   const ts = now()
+  const replayFingerprint = data.source_fingerprint?.trim()
+    || (data.evidence_operation_key ? null : fallbackEvidenceFingerprint(data))
+  if (replayFingerprint) {
+    const evidence = db.prepare('SELECT todo_id FROM todo_evidence WHERE source_fingerprint = ?').get(replayFingerprint) as
+      | { todo_id: string }
+      | undefined
+    if (evidence) {
+      const replay = resolveCanonicalTodo(db, evidence.todo_id)
+      if (replay) return { row: replay, created: false }
+    }
+  }
   let existing = db
-    .prepare('SELECT * FROM todos WHERE dedup_key = ? AND scope_key = ?')
+    .prepare(
+      `SELECT * FROM todos
+       WHERE dedup_key = ? AND scope_key = ? AND record_status = 'canonical'
+         AND status IN ('pending','in_progress')
+       ORDER BY created_at ASC, id ASC
+       LIMIT 1`,
+    )
     .get(dedupKey, data.scope_key) as Todo | undefined
   if (!existing && data.source === 'llm' && data.session_id) {
     const incomingTitle = normalize(data.title)
     const provisional = db.prepare(
       `SELECT * FROM todos
        WHERE scope_key = ? AND source = 'tool' AND session_id = ?
-         AND status NOT IN ('done','cancelled') AND source_excerpt IS NULL AND created_at >= ?
-       ORDER BY created_at DESC`,
+         AND record_status = 'canonical'
+         AND status IN ('pending','in_progress') AND source_excerpt IS NULL AND created_at >= ?
+       ORDER BY created_at DESC, id ASC`,
     ).all(data.scope_key, data.session_id, ts - 5 * 60_000) as Todo[]
-    existing = provisional.find((candidate) => {
+    const sameTurn = Number.isInteger(data.source_turn)
+      ? [
+          ...provisional.filter((candidate) => candidate.source_turn === data.source_turn),
+          ...provisional.filter((candidate) => candidate.source_turn == null),
+        ]
+      : provisional.filter((candidate) => candidate.source_turn == null)
+    existing = sameTurn.find((candidate) => {
       const candidateTitle = normalize(candidate.title)
       return Math.min(candidateTitle.length, incomingTitle.length) >= 6
         && (candidateTitle.includes(incomingTitle) || incomingTitle.includes(candidateTitle))
     })
   }
   const sourceEvidence = normalizeSourceEvidence(data)
-  if (existing && existing.status !== 'done' && existing.status !== 'cancelled') {
+  if (existing) {
+    const fingerprint = replayFingerprint
+      ?? (data.evidence_operation_key ? todoEvidenceFingerprint(data.evidence_operation_key, existing.id) : null)
     // update mutable fields (take non-null incoming)
     const due = data.due_at ?? existing.due_at
     const pri = data.priority ?? existing.priority ?? null
@@ -198,6 +361,19 @@ export function upsertTodo(
       'UPDATE todos SET due_at = ?, priority = ?, detail = ?, milestone_id = ?, source = ?, source_excerpt = ?, source_turn = ?, updated_at = ? WHERE id = ?',
     ).run(due, pri, detail, ms, source, sourceExcerpt, sourceTurn, ts, existing.id)
     syncTodoFts(db, existing.id, existing.title, detail)
+    if (fingerprint) {
+      addTodoEvidence(db, {
+        todo_id: existing.id,
+        source_scope_key: data.scope_key,
+        session_id: data.session_id,
+        turn_seq: data.source_turn,
+        source_kind: data.evidence_source_kind ?? defaultEvidenceSourceKind(data.source),
+        relation: data.evidence_relation ?? 'mention',
+        excerpt: sourceEvidence.excerpt ?? data.source_excerpt,
+        occurred_at: data.evidence_occurred_at ?? ts,
+        source_fingerprint: fingerprint,
+      })
+    }
     return {
       row: { ...existing, due_at: due, priority: pri, detail, milestone_id: ms, source, source_excerpt: sourceExcerpt, source_turn: sourceTurn, updated_at: ts },
       created: false,
@@ -220,10 +396,12 @@ export function upsertTodo(
     created_at: ts,
     updated_at: ts,
     completed_at: null,
+    record_status: 'canonical',
+    merged_into_id: null,
   }
   db.prepare(
-    `INSERT INTO todos(id, title, detail, status, priority, due_at, milestone_id, scope_key, dedup_key, source, session_id, source_excerpt, source_turn, created_at, updated_at, completed_at)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+    `INSERT INTO todos(id, title, detail, status, priority, due_at, milestone_id, scope_key, dedup_key, source, session_id, source_excerpt, source_turn, created_at, updated_at, completed_at, record_status, merged_into_id)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,NULL)`,
   ).run(
     row.id,
     row.title,
@@ -240,7 +418,21 @@ export function upsertTodo(
     row.source_turn,
     row.created_at,
     row.updated_at,
+    row.record_status,
   )
+  const fingerprint = replayFingerprint
+    ?? (data.evidence_operation_key ? todoEvidenceFingerprint(data.evidence_operation_key, row.id) : null)
+  addTodoEvidence(db, {
+    todo_id: row.id,
+    source_scope_key: data.scope_key,
+    session_id: data.session_id,
+    turn_seq: data.source_turn,
+    source_kind: data.evidence_source_kind ?? defaultEvidenceSourceKind(data.source),
+    relation: data.evidence_relation ?? 'origin',
+    excerpt: sourceEvidence.excerpt ?? data.source_excerpt,
+    occurred_at: data.evidence_occurred_at ?? ts,
+    source_fingerprint: fingerprint ?? `todo:${row.id}:origin`,
+  })
   return { row, created: true }
 }
 
@@ -250,7 +442,16 @@ export function upsertTodo(
 export function promoteToolTodoOrigins(
   db: DB,
   scopeKey: string,
-  data: { session_id: string; source_excerpt: string; source_turn: number; created_from: number; created_to: number },
+  data: {
+    session_id: string
+    source_excerpt: string
+    source_turn: number
+    created_from: number
+    created_to: number
+    /** Stable identity of the accepted human turn; one evidence id is derived per todo. */
+    evidence_operation_key?: string
+    evidence_occurred_at?: number
+  },
 ): number {
   const evidence = normalizeSourceEvidence({
     source: 'llm',
@@ -259,18 +460,39 @@ export function promoteToolTodoOrigins(
     source_turn: data.source_turn,
   })
   if (evidence.excerpt === null || evidence.turn === null) return 0
-  return Number(db.prepare(
-    `UPDATE todos
-     SET source = 'llm', source_excerpt = ?, source_turn = ?
-     WHERE scope_key = ? AND source = 'tool' AND session_id = ?
-       AND source_excerpt IS NULL AND created_at >= ? AND created_at <= ?`,
-  ).run(evidence.excerpt, evidence.turn, scopeKey, data.session_id, data.created_from, data.created_to).changes)
+  const rows = db.prepare(
+    `SELECT id FROM todos
+     WHERE scope_key = ? AND record_status = 'canonical' AND source = 'tool' AND session_id = ?
+       AND source_excerpt IS NULL
+       AND (source_turn = ? OR (source_turn IS NULL AND created_at >= ? AND created_at <= ?))
+     ORDER BY created_at ASC, id ASC`,
+  ).all(scopeKey, data.session_id, data.source_turn, data.created_from, data.created_to) as Array<{ id: string }>
+  const operationKey = data.evidence_operation_key
+    ?? `extract/v1/${scopeKey}/${data.session_id}/${data.source_turn}`
+  for (const row of rows) {
+    db.prepare(
+      "UPDATE todos SET source = 'llm', source_excerpt = ?, source_turn = ? WHERE id = ? AND record_status = 'canonical'",
+    ).run(evidence.excerpt, evidence.turn, row.id)
+    const fingerprint = todoEvidenceFingerprint(operationKey, row.id)
+    addTodoEvidence(db, {
+      todo_id: row.id,
+      source_scope_key: scopeKey,
+      session_id: data.session_id,
+      turn_seq: evidence.turn,
+      source_kind: 'human',
+      relation: 'origin',
+      excerpt: evidence.excerpt,
+      occurred_at: data.evidence_occurred_at ?? data.created_to,
+      source_fingerprint: fingerprint,
+    })
+  }
+  return rows.length
 }
 
 export function setTodoStatus(db: DB, id: string, status: TodoStatus): void {
   const ts = now()
   const completed = status === 'done' ? ts : null
-  db.prepare('UPDATE todos SET status = ?, completed_at = COALESCE(?, completed_at), updated_at = ? WHERE id = ?').run(
+  db.prepare("UPDATE todos SET status = ?, completed_at = COALESCE(?, completed_at), updated_at = ? WHERE id = ? AND record_status = 'canonical'").run(
     status,
     completed,
     ts,
@@ -283,9 +505,18 @@ export function setTodoStatus(db: DB, id: string, status: TodoStatus): void {
 }
 
 export function listTodos(db: DB, scopeKey: string, status?: TodoStatus): Todo[] {
-  const where = status ? 'WHERE scope_key = ? AND status = ?' : 'WHERE scope_key = ?'
+  const where = status
+    ? "WHERE scope_key = ? AND record_status = 'canonical' AND status = ?"
+    : "WHERE scope_key = ? AND record_status = 'canonical'"
   const params = status ? [scopeKey, status] : [scopeKey]
   return db.prepare(`SELECT * FROM todos ${where} ORDER BY due_at IS NULL, due_at ASC, created_at DESC`).all(...params) as Todo[]
+}
+
+/** Administrative/history projection including merged and rejected records. */
+export function listTodoRecords(db: DB, scopeKey: string): Todo[] {
+  return db.prepare(
+    'SELECT * FROM todos WHERE scope_key = ? ORDER BY created_at DESC, id ASC',
+  ).all(scopeKey) as Todo[]
 }
 
 export function listDueTodos(db: DB, scopeKey: string, before: string | number | Date): Todo[] {
@@ -300,7 +531,8 @@ export function listDueTodos(db: DB, scopeKey: string, before: string | number |
   // own the actual instant cutoff below.
   const candidates = db
     .prepare(
-      `SELECT * FROM todos WHERE scope_key = ? AND due_at IS NOT NULL AND status IN ('pending','in_progress') AND last_reminded_at IS NULL`,
+      `SELECT * FROM todos WHERE scope_key = ? AND record_status = 'canonical'
+         AND due_at IS NOT NULL AND status IN ('pending','in_progress') AND last_reminded_at IS NULL`,
     )
     .all(scopeKey) as Todo[]
   return candidates
@@ -310,7 +542,7 @@ export function listDueTodos(db: DB, scopeKey: string, before: string | number |
 
 /** Stamp a todo as reminded so the scheduler does not re-fire it. */
 export function setTodoReminded(db: DB, id: string, ts = now()): void {
-  db.prepare('UPDATE todos SET last_reminded_at = ? WHERE id = ?').run(ts, id)
+  db.prepare("UPDATE todos SET last_reminded_at = ? WHERE id = ? AND record_status = 'canonical'").run(ts, id)
 }
 
 /** Fuzzy-locate a non-terminal todo by title (M8 + v0.3.2): an exact normalized
@@ -318,7 +550,7 @@ export function setTodoReminded(db: DB, id: string, ts = now()): void {
 export function findTodoByTitle(db: DB, scopeKey: string, title: string): Todo | undefined {
   if (!normalize(title)) return undefined
   const rows = db
-    .prepare("SELECT * FROM todos WHERE scope_key = ? AND status IN ('pending','in_progress')")
+    .prepare("SELECT * FROM todos WHERE scope_key = ? AND record_status = 'canonical' AND status IN ('pending','in_progress')")
     .all(scopeKey) as Todo[]
   return bestByTitle(rows, title, RANK_TODO)
 }
@@ -705,8 +937,19 @@ export function applyTodoAction(
   action: TodoAction,
   args?: { due_at?: string | null; session_id?: string | null },
 ): Todo | null {
-  const t = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
+  let t = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
   if (!t) return null
+  if (t.record_status === 'merged') {
+    // A merged row is immutable historical identity. In particular, reopening
+    // it would recreate the duplicate. Other actions may safely follow the old
+    // id to the canonical item.
+    if (action === 'reopen') return t
+    t = resolveCanonicalTodo(db, t.id)
+    if (!t || t.record_status !== 'canonical') return null
+    id = t.id
+  } else if (t.record_status !== 'canonical') {
+    return t
+  }
   if (action !== 'reopen' && (t.status === 'done' || t.status === 'cancelled')) return t
   const ts = now()
   const session_id = args?.session_id ?? null
@@ -782,8 +1025,9 @@ export type TodoConsolidateResult =
  * Merge a duplicate todo (source) into its keeper (target) — M9 P35, one
  * audited atomic action instead of implicit dedup magic. Deterministic rules:
  * target absorbs source's due_at (only when its own is empty) and the higher
- * priority, its detail records the merge; source is soft-cancelled (FTS drop)
- * and its unhandled reminder cards are settled. One todo_consolidated event
+ * priority, its detail records the merge; source keeps its business status but
+ * becomes a merged historical record (FTS drop), and its unhandled reminder
+ * cards are settled. One todo_consolidated event
  * covers the whole merge. `scopeKey` pins the fuzzy-title fallback; id refs
  * resolve without it (and a resolved source pins the scope for the target).
  */
@@ -801,8 +1045,8 @@ export function applyTodoConsolidate(
   const target = byId(intoRef.id) ?? (intoRef.title ? findTodoByTitle(db, scopeKey ?? source.scope_key, intoRef.title) : undefined)
   if (!target) return { ok: false, kind: 'not-found', error: 'target todo not found' }
   if (source.id === target.id) return { ok: false, kind: 'same-item', error: 'source and target are the same todo' }
-  if (source.status === 'done' || source.status === 'cancelled' || target.status === 'done' || target.status === 'cancelled') {
-    return { ok: false, kind: 'terminal', error: 'consolidate requires both todos to be open (pending/in_progress)' }
+  if (source.record_status !== 'canonical' || target.record_status !== 'canonical') {
+    return { ok: false, kind: 'terminal', error: 'consolidate requires both todos to be canonical records' }
   }
   const ts = now()
   const mergeNote = `（已并入「${source.title}」${source.due_at ? `，原截止 ${source.due_at}` : ''}）`
@@ -821,8 +1065,12 @@ export function applyTodoConsolidate(
     ts,
     target.id,
   )
-  syncTodoFts(db, target.id, target.title, mergedDetail)
-  setTodoStatus(db, source.id, 'cancelled')
+  if (target.status === 'pending' || target.status === 'in_progress') syncTodoFts(db, target.id, target.title, mergedDetail)
+  else db.prepare("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id = ?").run(target.id)
+  db.prepare(
+    "UPDATE todos SET record_status = 'merged', merged_into_id = ?, updated_at = ? WHERE id = ? AND record_status = 'canonical'",
+  ).run(target.id, ts, source.id)
+  db.prepare("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id = ?").run(source.id)
   markTodoNotificationsHandled(db, source.id)
   const inherited: string[] = []
   if (due && due !== target.due_at) inherited.push(`继承截止 ${due}`)
@@ -848,8 +1096,11 @@ export function applyTodoUpdate(
   patch: { title?: string; detail?: string | null; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null },
   sessionId?: string | null,
 ): Todo | null {
-  const t = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
+  let t = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
   if (!t) return null
+  if (t.record_status === 'merged') t = resolveCanonicalTodo(db, t.id)
+  if (!t || t.record_status !== 'canonical') return null
+  id = t.id
   const title = patch.title?.trim() ? patch.title.trim() : t.title
   const detail = patch.detail !== undefined ? patch.detail : t.detail
   const due = patch.due_at !== undefined ? patch.due_at : t.due_at
@@ -1099,7 +1350,7 @@ export function countEventKindSince(db: DB, kind: string, sinceMs: number): numb
 /** Open-todo near-duplicate candidate pairs within a scope, by normalized title. */
 export function listDuplicateTodos(db: DB, scopeKey: string): DuplicateTodoPair[] {
   const rows = db
-    .prepare("SELECT id, title FROM todos WHERE scope_key = ? AND status IN ('pending','in_progress') ORDER BY created_at ASC")
+    .prepare("SELECT id, title FROM todos WHERE scope_key = ? AND record_status = 'canonical' AND status IN ('pending','in_progress') ORDER BY created_at ASC")
     .all(scopeKey) as Array<{ id: string; title: string }>
   const byNorm = new Map<string, Array<{ id: string; title: string }>>()
   for (const r of rows) {

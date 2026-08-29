@@ -35,6 +35,9 @@ import type {
   TimelineEvent,
   Todo,
   TodoAction,
+  TodoEvidence,
+  TodoEvidenceRelation,
+  TodoEvidenceSourceKind,
   TodoStatus,
   ExtractionLog,
   ExtractionStatus,
@@ -50,6 +53,16 @@ export interface ScopeHandle {
   db: DB
   scopeKey: string
   dataDir: string
+}
+
+export interface TodoEvidenceWrite {
+  session_id?: string | null
+  turn_seq?: number | null
+  source_kind: TodoEvidenceSourceKind
+  relation: TodoEvidenceRelation
+  excerpt?: string | null
+  occurred_at?: number
+  source_fingerprint: string
 }
 
 // NOTE: dsh loader expects the plugin as the module's DEFAULT export
@@ -137,7 +150,7 @@ export default class Yolo extends Service {
    * (drives the todo_created ledger event). */
   addTodo(
     cwd: string,
-    data: { title: string; detail?: string | null; priority?: Priority | null; due_at?: string | null; milestone_id?: string | null; source?: Source; session_id?: string | null; source_excerpt?: string | null; source_turn?: number | null },
+    data: { title: string; detail?: string | null; priority?: Priority | null; due_at?: string | null; milestone_id?: string | null; source?: Source; session_id?: string | null; source_excerpt?: string | null; source_turn?: number | null; source_fingerprint?: string | null; evidence_operation_key?: string; evidence_source_kind?: TodoEvidenceSourceKind; evidence_relation?: TodoEvidenceRelation; evidence_occurred_at?: number },
   ): { todo: Todo; created: boolean } {
     const h = this.resolve(cwd)
     const { row, created } = repo.upsertTodo(h.db, { ...data, scope_key: h.scopeKey })
@@ -145,10 +158,10 @@ export default class Yolo extends Service {
   }
   promoteToolTodoOrigins(
     cwd: string,
-    data: { session_id: string; source_excerpt: string; source_turn: number; created_from: number; created_to: number },
+    data: { session_id: string; source_excerpt: string; source_turn: number; created_from: number; created_to: number; evidence_operation_key?: string; evidence_occurred_at?: number },
   ): number {
     const h = this.resolve(cwd)
-    return repo.promoteToolTodoOrigins(h.db, h.scopeKey, data)
+    return withTransaction(h.db, () => repo.promoteToolTodoOrigins(h.db, h.scopeKey, data))
   }
   setTodoStatus(cwd: string, id: string, status: TodoStatus): void {
     repo.setTodoStatus(this.resolve(cwd).db, id, status)
@@ -157,9 +170,37 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.listTodos(h.db, h.scopeKey, status)
   }
+  /** Administrative/history projection; ordinary product surfaces use listTodos. */
+  listTodoRecords(cwd: string): Todo[] {
+    const h = this.resolve(cwd)
+    return repo.listTodoRecords(h.db, h.scopeKey)
+  }
+  addTodoEvidence(cwd: string, todoId: string, data: TodoEvidenceWrite): { evidence: TodoEvidence; created: boolean }
+  addTodoEvidence(cwd: string, data: TodoEvidenceWrite & { todo_id: string }): { evidence: TodoEvidence; created: boolean }
+  addTodoEvidence(
+    cwd: string,
+    todoIdOrData: string | (TodoEvidenceWrite & { todo_id: string }),
+    maybeData?: TodoEvidenceWrite,
+  ): { evidence: TodoEvidence; created: boolean } {
+    const h = this.resolve(cwd)
+    const todoId = typeof todoIdOrData === 'string' ? todoIdOrData : todoIdOrData.todo_id
+    const data = typeof todoIdOrData === 'string' ? maybeData! : todoIdOrData
+    const { row, created } = repo.addTodoEvidence(h.db, {
+      ...data,
+      todo_id: todoId,
+      source_scope_key: h.scopeKey,
+    })
+    return { evidence: row, created }
+  }
+  listTodoEvidence(cwd: string, todoId: string): TodoEvidence[] {
+    return repo.listTodoEvidence(this.resolve(cwd).db, todoId)
+  }
+  resolveCanonicalTodo(cwd: string, todoId: string): Todo | null {
+    return repo.resolveCanonicalTodo(this.resolve(cwd).db, todoId) ?? null
+  }
   findTodo(cwd: string, ref: { id?: string; title?: string }): Todo | null {
     const h = this.resolve(cwd)
-    if (ref.id) return repo.listTodos(h.db, h.scopeKey).find((todo) => todo.id === ref.id) ?? null
+    if (ref.id) return repo.resolveCanonicalTodo(h.db, ref.id) ?? null
     return ref.title ? repo.findTodoByTitle(h.db, h.scopeKey, ref.title) ?? null : null
   }
   listDueTodos(cwd: string, before: string | number | Date): Todo[] {

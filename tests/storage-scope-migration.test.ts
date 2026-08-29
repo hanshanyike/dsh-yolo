@@ -38,6 +38,9 @@ function seedLegacy(db: DB): void {
   db.prepare('INSERT INTO milestones(id,title,status,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?)').run('same-ms', '功能分支里程碑', 'active', LEGACY, 2, 20)
   db.prepare('INSERT INTO todos(id,title,status,milestone_id,scope_key,session_id,source_excerpt,source_turn,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
     .run('same-todo', '功能分支事项', 'pending', 'same-ms', LEGACY, 'session-1', '请继续跟进功能分支事项', 2, 2, 20)
+  db.prepare(`INSERT INTO todo_evidence(id,todo_id,source_scope_key,session_id,turn_seq,source_kind,relation,excerpt,occurred_at,source_fingerprint)
+              VALUES(?,?,?,?,?,?,?,?,?,?)`)
+    .run('evidence-1', 'same-todo', LEGACY, 'session-1', 2, 'extraction', 'origin', '请继续跟进功能分支事项', 20, 'extract/session-1/2/todo-0')
   db.prepare('INSERT INTO goals(id,title,progress,status,milestone_id,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').run('same-goal', '功能分支目标', 20, 'active', 'same-ms', LEGACY, 2, 20)
   // Same id+key but different content must still follow updated_at conflict policy.
   db.prepare('INSERT INTO preferences(id,key,value,confidence,scope_key,updated_at,valid_at) VALUES(?,?,?,?,?,?,?)').run('pref-main', '跟进节奏', '每天', 0.8, LEGACY, 20, 20)
@@ -193,6 +196,8 @@ describe('legacy branch scope migration', () => {
     expect(canonical.prepare('SELECT handled_at FROM notifications WHERE title = ?').get('已处理的分支提醒')).toEqual({ handled_at: 31 })
     expect(canonical.prepare('SELECT todo_id,milestone_id FROM pending_reminders WHERE payload = ?').get('跟进功能分支')).toEqual({ todo_id: featureTodo.id, milestone_id: featureMilestone.id })
     expect(canonical.prepare('SELECT todo_id FROM attention_feedback WHERE evidence_fingerprint = ?').get('fp')).toEqual({ todo_id: featureTodo.id })
+    expect(canonical.prepare('SELECT todo_id,source_scope_key FROM todo_evidence WHERE source_fingerprint = ?').get('extract/session-1/2/todo-0'))
+      .toEqual({ todo_id: featureTodo.id, source_scope_key: CANONICAL })
 
     expect(canonical.prepare('SELECT value FROM preferences WHERE key = ?').get('跟进节奏')).toEqual({ value: '每天' })
     expect(canonical.prepare('SELECT COUNT(*) AS n FROM preference_history WHERE key = ?').get('跟进节奏')).toEqual({ n: 1 })
@@ -208,11 +213,46 @@ describe('legacy branch scope migration', () => {
       todos: canonical.prepare('SELECT COUNT(*) AS n FROM todos').get(),
       events: canonical.prepare('SELECT COUNT(*) AS n FROM events').get(),
       notifications: canonical.prepare('SELECT COUNT(*) AS n FROM notifications').get(),
+      evidence: canonical.prepare('SELECT COUNT(*) AS n FROM todo_evidence').get(),
     }
     expect(migrateLegacyScopeDatabases(canonical, dataDir, canonicalPath, CANONICAL, 'D:\\Work\\Alpha').imported).toEqual([])
     expect(canonical.prepare('SELECT COUNT(*) AS n FROM todos').get()).toEqual(countsBefore.todos)
     expect(canonical.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual(countsBefore.events)
     expect(canonical.prepare('SELECT COUNT(*) AS n FROM notifications').get()).toEqual(countsBefore.notifications)
+    expect(canonical.prepare('SELECT COUNT(*) AS n FROM todo_evidence').get()).toEqual(countsBefore.evidence)
+    canonical.close()
+  })
+
+  it('remaps merged todo self-references and their immutable evidence', () => {
+    const dataDir = tempDir()
+    const canonicalPath = join(dataDir, 'yolo-canonical_default.db')
+    const legacyPath = join(dataDir, 'yolo-canonical_main.db')
+    const canonical = openDb(canonicalPath)
+    openDatabases.push(canonical)
+    canonical.prepare('INSERT INTO todos(id,title,status,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?)')
+      .run('source-id', '主库占用同一 ID', 'pending', CANONICAL, 1, 1)
+
+    const legacy = openDb(legacyPath)
+    legacy.prepare('INSERT INTO todos(id,title,status,scope_key,record_status,merged_into_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
+      .run('source-id', '分支重复副本', 'done', LEGACY, 'merged', 'keeper-id', 2, 3)
+    legacy.prepare('INSERT INTO todos(id,title,status,scope_key,record_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)')
+      .run('keeper-id', '分支规范事项', 'pending', LEGACY, 'canonical', 1, 3)
+    legacy.prepare(`INSERT INTO todo_evidence(id,todo_id,source_scope_key,session_id,turn_seq,source_kind,relation,occurred_at,source_fingerprint)
+                    VALUES(?,?,?,?,?,?,?,?,?)`)
+      .run('merged-evidence', 'source-id', LEGACY, 'session-merged', 5, 'extraction', 'completion_claim', 3, 'merged/fingerprint')
+    legacy.close()
+
+    expect(migrateLegacyScopeDatabases(canonical, dataDir, canonicalPath, CANONICAL, 'D:\Work\Alpha').imported)
+      .toEqual(['yolo-canonical_main.db'])
+    const source = canonical.prepare('SELECT id,status,record_status,merged_into_id FROM todos WHERE title=?').get('分支重复副本') as
+      { id: string; status: string; record_status: string; merged_into_id: string }
+    expect(source).toMatchObject({ status: 'done', record_status: 'merged', merged_into_id: 'keeper-id' })
+    expect(source.id).not.toBe('source-id')
+    expect(canonical.prepare('SELECT todo_id,source_scope_key FROM todo_evidence WHERE source_fingerprint=?').get('merged/fingerprint'))
+      .toEqual({ todo_id: source.id, source_scope_key: CANONICAL })
+    expect(canonical.prepare("SELECT COUNT(*) AS n FROM yolo_fts WHERE row_type='todo' AND row_id=?").get(source.id))
+      .toEqual({ n: 0 })
+    expect(canonical.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
     canonical.close()
   })
 

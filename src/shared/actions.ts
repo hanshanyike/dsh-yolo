@@ -10,6 +10,7 @@ import type Yolo from '../storage/index.ts'
 import type { MilestoneStatus, Priority, TimelineEvent, Todo, TodoAction } from '../storage/types.ts'
 import { createHash } from 'node:crypto'
 import { localDateStr } from './text.ts'
+import { todoEvidenceFingerprint } from './todo-identity.ts'
 import { buildDashboardData } from '../ui/dashboard.ts'
 
 const PRIORITIES: readonly Priority[] = ['low', 'medium', 'high', 'urgent']
@@ -353,7 +354,13 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
       return deny(yolo, cwd, r, 'quick_add requires kind=todo and title', 400)
     }
     const due = typeof r.due_at === 'string' && r.due_at ? r.due_at : localDateStr()
-    const { todo, created } = yolo.addTodo(cwd, { title: ref.title, due_at: due, source: 'manual' })
+    const { todo, created } = yolo.addTodo(cwd, {
+      title: ref.title,
+      due_at: due,
+      source: 'manual',
+      evidence_operation_key: r.client_action_id,
+      evidence_source_kind: 'panel_action',
+    })
     if (created) {
       yolo.addEvent(cwd, {
         kind: 'todo_created',
@@ -523,7 +530,28 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
     cwd,
     clientActionId,
     hash,
-    () => JSON.stringify(applyYoloActionOnce(yolo, cwd, r)),
+    () => {
+      const outcome = applyYoloActionOnce(yolo, cwd, r)
+      const todoId = outcome.ok && r.kind === 'todo' && typeof outcome.item?.id === 'string'
+        ? outcome.item.id
+        : undefined
+      if (todoId) {
+        const relation = r.action === 'quick_add'
+          ? 'origin'
+          : r.action === 'complete'
+            ? 'completion_claim'
+            : r.action === 'reopen'
+              ? 'correction'
+              : 'update'
+        yolo.addTodoEvidence(cwd, todoId, {
+          session_id: r.session_id ?? null,
+          source_kind: r.session_id ? 'assistant_action' : 'panel_action',
+          relation,
+          source_fingerprint: todoEvidenceFingerprint(clientActionId, todoId),
+        })
+      }
+      return JSON.stringify(outcome)
+    },
   )
   if (result.status === 'conflict') {
     return {
