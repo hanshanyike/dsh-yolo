@@ -826,6 +826,31 @@ export function listEventSubjectStats(
   ).all(scopeKey, openedAt, ...clause.params) as HistorySubjectStats[]
 }
 
+export function listLatestEventsBySubject(
+  db: DB,
+  scopeKey: string,
+  openedAt: number,
+  kinds: readonly string[],
+): TimelineEvent[] {
+  const clause = eventKindClause(kinds)
+  return (db.prepare(
+    `WITH ranked AS (
+       SELECT events.*,
+         ROW_NUMBER() OVER (
+           PARTITION BY subject_type, subject_id
+           ORDER BY occurred_at DESC, rowid DESC
+         ) AS subject_rank
+       FROM events
+       WHERE scope_key = ? AND subject_type IS NOT NULL AND subject_id IS NOT NULL
+         AND occurred_at <= ? AND ${clause.sql}
+     )
+     SELECT * FROM ranked WHERE subject_rank = 1`,
+  ).all(scopeKey, openedAt, ...clause.params) as Array<StoredTimelineEvent & { subject_rank: number }>).map((row) => {
+    const { subject_rank: _rank, ...event } = row
+    return timelineEvent(event)
+  })
+}
+
 // ---------- session summaries (v0.3.0 ledger source badges) ----------
 
 export function upsertSessionSummary(

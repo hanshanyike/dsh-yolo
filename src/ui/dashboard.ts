@@ -45,7 +45,7 @@ export interface WebServerLike {
 }
 
 /** Resolve the source-badge label of one event (TC-3/TC-5, open question #4). */
-function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
+export function eventLabel(e: TimelineEvent, sessions: Map<string, string>): string {
   if (e.session_id) return sessions.get(e.session_id) ?? '来源会话'
   if (e.source === 'manual') return e.kind === 'todo_created' ? '快速记一条' : '看板操作'
   if (e.source === 'llm') return '会话记录'

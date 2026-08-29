@@ -81,6 +81,13 @@ describe('ui apply: global dashboard endpoint', () => {
     expect(dashboards[0][0].kind).toBe('prefix')
   })
 
+  it('registers the paginated history endpoint exactly once', () => {
+    const { ctx } = makeCtx(mockYolo())
+    apply(ctx as never, undefined)
+    const calls = (ctx.webServer.register as ReturnType<typeof vi.fn>).mock.calls
+    expect(calls.filter(([opts]) => opts.path === '/yolo/history')).toHaveLength(1)
+  })
+
   it('serves the workspace of the most recent session, not process.cwd()', () => {
     const cwds: string[] = []
     const yolo = {

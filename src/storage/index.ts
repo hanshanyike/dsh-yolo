@@ -352,6 +352,10 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.listEventSubjectStats(h.db, h.scopeKey, openedAt, kinds)
   }
+  listLatestEventsBySubject(cwd: string, openedAt: number, kinds: readonly string[]): TimelineEvent[] {
+    const h = this.resolve(cwd)
+    return repo.listLatestEventsBySubject(h.db, h.scopeKey, openedAt, kinds)
+  }
 
   // ---- session summaries (v0.3.0 C) ----
   upsertSessionSummary(cwd: string, sessionId: string, summary: string): void {
