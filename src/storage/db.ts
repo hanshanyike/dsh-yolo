@@ -159,6 +159,20 @@ function migrate(db: DB): void {
   if (!eventCols.some((c) => c.name === 'source')) {
     db.exec('ALTER TABLE events ADD COLUMN source TEXT')
   }
+  for (const [name, type] of [
+    ['subject_type', 'TEXT'],
+    ['subject_id', 'TEXT'],
+    ['subject_title', 'TEXT'],
+    ['related_subject_type', 'TEXT'],
+    ['related_subject_id', 'TEXT'],
+    ['related_subject_title', 'TEXT'],
+    ['change_json', 'TEXT'],
+  ] as const) {
+    if (!eventCols.some((c) => c.name === name)) db.exec(`ALTER TABLE events ADD COLUMN ${name} ${type}`)
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_events_subject
+    ON events(scope_key, subject_type, subject_id, occurred_at DESC)
+    WHERE subject_id IS NOT NULL`)
   if (!todoCols.some((c) => c.name === 'session_id')) {
     db.exec('ALTER TABLE todos ADD COLUMN session_id TEXT')
   }

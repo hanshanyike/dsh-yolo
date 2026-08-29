@@ -397,12 +397,39 @@ describe('preferences', () => {
 
 describe('events', () => {
   it('addEvent returns the generated UUID row (not a rowid) and persists it', () => {
-    const e = repo.addEvent(db, { kind: 'decision', summary: 'chose trigram', scope_key: SCOPE })
+    const e = repo.addEvent(db, {
+      kind: 'todo_updated', summary: '调整客户回访时间', scope_key: SCOPE,
+      subject_type: 'todo', subject_id: 'todo-1', subject_title: '回访客户',
+      change: { due_at: { before: '2026-08-29', after: '2026-09-01' } },
+    })
     expect(e).not.toBeNull()
     // UUID shape, not a numeric rowid string
     expect(e!.id).toMatch(/^[0-9a-f-]{36}$/)
     const stored = repo.listEvents(db, SCOPE)
-    expect(stored.some((x) => x.id === e!.id)).toBe(true)
+    expect(stored.find((x) => x.id === e!.id)).toMatchObject({
+      subject_type: 'todo', subject_id: 'todo-1', subject_title: '回访客户',
+      change: { due_at: { before: '2026-08-29', after: '2026-09-01' } },
+    })
+  })
+
+  it('paginates visible history and groups subject stats without inferring legacy rows', () => {
+    repo.addEvent(db, { kind: 'decision', summary: '采用本地存储', scope_key: SCOPE, occurred_at: 10 })
+    repo.addEvent(db, {
+      kind: 'todo_created', summary: '新增回访安排', scope_key: SCOPE, occurred_at: 20,
+      subject_type: 'todo', subject_id: 'todo-1', subject_title: '回访客户',
+    })
+    repo.addEvent(db, {
+      kind: 'todo_postponed', summary: '回访改到下周', scope_key: SCOPE, occurred_at: 30,
+      subject_type: 'todo', subject_id: 'todo-1', subject_title: '回访客户',
+    })
+    repo.addEvent(db, { kind: 'action_denied', summary: '内部拒绝', scope_key: SCOPE, occurred_at: 40 })
+
+    expect(repo.listEventsUntil(db, SCOPE, 35, 10, ['decision', 'todo_created', 'todo_postponed']).map((row) => row.occurred_at))
+      .toEqual([30, 20, 10])
+    expect(repo.listEventsForSubject(db, SCOPE, 'todo', 'todo-1', 35, 10, ['todo_created', 'todo_postponed']))
+      .toHaveLength(2)
+    expect(repo.listEventSubjectStats(db, SCOPE, 35, ['decision', 'todo_created', 'todo_postponed']))
+      .toEqual([{ subject_type: 'todo', subject_id: 'todo-1', change_count: 2, last_changed_at: 30 }])
   })
 })
 

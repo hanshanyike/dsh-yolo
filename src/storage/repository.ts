@@ -13,6 +13,8 @@ import type {
   ExtractionStrategy,
   Goal,
   GoalStatus,
+  HistorySubjectStats,
+  HistorySubjectType,
   Milestone,
   MilestoneStatus,
   Notification,
@@ -692,7 +694,22 @@ export function listPreferenceHistory(db: DB, scopeKey: string): PreferenceHisto
 
 export function addEvent(
   db: DB,
-  data: { kind: EventKind; summary: string; detail?: string | null; session_id?: string | null; source?: Source | null; occurred_at?: number; scope_key: string },
+  data: {
+    kind: EventKind
+    summary: string
+    detail?: string | null
+    session_id?: string | null
+    source?: Source | null
+    occurred_at?: number
+    scope_key: string
+    subject_type?: HistorySubjectType | null
+    subject_id?: string | null
+    subject_title?: string | null
+    related_subject_type?: HistorySubjectType | null
+    related_subject_id?: string | null
+    related_subject_title?: string | null
+    change?: TimelineEvent['change']
+  },
 ): TimelineEvent | null {
   const ts = data.occurred_at ?? now()
   const row: TimelineEvent = {
@@ -704,28 +721,109 @@ export function addEvent(
     source: data.source ?? null,
     occurred_at: ts,
     scope_key: data.scope_key,
+    subject_type: data.subject_type ?? null,
+    subject_id: data.subject_id ?? null,
+    subject_title: data.subject_title ?? null,
+    related_subject_type: data.related_subject_type ?? null,
+    related_subject_id: data.related_subject_id ?? null,
+    related_subject_title: data.related_subject_title ?? null,
+    change: data.change ?? null,
   }
   db.prepare(
-    `INSERT INTO events(id, kind, summary, detail, session_id, source, occurred_at, scope_key)
-     VALUES(?,?,?,?,?,?,?,?)`,
-  ).run(row.id, row.kind, row.summary, row.detail, row.session_id, row.source, row.occurred_at, row.scope_key)
+    `INSERT INTO events(
+       id, kind, summary, detail, session_id, source, occurred_at, scope_key,
+       subject_type, subject_id, subject_title,
+       related_subject_type, related_subject_id, related_subject_title, change_json
+     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    row.id, row.kind, row.summary, row.detail, row.session_id, row.source, row.occurred_at, row.scope_key,
+    row.subject_type, row.subject_id, row.subject_title,
+    row.related_subject_type, row.related_subject_id, row.related_subject_title,
+    row.change ? JSON.stringify(row.change) : null,
+  )
   return row
+}
+
+type StoredTimelineEvent = Omit<TimelineEvent, 'change'> & { change_json?: string | null }
+
+function timelineEvent(row: StoredTimelineEvent): TimelineEvent {
+  let change: TimelineEvent['change'] = null
+  if (row.change_json) {
+    try { change = JSON.parse(row.change_json) as NonNullable<TimelineEvent['change']> } catch { change = null }
+  }
+  const { change_json: _changeJson, ...event } = row
+  return { ...event, change }
 }
 
 export function listEvents(db: DB, scopeKey: string, limit = 50): TimelineEvent[] {
   // rowid DESC breaks same-millisecond ties (occurred_at is ms-precision, so
   // two events created in one tick have equal keys and SQLite does not
   // guarantee their order — this made the timeline flaky across platforms).
-  return db
+  return (db
     .prepare('SELECT * FROM events WHERE scope_key = ? ORDER BY occurred_at DESC, rowid DESC LIMIT ?')
-    .all(scopeKey, limit) as TimelineEvent[]
+    .all(scopeKey, limit) as StoredTimelineEvent[]).map(timelineEvent)
 }
 
 /** Events within [fromMs, toMs) — the day ledger's data source (local day bounds). */
 export function listEventsBetween(db: DB, scopeKey: string, fromMs: number, toMs: number): TimelineEvent[] {
-  return db
+  return (db
     .prepare('SELECT * FROM events WHERE scope_key = ? AND occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at DESC, rowid DESC')
-    .all(scopeKey, fromMs, toMs) as TimelineEvent[]
+    .all(scopeKey, fromMs, toMs) as StoredTimelineEvent[]).map(timelineEvent)
+}
+
+function eventKindClause(kinds: readonly string[]): { sql: string; params: string[] } {
+  if (kinds.length === 0) return { sql: '1 = 0', params: [] }
+  return { sql: `kind IN (${kinds.map(() => '?').join(',')})`, params: [...kinds] }
+}
+
+/** Stable history snapshot query; openedAt prevents newly arriving rows from shifting pagination. */
+export function listEventsUntil(
+  db: DB,
+  scopeKey: string,
+  openedAt: number,
+  limit: number,
+  kinds: readonly string[],
+): TimelineEvent[] {
+  const clause = eventKindClause(kinds)
+  return (db.prepare(
+    `SELECT * FROM events
+     WHERE scope_key = ? AND occurred_at <= ? AND ${clause.sql}
+     ORDER BY occurred_at DESC, rowid DESC LIMIT ?`,
+  ).all(scopeKey, openedAt, ...clause.params, limit) as StoredTimelineEvent[]).map(timelineEvent)
+}
+
+export function listEventsForSubject(
+  db: DB,
+  scopeKey: string,
+  subjectType: HistorySubjectType,
+  subjectId: string,
+  openedAt: number,
+  limit: number,
+  kinds: readonly string[],
+): TimelineEvent[] {
+  const clause = eventKindClause(kinds)
+  return (db.prepare(
+    `SELECT * FROM events
+     WHERE scope_key = ? AND subject_type = ? AND subject_id = ?
+       AND occurred_at <= ? AND ${clause.sql}
+     ORDER BY occurred_at DESC, rowid DESC LIMIT ?`,
+  ).all(scopeKey, subjectType, subjectId, openedAt, ...clause.params, limit) as StoredTimelineEvent[]).map(timelineEvent)
+}
+
+export function listEventSubjectStats(
+  db: DB,
+  scopeKey: string,
+  openedAt: number,
+  kinds: readonly string[],
+): HistorySubjectStats[] {
+  const clause = eventKindClause(kinds)
+  return db.prepare(
+    `SELECT subject_type, subject_id, COUNT(*) AS change_count, MAX(occurred_at) AS last_changed_at
+     FROM events
+     WHERE scope_key = ? AND subject_type IS NOT NULL AND subject_id IS NOT NULL
+       AND occurred_at <= ? AND ${clause.sql}
+     GROUP BY subject_type, subject_id`,
+  ).all(scopeKey, openedAt, ...clause.params) as HistorySubjectStats[]
 }
 
 // ---------- session summaries (v0.3.0 ledger source badges) ----------
@@ -998,13 +1096,21 @@ export function applyTodoAction(
     case 'start':
       if (t.status === 'in_progress') return t
       db.prepare('UPDATE todos SET status = ?, updated_at = ? WHERE id = ?').run('in_progress', ts, id)
-      addEvent(db, { kind: 'todo_started', summary: `开始：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
+      addEvent(db, {
+        kind: 'todo_started', summary: `开始：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source,
+        subject_type: 'todo', subject_id: id, subject_title: t.title,
+        change: { status: { before: t.status, after: 'in_progress' } },
+      })
       break
     case 'complete':
       setTodoStatus(db, id, 'done')
       // v0.3.2 feedback: a completed commitment is a "good" signal (P/B1)
       db.prepare('UPDATE todos SET good_count = COALESCE(good_count,0) + 1, updated_at = ?, completed_at = ? WHERE id = ?').run(ts, ts, id)
-      addEvent(db, { kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
+      addEvent(db, {
+        kind: 'todo_completed', summary: `完成：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source,
+        subject_type: 'todo', subject_id: id, subject_title: t.title,
+        change: { status: { before: t.status, after: 'done' } },
+      })
       break
     case 'reopen':
       if (t.status !== 'done' && t.status !== 'cancelled') return t
@@ -1017,6 +1123,10 @@ export function applyTodoAction(
         occurred_at: ts,
         session_id,
         source,
+        subject_type: 'todo',
+        subject_id: id,
+        subject_title: t.title,
+        change: { status: { before: t.status, after: 'pending' } },
       })
       break
     case 'cancel':
@@ -1024,7 +1134,11 @@ export function applyTodoAction(
       // v0.3.2 feedback: a cancelled commitment is a "stale" signal — it was
       // tracked but did not materialize (P/B1)
       db.prepare('UPDATE todos SET stale_count = COALESCE(stale_count,0) + 1, updated_at = ? WHERE id = ?').run(ts, id)
-      addEvent(db, { kind: 'todo_cancelled', summary: `取消：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
+      addEvent(db, {
+        kind: 'todo_cancelled', summary: `取消：${t.title}`, scope_key: t.scope_key, occurred_at: ts, session_id, source,
+        subject_type: 'todo', subject_id: id, subject_title: t.title,
+        change: { status: { before: t.status, after: 'cancelled' } },
+      })
       break
     case 'postpone': {
       if (!args?.due_at) return t
@@ -1041,12 +1155,19 @@ export function applyTodoAction(
         occurred_at: ts,
         session_id,
         source,
+        subject_type: 'todo',
+        subject_id: id,
+        subject_title: t.title,
+        change: { due_at: { before: t.due_at ?? null, after: args.due_at } },
       })
       break
     }
     case 'remind_again':
       db.prepare('UPDATE todos SET last_reminded_at = NULL, updated_at = ? WHERE id = ?').run(ts, id)
-      addEvent(db, { kind: 'todo_remind_again', summary: `再次提醒：「${t.title}」`, scope_key: t.scope_key, occurred_at: ts, session_id, source })
+      addEvent(db, {
+        kind: 'todo_remind_again', summary: `再次提醒：「${t.title}」`, scope_key: t.scope_key, occurred_at: ts, session_id, source,
+        subject_type: 'todo', subject_id: id, subject_title: t.title,
+      })
       break
   }
   markTodoNotificationsHandled(db, id)
@@ -1122,6 +1243,13 @@ export function applyTodoConsolidate(
     occurred_at: ts,
     session_id: sessionId ?? null,
     source: sessionId ? null : 'manual',
+    subject_type: 'todo',
+    subject_id: source.id,
+    subject_title: source.title,
+    related_subject_type: 'todo',
+    related_subject_id: target.id,
+    related_subject_title: target.title,
+    change: { record_status: { before: 'canonical', after: 'merged' } },
   })
   return { ok: true, target: db.prepare('SELECT * FROM todos WHERE id = ?').get(target.id) as Todo }
 }
@@ -1149,10 +1277,12 @@ export function applyTodoUpdate(
   db.prepare('UPDATE todos SET title = ?, detail = ?, due_at = ?, priority = ?, milestone_id = ?, updated_at = ? WHERE id = ?').run(title, detail, due, pri, ms, ts, id)
   syncTodoFts(db, id, title, detail ?? null)
   const changes: string[] = []
-  if (title !== t.title) changes.push(`标题「${t.title}」→「${title}」`)
-  if (detail !== t.detail) changes.push('备注已更新')
-  if (due !== t.due_at) changes.push(`截止 ${t.due_at ?? '无'} → ${due ?? '无'}`)
-  if (pri !== t.priority) changes.push(`优先级 ${t.priority ?? '无'} → ${pri ?? '无'}`)
+  const change: NonNullable<TimelineEvent['change']> = {}
+  if (title !== t.title) { changes.push(`标题「${t.title}」→「${title}」`); change.title = { before: t.title, after: title } }
+  if (detail !== t.detail) { changes.push('备注已更新'); change.detail = { before: t.detail ?? null, after: detail ?? null } }
+  if (due !== t.due_at) { changes.push(`截止 ${t.due_at ?? '无'} → ${due ?? '无'}`); change.due_at = { before: t.due_at ?? null, after: due ?? null } }
+  if (pri !== t.priority) { changes.push(`优先级 ${t.priority ?? '无'} → ${pri ?? '无'}`); change.priority = { before: t.priority ?? null, after: pri ?? null } }
+  if (ms !== t.milestone_id) change.milestone_id = { before: t.milestone_id ?? null, after: ms ?? null }
   addEvent(db, {
     kind: 'todo_updated',
     summary: `更新「${title}」${changes.length ? `（${changes.join('；')}）` : ''}`,
@@ -1160,6 +1290,10 @@ export function applyTodoUpdate(
     occurred_at: ts,
     session_id: sessionId ?? null,
     source: 'manual',
+    subject_type: 'todo',
+    subject_id: id,
+    subject_title: t.title,
+    change,
   })
   return db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo
 }
@@ -1177,6 +1311,13 @@ export function applyGoalProgress(db: DB, id: string, progress: number, note?: s
     scope_key: g.scope_key,
     session_id: sessionId ?? null,
     source: sessionId ? null : 'manual',
+    subject_type: 'goal',
+    subject_id: id,
+    subject_title: g.title,
+    change: {
+      progress: { before: g.progress, after: clamped },
+      ...(clamped >= 100 && g.status !== 'achieved' ? { status: { before: g.status, after: 'achieved' } } : {}),
+    },
   })
   return db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal
 }
@@ -1193,6 +1334,10 @@ export function applyMilestoneStatus(db: DB, id: string, status: MilestoneStatus
     scope_key: m.scope_key,
     session_id: sessionId ?? null,
     source: sessionId ? null : 'manual',
+    subject_type: 'milestone',
+    subject_id: id,
+    subject_title: m.title,
+    change: { status: { before: m.status, after: status } },
   })
   return db.prepare('SELECT * FROM milestones WHERE id = ?').get(id) as Milestone
 }
@@ -1206,11 +1351,15 @@ export function applyMilestoneRename(db: DB, id: string, title: string, sessionI
   db.prepare('UPDATE milestones SET title = ?, updated_at = ? WHERE id = ?').run(t, ts, id)
   syncMilestoneFts(db, id, t, m.description)
   addEvent(db, {
-    kind: 'milestone_status',
+    kind: 'milestone_updated',
     summary: `里程碑改名「${m.title}」→「${t}」`,
     scope_key: m.scope_key,
     session_id: sessionId ?? null,
     source: 'manual',
+    subject_type: 'milestone',
+    subject_id: id,
+    subject_title: m.title,
+    change: { title: { before: m.title, after: t } },
   })
   return db.prepare('SELECT * FROM milestones WHERE id = ?').get(id) as Milestone
 }
@@ -1225,11 +1374,15 @@ export function applyGoalRename(db: DB, id: string, title: string, sessionId?: s
   db.prepare("DELETE FROM yolo_fts WHERE row_type = 'goal' AND row_id = ?").run(id)
   db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('goal', id, t, g.description ?? '')
   addEvent(db, {
-    kind: 'goal_progress',
+    kind: 'goal_updated',
     summary: `目标改名「${g.title}」→「${t}」`,
     scope_key: g.scope_key,
     session_id: sessionId ?? null,
     source: 'manual',
+    subject_type: 'goal',
+    subject_id: id,
+    subject_title: g.title,
+    change: { title: { before: g.title, after: t } },
   })
   return db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal
 }
@@ -1248,6 +1401,10 @@ export function applyGoalAbandon(db: DB, id: string, sessionId?: string | null):
     scope_key: g.scope_key,
     session_id: sessionId ?? null,
     source: 'manual',
+    subject_type: 'goal',
+    subject_id: id,
+    subject_title: g.title,
+    change: { status: { before: g.status, after: 'abandoned' } },
   })
   return db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal
 }

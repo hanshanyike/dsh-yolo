@@ -24,7 +24,9 @@ export type EventKind =
   | 'todo_reopened'
   | 'goal_progress'
   | 'goal_status'
+  | 'goal_updated'
   | 'milestone_status'
+  | 'milestone_updated'
   | 'brief_generated'
   | 'attention_seen'
   | 'attention_suppressed'
@@ -38,6 +40,14 @@ export type ExtractionStrategy = 'rule' | 'llm'
 export type ExtractionStatus = 'ok' | 'empty' | 'error'
 export type ScopeMode = 'workspace' | 'user' | 'global'
 export type RowType = 'todo' | 'milestone' | 'goal' | 'preference' | 'event'
+export type HistorySubjectType = 'todo' | 'goal' | 'milestone'
+
+export type HistoryChangeValue = string | number | boolean | null
+export interface HistoryFieldChange {
+  before: HistoryChangeValue
+  after: HistoryChangeValue
+}
+export type HistoryChangeSet = Record<string, HistoryFieldChange>
 
 /** Where a memory item came from — for audit + dedup. */
 export type Source = 'rule' | 'llm' | 'tool' | 'manual'
@@ -154,6 +164,24 @@ export interface TimelineEvent {
   source?: Source | null
   occurred_at: number
   scope_key: string
+  /** Stable product-object identity. Legacy/free-form events deliberately keep this null. */
+  subject_type?: HistorySubjectType | null
+  subject_id?: string | null
+  /** Immutable label at event time, so later rename/delete never rewrites history. */
+  subject_title?: string | null
+  /** Optional second object for relations such as duplicate consolidation. */
+  related_subject_type?: HistorySubjectType | null
+  related_subject_id?: string | null
+  related_subject_title?: string | null
+  /** Structured field-level facts; summary remains the human-readable projection. */
+  change?: HistoryChangeSet | null
+}
+
+export interface HistorySubjectStats {
+  subject_type: HistorySubjectType
+  subject_id: string
+  change_count: number
+  last_changed_at: number
 }
 
 /** One-line summary of an originating dsh session (ledger source badge). */

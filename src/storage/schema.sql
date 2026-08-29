@@ -139,11 +139,20 @@ CREATE TABLE IF NOT EXISTS events (
   session_id  TEXT,                  -- originating dsh session (nullable)
   source      TEXT,                  -- llm|tool|manual (nullable; drives ledger labels)
   occurred_at INTEGER NOT NULL,
-  scope_key   TEXT NOT NULL
+  scope_key   TEXT NOT NULL,
+  subject_type TEXT,                 -- todo|goal|milestone; null for free-form/legacy events
+  subject_id   TEXT,                 -- stable id, deliberately not an FK so deleted history survives
+  subject_title TEXT,                -- title snapshot at event time
+  related_subject_type TEXT,         -- second object for relations such as consolidate
+  related_subject_id TEXT,
+  related_subject_title TEXT,
+  change_json TEXT                   -- structured field changes; summary remains display text
 );
 CREATE INDEX IF NOT EXISTS idx_events_time ON events(occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_scope ON events(scope_key);
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id) WHERE session_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_events_subject ON events(scope_key, subject_type, subject_id, occurred_at DESC)
+  WHERE subject_id IS NOT NULL;
 
 -- one-line summary per originating session (ledger source badges, v0.3.0)
 CREATE TABLE IF NOT EXISTS session_summaries (

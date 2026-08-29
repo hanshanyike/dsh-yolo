@@ -369,6 +369,13 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
         summary: `＋ 快速记一条「${todo.title}」`,
         detail: due ? `截止 ${due}` : null,
         source: 'manual',
+        subject_type: 'todo',
+        subject_id: todo.id,
+        subject_title: todo.title,
+        change: {
+          status: { before: null, after: todo.status },
+          ...(todo.due_at ? { due_at: { before: null, after: todo.due_at } } : {}),
+        },
       })
     }
     return { ok: true, item: todo as unknown as Record<string, unknown> }

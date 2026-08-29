@@ -94,7 +94,9 @@ export const USER_VISIBLE_CHANGE_KINDS = new Set([
   'todo_consolidated',
   'goal_progress',
   'goal_status',
+  'goal_updated',
   'milestone_status',
+  'milestone_updated',
 ])
 
 export function isUserVisibleChange(row: Pick<YoloLedgerEntry, 'kind'>): boolean {

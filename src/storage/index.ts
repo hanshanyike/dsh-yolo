@@ -20,6 +20,8 @@ import type { DuplicateTodoPair } from './types.ts'
 import type {
   Goal,
   GoalStatus,
+  HistorySubjectStats,
+  HistorySubjectType,
   Milestone,
   MilestoneStatus,
   Notification,
@@ -43,7 +45,6 @@ import type {
   ExtractionStatus,
   RecallLog,
   ExtractionStrategy,
-  EventKind,
   Priority,
   AttentionFeedback,
   ClientActionRecord,
@@ -325,7 +326,7 @@ export default class Yolo extends Service {
   // ---- events ----
   addEvent(
     cwd: string,
-    data: { kind: EventKind; summary: string; detail?: string | null; session_id?: string | null; source?: Source | null; occurred_at?: number },
+    data: Omit<TimelineEvent, 'id' | 'scope_key' | 'occurred_at'> & { occurred_at?: number },
   ): TimelineEvent | null {
     const h = this.resolve(cwd)
     return repo.addEvent(h.db, { ...data, scope_key: h.scopeKey })
@@ -338,6 +339,18 @@ export default class Yolo extends Service {
   listEventsBetween(cwd: string, fromMs: number, toMs: number): TimelineEvent[] {
     const h = this.resolve(cwd)
     return repo.listEventsBetween(h.db, h.scopeKey, fromMs, toMs)
+  }
+  listEventsUntil(cwd: string, openedAt: number, limit: number, kinds: readonly string[]): TimelineEvent[] {
+    const h = this.resolve(cwd)
+    return repo.listEventsUntil(h.db, h.scopeKey, openedAt, limit, kinds)
+  }
+  listEventsForSubject(cwd: string, subjectType: HistorySubjectType, subjectId: string, openedAt: number, limit: number, kinds: readonly string[]): TimelineEvent[] {
+    const h = this.resolve(cwd)
+    return repo.listEventsForSubject(h.db, h.scopeKey, subjectType, subjectId, openedAt, limit, kinds)
+  }
+  listEventSubjectStats(cwd: string, openedAt: number, kinds: readonly string[]): HistorySubjectStats[] {
+    const h = this.resolve(cwd)
+    return repo.listEventSubjectStats(h.db, h.scopeKey, openedAt, kinds)
   }
 
   // ---- session summaries (v0.3.0 C) ----

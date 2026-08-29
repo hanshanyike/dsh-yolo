@@ -184,7 +184,7 @@ function mergeExtraction(
     title ? yolo.findMilestoneId(cwd, title) : null
   for (const t of r.todos) {
     if (shouldDropExtracted('todo', t.title)) continue
-    const { created } = yolo.addTodo(cwd, {
+    const { todo, created } = yolo.addTodo(cwd, {
       title: t.title,
       due_at: t.due_at,
       priority: toPriority(t.priority),
@@ -204,6 +204,13 @@ function mergeExtraction(
         detail: t.due_at ? `截止 ${t.due_at}` : null,
         session_id: sessionId,
         source: 'llm',
+        subject_type: 'todo',
+        subject_id: todo.id,
+        subject_title: todo.title,
+        change: {
+          status: { before: null, after: todo.status },
+          ...(todo.due_at ? { due_at: { before: null, after: todo.due_at } } : {}),
+        },
       })
     }
   }

@@ -21,7 +21,7 @@ beforeEach(() => {
   db = openDb(':memory:')
 })
 
-function lastEvent(): { kind: string; summary: string; session_id?: string | null } | undefined {
+function lastEvent() {
   const events = repo.listEvents(db, SCOPE)
   return events[0]
 }
@@ -37,6 +37,10 @@ describe('applyTodoAction', () => {
     expect(ftsSearch(db, '季度报告', 5, ['todo'])).toHaveLength(0)
     expect(lastEvent()?.kind).toBe('todo_completed')
     expect(lastEvent()?.summary).toContain('写季度报告初稿')
+    expect(lastEvent()).toMatchObject({
+      subject_type: 'todo', subject_id: t.id, subject_title: '写季度报告初稿',
+      change: { status: { before: 'pending', after: 'done' } },
+    })
   })
 
   it('complete is idempotent — no duplicate event on a done todo', () => {
@@ -137,6 +141,7 @@ describe('applyTodoAction', () => {
     expect(moved?.last_reminded_at).toBeNull()
     expect(lastEvent()?.kind).toBe('todo_postponed')
     expect(lastEvent()?.summary).toContain('2026-08-25')
+    expect(lastEvent()?.change).toEqual({ due_at: { before: '2026-08-22', after: '2026-08-25' } })
     // cleared stamp => due scan picks it up again
     expect(repo.listDueTodos(db, SCOPE, '2026-08-26')).toHaveLength(1)
   })
@@ -281,6 +286,11 @@ describe('applyTodoConsolidate', () => {
     expect(events[0].detail).toContain('继承截止 2026-08-30')
     expect(events[0].detail).toContain('优先级升为 high')
     expect(events[0].session_id).toBe('session-merge')
+    expect(events[0]).toMatchObject({
+      subject_type: 'todo', subject_id: source.id, subject_title: source.title,
+      related_subject_type: 'todo', related_subject_id: target.id, related_subject_title: target.title,
+      change: { record_status: { before: 'canonical', after: 'merged' } },
+    })
     // the source's unhandled reminder card is settled with the merge
     expect(repo.listUnhandledNotifications(db, SCOPE)).toHaveLength(0)
   })

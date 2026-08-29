@@ -208,7 +208,11 @@ function importAttached(db: DB, scopeKey: string, cwd: string, source: string, w
   const historyColumns = ['id', 'key', 'value', 'scope_key', 'session_id', 'valid_at', 'invalid_at']
   mergeIdTable(db, source, 'preference_history', historyColumns, historyColumns.filter((c) => c !== 'scope_key'), (row) => ({ ...row, scope_key: scopeKey }))
   mergePreferences(db, scopeKey, source)
-  const eventColumns = ['id', 'kind', 'summary', 'detail', 'session_id', 'source', 'occurred_at', 'scope_key']
+  const eventColumns = [
+    'id', 'kind', 'summary', 'detail', 'session_id', 'source', 'occurred_at', 'scope_key',
+    'subject_type', 'subject_id', 'subject_title',
+    'related_subject_type', 'related_subject_id', 'related_subject_title', 'change_json',
+  ]
   mergeIdTable(db, source, 'events', eventColumns, eventColumns.filter((c) => c !== 'scope_key'), (row) => ({ ...row, scope_key: scopeKey }))
 
   db.prepare(
