@@ -34,6 +34,8 @@ export interface YoloActionRequest {
   into_title?: string
   /** Originating dsh session, stamped on the audit event (chat actions only). */
   session_id?: string
+  /** Host turn of an assistant tool action; panel actions leave it absent. */
+  session_turn?: number | null
   /** Notification sub-kind when authoring a card (author_notification): 'reminder' | 'brief'. */
   notif_kind?: string
   /** Dashboard-v2 workspace/action identity and immutable judgment binding. */
@@ -506,6 +508,7 @@ export function hashYoloActionRequest(r: YoloActionRequest): string {
     into_id: r.into_id ?? null,
     into_title: r.into_title ?? null,
     session_id: r.session_id ?? null,
+    session_turn: r.session_turn ?? null,
     notif_kind: r.notif_kind ?? null,
     scope_cwd: r.scope_cwd ?? null,
     reason_version: r.reason_version ?? null,
@@ -545,6 +548,7 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
               : 'update'
         yolo.addTodoEvidence(cwd, todoId, {
           session_id: r.session_id ?? null,
+          turn_seq: r.session_turn ?? null,
           source_kind: r.session_id ? 'assistant_action' : 'panel_action',
           relation,
           source_fingerprint: todoEvidenceFingerprint(clientActionId, todoId),

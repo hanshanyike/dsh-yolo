@@ -159,14 +159,14 @@ describe('yolo_action', () => {
       header: { id: 'session-action-evidence', cwd },
       events: [{ type: 'tool/call', data: { callId: 'action-call-1', turn: 6 } }],
     }
-    const exec = { callId: 'action-call-1', agent: { session } }
+    const exec = { callId: 'action-call-1:code:0', rootCallId: 'transport-call-unlogged', agent: { session } }
     const args = { action: 'complete', kind: 'todo', id: todo.id }
 
     expect(await tool('yolo_action').execute(args, exec)).toMatchObject({ ok: true })
     expect(await tool('yolo_action').execute(args, exec)).toMatchObject({ ok: true })
     expect(yolo.listTodoEvidence(cwd, todo.id)).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        session_id: 'session-action-evidence', source_kind: 'assistant_action', relation: 'completion_claim',
+        session_id: 'session-action-evidence', turn_seq: 6, source_kind: 'assistant_action', relation: 'completion_claim',
       }),
     ]))
     expect(yolo.listTodoEvidence(cwd, todo.id).filter((row) => row.source_kind === 'assistant_action')).toHaveLength(1)

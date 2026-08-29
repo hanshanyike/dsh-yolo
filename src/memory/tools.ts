@@ -31,16 +31,32 @@ interface ToolOrigin {
 function toolOrigin(exec: unknown): ToolOrigin {
   const session = execSession(exec) as { events?: ReadonlyArray<{ type?: string; data?: unknown }> } | undefined
   const sessionIdValue = sessionId(session)
-  const rawCallId = (exec as { callId?: unknown; rootCallId?: unknown } | undefined)?.callId
-    ?? (exec as { rootCallId?: unknown } | undefined)?.rootCallId
+  const execution = exec as { callId?: unknown; rootCallId?: unknown } | undefined
+  const rawCallId = execution?.callId ?? execution?.rootCallId
   const callId = typeof rawCallId === 'string' && rawCallId ? rawCallId : undefined
   if (!callId) return { sessionId: sessionIdValue }
-  const call = [...(session?.events ?? [])].reverse().find((event) => {
+  // Code-mode/native sub-dispatches have their own stable callId, while the
+  // durable session records only the model-requested root call. Keep the leaf
+  // id for idempotency, but accept either identity when recovering its turn.
+  const durableCallIds = new Set([execution?.callId, execution?.rootCallId]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0))
+  const recentEvents = [...(session?.events ?? [])].reverse()
+  const call = recentEvents.find((event) => {
     if (event.type !== 'tool/call' || typeof event.data !== 'object' || event.data === null) return false
-    return (event.data as { callId?: unknown }).callId === callId
+    const durableId = (event.data as { callId?: unknown }).callId
+    return typeof durableId === 'string' && durableCallIds.has(durableId)
   })
-  const turn = typeof (call?.data as { turn?: unknown } | undefined)?.turn === 'number'
-    ? (call!.data as { turn: number }).turn
+  // Some composite transports do not expose the model-requested call id on
+  // their native sub-dispatch. The root tool/call is nevertheless durable
+  // before any child executes, and every child belongs to that same turn.
+  const turnEvent = call ?? recentEvents.find((event) => (
+    event.type === 'tool/call'
+    && typeof event.data === 'object'
+    && event.data !== null
+    && typeof (event.data as { turn?: unknown }).turn === 'number'
+  ))
+  const turn = typeof (turnEvent?.data as { turn?: unknown } | undefined)?.turn === 'number'
+    ? (turnEvent!.data as { turn: number }).turn
     : undefined
   return { sessionId: sessionIdValue, callId, turn }
 }
@@ -162,14 +178,14 @@ export function registerYoloTools(ctx: YoloContext): void {
         const origin = toolOrigin(exec)
         const client_action_id = origin.callId ? toolTodoActionId(origin.sessionId, origin.callId) : undefined
         if (args.kind === 'todo') {
-          const outcome = applyYoloAction(y, cwd, { action: 'cancel', kind: 'todo', id: args.id, session_id: origin.sessionId, client_action_id })
+          const outcome = applyYoloAction(y, cwd, { action: 'cancel', kind: 'todo', id: args.id, session_id: origin.sessionId, session_turn: origin.turn, client_action_id })
           return json(outcome)
         }
         if (args.kind === 'milestone') {
-          return json(applyYoloAction(y, cwd, { action: 'set_status', kind: 'milestone', id: args.id, status: 'abandoned', session_id: origin.sessionId, client_action_id }))
+          return json(applyYoloAction(y, cwd, { action: 'set_status', kind: 'milestone', id: args.id, status: 'abandoned', session_id: origin.sessionId, session_turn: origin.turn, client_action_id }))
         }
         if (args.kind === 'goal') {
-          return json(applyYoloAction(y, cwd, { action: 'abandon', kind: 'goal', id: args.id, session_id: origin.sessionId, client_action_id }))
+          return json(applyYoloAction(y, cwd, { action: 'abandon', kind: 'goal', id: args.id, session_id: origin.sessionId, session_turn: origin.turn, client_action_id }))
         }
         return json({ ok: false, error: 'unsupported kind' })
       },
@@ -217,6 +233,7 @@ export function registerYoloTools(ctx: YoloContext): void {
           status: args.status,
           note: args.note,
           session_id: origin.sessionId,
+          session_turn: origin.turn,
           client_action_id,
         })
         return json(outcome)
