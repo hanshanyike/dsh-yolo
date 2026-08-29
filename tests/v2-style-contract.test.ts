@@ -38,6 +38,7 @@ describe('dashboard v2 Mono style contract', () => {
       '.v2-today-row-body',
       '.v2-today-row-reason',
       '.v2-today-row-meta',
+      '.v2-today-row-actions',
       '.v2-task-section',
       '.v2-task-section-head',
       '.v2-task-list',
@@ -95,6 +96,8 @@ describe('dashboard v2 Mono style contract', () => {
     expect(css).toContain('.yolo-scope[data-presentation="split"] .v2-task-action-panel')
     expect(css).toContain('overflow-x: clip')
     expect(css).toMatch(/\.v2-today-row-reason[^}]*overflow-wrap:\s*anywhere/u)
+    expect(css).toContain('.v2-today-row-actions button')
+    expect(css).toContain('white-space: nowrap')
     expect(css).toContain('minmax(0, 1fr)')
   })
 

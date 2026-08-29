@@ -552,7 +552,8 @@ export const YOLO_CSS = `
 .yolo-scope .v2-today-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; min-width: 0; margin-top: 6px; color: var(--y-text-3); font-size: 13px; }
 .yolo-scope .v2-today-row-meta button { min-height: 32px; padding: 0 6px; border-color: transparent; background: none; color: var(--y-text-2); text-align: left; }
 .yolo-scope .v2-today-row-meta time { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
-.yolo-scope .v2-today-row > button { min-width: 58px; padding: 0 10px; }
+.yolo-scope .v2-today-row-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; align-self: center; }
+.yolo-scope .v2-today-row-actions button { flex: none; min-width: 58px; padding: 0 10px; white-space: nowrap; }
 .yolo-scope .v2-secondary-more { width: 100%; margin-top: 10px; border-color: var(--y-line-strong); background: var(--y-surface-2); color: var(--y-text-2); }
 .yolo-scope .v2-today-surface > section[aria-labelledby="v2-progress-title"] > h2 { border-bottom: 0; }
 .yolo-scope .v2-recent-changes > li { padding: 7px 2px; border-bottom: 1px solid var(--y-line); color: var(--y-text-2); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
@@ -618,7 +619,8 @@ export const YOLO_CSS = `
 .yolo-scope.compact .v2-judgment-header time { flex-basis: 100%; margin-left: 0; }
 .yolo-scope.compact .v2-judgment--compact .v2-judgment-actions button { width: 100%; }
 .yolo-scope.compact .v2-today-row { grid-template-columns: 22px minmax(0, 1fr); padding-inline: 4px; }
-.yolo-scope.compact .v2-today-row > button { grid-column: 2; justify-self: start; min-height: 32px; }
+.yolo-scope.compact .v2-today-row-actions { grid-column: 2; justify-self: start; justify-content: flex-start; width: 100%; }
+.yolo-scope.compact .v2-today-row-actions button { min-height: 32px; }
 .yolo-scope.compact .v2-task-action-panel { width: 100%; border-left: 0; box-shadow: none; }
 .yolo-scope.compact .v2-task-action-panel [role="group"] button { flex-basis: 100%; min-height: 40px; }
 .yolo-scope.compact .v2-learning-receipt dl > div { grid-template-columns: 1fr; gap: 2px; }
@@ -689,7 +691,7 @@ export const YOLO_CSS = `
 .yolo-scope .v2-task-section-head > h2 { font-size: 16px; }
 .yolo-scope .v2-task-list { padding: 0 14px; border-radius: 14px; }
 .yolo-scope .v2-today-row { padding: 13px 0; }
-.yolo-scope .v2-today-row > button { min-height: 36px; align-self: center; }
+.yolo-scope .v2-today-row-actions { align-self: center; }
 .yolo-scope .v2-today-row-meta button { color: var(--y-text-2); }
 .yolo-scope .v2-today-surface > section[aria-labelledby="v2-progress-title"] { margin-top: 27px; }
 .yolo-scope .v2-today-surface > section[aria-labelledby="v2-progress-title"] > button { border: 0; background: transparent; padding-inline: 0; }
