@@ -244,6 +244,8 @@ export const YOLO_CSS = `
 .yolo-scope .notif-type { font-size: 13px; font-weight: 650; color: var(--y-text-1); }
 .yolo-scope .notif-time { font-size: 12px; color: var(--y-text-3); margin-left: auto; }
 .yolo-scope .notif-body { font-size: 13.5px; line-height: 20px; color: var(--y-text-1); margin-bottom: 9px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.yolo-scope .notif-body--brief { display: block; overflow: visible; }
+.yolo-scope .notif-brief-text { color: var(--y-text-2); white-space: pre-wrap; }
 .yolo-scope .notif-acts { display: flex; gap: 6px; flex-wrap: wrap; }
 .yolo-scope .notif-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; margin-top: 2px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: none; color: var(--y-text-2); font-size: 12px; cursor: pointer; transition: all var(--y-dur-1); }
 .yolo-scope .notif-more:hover { background: var(--y-surface-2); color: var(--y-text-1); }

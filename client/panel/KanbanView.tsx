@@ -223,6 +223,16 @@ function cleanNotificationText(value: string): string {
   return value.replace(/^[\uFFFD⏰☀🌙]\s*/u, '')
 }
 
+/** Older brief bodies included the card title as their first line. Keep those
+ * cards readable after the backend stops repeating the title. */
+function cleanBriefBody(body: string | null | undefined, title: string): string {
+  const text = cleanNotificationText(body ?? '').trim()
+  if (!text) return ''
+  const lines = text.split('\n')
+  if (lines[0]?.trim() === title.trim()) lines.shift()
+  return lines.join('\n').trim()
+}
+
 const noop = (): void => {}
 
 export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail, notifFocusTick = 0 }: KanbanViewProps): JSX.Element {
@@ -702,6 +712,8 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
       {(notifShowAll ? openNotifications : openNotifications.slice(0, NOTIF_PREVIEW)).map((n) => {
         const dueFor = n.kind === 'reminder' && n.todo_id ? data.todos.find((td) => td.id === n.todo_id) : undefined
         const timeLabel = dueFor?.due_at ? dueMomentLabel(dueFor.due_at) : n.kind === 'brief' ? localDayLabel(n.created_at) : fmtTime(n.created_at)
+        const title = cleanNotificationText(n.title)
+        const briefBody = n.kind === 'brief' ? cleanBriefBody(n.body, title) : ''
         return (
           <div key={n.id} className={`notif${n.kind === 'reminder' ? ' reminder' : ''}`}>
             <div className="notif-head">
@@ -709,10 +721,12 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
               <span className="notif-type">{notifTypeLabel(n.kind, n.title)}</span>
               <span className="notif-time mono">{timeLabel}</span>
             </div>
-            <div className="notif-body">
-              <div style={{ fontWeight: 500 }}>{cleanNotificationText(n.title)}</div>
-              {n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2, whiteSpace: 'pre-wrap' }}>{cleanNotificationText(n.body)}</div>}
-            </div>
+            {(n.kind !== 'brief' || briefBody) && <div className={`notif-body${n.kind === 'brief' ? ' notif-body--brief' : ''}`}>
+              {n.kind !== 'brief' && <div style={{ fontWeight: 500 }}>{title}</div>}
+              {n.kind === 'brief'
+                ? <div className="notif-brief-text">{briefBody}</div>
+                : n.body && <div style={{ color: 'var(--y-text-2)', marginTop: 2, whiteSpace: 'pre-wrap' }}>{cleanNotificationText(n.body)}</div>}
+            </div>}
             <div className="notif-acts">
               {n.kind === 'reminder' && n.todo_id && (
                 <>
@@ -729,13 +743,13 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
               )}
               <button type="button" className="nact nact--chat" onClick={() => {
                 onOpenChat({
-                  title: cleanNotificationText(n.title),
-                  detail: n.body ?? null,
+                  title,
+                  detail: n.kind === 'brief' ? briefBody || null : n.body ?? null,
                   todoId: n.todo_id ?? undefined,
                   scopeCwd: n.scope_cwd ?? n.ws?.cwd,
                 })
               }}>
-                <IcChat size={12} />{n.todo_id ? '讨论这项安排' : '讨论这条提醒'}
+                <IcChat size={12} />{n.todo_id ? '讨论这项安排' : n.kind === 'brief' ? '讨论这份简报' : '讨论这条提醒'}
               </button>
               <button type="button" className="nact" disabled={busyKey === `n-${n.id}`} onClick={() => { void act(`n-${n.id}`, { action: 'handled', kind: 'notification', id: n.id, scope_cwd: n.scope_cwd ?? n.ws?.cwd }) }}>
                 知道了

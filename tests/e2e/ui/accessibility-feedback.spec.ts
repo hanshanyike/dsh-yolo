@@ -83,6 +83,27 @@ test('notification cards preserve all user-authored body lines', async ({ page }
   }
 })
 
+test('brief cards show the full digest without repeating the card title', async ({ page }) => {
+  const fx = createFixtures(api)
+  const title = `早报 · [E2E] ${Date.now()}`
+  const firstLine = '- 优先处理：确认客户方案'
+  const lastLine = '- 明日优先：发送最终版本'
+  await fx.notification(title, {
+    note: `${title}\n\n${firstLine}\n- 今日到期：无\n- 逾期：无\n${lastLine}`,
+    notifKind: 'brief',
+  })
+  try {
+    await openYoloPanel(page)
+    const card = page.locator('.notif').filter({ hasText: firstLine })
+    await expect(card).toBeVisible()
+    await expect(card.locator('.notif-body')).toContainText(lastLine)
+    await expect(card.locator('.notif-body')).not.toContainText(title)
+    await expect(card.getByRole('button', { name: '讨论这份简报' })).toBeVisible()
+  } finally {
+    await fx.dispose()
+  }
+})
+
 test('A11Y-02: 一级 Tab 使用 roving tabindex 并支持方向键、Home、End', async ({ page }) => {
   await openYoloPanel(page)
   const tabs = page.getByRole('tablist', { name: '助手页面' })

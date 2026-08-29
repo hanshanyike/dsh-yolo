@@ -90,7 +90,7 @@ describe('runBriefTick timing (TD-1)', () => {
     expect(result).toEqual({ morning: true, evening: false })
     expect(yolo.addNotification).toHaveBeenCalledTimes(1)
     expect(yolo.addNotification).toHaveBeenCalledWith('/ws/a', expect.objectContaining({
-      body: expect.stringContaining('今日到期 2 件：提交差旅报销、确认版本发布时间'),
+      body: expect.stringContaining('优先处理：提交差旅报销'),
     }))
     expect(yolo.setBriefStamp).toHaveBeenCalledWith('/ws/a', 'morning', '2026-08-22')
     expect(yolo.setBriefStamp).toHaveBeenCalledWith('/ws/b', 'morning', '2026-08-22')
@@ -119,7 +119,7 @@ describe('brief body fallback (TD-6)', () => {
     })
     await runBriefTick({ yolo, cwd: () => CWD, config: CONFIG, now: at('10:00') })
     const call = (yolo.addNotification as ReturnType<typeof vi.fn>).mock.calls[0]
-    expect(call[1].body).toContain('早报 · 2026-08-22')
+    expect(call[1].body).not.toContain('早报 · 2026-08-22')
     expect(call[1].body).toContain('今日到期 1 件：写周报')
   })
 
@@ -129,8 +129,8 @@ describe('brief body fallback (TD-6)', () => {
     await runBriefTick({ yolo, cwd: () => CWD, config: CONFIG, llm: brokenLlm, now: at('19:00') })
     // 19:00 已过两个时段：call[0] 早报、call[1] 晚报，正文都应是回退 markdown
     const calls = (yolo.addNotification as ReturnType<typeof vi.fn>).mock.calls
-    expect(calls[0][1].body).toContain('早报 · 2026-08-22')
-    expect(calls[1][1].body).toContain('晚报 · 2026-08-22')
+    expect(calls[0][1].body).not.toContain('早报 · 2026-08-22')
+    expect(calls[1][1].body).not.toContain('晚报 · 2026-08-22')
   })
 })
 
@@ -144,9 +144,10 @@ describe('fact collectors', () => {
       listEventsBetween: vi.fn(() => [event({ kind: 'goal_progress', summary: '目标A → 60%' })]),
     })
     const facts = collectMorningFacts(yolo, CWD, '2026-08-22')
-    expect(facts[0]).toContain('今日到期 1 件：今日事')
-    expect(facts[1]).toContain('逾期 1 件：逾期事')
-    expect(facts[3]).toContain('目标进展 1 条')
+    expect(facts[0]).toContain('优先处理：逾期事')
+    expect(facts[1]).toContain('今日到期 1 件：今日事')
+    expect(facts[2]).toContain('逾期 1 件：逾期事')
+    expect(facts[4]).toContain('目标进展 1 条')
   })
 
   it('evening: done today / still hanging / nearest next', () => {
@@ -159,11 +160,12 @@ describe('fact collectors', () => {
     })
     const facts = collectEveningFacts(yolo, CWD, '2026-08-22')
     expect(facts[0]).toContain('今日完成 1 件：已完成')
-    expect(facts[2]).toContain('还挂着 1 件，最近的：挂着（2026-08-23）')
+    expect(facts[2]).toContain('未完成 1 件')
+    expect(facts[3]).toContain('明日优先：挂着（2026-08-23）')
   })
 
-  it('renderBriefMarkdown formats head + bullet lines', () => {
+  it('renderBriefMarkdown formats facts without repeating the card title', () => {
     const md = renderBriefMarkdown('morning', ['今日到期：无', '逾期：无'], '2026-08-22')
-    expect(md.split('\n')).toEqual(['早报 · 2026-08-22', '', '- 今日到期：无', '- 逾期：无'])
+    expect(md.split('\n')).toEqual(['- 今日到期：无', '- 逾期：无'])
   })
 })
