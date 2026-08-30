@@ -4,7 +4,7 @@
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.5.0-beta.1] — 2026-08-30
 
 ### Added
 
@@ -17,6 +17,7 @@
 ### Changed
 
 - 发布闭环现在要求每个 npm 版本和不可变 Git 标签都对应一个经过核验的 GitHub Release；预发布会明确标记为 prerelease。
+- 内部重组为清晰的 domain、application、contracts、runtime 与 infrastructure 边界，并以稳定 `ScopeRef`、workspace catalog 和 single-store 事务约束后续演进；既有插件入口、HTTP payload 与 SQLite 数据保持兼容。
 - YOLO 标识回归并精炼为“关注圆心 + 下一项进入焦点”的原始构图，底色对齐 dsh 的 DeepSeek 品牌蓝，并统一侧栏、助手看板、设置、README、原型和社交预览中的品牌来源。
 - 顶部「和助手聊聊」现在每次打开都会创建新的独立会话，不再复用上一轮助手对话历史；事项讨论继续按事项隔离。
 - 顶部通知数字改为尚未查看的新投递数；打开通知记录只更新已读状态，首页继续负责完成、推迟、讨论和提醒处理。
@@ -232,7 +233,8 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc5...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.5.0-beta.1...HEAD
+[0.5.0-beta.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc5...v0.5.0-beta.1
 [0.4.0-rc5]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc4...v0.4.0-rc5
 [0.4.0-rc4]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc3...v0.4.0-rc4
 [0.4.0-rc3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc2...v0.4.0-rc3
