@@ -121,6 +121,17 @@ node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/
 6. 用户可感知变化同步 `README.md` / `docs/usage.md`；架构或契约变化同步对应
    `docs/architecture/*.md` / `docs/testing*.md`，并在发布时写入 `CHANGELOG.md`。
 
+## 交付闭环
+
+- 每次完成一个用户请求或一组可独立验证的逻辑变更后，必须在适用门禁通过后创建范围明确的 commit；
+  除非用户明确要求暂不提交，否则不得只把已完成改动留在工作区。
+- commit 完成后必须按“分支与远程约定”合入本地 `develop`，并推送 `origin/develop`。若当前已经位于
+  `develop`，直接提交并推送；不得为此额外创建或推送远程功能分支。
+- 推送后必须重新 fetch，并核对本地 HEAD、`origin/develop` 与 `git ls-remote` 的远端引用一致；最终回复
+  明确报告 commit、推送结果和远端 CI 状态。凭据、冲突或 CI 阻塞时不得绕过，必须说明实际状态。
+- 混合工作区必须精确暂存本次路径或 hunk，保留协作者的未完成改动。此交付规则不自动授权更新
+  `main`、创建 tag、发布 GitHub Release 或执行 `npm publish`，这些动作仍需用户单独明确授权。
+
 ## 文档索引
 
 - **愿景**：`docs/VISION.md`（四阶段：Keeper → Organizer → Manager → Companion）
