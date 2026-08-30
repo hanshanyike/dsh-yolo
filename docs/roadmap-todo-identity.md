@@ -75,7 +75,7 @@ R2b 已提供宿主配置回放与 engineering gate：`pnpm eval:todo-resolver` 
 
 - [x] 使用真实宿主模型配置回放长期 gold，生成不含凭据和原始模型文本、路由与时钟可审计的 prediction/report。
 - [x] 对 prediction 完整性、单一路由、分层样本、false-link、missed-link、exact、高置信误授权和安全覆盖设门。
-- [ ] **下一开发项：**把 `todoIdentityR2Enabled` 加入助手看板设置，标记为实验性、默认关闭，并准确说明
+- [x] 把 `todoIdentityR2Enabled` 加入助手看板设置，标记为实验性、默认关闭，并准确说明
   只会 LINK 唯一开放事项或按稳定 ID 修改明确截止时间。
 - [ ] **低优先级评测债务：**当用户反馈误关联/漏关联，或 resolver 模型、prompt、阈值、授权范围有实质变化时，
   从脱敏真实 shadow 日志扩充并独立标注评测集；不为形式上的“另一套 holdout”阻塞当前实验入口。

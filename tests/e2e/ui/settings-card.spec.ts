@@ -22,14 +22,18 @@ async function openYoloSettings(page: Page): Promise<Locator> {
 test('YOLO 设置可保存并在刷新后回读，且关闭提醒进入真实运行配置（W14）', async ({ page }) => {
   let card = await openYoloSettings(page)
   const reminder = card.getByRole('checkbox', { name: /启用到期提醒/ })
+  const identity = card.getByRole('checkbox', { name: /高置信事项自动关联/ })
   const ahead = card.getByRole('textbox', { name: /^提前提醒（分钟）/ })
   const originalEnabled = await reminder.isChecked()
+  const originalIdentity = await identity.isChecked()
   const originalAhead = await ahead.inputValue()
   const alternateAhead = originalAhead === '7' ? '0' : '7'
   let changed = false
 
   await expect(card.getByRole('checkbox', { name: /启用 LLM 提取/ })).toBeVisible()
   await expect(card.getByRole('textbox', { name: /^提取模型/ })).toBeVisible()
+  await expect(identity).toBeVisible()
+  await expect(card.getByText(/仅在模型置信度至少为 0.98 且只有一个开放候选时/)).toBeVisible()
   await expect(card.getByRole('textbox', { name: /^扫描间隔（秒）/ })).toBeVisible()
   await expect(card.getByRole('checkbox', { name: /启用安静时段/ })).toBeVisible()
   await expect(card.getByRole('checkbox', { name: /启用早晚报/ })).toBeVisible()
@@ -40,6 +44,8 @@ test('YOLO 设置可保存并在刷新后回读，且关闭提醒进入真实运
 
   try {
     await reminder.setChecked(false)
+    await identity.setChecked(!originalIdentity)
+    if (!originalIdentity) await expect(card.getByText(/保存即确认启用实验能力/)).toBeVisible()
     await ahead.fill(alternateAhead)
     await card.getByRole('button', { name: '保存设置' }).click()
     await expect(card.getByRole('status')).toContainText('设置已保存')
@@ -47,17 +53,20 @@ test('YOLO 设置可保存并在刷新后回读，且关闭提醒进入真实运
 
     card = await openYoloSettings(page)
     await expect(card.getByRole('checkbox', { name: /启用到期提醒/ })).not.toBeChecked()
+    await expect(card.getByRole('checkbox', { name: /高置信事项自动关联/ })).toBeChecked({ checked: !originalIdentity })
     await expect(card.getByRole('textbox', { name: /^提前提醒（分钟）/ })).toHaveValue(alternateAhead)
   } finally {
     if (changed) {
       card = await openYoloSettings(page)
       await card.getByRole('checkbox', { name: /启用到期提醒/ }).setChecked(originalEnabled)
+      await card.getByRole('checkbox', { name: /高置信事项自动关联/ }).setChecked(originalIdentity)
       await card.getByRole('textbox', { name: /^提前提醒（分钟）/ }).fill(originalAhead)
       await card.getByRole('button', { name: '保存设置' }).click()
       await expect(card.getByRole('status')).toContainText('设置已保存')
 
       card = await openYoloSettings(page)
       await expect(card.getByRole('checkbox', { name: /启用到期提醒/ })).toBeChecked({ checked: originalEnabled })
+      await expect(card.getByRole('checkbox', { name: /高置信事项自动关联/ })).toBeChecked({ checked: originalIdentity })
       await expect(card.getByRole('textbox', { name: /^提前提醒（分钟）/ })).toHaveValue(originalAhead)
     }
   }

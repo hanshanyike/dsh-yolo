@@ -6,6 +6,7 @@ export type EditableSettingsSection = 'extraction' | 'reminder' | 'brief' | 'sto
 export interface YoloSettingsDraft {
   extractionEnabled: boolean
   extractionModel: string
+  todoIdentityR2Enabled: boolean
   reminderEnabled: boolean
   checkIntervalSec: string
   aheadMin: string
@@ -36,6 +37,7 @@ export function settingsDraftFrom(value: YoloSettings): YoloSettingsDraft {
   return {
     extractionEnabled: value.extraction.enableLLM,
     extractionModel: value.extraction.model,
+    todoIdentityR2Enabled: value.extraction.todoIdentityR2Enabled,
     reminderEnabled: value.reminder.enabled,
     checkIntervalSec: String(value.reminder.checkIntervalSec),
     aheadMin: String(value.reminder.aheadMin),
@@ -82,6 +84,7 @@ export function settingsFromDraft(current: YoloSettings, draft: YoloSettingsDraf
       ...current.extraction,
       enableLLM: draft.extractionEnabled,
       model: draft.extractionModel.trim(),
+      todoIdentityR2Enabled: draft.todoIdentityR2Enabled,
     },
     reminder: {
       ...current.reminder,

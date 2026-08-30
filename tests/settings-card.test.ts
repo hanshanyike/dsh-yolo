@@ -29,11 +29,13 @@ describe('YOLO settings card model', () => {
     const current = Config({ recall: { topK: 8 }, extraction: { minIntervalSec: 45 } } as never)
     const draft = settingsDraftFrom(current)
     draft.extractionModel = 'deepseek-reasoner'
+    draft.todoIdentityR2Enabled = true
     draft.reminderEnabled = false
     const next = settingsFromDraft(current, draft)
 
     expect(next.recall.topK).toBe(8)
     expect(next.extraction.minIntervalSec).toBe(45)
+    expect(next.extraction.todoIdentityR2Enabled).toBe(true)
     expect(changedSettingsSections(current, next)).toEqual(['extraction', 'reminder'])
     expect(resolveReminderRuntime(next.reminder).enabled).toBe(false)
   })
@@ -50,6 +52,19 @@ describe('YOLO settings card model', () => {
     expect(scope.set.mock.calls.map((call) => call[0])).toEqual(['reminder', 'storage'])
     expect(scope.getSnapshot().value?.reminder).toMatchObject({ enabled: false, aheadMin: 15 })
     expect(scope.getSnapshot().value?.storage.snapshotInterval).toBe('every_10_turns')
+  })
+
+  it('stages and persists the R2a experimental switch in the extraction section', async () => {
+    const current = Config(undefined)
+    const scope = writableScope(current)
+    const draft = settingsDraftFrom(current)
+    expect(draft.todoIdentityR2Enabled).toBe(false)
+
+    draft.todoIdentityR2Enabled = true
+    await expect(saveSettingsDraft(scope, current, draft)).resolves.toEqual({ ok: true })
+    expect(scope.set).toHaveBeenCalledTimes(1)
+    expect(scope.set).toHaveBeenCalledWith('extraction', expect.objectContaining({ todoIdentityR2Enabled: true }))
+    expect(scope.getSnapshot().value?.extraction.todoIdentityR2Enabled).toBe(true)
   })
 
   it('rejects invalid values before persistence', async () => {

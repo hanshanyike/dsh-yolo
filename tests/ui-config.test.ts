@@ -21,6 +21,7 @@ describe('YOLO runtime Config schema', () => {
     expect(c.enabled).toBe(true)
     expect(c.extraction.enableLLM).toBe(true)
     expect(c.extraction.model).toBe('deepseek-chat')
+    expect(c.extraction.todoIdentityR2Enabled).toBe(false)
     expect(c.reminder.enabled).toBe(true)
     expect(c.storage.scope).toBe('workspace')
     expect(c.storage.snapshotInterval).toBe('daily')
@@ -28,11 +29,12 @@ describe('YOLO runtime Config schema', () => {
   })
 
   it('accepts explicit overrides', () => {
-    const c = Config({ enabled: false, reminder: { enabled: false }, recall: { topK: 8 } } as never)
+    const c = Config({ enabled: false, extraction: { todoIdentityR2Enabled: true }, reminder: { enabled: false }, recall: { topK: 8 } } as never)
     expect(c.enabled).toBe(false)
     expect(c.reminder.enabled).toBe(false)
     expect(c.recall.topK).toBe(8)
     expect(c.extraction.enableLLM).toBe(true) // untouched fields keep defaults
+    expect(c.extraction.todoIdentityR2Enabled).toBe(true)
   })
 
   it('rejects out-of-range numbers', () => {
