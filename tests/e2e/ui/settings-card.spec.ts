@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs'
 import { test, expect, type Page, type Locator } from '@playwright/test'
 import { dismissHostSetupDialogs } from '../helpers.ts'
+
+const packageVersion = (JSON.parse(
+  readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'),
+) as { version: string }).version
 
 async function openYoloSettings(page: Page): Promise<Locator> {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
@@ -10,7 +15,7 @@ async function openYoloSettings(page: Page): Promise<Locator> {
   await dialog.getByRole('button', { name: '插件' }).click()
   const card = dialog.locator('.yolo-settings-card')
   await expect(card.getByRole('heading', { name: 'YOLO — 管理工作与生活的助手' })).toBeVisible()
-  await expect(card.getByLabel('发布版本 0.4.0-rc5')).toHaveText('v0.4.0-rc5')
+  await expect(card.getByLabel(`发布版本 ${packageVersion}`)).toHaveText(`v${packageVersion}`)
   return card
 }
 
