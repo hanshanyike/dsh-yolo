@@ -46,6 +46,21 @@
 - 本地 `develop` 有未提交改动时，必须先做可恢复备份并在合并后原样恢复；不得为了合入功能而丢弃、覆盖
   或顺手提交协作者的未完成改动。
 
+## 版本与发布约定
+
+- 版本遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-CN/)：日常逻辑变更应提交并推送，
+  但**不得把每个 commit 都当成一次版本发布**；只在汇总并执行一次明确授权的发布时修改版本号。
+- `0.x` 阶段：兼容修复提升 PATCH，新功能提升 MINOR，破坏性 API / 配置 / 存储变化也提升 MINOR 并记录迁移；
+  `1.0.0` 以后破坏性变化提升 MAJOR。纯文档、测试或内部重构随下一次适用发布归档，不单独为其 bump。
+- 新版本线的预发布标识统一使用独立数字段：`alpha.1` → `beta.1` → `rc.1` → 正式版；同一阶段按
+  `alpha.2` / `beta.2` / `rc.2` 递增。已发布的 `0.4.0-rc1` 至 `rc5` 不重写；若该版本线仍需候选版，
+  为保持 SemVer 递增只能继续 `0.4.0-rc6`，下一版本线再切换到点分格式。
+- npm `latest` 只指向稳定版；预发布版必须显式发布到 `alpha`、`beta` 或 `rc` dist-tag，安装文档也必须
+  使用对应 tag 或固定版本。Git 标签使用 `v<package-version>`，已发布版本与已推送标签均不可覆盖或移动。
+- 版本选择、候选版阶段、稳定版晋级、CHANGELOG、Git 标签和 npm dist-tag 的完整规则以
+  [`docs/release.md`](docs/release.md) 为事实源。创建 tag、更新 `main`、发布 GitHub Release 或 npm 包仍需
+  用户针对本次发布明确授权。
+
 ## 常用命令
 
 ```bash

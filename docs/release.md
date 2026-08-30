@@ -16,12 +16,58 @@
 
 ## 版本与标签约定
 
-- `package.json` 和 npm registry 使用不带 `v` 的 SemVer，例如 `0.4.0-rc1`。
-- Git 标签在同一版本前加 `v`，例如 `v0.4.0-rc1`。候选版必须使用
-  `-rc<递增数字>`，不要写成 `0.4.0.rc1`、`0.4.0-rc.1` 或重复使用已经发布的版本。
+- `package.json` 和 npm registry 使用不带 `v` 的
+  [Semantic Versioning 2.0.0](https://semver.org/lang/zh-CN/)，例如 `0.5.0-rc.1`。
+- Git 标签在同一版本前加 `v`，例如 `v0.5.0-rc.1`。预发布标识使用独立的数字段：
+  `alpha.1`、`beta.1`、`rc.1`，随后按 `.2`、`.3` 递增；不要写成非 SemVer 的 `0.5.0.rc1`。
+- 已发布的 `0.4.0` 候选版历史上采用了 `0.4.0-rc1` 至 `0.4.0-rc5`。这些版本不得重写；如果该版本线
+  仍需候选版，为保持版本优先级单调递增，只能继续使用 `0.4.0-rc6`，不要中途改成优先级更低的
+  `0.4.0-rc.6`。从下一条版本线开始统一使用点分格式，并避免再形成两套命名。
 - 下文以 `<new-version>` 和 `<new-tag>` 表示这两个值；执行前先把占位符替换成实际值，
   并确认 `<new-tag>` 严格等于 `v<new-version>`。
 - 已推送的标签和已发布的 npm 版本都视为不可变；不得强推、移动远端标签或取消发布来覆盖错误。
+
+### 版本号如何选择
+
+版本号表示一次可安装、可追踪的发布，不是 commit 计数器。每个完成的逻辑变更仍按 `AGENTS.md` 提交并
+推送到 `develop`；只有用户明确授权组装发布时，才汇总这些提交、更新 CHANGELOG 并修改版本号。
+
+| 变化 | `0.x` 阶段 | `1.x` 及以后 | 示例 |
+| --- | --- | --- | --- |
+| 向后兼容的缺陷修复 | 提升 PATCH | 提升 PATCH | `0.5.0` → `0.5.1` |
+| 向后兼容的新功能 | 提升 MINOR | 提升 MINOR | `0.5.1` → `0.6.0` |
+| 破坏性 API、配置、存储或行为变化 | 提升 MINOR，并提供迁移说明 | 提升 MAJOR，并提供迁移说明 | `0.6.0` → `0.7.0`；`1.6.0` → `2.0.0` |
+| 纯文档、测试或不改变外部行为的内部重构 | 不单独 bump，随下一次适用发布归档 | 不单独 bump，随下一次适用发布归档 | — |
+
+`0.x` 表示公共契约仍在演进，不等于可以无提示破坏兼容性；所有破坏性变化都必须写入 CHANGELOG，涉及
+SQLite schema、配置或 API payload 时必须同时提供迁移或兼容策略。准备承诺稳定公共契约时发布 `1.0.0`。
+
+### 预发布阶段
+
+- `alpha.N`：方案仍在实验，功能和契约可能不完整。
+- `beta.N`：目标功能基本完整，主要用于兼容性、真实使用和回归验证。
+- `rc.N`：正式发布候选，只接受发布阻断修复；普通新功能进入下一条 MINOR 版本线。
+- 无预发布后缀：稳定版，例如 `0.5.0`；必须通过完整发布门禁。
+
+同一基础版本的正常顺序为：
+
+```text
+0.5.0-alpha.1 → 0.5.0-alpha.2 → 0.5.0-beta.1 → 0.5.0-rc.1 → 0.5.0 → 0.5.1
+```
+
+候选版发现缺陷时继续增加 `rc.N`，不要为了表示候选版修复而从 `0.5.0-rc.N` 跳到
+`0.5.1-rc.1`。只有 `0.5.0` 已经稳定发布、或者该版本被明确放弃且在 CHANGELOG 记录原因后，才开始
+`0.5.1` 的预发布序列。
+
+### npm dist-tag
+
+- `latest` 只指向最新稳定版；普通的无版本安装会解析这个标签。
+- `alpha`、`beta`、`rc` 分别指向对应阶段最新版本。预发布必须通过 `npm publish --tag <stage>` 显式发布，
+  不得让默认发布意外覆盖 `latest`。
+- 尚无当前稳定版时，README 和使用文档必须给出 `@rc`、其他适用阶段 tag 或固定版本，不能用裸包名暗示
+  `latest` 就是当前候选版；也不要为修复一个过旧的 `latest` 而把 RC 指向 `latest`。
+- 稳定版发布使用 `npm publish --access public --tag latest`，并在发布后查询精确版本和全部 dist-tag。
+  `rc` 可以保留在最后一个候选版，直到下一条候选版本线开始。
 
 ## 候选版发布步骤
 
@@ -148,6 +194,9 @@ npm view dsh-plugin-yolo dist-tags --json
 第一条命令必须输出 `<new-tag>`。发布后的版本必须可查询，`rc` dist-tag 必须指向
 `<new-version>`；候选版发布不得意外改动 `latest`。
 
+如果发布的是 `alpha` 或 `beta`，分别把命令中的 `--tag rc` 和验证目标改为 `alpha` 或 `beta`；阶段名必须
+与版本后缀一致。
+
 ### 7. 恢复 Unreleased
 
 发布成功后，在 CHANGELOG 顶部新建空的 `## [Unreleased]` 小节，并将 `[Unreleased]` 比较链接
@@ -159,6 +208,24 @@ git diff --cached --check
 git commit -m "docs: reopen changelog after <new-version>"
 git push origin develop
 ```
+
+## 正式版晋级
+
+正式版不是给最后一个 RC 改标签，而是发布一个没有预发布后缀的新版本。例如 `0.5.0-rc.3` 通过验证后，
+下一版本为 `0.5.0`，并拥有独立的 `v0.5.0` Git 标签和 npm 包版本。
+
+正式版复用“候选版发布步骤”中的冻结、门禁、CHANGELOG、版本提交、包内容验证、远端 CI、推标签和恢复
+Unreleased 流程，但步骤 6 必须显式发布到 `latest`：
+
+```bash
+git describe --tags --exact-match HEAD
+npm publish --access public --tag latest
+npm view dsh-plugin-yolo@<new-version> version dist.integrity
+npm view dsh-plugin-yolo dist-tags --json
+```
+
+发布前必须确认 `<new-version>` 不含 `alpha`、`beta` 或 `rc` 后缀；发布后 `latest` 必须严格指向
+`<new-version>`。不得通过移动 `rc` dist-tag、修改旧 Git 标签或取消发布来伪造正式版。
 
 ## 失败恢复与幂等重试
 
@@ -225,6 +292,7 @@ GitHub 安装依赖 `prepare` 从源码构建，pnpm ≥10 可能要求使用方
 
 ## 版本策略
 
-- `0.x`——dsh 平台本身仍是 `0.1.0-rc`；允许在次版本升级中引入破坏性变更，且必须记录在 CHANGELOG 中。
-- 修复只提升补丁版本；功能发布提升次版本（记忆基础 → `0.2.0`，有状态计划 + 回复即操作 → `0.3.0`，依此类推）。
+- 具体版本号、预发布阶段和 dist-tag 按本文“版本与标签约定”执行；不得临时发明另一套编号方式。
+- `0.x` 阶段允许在 MINOR 升级中引入有迁移说明的破坏性变化，但仍应尽量保持兼容；公共契约稳定后晋级
+  `1.0.0`。
 - `@deepseek-ai/cordis` 的 peer dependency 保持为 `*`，由宿主提供。
