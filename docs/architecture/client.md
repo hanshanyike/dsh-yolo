@@ -2,95 +2,80 @@
 
 ## 职责与边界
 
-客户端把 YOLO 注册为全局侧栏入口和设置卡，在同一助手面板内呈现计划、通知和对话。它只通过
-`src/ui/` 暴露的 JSON API 工作，共享 TypeScript 载荷类型，但不访问 SQLite，也不自行决定
-领域状态、attention 分数或撤销真相。
+浏览器客户端负责 panel shell、页面 controller、对话/通知/事项前景和 Mono 展示。服务端仍是 current state 与业务判断事实源；客户端不推导不存在的完成状态、attention reason、source 或 workspace owner。
+
+## 当前控制器拆分
+
+Phase 5 已把高耦合 use-case state 从两个大组件迁到稳定 controller：
+
+| Controller | Owner |
+|---|---|
+| `panel/controllers/use-dashboard-controller.ts` | dashboard fetch、loading/error、业务 signature、refresh sweep、unseen revision 防倒退 |
+| `panel/controllers/use-item-detail-controller.ts` | 当前事项定位、编辑 draft、动作/保存、receipt/undo/error 与讨论入口 |
+| `panel/controllers/use-notification-navigation.ts` | popup 已读、reminder todo 定位和通知记录 fallback |
+| `panel/kanban/use-kanban-actions.ts` | quick add、事项动作、attention intent、Today task panel、receipt/undo/error |
+| `panel/kanban/surfaces.ts` | 稳定 Home/Plan/History surface key |
+
+`YoloPanel.tsx` 仍是 shell：拥有 route、foreground、layout/presentation、panel 恢复、主题和 controller 组合。`KanbanView.tsx` 仍负责页面呈现、筛选和局部 editor UI，但不再自行实现主要 mutation workflow。此次拆分保持现有 IA、视觉与 HTTP contracts，不新增页面。
 
 ## 文件结构
 
 | 路径 | 职责 |
 |---|---|
-| `index.ts` | 注册 `settings.plugin.item` 与 `sidebar.footer.action` 两个 slot |
-| `settings/SettingsCard.tsx` / `model.ts` | 设置表单、校验、宿主持久化与回读 |
-| `sidebar/YoloSidebarDashboard.tsx` | 侧栏入口、轻量 badge 轮询和面板挂载 |
-| `panel/YoloPanel.tsx` | 首页/计划/历史 shell、单一前景状态、数据加载、主题与通知记录入口 |
-| `panel/NotificationLog.tsx` | 完整通知时间流、分页、已读基线和事项跳转 |
-| `panel/HistoryView.tsx` | 独立分页的按时间 / 按事项历史、状态筛选、事项展开和来源入口 |
-| `panel/DataManagementDialog.tsx` | 日期范围预览、按工作区分组提交批量取消或永久删除 |
-| `panel/navigation.ts` / `PageTabs.tsx` | 页面路由、focus/split 纯派生和一级/二级导航 |
-| `panel/ForegroundContext.tsx` | 来源预览、诚实降级和原会话导航反馈 |
-| `panel/KanbanView.tsx` | 三页面内容、计划筛选、动作编排和事项上下文入口 |
-| `panel/ChatPane.tsx` | resident/anchored 共用对话视图与请求构造 |
-| `panel/chat/controller.ts` / `scroll.ts` | 跨组件重挂载请求控制器、单调状态水合和 near-bottom 滚动策略 |
-| `panel/CaptureBar.tsx` | 快速新增输入 |
-| `panel/MoreMenu.tsx` | 刷新、主题和计划高级筛选等低频入口 |
-| `panel/state.ts` | 页面、单一前景、筛选及事项讨论 episode 的模块级读写 |
-| `panel/v2/` | Today 投影模型、助手判断、任务动作、学习回执、撤销和 API client |
-| `design/` | Mono tokens、全局样式注入和单色图标 |
-| `YoloLogo.tsx` | 产品标识组件：关注圆心与下一项进入焦点的动态圆点 |
+| `index.ts` | dsh client registration、settings 与 sidebar slot |
+| `panel/YoloPanel.tsx` | shell、route、single foreground、layout/controller composition |
+| `panel/KanbanView.tsx` | Home/Plan/History 页面内容和纯筛选呈现 |
+| `panel/controllers/` | dashboard、detail、notification use-case controllers |
+| `panel/kanban/` | board actions 与稳定 surface names |
+| `panel/ChatPane.tsx`、`panel/chat/` | fresh assistant/item-episode conversation UI 与请求/scroll controller |
+| `panel/HistoryView.tsx` | history read model UI |
+| `panel/NotificationLog.tsx` | cursor-paginated notification record UI |
+| `panel/ForegroundContext.tsx` | detail/source/chat 单一前景 |
+| `panel/v2/` | 已有 Dashboard v2 展示组件与 API helper；目录名仍为 compatibility，未虚构为新数据版本 |
+| `sidebar/` | 常驻入口、badge 与 non-modal popup |
+| `settings/` | `contracts/config` 设置模型和卡片 |
+| `design/` | Mono tokens、icons、style |
 
-## 加载与刷新策略
+## Contracts 与依赖
 
-- 面板是 session-independent 的全局表面，挂在侧栏 footer，而非某个工作会话 tab。
-- 打开面板时请求一次 `GET /yolo/dashboard`；动作成功与手动刷新后重新拉取。
-- 完整 dashboard 不做 30 秒轮询，避免持续重建跨工作区投影。
-- 侧栏角标独立请求 `GET /yolo/badge`，面板关闭时也可更新。
-- 通知记录独立请求 `GET /yolo/notifications` 并分页；dashboard 的有限通知投影不冒充完整历史。
-- 完整历史独立请求 `GET /yolo/history`：时间线跨工作区分页，事项视图按稳定主体聚合，展开时再按需读取单事项事件；dashboard 的 `ledger` 仍只服务首页当天摘要。
-- 面板状态只保存视图、筛选和展示偏好；领域数据始终以服务端返回为准。
+客户端 DTO 统一从 `src/contracts/*` 导入。纯日期、筛选与 dashboard surface 规则仍可从明确的 `src/shared/*` 纯函数导入。
 
-## 动作与信任交互
+Dependency fitness test 禁止 client 直接依赖：
 
-所有变更通过 `postYoloAction()` 调用 `POST /yolo/actions`。客户端生成 `client_action_id`，处理
-结构化错误，并只展示服务端返回的 `learning_receipt`。完成/推迟后的撤销使用服务端生成的
-`undo` descriptor，必须在 `expires_at` 前通过同一动作端点提交，不能做客户端私有回滚。
+- `src/storage/types.ts`；
+- `src/shared/actions.ts`；
+- `src/ui/config.ts`。
 
-数据管理使用 dashboard 当前快照做执行前预览，再按候选行的 `scope_cwd` 分组提交 `bulk_cancel` 或
-`bulk_delete`。服务端重新按日期范围选择真实候选，因此客户端预览不构成写入事实；每个工作区独立事务，
-跨区失败必须逐区报告。聚合载荷为 partial 时禁止“全部已知工作区”，永久删除还必须输入中文确认词，
-客户端才会发送服务端要求的 `PERMANENT_DELETE` 字面量。日期范围两端均包含，字段语义复用
-`shared/todo-range.ts`，不能在组件内另写字符串日期规则。
+客户端所有 mutation 继续通过 `/yolo/actions` 或专用 HTTP endpoint；controller 只能显示服务端 outcome/receipt，不能直接修改 SQLite 语义。
 
-首读未见过的 attention 判断后提交 `seen`；同一证据刷新/重开后显示紧凑形态。suppress 与
-feedback 必须回传服务端给出的 `reason_version` 和 `evidence_fingerprint`。客户端不计算或
-覆盖 score、reason、fingerprint。首页的次级“需要关注”行只呈现主理由和去重后的其余结构化
-evidence；完整 explanation 只保留给主助手判断，避免同一事实在一行内复读。
-同一事项的判断、提醒与今日安排在首页合并为一个事项表面。“知道了”只处理目标 notification，事项
-保持开放；最新提醒正文随合并事项显示，不因去重丢失用户文本。顶部 badge 只表示 `seen_at IS NULL`
-的新投递；打开通知记录只改变已读状态，不改变提醒处理或事项状态。通知记录不复制完成、推迟、讨论和
-“知道了”，绑定提醒只提供“查看事项”。
+## 状态与刷新
 
-## 对话
+- Dashboard 首开加载一次；动作、显式刷新与 notification request 触发重新读取，不恢复 panel 内 30 秒轮询。
+- dashboard sweep 使用稳定业务 signature，纯响应时间变化不触发动效。
+- unseen 更新绑定 server revision，旧 dashboard/旧请求不能覆盖较新 badge。
+- popup click 先标记指定 delivery seen；能解析 reminder todo 时打开该事项，否则打开 notification record。
+- route、foreground、draft、thread 和 request 不因 responsive presentation 改变。
 
-“和助手聊聊”访问该工作区 resident thread；“讨论这项安排”按 `scope_cwd + todo id` 使用独立
-episode 与 thread key。响应式返回只隐藏 episode，显式关闭才结束；模块级 `ChatConversationController` 按 conversation 保存
-optimistic 用户行与 `client_request_id`；side/full 切换或面板重挂载先从宿主 GET 水合，不会重放
-POST。只接受不小于当前 revision 的结果，避免旧 poll 把 completed 回退为 accepted。
-split 使用 `.dock-msgs`、focus 使用 `.p-body` 作为各自真实 scroll owner；首载与 near-bottom 状态下
-的发送/回复自动跟随，用户主动上翻后保留位置，只显示不抢焦点的“有新消息 · 回到最新”。
-`navigation.ts` 用主面最小宽度、340px 上下文宽度与分隔线推导 split 阈值。宽度不足时上下文替换
-主面，足够时只显示“主面 + 一个上下文区”；布局不是持久状态。draft 与 pending 同属 conversation
-controller，形态切换不会因组件重挂载而丢失。
+## 对话与前景
 
-## Mono 设计约束
+panel 任一时刻只有一个 detail/source/conversation foreground。顶层“和助手聊聊”每次显式打开都生成新的 `a-*` ephemeral thread，界面从空历史开始且绝不展示内部 `w-*` resident；事项讨论复用自己的 episode，显式结束后才释放。split/focus 各自有真实 scroll owner，near-bottom 才自动跟随最新消息。
 
-- 中性色加单一 indigo，总色数保持克制；层级主要由排版和间距表达。
-- 使用发丝线结构，不增加过度隐喻装饰。
-- 常规动效不超过 200ms，并尊重 reduced-motion。
-- 340px 窄面板仍提供首页、计划、历史；上下文使用 focus 呈现且隐藏页面 Tab。
-- UI 变更必须按 `docs/testing.md` 执行适用的 W1–W16 真机验证。
+## Mono 设计与响应式
+
+使用中性色与单一 indigo，发丝线层次和不超过 200ms 的动效；不添加装饰性隐喻。340px、窄屏、标准宽和宽屏只改变 presentation，不改变应用状态。reduced-motion 必须保留功能。
 
 ## Bundle 构建契约
 
-dsh 的 client registry 会解析 loader entry 对应包根的 `package.json` 并读取
-`dsh.client: { platform: 'web' }`。以下条件缺一不可：
+浏览器入口仍为 `client/index.ts`，构建为 CJS 后由 `scripts/wrap-client.mjs` 注册到 dsh ModuleLoader，并提供所需 `process` shim。裸 package row、`./client` export、manifest `dsh.client` 与 host patch rows 由 `tests/package-loader-contract.test.ts` 固定。
 
-1. `cordis.patch.yml` 包含裸包名 `dsh-plugin-yolo` entry；仅有 `dist/src/*` 子路径时无法发现
-   包根 manifest。
-2. `dsh.client` 必须是对象，不是字符串。
-3. client 先构建为 CJS，再由 `scripts/wrap-client.mjs` 包进
-   `window.__ModuleLoader__.load({ id, factory })`。
-4. classic script 环境没有 Node 全局，wrapper 必须提供 React CJS 所需的 `process` shim。
-5. factory 最终返回 `{ apply, inject, name: 'yolo-client' }`。
+## 测试
 
-加载与环境故障的集中排查见 [运行与装配](runtime.md)。
+- `tests/panel-controllers.test.ts` 覆盖 dashboard signature、notification routing 和 controller 纯行为。
+- 原 panel/navigation/filter/chat/settings 测试继续覆盖兼容行为。
+- 修改任何 controller、client contract 或 layout 后运行 `pnpm check`、`pnpm test:run`、`pnpm build`、受影响 UI E2E 与 W1–W16；controller 单测不能替代真实 Edge。
+
+## 当前限制
+
+- shell 和 KanbanView 已明显缩小，但仍不是完全按每个产品页面物理拆分；未来拆分必须以 use-case owner 和可验证收益为依据。
+- `panel/v2` 尚未重命名；它不表示有两份服务器 current state。
+- Agent task 页面未实现，客户端没有隐藏的 Agent task controller 或路由。

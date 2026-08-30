@@ -5,7 +5,7 @@
 相关边界如下：
 
 - 自动抽取与合并由 `src/extract/` 负责。
-- SQLite、FTS5、作用域和领域动作由 `src/storage/` 与 `src/shared/actions.ts` 负责。
+- SQLite 与 FTS5 由 `src/storage/` 负责；领域动作由 `src/application/commands/` 负责，`src/shared/actions.ts` 仅为兼容 re-export。
 - 到期扫描、通知投递和常驻线程投递由 `src/reminder/` 负责；通知已读由 `src/ui/` 管理。
 - `src/memory/` 只通过 `ctx.yolo` 使用存储服务，不另建一套记忆状态。
 
@@ -21,7 +21,7 @@ export const inject = ['yolo', 'tools', 'systemPrompt', 'llm', 'settings']
 它完成四件事：
 
 1. 注册五个模型可见工具。
-2. 监听 `session/event`，记录最近一条真实工作会话的用户消息及其工作区。
+2. 监听真实 `session/event`，推进召回去重并异步预热；最近用户消息与工作区读取自 `ctx.yolo.observations`。
 3. 对该消息异步预热语义扩写和候选重排。
 4. 注册两段 system prompt section 和一段动态 context。
 
@@ -31,7 +31,7 @@ YOLO 常驻线程和卡片锚定线程属于助手自己的交互表面。它们
 
 | 文件 | 职责 |
 |---|---|
-| `index.ts` | 插件入口、用户消息与工作区跟踪、语义召回异步预热、依赖接线 |
+| `index.ts` | 插件入口、召回去重、语义召回异步预热、observation 依赖接线 |
 | `tools.ts` | 注册 `memory_*`、`yolo_query`、`yolo_action` 五个模型工具 |
 | `recall.ts` | 三段 prompt/context、确定性注入策略、模板转义、会话内去重、缓存重排结果的应用 |
 | `semantic.ts` | 宿主 LLM 查询扩写与候选重排、进程内缓存、每日预算、连续空结果自动降级 |
@@ -76,21 +76,20 @@ YOLO 常驻线程和卡片锚定线程属于助手自己的交互表面。它们
 
 ## 五、最近用户消息的获取
 
-当前宿主的 `AssembleContext` 不提供 `userMessage`。因此模块监听：
+当前宿主的 `AssembleContext` 不提供 `userMessage`。storage provider 的唯一 `TurnObservationService` 监听宿主事件并维护最近真实工作会话文本/cwd；memory 在 context 装配时只读取：
 
 ```text
-session/event
-  └─ event.type === user/message
-       ├─ 提取文本块
-       ├─ 更新 lastUserText
-       ├─ 更新最近真实工作区 cwd
-       ├─ 推进会话注入去重状态
-       └─ 异步预热语义召回
+ctx.yolo.observations
+  ├─ latestUserText()
+  └─ latestWorkspaceCwd()
+
+memory 自己的 `session/event` listener 只做：
+真实 user/message
+  ├─ 推进 RecallDedupTracker
+  └─ 异步预热语义召回
 ```
 
-assistant 消息、工具事件、空文本和 YOLO 内部线程都会被忽略。动态 context 装配时读取这个缓存，而不是从装配参数中读取用户消息。
-
-这组缓存目前是插件实例级单值，而不是按 session 建立的映射；顺序交互符合现有测试，但多个工作会话并发交错时可能互相覆盖最近消息或工作区，属于已知限制。
+assistant 消息、工具事件、空文本和 YOLO 内部线程都会在 runtime/provider 边界忽略。Observation 按 session 保存 direct-human turn，并有界清理；全局 latest 值只服务当前 prompt fallback，不再由 memory/reminder/UI 各保存一份竞争状态。
 
 ## 六、确定性检索
 
@@ -237,7 +236,7 @@ prompt 装配
 
 - `yolo-instructions` 告诉模型识别以 `⏰ YOLO 提醒` 开头的消息。
 - 用户回复“已完成”“推迟到某日”“再提醒”时，模型使用 `yolo_action`。
-- `yolo_action` 进入与看板 HTTP 动作相同的 `applyYoloAction` 路径，再由存储层完成状态迁移、提醒盖章复位或通知卡处理，并写时间线事件。
+- `yolo_action` 进入与看板 HTTP 动作相同的 `application/commands/applyYoloAction` 路径，再由单 workspace UnitOfWork 完成状态迁移、提醒盖章复位或通知卡处理，并写时间线事件。
 
 当前提醒正文只包含用户可读的标题和到期时间，不携带 todo id 或模型操作指令；模型按标题引用 todo，处理规则只存在于 system section。若后续修改提醒载荷，必须同步核对 `src/reminder/scheduler.ts`、`recall.ts` 的指令和 `tools.ts` 的工具描述。
 
@@ -251,7 +250,7 @@ prompt 装配
 
 ## 十四、已知限制
 
-1. 最近消息、工作区和注入 tracker 都是插件实例级单值，多工作会话并发交错时可能串扰。
+1. 最近消息和工作区已经统一由 `TurnObservationService` 管理；但 `RecallDedupTracker` 仍是 memory 插件实例级状态，多 session 并发时的注入去重尚未完全按 session 隔离。
 2. 扩写与重排缓存没有 TTL 或容量上限，长时间运行时会持续增长。
 3. 重排只改变优先顺序，没有真正过滤 `irrelevant` 候选。
 4. `recall.topK` 与 `recall.maxTokens` 设置尚未接入实际召回。
@@ -266,7 +265,8 @@ prompt 装配
 
 | 测试文件 | 主要覆盖 |
 |---|---|
-| `tests/memory-index.test.ts` | 插件注册、最近用户消息跟踪、YOLO 内部线程跳过、特殊 FTS 字符、二字中文回退、改写召回、session 切换去重 |
+| `tests/memory-index.test.ts` | 插件注册、observation 消费、YOLO 内部线程跳过、特殊 FTS 字符、二字中文回退、改写召回、session 切换去重 |
+| `tests/turn-observation.test.ts` | 并发 session、direct-human capture、late steering、YOLO session 排除与有界清理 |
 | `tests/memory-tools.test.ts` | 五个模型工具的执行、作用域解析、写入/查询/软删除、提醒回复动作 |
 | `tests/memory-recall.test.ts` | 三段 prompt/context、偏好上限、模板转义、动态召回渲染、注入键回报和类别配额 |
 | `tests/recall-policy.test.ts` | `applyRecallPolicy` 的三类丢弃原因、超预算跳过、`RecallDedupTracker` 状态机、混合 FTS 查询 |

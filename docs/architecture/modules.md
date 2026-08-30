@@ -1,32 +1,49 @@
 # 模块架构索引
 
-> 本文件是当前模块文档的唯一索引。新增或修改实现时，请更新对应模块文档；
-> 跨模块流程统一写入 `overview.md`，不另建阶段性架构稿、评审报告或重构 PRD。
+本目录描述当前已实现的稳定架构。本文是模块文档的**唯一索引**；各模块的职责、依赖与事实 owner 只在对应正文维护，不在其他索引重复定义。
 
-## 总览
+## 分层模块化单体
 
-- [整体架构](overview.md)：模块关系、跨模块数据流、设计决策与 dsh 扩展点。
-- [运行与装配](runtime.md)：包入口、插件 bundle、构建脚本、宿主约束与故障排查。
-- [测试体系](../testing.md)：测试分层与真机验证。
+YOLO 是一个随 dsh 装载的本地模块化单体。稳定依赖方向是：
 
-## 模块文档
+```text
+dsh / HTTP / scheduler / React adapters
+                 ↓
+            application
+                 ↓
+              domain
 
-| 代码模块 | 文档 | 核心职责 |
+contracts  ← 跨边界 DTO 与配置形状
+runtime / infrastructure / storage ← application 使用的现有实现与兼容服务
+```
+
+Phase 0–4 已把配置、命令、读取投影、摄取、维护、会话运行态、turn 观察和工作区目录迁到明确 owner；旧 import path 与 `ctx.yolo` 仍作为兼容 façade。当前没有引入微服务，也没有改成 event sourcing。
+
+## 模块正文
+
+| 模块 | 正文 | 当前唯一职责摘要 |
 |---|---|---|
-| `src/shared/` | [共享契约](shared.md) | 跨 host/client 类型、动作入口、筛选、质量与会话工具 |
-| `src/attention/` | [助手判断](attention.md) | 基于可审计事实生成稳定、可反馈的唯一判断 |
-| `src/storage/` | [存储服务](storage.md) | `ctx.yolo`、SQLite、作用域、搜索、快照与领域状态迁移 |
-| `src/extract/` | [语义提取](extract.md) | 对话结束后的 LLM 结构化抽取与状态更新 |
-| `src/memory/` | [记忆与召回](memory.md) | 模型工具、提示词注入、确定性召回与语义增强 |
-| `src/reminder/` | [提醒与简报](reminder.md) | 调度、通知投递、常驻线程投递、简报与快照节奏 |
-| `src/ui/` | [看板服务端](ui.md) | 设置、聚合投影、动作、角标和面板会话 API |
-| `client/` | [浏览器客户端](client.md) | 侧栏入口、助手面板、交互状态与 HTTP 消费端 |
+| 整体装配 | [overview.md](overview.md) | 全景依赖、端到端数据流、事实 owner 与兼容边界 |
+| `domain` | [domain.md](domain.md) | `ScopeRef`、稳定工作区身份与存储无关的领域类型 |
+| `application` | [application.md](application.md) | command、ingestion、read model、maintenance、conversation 用例 owner |
+| `contracts` | [contracts.md](contracts.md) | host/client/application 边界的稳定 DTO 与配置形状 |
+| `runtime` | [runtime.md](runtime.md) | 配置归一化、turn observation、YOLO conversation runtime 与装载契约 |
+| `infrastructure` | [infrastructure.md](infrastructure.md) | durable workspace catalog 与基础设施生命周期 |
+| `storage` | [storage.md](storage.md) | workspace SQLite、single-store UnitOfWork、repository 与 `ctx.yolo` 兼容 façade |
+| `extract` | [extract.md](extract.md) | dsh turn 捕获、LLM 提取与 ingestion use case 调用 |
+| `memory` | [memory.md](memory.md) | 模型工具、召回与 prompt adapter |
+| `reminder` | [reminder.md](reminder.md) | scheduler/brief/delivery adapter；快照调用 application maintenance |
+| `attention` | [attention.md](attention.md) | 可审计的确定性判断纯策略 |
+| `ui` | [ui.md](ui.md) | 设置与 `/yolo/*` 薄 HTTP adapters |
+| `shared` | [shared.md](shared.md) | 迁移期兼容 re-export 与仍被复用的纯规则；禁止新增编排 owner |
+| `client` | [client.md](client.md) | React shell、页面 controller、API 与 Mono 展示层 |
 
-## 维护规则
+## 架构治理
 
-1. 一个顶层代码模块只维护一份架构正文。
-2. 跨模块流程写在 `overview.md`；模块文档只描述自己的职责、边界和公开契约。
-3. 配置 schema 的完整速查只放在 `ui.md`；各模块只解释自己读取的键。
-4. 平台实测、装载和环境问题只放在 `runtime.md`。
-5. 架构文档统一使用中文；代码标识符、协议字段和必要的技术名词保持原样。
-6. 阶段计划、验证快照和交互原型只保留在本地工作记录；稳定结论合并进对应模块文档后再提交。
+- 新的 current-state 写入语义只能由 `application` command/ingestion owner 定义。
+- `domain` 不依赖 dsh、SQLite、HTTP、React 或 application。
+- UI、模型工具、extract、memory、reminder 是 adapters，不直接拥有同一份运行事实。
+- `WorkspaceId` 是 catalog 分配的 opaque 稳定标识；cwd 只在 adapter/compatibility 边界解析。
+- 跨工作区读取允许 partial result；写入 UnitOfWork 永远只覆盖一个 workspace store。
+- `tests/architecture-dependencies.test.ts` 的 allowlist 只能收紧；`tests/package-loader-contract.test.ts` 固定发布和 Cordis 装载契约。
+- 未实现的 dsh Agent task 观察/验收属于后续能力，不得在本文档标记为当前实现。

@@ -2,15 +2,15 @@
 
 ## 职责与边界
 
-该插件在真实工作会话的一轮对话结束后，用一次 LLM 结构化调用识别 commitments、plans 与
-tracking rules，并把新条目和既有条目的状态变化交给存储/统一动作链。它不依赖主 agent
+该插件是 dsh turn adapter：在真实工作会话的一轮对话结束后，用一次 LLM 结构化调用识别 commitments、plans 与
+tracking rules，并把已接受结果交给 `application/ingestion`。它不依赖主 agent
 主动调用写入工具，也不使用逐消息正则快速路径；YOLO resident/anchored 内部会话会被跳过。
 
 ## 文件
 
 | 文件 | 职责 |
 |---|---|
-| `index.ts` | 插件入口、turn 触发、配置读取、节流/配额、合并、质量闸门与失败隔离 |
+| `index.ts` | 插件入口、turn 触发、配置读取、节流/配额、LLM 编排与失败隔离；消费 `ctx.yolo.observations` |
 | `llm-extract.ts` | LLM 调用、内容折叠、JSON 解析和防御式校验 |
 | `prompt.ts` | 抽取提示词与已知记忆摘要 |
 | `todo-resolver.ts` | R1 稳定 ID 候选渲染、shadow 身份裁决与严格结果校验 |
@@ -19,6 +19,7 @@ tracking rules，并把新条目和既有条目的状态变化交给存储/统�
 
 ```text
 agent/pre-step（只捕获本轮实际进入模型的 direct-human 消息 + 工具执行前的 identity candidates）
+  → 唯一 ctx.yolo.observations 按 session + turn 保存捕获
   → agent/turn-stopping 仅排队，不等待辅助模型
   → agent.whenIdle() + durable turn/end completed|max-tokens
   → 跳过 YOLO 内部会话
@@ -30,7 +31,9 @@ agent/pre-step（只捕获本轮实际进入模型的 direct-human 消息 + 工�
   → shouldDropExtracted 质量过滤
   → 只从 captured direct-human 消息生成有界来源摘录与 turn 元数据
   → 生成 session + turn 稳定 operation id 与规范化请求哈希
-  → runIdempotentAction 原子执行：先写 todos/milestones/goals/preferences/events
+  → compatibility cwd 解析为 workspace ScopeRef
+  → runIdempotentScopeAction 建立单 workspace UnitOfWork
+  → application/ingestion/apply-extraction 写 todos/milestones/goals/preferences/events
   → 再应用 updates[] 的状态变化并追加 todo_evidence
   → extraction_log / session summary 审计与 operation 结果同事务提交
   → 从写入前快照召回 todo identity candidates（开放、终态、merged alias、evidence）
@@ -49,7 +52,7 @@ derived-message fallback 仍可作为抽取输入，但不会被当作可引用�
 元数据和 tool/extraction 同轮对齐；宿主只支持打开会话时，界面不得声称能够精确定位到该轮。
 
 每个 durable `(session, turn)` 生成版本化 operation id，并与本轮输入的规范化请求哈希绑定。模型调用在
-崩溃恢复时仍可能重新发生，但存储副作用由 `runIdempotentAction` 原子保护：相同 operation 与请求重放原
+崩溃恢复时仍可能重新发生，但存储副作用由 `runIdempotentScopeAction` 在单 workspace store 内原子保护：相同 operation 与请求重放原
 结果，不重复生成事项、状态事件或 `extraction_log`；同一 id 携带不同输入会报告 conflict。每个被该轮
 创建、复用或更新的事项再以 `(operation id, resolved canonical todo id)` 生成 evidence fingerprint，因此
 一轮可以关联多个事项，同一事项也可以累积多个会话/轮次的 evidence。
@@ -114,9 +117,17 @@ cross_session、same_name_distinct、terminal、step 等层统计 false-link 与
 只保留需要管理的承诺、计划、目标/里程碑、日程事件和跟踪规则。人格、泛知识、随口偏好与
 无后续管理价值的生活细节不属于本模块的长期记忆范围。
 
+## 架构归属
+
+- direct-human turn、最近 cwd 和 turn cadence 的唯一 owner 是 [`runtime/turn-observation.ts`](runtime.md)，extract 不保存第二份 session 状态。
+- accepted extraction 的写入组合与 known context 位于 [`application/ingestion`](application.md)。
+- 领域类型与 extraction DTO 分别来自 [`domain`](domain.md) 与 [`contracts`](contracts.md)。
+- `ctx.yolo` 当前提供 scope bridge、single-store UoW 与 repository compatibility；catalog 不加入 extraction transaction。
+
 ## 相关文档
 
 - [记忆与召回](memory.md)
 - [存储服务](storage.md)
-- [共享质量闸门与动作入口](shared.md)
+- [应用用例](application.md)
+- [运行时观察](runtime.md)
 - [事项身份、去重与会话关联路线](../roadmap-todo-identity.md)

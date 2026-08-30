@@ -28,8 +28,23 @@ node scripts/todo-resolver-eval.mjs evaluate <labeled-samples.jsonl>
 - **内存 SQLite**：schema、存储动作、FTS、审计、提醒查询和跨工作区作用域。
 - **插件接线**：用最小 `ctx` stub 捕获事件、工具、system prompt 和 HTTP 端点注册。
 - **失败隔离**：模型、存储或单个工作区失败时不得拖垮会话或整个聚合看板。
+- **架构契约**：静态 import graph、package/Cordis loader、durable catalog、single-owner observation 和 compatibility façade。
 
 相关测试按模块命名，例如 `storage-*.test.ts`、`memory-*.test.ts`、`reminder-*.test.ts`、`ui-*.test.ts` 和 `shared-*.test.ts`。新增行为应放到最接近其事实源的测试文件；独立状态机可单独建文件。
+
+### 架构与 package contract
+
+Phase 0–4 的结构不是只靠文档约定，以下自动门禁是当前交付契约：
+
+| 测试 | 证明内容 |
+|---|---|
+| `tests/architecture-dependencies.test.ts` | shared 不反向依赖 UI；extract/memory/reminder 不依赖 `ui/session`；client 只从 contracts 获取受控类型；legacy allowlist 为空且只能收紧 |
+| `tests/package-loader-contract.test.ts` | package exports、Cordis patch rows、五插件 default/name/inject/apply、`yolo` 配置默认值、host/client build 与 schema/wrapper 资产 |
+| `tests/workspace-catalog.test.ts` | catalog 重启恢复、幂等注册、损坏隔离、stale/invalid、marker-proven relocate 与 forget 不删数据 |
+| `tests/turn-observation.test.ts` | 并发 session 隔离、late steering、turn 幂等、YOLO session 排除、状态上限与 provider 单 owner 接线 |
+| `tests/storage-actions.test.ts`、`tests/ui-actions.test.ts` | 单 workspace transaction、`ScopeRef` 路由、state/event/evidence/idempotency 一致性与 HTTP compatibility |
+
+静态门禁当前只冻结已迁移的高风险边界，不等于所有 application-to-infrastructure 依赖都已抽象成 ports。新增规则必须先独立表达目标，再决定是否有短期、逐文件、只能收紧的例外；不得自动学习当前 import 作为新基线。
 
 ### API E2E
 
@@ -72,8 +87,12 @@ UI 套件使用 Playwright 驱动真实 Edge，验证看板打开、捕获、筛
   不能只报告总体准确率，也不能把没有 prediction 的 gold 样本计为模型错误。
 - 每个聚合事项显式携带并保留自己的 `scope_cwd`；未知 scope 被拒绝。
 - 工作区身份只取 canonical cwd；同一 cwd 的非 Git/main/feature 状态和 Windows 等价路径不得重复注册或拆库。
-- 常驻对话与事项对话隔离，旧请求或轮询结果不能覆盖新对话。
+- 顶层“和助手聊聊”每次显式打开都是新的 ephemeral thread 且不显示 resident 历史；事项讨论按事项 episode 复用，旧请求或轮询结果不能覆盖新对话。
 - 提醒首次载入只建立基线；新通知去重、非堆叠，并在超时后关闭。
+- WorkspaceId 必须跨 catalog 重启和显式 relocate 保持稳定；cwd/scope key 不能冒充 opaque identity。
+- catalog 与 workspace DB 不组成跨库事务；catalog 损坏或单 workspace 不可用必须可恢复/partial，不能污染其他 workspace。
+- direct-human turn、latest cwd/text 与 snapshot cadence 只由 `ctx.yolo.observations` 更新；各插件不得恢复第二份运行状态。
+- 旧 `shared/actions`、`ui/session`、`ui/config` 等 compatibility path 与新 owner 返回相同行为，且新代码不能增加旧边界依赖。
 
 ## 五、E2E 运行约定
 
@@ -94,7 +113,7 @@ node scripts/e2e.mjs --spec <spec-name>
 1. 选择离事实源最近的层：纯逻辑用单测，端点和持久化用 API E2E，宿主交互和布局用 UI E2E。
 2. 构造最小输入，覆盖正常路径、边界、重复请求和失败恢复。
 3. 使用真实措辞和可精准清理的夹具。
-4. 先运行对应测试，再运行 `pnpm check` 与 `pnpm test:run`。
+4. 跨模块改动先为 owner、scope、事务、read model、失败模式和 compatibility path 写测试，再运行对应测试、`pnpm check` 与 `pnpm test:run`。
 5. 若改动 UI 或 payload，继续运行相关 E2E 和第八节真机走查。
 
 ## 七、覆盖率
@@ -116,7 +135,7 @@ pnpm test:run -- --coverage
 - `src/ui/**`，以及 dashboard、badge、actions 或 session payload；
 - UI 相关版本进入发布前。
 
-仅修改不影响载荷的存储、提取或提醒内部逻辑时，可以由类型检查、单元测试和相关 API E2E 覆盖。
+仅修改不影响载荷的存储、提取或提醒内部逻辑时，可以由类型检查、架构/单元测试和相关 API E2E 覆盖。若修改 catalog、ScopeRef、observation、conversation runtime 或 package loader，即使 UI 不变，也必须使用隔离 `DSH_HOME` 验证真实宿主重启、插件装载和数据恢复。
 
 ### 启动
 
@@ -140,7 +159,7 @@ npx @deepseek-ai/dsh web --no-open --port 4080
 | W7 | 宿主原生响应式 | 340px、`<480px`、标准宽度和双栏阈值两侧核心操作可用，无横向滚动或遮挡；宽度由宿主侧栏右侧可用容器决定；resize 只改变呈现，不改变页面、线程、请求、草稿、滚动或焦点 |
 | W8 | 历史变化与来源 | 时间线只展示用户可理解的变化并排除操作型审计噪声；按事项使用稳定 scope/type/id 聚合，改名不断链、同名不合并、旧事件不猜测；首页、计划、历史和详情中的来源行为一致，manual/tool/legacy 证据明确降级 |
 | W9 | 宿主会话切换与来源往返 | 面板打开时切换普通会话会自动收起；打开来源成功后收起 YOLO，重新打开后恢复原页面、事项和来源预览；导航失败时不先关闭且提供可恢复反馈 |
-| W10 | 助手对话与事项讨论隔离 | 工作区常驻对话、事项 A 和事项 B 的新讨论互不泄漏；返回只隐藏前景，显式结束才释放讨论；慢回复、重挂载和响应式切换不重复 POST 或串写线程 |
+| W10 | 助手对话与事项讨论隔离 | 每次显式打开“和助手聊聊”生成新的空历史 ephemeral thread，绝不读取内部 resident；事项 A/B episode 互不泄漏，返回只隐藏事项前景，显式结束才释放讨论；慢回复、重挂载和响应式切换不重复 POST 或串写线程 |
 | W11 | 首页准入与首要关注 | 首页最多突出一个首要事项；普通积压不为填空进入首页；判断、提醒、关注与今日事项按 `(scope,id)` 去重，高压其余事项保持可达 |
 | W12 | 服务端回执 | 处理后只展示服务端实际返回的变化和作用范围；通知已读不等于提醒已处理，提醒 handled 不等于事项完成，撤销恢复原值 |
 | W13 | 跨工作区与失败隔离 | `single / all / partial / all-fail / recovery` 均符合契约；同 id 跨 scope 不误合并，动作和来源始终使用原 `scope_cwd`；可用内容继续操作且 partial 只提示一次 |

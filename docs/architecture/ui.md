@@ -1,105 +1,54 @@
-# `src/ui/`：设置与看板服务端
+# `src/ui/`：设置与 HTTP adapters
 
 ## 职责与边界
 
-`ui` 是浏览器客户端的 host 半边：注册 Settings 配置，构建 Dashboard v2 与角标投影，处理
-统一动作，并管理面板的 resident/anchored agent 会话。所有显式 cwd 都必须通过存储服务的
-工作区注册表校验，HTTP 调用不能借此打开任意目录。
+`ui` 是浏览器客户端的 host adapter：安装 Settings section、校验请求、解析 compatibility cwd/scope、调用 application use case/read model，并序列化 `/yolo/*` 响应。它不再拥有配置 shape、Dashboard/History 投影、动作语义或 session runtime。
 
-## 文件
+## 文件与 owner
 
-| 文件 | 职责 |
+| 文件 | 当前职责 |
 |---|---|
-| `index.ts` | 配置归一化、设置 section、latest cwd 跟踪和各端点装配 |
-| `config.ts` | schemastery `Config` 接口与默认值 |
-| `dashboard.ts` | 单工作区投影、跨工作区聚合、memory health 和 dashboard 端点 |
-| `badge.ts` | 不构建完整 dashboard 的轻量未读数与新通知预览聚合 |
-| `notifications.ts` | 完整通知记录分页、跨工作区聚合与已读动作 |
-| `actions.ts` | 工作区白名单、scope pin 和 `POST /yolo/actions` |
-| `session.ts` | `YoloSessions`、`YoloChatThreads` 与 messages/send 端点 |
-| `chat-requests.ts` | 宿主生命周期内的对话请求幂等、状态、TTL/cap 与 optimistic 合并 |
-| `workspace-scope.ts` | cwd 规范化和 registry 查找 |
+| `index.ts` | 配置归一化、settings 与 endpoints 装配；从 `ctx.yolo.observations` 读取 current cwd |
+| `actions.ts` | `/yolo/actions` 请求校验、workspace allowlist、`ScopeRef` 解析与 command 调用 |
+| `dashboard.ts` | 薄 HTTP controller；投影 owner 在 `application/read-models/dashboard.ts` |
+| `badge.ts` | 薄 HTTP controller；投影 owner 在 application |
+| `history.ts` | 薄 HTTP controller；投影 owner 在 application |
+| `notifications.ts` | 薄 HTTP controller；投影 owner 在 application |
+| `config.ts` | `runtime/config.ts` compatibility re-export |
+| `session.ts` | `application/conversation` compatibility re-export |
+| `chat-requests.ts` | application chat request compatibility re-export |
+| `workspace-scope.ts` | application scope helper compatibility re-export |
 
-## 配置归一化
+## 请求路由
 
-loader 可能在 bundle 没有 config 段时传入 `undefined`，所以 `apply()` 必须先执行
-`Config(config ?? {})` 再读取 `.enabled` 或嵌套字段。schemastery 默认值不会替代这一步。
+显式 `scope_cwd` 必须命中 durable catalog 的 ready workspace；adapter 把它转换为 `{ kind: 'workspace', workspaceId }` 后再进入 application。未知、stale 或 ambiguous workspace 返回 typed error，不能自行打开任意目录或退回另一个 workspace。
+
+`GET /yolo/dashboard`、history、notifications 和 badge 使用 application projector 聚合 ready workspaces。单 workspace 失败时返回其他结果并显式设置 partial/error；全部失败才返回整体错误。
+
+`POST /yolo/actions` 与模型工具复用 `application/commands/apply-yolo-action.ts`。HTTP 不直接调用 repository 裸 mutation，也不重新实现 idempotency、evidence 或 attention trust binding。
+
+## 对话端点
+
+session messages/send 通过 `application/conversation` 与 `ctx.yolo.conversations` 使用统一 runtime。无 `thread` 的 resident 路径只为提醒等内部兼容投递保留；面板总是传入 thread：顶层“和助手聊聊”每次显式打开生成新的 ephemeral key，事项讨论按事项 episode 复用。请求 registry 仍是宿主生命周期状态而非持久账本；重复 `client_request_id` 返回同一 request，不重复 `followup`。
 
 ## 配置
 
-| 分组 | 键 | 默认值 |
-|---|---|---|
-| 总开关 | `enabled` | `true` |
-| extraction | `enableLLM` / `model` | `true` / `deepseek-chat` |
-| extraction | `minIntervalSec` / `minTurnChars` / `maxRunsPerDay` | `30` / `4` / `300` |
-| reminder | `enabled` / `checkIntervalSec` / `aheadMin` | `true` / `30` / `0` |
-| reminder | `quietHoursEnabled` / `quietStart` / `quietEnd` | `false` / `22:00` / `08:00` |
-| brief | `enabled` / `morningTime` / `eveningTime` / `model` | `true` / `09:00` / `21:00` / `deepseek-chat` |
-| storage | `scope` / `snapshotInterval` | `workspace` / `daily` |
-| recall | `maxTokens` / `topK` | `512` / `5` |
-| semantic | `enabled` / `model` / `expansionsPerQuery` | `true` / `deepseek-chat` / `3` |
-| semantic | `rerankOn` / `maxRerankCandidates` | `true` / `8` |
-| semantic | `dailyBudget` / `minQueryChars` / `degradeAfterEmpty` | `60` / `6` / `5` |
-| ui | `aggregateAcrossWorkspaces` / `focusDefaultCount` | `false` / `0` |
+UI 只渲染和保存 `contracts/config.ts` 定义的 `yolo` 设置。运行时 `Config(config ?? {})`、默认值和 schema owner 已迁到 `runtime/config.ts`。`aggregateAcrossWorkspaces` 保留兼容字段；Dashboard 产品行为仍固定聚合所有已登记工作区。
 
-`aggregateAcrossWorkspaces` 是兼容字段；当前 `GET /yolo/dashboard` 按产品约束始终聚合所有已登记
-工作区，端点不再根据该值退回单工作区。`focusDefaultCount` 仍进入返回载荷。
+## 稳定端点
 
-浏览器端在 `settings.plugin.item` 中绑定 `settingsScope.bind({ namespace: 'yolo' })`。卡片对
-extraction、reminder、brief 与 storage 快照节奏采用暂存后显式保存，宿主按 revision 持久化并
-回读确认；失败必须保留输入并显示错误，不能只在静态说明中承诺配置。扫描 interval 在调度器
-启动时固定，所以卡片明确标注“重启宿主后生效”。
-
-配置 schema 与运行接线并不完全等价：`semantic.*` 会在每条用户消息预热前实时读取；
-`storage.scope` 以及 `recall.maxTokens/topK` 目前尚未接入对应主链路，修改这些值不会改变实际
-存储作用域或动态召回。各模块文档必须如实标注这种差异。
-
-## Dashboard 与角标
-
-`GET /yolo/dashboard` 遍历 `listWorkspaceMeta()`，用 registry 的 scope key 固定每次读取，再经
-`aggregateDashboards()` 合并、全局排序并只保留一个 attention 判断。单工作区损坏会被跳过，
-错误进入 `workspaceErrors` 且 `summary.partial = true`；仅当全部工作区均失败时返回 500。
-
-Dashboard v2 是同一个存储上的聚合读投影，没有 v1/v2 双写。每行携带 `scope_cwd`/`ws`。
-todo 行继续提供首来源 `source` 兼容字段，同时把 `todo_evidence` 投影为稳定排序的 `sources[]`、
-`source_count` 和去重后的 `related_session_count`；跨工作区聚合会为每条来源重标 owner workspace，
-不能只修正 todo 顶层标签。
-`GET /yolo/badge` 只聚合完整的未读投递计数，不为角标构建 dashboard，也不能受 dashboard 有限切片
-影响而少算。`GET /yolo/notifications` 使用稳定打开时间与 opaque cursor 分页聚合完整投递记录；
-`POST /yolo/notifications/seen` 只更新 `seen_at`，不改变 `handled_at` 或事项状态。
-
-`GET /yolo/history` 使用相同的稳定打开时间与 opaque cursor。`view=timeline` 返回跨工作区全局时间流；
-`view=items` 在服务端按稳定主体聚合并在分页前应用状态/关键词筛选；`view=subject` 只接受已登记
-`scope_cwd`，按需读取一个事项的完整变化。内部审计事件不进入该产品端点。
-
-## 动作与会话端点
-
-| 端点 | 作用 |
-|---|---|
-| `GET /yolo/dashboard` | 全工作区 Dashboard v2 |
-| `GET /yolo/badge` | 轻量未读通知角标与新通知预览 |
-| `GET /yolo/notifications` | 跨工作区完整通知记录与分页 |
-| `GET /yolo/history` | 按时间、按事项或单事项读取用户可见的分页历史 |
-| `POST /yolo/notifications/seen` | 标记单条或打开基线之前的通知已读 |
-| `POST /yolo/actions` | 经白名单与 scope pin 后调用 `applyYoloAction` |
-| `GET /yolo/session/messages` | 读取 resident 或 anchored 对话 |
-| `POST /yolo/session/send` | 发送并推进对应 YOLO agent |
-
-对话发送携带 `client_request_id`。宿主按规范化 cwd + thread + client request 建幂等键，每个
-conversation 同时只保留一个 active request；重复 POST 返回同一 `request_id/status`，不会再次
-调用 `followup`。`GET messages` 返回单调 revision 和 accepted/stale/completed/failed 状态，并在
-agent transcript 尚未出现用户行时合并一条 optimistic 行。completed 只由发送前 assistant 基线后的
-新 assistant 行触发；无可靠信号不声称 running/failed。registry 有 TTL/cap，属于宿主生命周期状态，
-不是跨宿主重启的持久化账本。
-
-无 `thread` 时使用每工作区持久的 `yolo-w-*` resident thread；有 `thread` 时使用延迟创建、
-LRU 限额的 `yolo-a-*` anchored 临时线程。两类内部 id 都不会移动 latest workspace。
-显式 `cwd` 必须命中 registry。创建 agent 时传入宿主当前 provider/model 并安装 model selection，
-否则程序化会话可能因缺少 `{{model}}` 而无法回复。
+- `GET /yolo/dashboard`
+- `GET /yolo/badge`
+- `GET /yolo/notifications`
+- `GET /yolo/history`
+- `POST /yolo/notifications/seen`
+- `POST /yolo/actions`
+- `GET /yolo/session/messages`
+- `POST /yolo/session/send`
 
 ## 不变量
 
-1. 未知 `scope_cwd` 返回 `unknown_workspace_scope`，不能解析或注册任意路径。
-2. 看板行的动作固定到 canonical cwd registry 的 scope key；等价路径可路由，未知路径仍拒绝。
-3. Dashboard 局部失败必须显式暴露 partial，不能静默伪装完整。
-4. resident 与事项讨论历史严格隔离；同一事项在显式结束前复用 episode，结束后再次讨论才创建新 thread。
+1. UI adapter 不拥有 current state 或 read-model 写入。
+2. cwd 只作为 compatibility input；application identity 使用 stable WorkspaceId。
+3. `seen_at`、`handled_at` 和事项状态保持分离。
+4. old UI module paths 仅为 compatibility；新代码直接 import application/contracts/runtime owner。

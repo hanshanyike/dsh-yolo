@@ -1,73 +1,35 @@
-# `src/shared/`：共享契约
+# `src/shared/`：纯规则与兼容入口
 
 ## 职责与边界
 
-`shared` 保存宿主插件与浏览器客户端共同使用的类型、领域动作入口和纯函数规则。它不是一层
-完全无依赖的基础库：`actions.ts` 会调用存储服务并使用服务端看板投影，因此修改共享动作契约时
-必须同时检查 `storage`、`ui`、`memory`、`extract` 与 `client`。
+`shared` 是迁移期目录，不再拥有 application 编排或跨边界 DTO 的最终定义。它保留仍被 host/client 共同复用的纯函数，并为旧 import path 提供 compatibility re-export。
 
-## 文件
+## 当前内容
 
-| 文件 | 职责 |
+- 日期、到期、筛选、质量、文本、session 字段解析等纯规则。
+- Dashboard/history/badge/chat 等旧 DTO 定义；稳定消费者通过 `src/contracts/*` 使用它们。
+- `actions.ts` 仅 re-export `application/commands` 与 `contracts/actions`，不再依赖 UI 或存储编排。
+- `dashboard-surfaces.ts` 与 todo identity/range helpers 仍是确定性纯规则，不拥有数据库事实。
+
+## 已移出的 owner
+
+| 旧位置 | 当前 owner |
 |---|---|
-| `constants.ts` | namespace、service 名、UI slot、prompt 顺序和代码默认值 |
-| `dashboard.ts` | Dashboard v2 跨边界载荷、工作区标签、健康度和 todo 判定函数 |
-| `history.ts` | 分页历史的时间线、事项摘要、单事项事件和工作区载荷 |
-| `due.ts` | date-only / datetime 的统一解析、到期、逾期、本地日期和排序事实 |
-| `badge.ts` | 轻量角标载荷 `YoloBadgeData` |
-| `actions.ts` | `YoloActionRequest`、结果/回执/撤销类型与 `applyYoloAction` |
-| `filters.ts` | 看板日期范围、focus 分组、过滤、排序和分区纯函数 |
-| `quality.ts` | `shouldDropExtracted` 写入质量闸门 |
-| `session.ts` | 从 `session.header` 解析 cwd 与 session id |
-| `text.ts` | 内容块转文本、标题归一化、本地日期和日边界工具 |
-| `todo-identity.ts` | 抽取 turn、工具 call、事项 evidence 的版本化指纹与规范化请求哈希 |
-| `todo-range.ts` | 截止/创建日期范围校验、候选选择和取消/删除资格规则 |
+| `shared/actions.ts` 动作编排 | `application/commands/apply-yolo-action.ts` |
+| action request/outcome types | `contracts/actions.ts` |
+| storage domain types | `domain/types.ts` |
+| dashboard/history HTTP projector | `application/read-models/*` |
 
-## 关键契约
+## 架构约束
 
-`dashboard.ts` 是 host 与 client 的载荷事实源。`YoloDashboardData` 包含 todos、goals、
-milestones、events、preferences、ledger、notifications，以及 v2 的 attention、summary、
-capabilities、workspaces、workspaceErrors 和 memory health。聚合行携带 `scope_cwd`/`ws`，
-供服务端把动作安全地路由回原工作区；todo 行保留单个 `source` 兼容字段，并可携带不可变
-`sources[]`、`source_count` 和 `related_session_count`。
+- 禁止新增依赖 UI、HTTP、SQLite 或 dsh runtime 的 shared module。
+- 禁止把“多个 adapter 都想调用”作为把 use case 放入 shared 的理由；use case 属于 application。
+- client 应依赖 contracts，而不是 `shared/actions.ts`、storage types 或 UI config。
+- `tests/architecture-dependencies.test.ts` 强制 `shared -> ui` 为零，legacy allowlist 当前为空。
 
-`history.ts` 是独立 `/yolo/history` 端点的跨边界事实源。时间线只返回用户可理解的事件白名单；
-事项投影以 `scope_cwd + subject type + subject id` 作为身份并按最后变化排序，终态是筛选条件而非另一份数据。
+## 纯规则不变量
 
-`applyYoloAction(yolo, cwd, request)` 是统一动作入口，供模型工具、HTTP 端点和提取 updates
-复用。它负责参数校验、状态分发、拒绝审计、幂等、学习回执与短时撤销描述；失败返回带
-`code` 和 `httpStatus` 的结果，不把领域校验异常抛给调用者。
-
-支持的动作覆盖：
-
-- todo：`complete`、`start`、`cancel`、`postpone`、`remind_again`、`reopen`、`update`、
-  `quick_add`、`consolidate`、单条 `delete`、范围 `bulk_cancel` / `bulk_delete`；
-- goal/milestone：进度、状态、改名和放弃；
-- notification：处理和作者通知；
-- attention：`seen`、`suppress`、`feedback`。
-
-非空 `client_action_id` 最长 128 字符。同一 key 与同一规范化请求会重放原结果；同一 key
-配不同请求返回 `idempotency_conflict`。Attention 反馈必须携带当前
-`reason_version + evidence_fingerprint`，旧证据返回 `stale_attention`。
-永久删除必须携带 `confirmation=PERMANENT_DELETE`；该字段不暴露给模型工具。范围动作使用本地
-`YYYY-MM-DD` 的闭区间，按截止日期时通过统一 `due_at` 解析得到本地日，不能直接比较混合格式文本。
-
-## 规则与不变量
-
-- `sessionCwd()` 读取 `session.header.cwd`，不要恢复不存在的 `session.meta.cwd`。
-- 日期逻辑使用 `localDateStr()` / `dayBounds()`，不能用 UTC 日期切片代替本地日历日。
-- `due_at` 只通过 `due.ts` 解释：date-only 表示本地当日结束，带时区 datetime 按绝对时刻，
-  无时区 datetime 按本地精确时刻；看板、判断、筛选、摘要与提醒不得再自行切字符串比较。
-- `filters.ts` 定义的是产品语义，客户端只消费结果；修改时必须同步单测。
-- `shouldDropExtracted` 会拒绝确认词、裸元命令、空/单字标题和空偏好值，避免错误记忆触发错误提醒。
-- `todo-identity.ts` 的 operation id 只回答“哪一次宿主操作”，request hash 用来发现同 id 不同载荷，
-  evidence fingerprint 再绑定解析后的 canonical todo；三者不能用时间窗或普通 payload hash 相互替代。
-- `DEFAULTS` 当前包含 extraction、reminder、brief、recall、semantic 和 ui 默认值；完整用户配置
-  以 [看板服务端的配置](ui.md#配置) 为准。
-
-## 相关文档
-
-- [整体数据流](overview.md)
-- [存储领域动作](storage.md)
-- [助手判断绑定](attention.md)
-- [看板服务端](ui.md)
+- `due_at` 统一通过 due helpers 解释，不能对混合 date/datetime 文本直接排序。
+- 本地日历日使用 `localDateStr`/`dayBounds`，不能用 UTC 字符串切片代替。
+- operation id、request hash 与 evidence fingerprint 是不同层次，不能互相替代。
+- compatibility re-export 不能发展成第二个 owner；移除前必须先迁完消费者并通过 package/host 门禁。

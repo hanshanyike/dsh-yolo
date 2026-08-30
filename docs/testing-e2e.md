@@ -46,7 +46,7 @@
 | `ui/source-navigation.spec.ts` | 首页、计划、历史和详情使用同一来源行为；预览、失败不关闭、成功打开宿主会话、重开恢复；旧数据降级 | W8 / W9 / SRC-01～04 |
 | `ui/foreground-exclusion.spec.ts` | 助手对话、事项讨论、详情、来源预览互斥；返回、Esc、焦点和单/双栏语义一致 | W5 / SM-01～03 / A11Y-01 |
 | `ui/context-responsive.spec.ts` | 可用容器宽度 340、479 和阈值两侧；宿主侧栏展开/收起；resize 保留 thread/draft/pending/scroll/focus，至多一个上下文区 | W7 / RSP-01～02 |
-| `ui/panel-v032.spec.ts` · `ui/chat-request-lifecycle.spec.ts` | resident、事项 A、事项 B 隔离；响应式隐藏继续 episode，显式结束后新建 episode；慢回复不串写 | W10 / CHAT-01～02 |
+| `ui/panel-v032.spec.ts` · `ui/chat-request-lifecycle.spec.ts` | 顶层 fresh ephemeral、事项 A、事项 B 隔离；响应式隐藏继续事项 episode，显式结束后新建 episode；慢回复不串写 | W10 / CHAT-01～02 |
 | `ui/chat-scroll.spec.ts` | 单栏和双栏上下文各自真实 scroll owner；首载、发送、回复贴底，上翻后只提示新消息 | W5 / W7 / W10 |
 | `ui/chat-request-lifecycle.spec.ts` | 单/双栏、Esc 和 panel 重挂载保持 accepted/stale；POST 恰好一次，旧轮询不覆盖当前前景 | W5 / W7 / W10 / CHAT-02 |
 | `ui/dashboard-trust.spec.ts` | 服务端回执、撤销、partial scope、reason/evidence/source 与 payload 一致，首页不重复 | W11～W16 |
@@ -128,7 +128,7 @@ TI-13 的已知缺口写成保守策略已经生效。
 | HIST-02 | unit + ui | 跨工作区按全局时间排序；完成/取消分区且各自可 reopen；reopen 后退出终态集合；merged 副本不进入“已取消”或普通 reopen，partial 明示 |
 | HIST-03 | unit + api + ui | 独立 `/yolo/history` 按打开时刻稳定分页；时间线跨工作区全局排序，用户可见白名单排除内部审计，结构化前后值与 SQLite 一致 |
 | HIST-04 | unit + api + ui | 按事项使用 `(scope,type,id)` 聚合；改名前后保持一项，同名不同 id 不合并；状态筛选在分页前生效，展开按需读取单事项历史，旧未关联事件只留在时间线 |
-| CHAT-01 | unit + ui + host | resident、事项 A、事项 B 三类历史隔离；响应式返回/隐藏后再次打开 A 继续同一 episode；显式结束清除它，之后再次讨论 A 创建新 episode；A/B/resident 不串写 |
+| CHAT-01 | unit + ui + host | 顶层“和助手聊聊”每次显式打开生成新的空历史 ephemeral thread 且不读取 resident；事项 A/B 历史隔离；响应式返回/隐藏后再次打开 A 继续同一 episode，显式结束后再讨论 A 创建新 episode |
 | CHAT-02 | unit + ui | 慢回复和旧轮询不得写入当前 B；单/双栏切换、panel unmount/remount 后 POST 恰好一次，pending/draft/scroll 连续 |
 
 #### 数据库迁移
@@ -153,7 +153,7 @@ TI-13 的已知缺口写成保守策略已经生效。
 W1 控制台零报错 · W4 中文 IME 组合态 · 宿主侧栏展开/收起后的真实可用宽度 · 125%/150% DPI ·
 reduced-motion 观感 · 原会话实际身份与来源摘录人工核对。
 
-### 真实宿主重构回归（RH-01～RH-05）
+### 真实宿主重构回归（RH-01～RH-06）
 
 所有场景使用隔离 `DSH_HOME`、工作区和数据库；正文必须是真实用户语言。每次结束后检查
 `PRAGMA integrity_check=ok`、`[E2E]` 残留为零、浏览器控制台无未解释 error。
@@ -162,9 +162,10 @@ reduced-motion 观感 · 原会话实际身份与来源摘录人工核对。
 |---|---|---|
 | RH-01 | 在普通工作会话说“明天下午三点提醒我把客户访谈纪要发给产品组” | 真实回复、唯一事项、正确 datetime、SQLite、`extraction_log`、provider/model、来源摘录/会话/工作区；打开原会话后收起，重开恢复来源预览；普通会话零提醒注入 |
 | RH-02 | 在另一普通会话说“把客户访谈纪要改到后天下午四点发” | 仍为一条事项、日期更新、旧时间不提醒、历史显示改期而非“进展”；来源规则与规格一致，不静默覆盖得无法解释 |
-| RH-03 | “和助手聊聊”发送“帮我梳理今天最需要处理的事情”；事项讨论发送“我需要先确认收件人名单，怎么安排更稳妥？” | 两处真实回复；resident 与事项讨论隔离；关闭重开和单/双栏切换不丢 pending/draft、不重复 POST；YOLO 自有对话不被抽取成重复事项 |
+| RH-03 | 连续两次显式打开“和助手聊聊”并分别发送问题；事项讨论发送“我需要先确认收件人名单，怎么安排更稳妥？” | 两次顶层聊天均从空历史开始并获得真实回复，不显示内部 resident；事项 episode 在隐藏/响应式切换后复用且与顶层线程隔离；不丢 pending/draft、不重复 POST；YOLO 自有对话不被抽取成重复事项 |
 | RH-04 | 普通会话说“一分钟后提醒我起身活动一下”并保持前台 | 到时恰好一张 notification；普通会话零注入/零切换；popup、badge、首页一致；“知道了”只 handled 提醒，SQLite 与审计一致 |
 | RH-05 | 真实 Edge 依次走 340px、`<480px`、标准宽和宽屏，再展开/收起宿主侧栏 | 单栏/双栏正确、至多一个上下文区、无横滚/遮挡；resize 保留页面/事项/thread/draft/scroll/focus；深浅主题、DPI、reduced-motion、Tab/Shift+Tab/Esc 可用 |
+| RH-06 | 使用隔离 `DSH_HOME` 创建两个工作区事项，完整停止并重启同一标准 dsh profile，再分别读取、操作并制造一个 workspace 暂时不可用 | `control.db` 恢复相同 opaque WorkspaceId 与 scope owner；可用 workspace 仍返回/可写，失效 workspace 显式 partial；普通 session 的最近 cwd、提取和快照 cadence 不受 YOLO 自有线程污染；无第二份 workspace 或重复事项 |
 
 ### 覆盖充分门槛
 
@@ -375,8 +376,9 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 
 | 改动 | 必须 |
 |---|---|
-| `src/storage/**`, `src/shared/**`, `src/memory/**`, `src/extract/**`, `src/reminder/**` | 相关单元测试 + `--suite api` |
+| `src/domain/**`, `src/application/**`, `src/contracts/**`, `src/runtime/**`, `src/infrastructure/**`, `src/storage/**`, `src/shared/**`, `src/memory/**`, `src/extract/**`, `src/reminder/**` | 架构/package contract + 相关单元测试 + `--suite api` |
 | `client/**`, `src/ui/**`, dashboard/actions payload 形状 | 单元测试 + `--suite ui` + 本文第八节对应组人工走查 |
+| catalog、`ScopeRef`、observation、conversation runtime 或 package/patch/build | 隔离真实宿主 RH-01/RH-03/RH-06 中受影响项；package 改动还需标准 profile 重新链接/装载 |
 | `playwright.config.ts`, `tests/e2e/**`, `scripts/e2e.mjs` | 全套 E2E 自证 |
 | 版本发布（UI 相关） | 全量 E2E + 真机走查 |
 
@@ -447,7 +449,7 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 ### 8.7 对话、详情、来源与宿主会话
 
 - [ ] 👤 **W9 会话切换让位**：YOLO 打开时点宿主侧栏其它会话 → 会话切前台、YOLO 自动收起
-- [ ] 🤖 **W10 三类历史隔离**：工作区常驻对话、事项 A 新讨论、事项 B 新讨论互不泄漏，真实模型回复进入正确线程
+- [ ] 🤖 **W10 三类历史隔离**：连续两次顶层“和助手聊聊”各自是新的空历史 ephemeral；事项 A 新讨论、事项 B 新讨论互不泄漏，且都不展示内部 resident 历史，真实模型回复进入正确线程
 - [ ] 👤 **W10 Episode 生命周期**：响应式返回或隐藏后再次打开 A 继续同一 episode；显式“结束讨论”清除它；之后再次讨论 A 创建新 episode
 - [ ] 🤖 **W5 单一前景**：事项详情、来源预览、事项讨论和助手对话任一时刻只存在一个；从来源进入讨论是替换，不叠出第三层
 - [ ] 👤 **W5 单/双栏一致**：标准宽单栏替换、足够宽时主面 + 一个上下文区；resize 只改变呈现，thread/pending/draft/scroll/focus 不丢
@@ -466,6 +468,8 @@ YOLO_E2E_REPORT=.tmp-e2e/report.json node scripts/e2e.mjs
 - [ ] 👤 **多区同板**：多工作区行聚合展示，`ws` 标签正确
 - [ ] 🤖 **跨区可操作**：直接完成/推迟其它工作区的行（`scope_cwd` 路由）
 - [ ] 👤 **工作区统一（A3）**：同一 cwd 在非 Git、main 和 feature 状态下共享待办，且不会重复成多个工作区
+- [ ] 👤 **Catalog 重启恢复（RH-06）**：完全停止并重启隔离宿主后两个 workspace 仍以原 WorkspaceId/owner 聚合；一个 store 暂不可用时只产生显式 partial，恢复后不重复注册或拆库
+- [ ] 👤 **Observation 单 owner（RH-06）**：交错两个普通 session、内部 resident 投递、顶层 ephemeral 和事项 episode，最近 cwd、direct-human 抽取和每十 turn 快照只由普通 session 推进且不串区
 
 ### 8.10 视觉与动效（VA，亮/暗各一轮）
 

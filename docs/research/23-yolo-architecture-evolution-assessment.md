@@ -2,10 +2,29 @@
 
 > 日期：2026-08-30
 > 范围：当前 dsh-yolo 全部宿主模块、存储、记忆、提醒、判断、HTTP、对话与浏览器客户端
-> 性质：Phase 0–5 一次性交付的实施规格；目标态尚未全部实现，完成后必须回写稳定架构事实源
+> 性质：Phase 0–5 的评估、实施规格与迁移结果记录；当前事实仍以 `docs/architecture/` 为准
 > 核心问题：继续局部修补，还是在新增 Agent 任务与记忆治理前进行结构性重构？
 
-本规格吸收独立评审提出的六项硬条件：完整事实 owner、严格 `ScopeRef`、durable catalog 生命周期、single-store UnitOfWork、宿主/打包兼容门禁，以及“一次交付但逐阶段提交”。只有这些条件进入自动测试并在最终真实宿主验证后，Phase 0–5 才能视为完成。
+本规格吸收独立评审提出的六项硬条件：完整事实 owner、严格 `ScopeRef`、durable catalog 生命周期、single-store UnitOfWork、宿主/打包兼容门禁，以及“一次交付但逐阶段提交”。这些条件已经进入 Phase 0–5 实现与自动门禁；最终交付仍需以本次集成的全量测试、真实宿主证据、`develop` 合入和远端核对为准。
+
+## 实施结果（2026-08-30）
+
+Phase 0–5 已在架构迁移分支按可回退提交落地；本节记录代码结构，不把后续 Agent task 或下一代记忆能力算作本次实现。
+
+| 阶段 | 提交 | 已实现结果 |
+|---|---|---|
+| Phase 0 | `60fa918` | dependency fitness、package/Cordis loader contract 与本实施规格；legacy dependency allowlist 可收紧 |
+| Phase 1 | `8a4de08` | 配置 shape/default owner 迁到 `contracts/runtime`，旧 UI config path 兼容 |
+| Phase 2 | `559a53a` | `ScopeRef` 骨架、application command/dashboard owner、single-workspace action transaction 与旧 actions/dashboard façade |
+| Phase 3 | `96f6f3a` | badge/history/notifications projector 迁到 application read-models，UI 缩为 HTTP adapters |
+| Phase 4 | `5063fd5` | domain types、ingestion/maintenance/conversation owner、durable workspace catalog、single `TurnObservationService`、conversation runtime 与 scope 接线 |
+| Phase 5 | `f4fef26` | Dashboard/detail/notification/Kanban action controllers；client DTO 统一走 contracts，shell/board 控制职责缩小 |
+
+实现保持五插件/package/HTTP/SQLite/客户端 IA 兼容，没有引入 event sourcing 或跨库事务。`ctx.yolo`、`shared/actions`、`storage/types`、`ui/config/session/chat-requests/workspace-scope` 和 UI projector paths 仍按明确 deprecation/compatibility 语义存在。application 目前仍通过 concrete `Yolo` service 访问 repository，`storage/repository.ts` 也尚未按 aggregate 物理拆分；这是后续只能继续收紧的迁移债务，不应被描述为已经完成最终 ports 纯化。
+
+会话语义也已固定：`yolo-w-*` resident 只供提醒等内部投递；顶层“和助手聊聊”每次显式打开生成新的 `yolo-a-*` ephemeral thread，不展示 resident 历史；事项讨论按事项 episode 复用其 ephemeral thread。
+
+durable catalog 当前只持久化 workspace discovery 与 opaque WorkspaceId。user-level tracking rule、dsh Agent task projection/acceptance、recall application receipt 和 memory utility 均尚未实现。
 
 ## 一、结论
 
@@ -293,7 +312,7 @@ YOLO 不需要微服务或通用框架。目标是一个本地、分层的 modul
 | user-level tracking rule | UserLocalCatalog + TrackingRule repository | 不复制到各 workspace DB |
 | dsh Agent task projection / acceptance | AgentWork application + catalog repository | dsh Job/Session 是外部事实，YOLO 只保存观察和管理投影 |
 | `latest cwd`、session source、turn sequence | TurnObservationService | 每个 session 一份记录；extract/memory/reminder/ui 只订阅快照 |
-| resident / item conversation identity | ConversationService | dsh adapter 管生命周期；业务模块只持有 typed reference |
+| 内部 resident / 顶层 ephemeral / item episode identity | ConversationService | dsh adapter 管生命周期；业务模块只持有 typed reference |
 | scheduler tick / clock | Scheduler adapter | 只发出时间信号，不拥有 reminder 或 snapshot 状态 |
 | dashboard/history/notification/badge projection | Application read-model services | 无写入权，不落为第二份 current state |
 | client route/request/optimistic state | 对应 page controller | 页面卸载时清理；不得推导或覆盖服务端领域事实 |
@@ -346,7 +365,7 @@ flowchart TB
     PRO[Proactivity<br/>attention · reminder · brief · delivery]
     READ[Read models<br/>dashboard · history · notifications]
     AWORK[Agent work<br/>observe dsh task · result acceptance]
-    CONV[Assistant conversation<br/>resident / item episodes]
+    CONV[Assistant conversation<br/>internal resident · fresh ephemeral · item episodes]
   end
 
   subgraph DOMAIN[Domain kernel]
@@ -639,29 +658,30 @@ Phase 0–5 可在同一次授权交付中连续完成，但不是一个不可�
 
 ### 12.3 Stable architecture documents
 
-本报告只用于评估与讨论。目标边界确认并实现后：
+迁移后的当前事实已回写 `docs/architecture/`：
 
-- 当前事实回写 `docs/architecture/overview.md`；
-- 每个顶层模块继续只维护一个正文；
-- `modules.md` 继续是唯一索引；
-- 阶段计划和迁移日志不作为远端长期架构事实源；
-- VISION、current architecture、tests、CHANGELOG 各自保持边界。
+- `overview.md` 描述当前全景、事实 owner、ScopeRef/catalog/UoW/runtime 与 compatibility 边界；
+- 每个顶层模块只维护一个正文；
+- `modules.md` 是唯一索引；
+- 本报告保留决策与阶段映射，不替代稳定架构事实源；
+- VISION、current architecture、tests、CHANGELOG 继续保持各自边界。
 
 ## 十三、立即决策建议
 
-### 现在继续做
+### 本次迁移后的下一步
 
 - 另一个会话正在进行的独立 bug/UI 生命周期修复；
 - 数据丢失、安全、幂等、类型和真实宿主回归；
-- 本评估的讨论、修订与目标边界确认；
-- Phase 0 特征化与依赖测试。
+- 继续收紧 application 到 repository ports 的依赖和 compatibility façade 消费者；
+- 对 catalog/ScopeRef/observation/controller 变更执行隔离真实宿主、API、Edge 与适用 W1–W16 验证；
+- 新能力进入前继续执行事实 owner、scope、事务、read model 与失败模式检查。
 
 ### 现在暂停
 
 - 直接实现报告 21 的 dsh Agent task；
 - 直接实现报告 22 的 tracking candidate、recall receipt、utility；
 - 新增跨工作区或 user-global 行为；
-- 继续扩大 `shared/actions`、`storage/index`、`ui/dashboard`、`YoloPanel`、`KanbanView`。
+- 绕过已建立 owner，重新扩大 `shared/actions`、`storage/index`、`ui/dashboard`、`YoloPanel`、`KanbanView`。
 
 ## 十四、最终判断
 

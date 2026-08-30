@@ -36,10 +36,10 @@
 
 ## 依赖关系
 
-- 输入类型来自 `src/shared/dashboard.ts`。
+- 输入类型经 `src/contracts/dashboard.ts` 暴露；部分纯展示类型仍由 shared compatibility 提供。
 - 反馈记录由 [存储服务](storage.md) 持久化。
-- 全局聚合和唯一候选发布由 [看板服务端](ui.md) 完成。
-- seen/suppress/feedback 的校验入口见 [共享动作契约](shared.md)。
+- 全局聚合和唯一候选发布由 [`application/read-models`](application.md) 完成，UI 只序列化响应。
+- seen/suppress/feedback 的校验入口位于 `application/commands`，旧 shared path 仅兼容转发。
 
 ## 不变量
 
