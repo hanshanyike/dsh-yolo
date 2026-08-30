@@ -221,9 +221,9 @@ CREATE TABLE IF NOT EXISTS extraction_log (
 );
 CREATE INDEX IF NOT EXISTS idx_extlog_session ON extraction_log(session_id);
 
--- R1 shadow resolver observations. These rows are deliberately append-only
--- and have no domain-action columns: a shadow decision must never mutate a
--- todo until a later rollout explicitly promotes a safe decision class.
+-- Resolver observations and the deterministic application-policy receipt.
+-- Model output remains evidence only; application_json records whether the
+-- separately-versioned R2 policy authorized or blocked a domain write.
 CREATE TABLE IF NOT EXISTS todo_resolution_log (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   scope_key         TEXT NOT NULL,
@@ -239,6 +239,7 @@ CREATE TABLE IF NOT EXISTS todo_resolution_log (
   error             TEXT,
   candidates_json   TEXT NOT NULL,
   resolutions_json  TEXT NOT NULL,
+  application_json  TEXT,
   token_in          INTEGER,
   token_out         INTEGER,
   duration_ms       INTEGER,

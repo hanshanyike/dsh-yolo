@@ -85,6 +85,10 @@ UI 套件使用 Playwright 驱动真实 Edge，验证看板打开、捕获、筛
   shadow 裁决只能写 `todo_resolution_log`，resolver 错误不能改变或阻断原抽取。
 - shadow 人工样本按改写、指代、省略、跨会话、同名异项、终态和步骤分层；统计 false-link 与 missed-link，
   不能只报告总体准确率，也不能把没有 prediction 的 gold 样本计为模型错误。
+- 长期 gold corpus 必须保持候选 shape、decision/target 基数和风险标签自检；人工构造但没有当前模型
+  prediction 的样本只能验证 schema 与策略边界，不能授权打开 `todoIdentityR2Enabled`。
+- R2a 开启路径只允许唯一开放候选的高置信 LINK 或明确 due_at UPDATE；状态、priority/title/detail、终态、
+  occurrence、step、多候选与多 mention 均应有 blocked 回归，application receipt 必须与 SQLite 实际结果一致。
 - 每个聚合事项显式携带并保留自己的 `scope_cwd`；未知 scope 被拒绝。
 - 工作区身份只取 canonical cwd；同一 cwd 的非 Git/main/feature 状态和 Windows 等价路径不得重复注册或拆库。
 - 顶层“和助手聊聊”每次显式打开都是新的 ephemeral thread 且不显示 resident 历史；事项讨论按事项 episode 复用，旧请求或轮询结果不能覆盖新对话。

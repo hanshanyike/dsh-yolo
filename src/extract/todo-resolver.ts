@@ -1,5 +1,5 @@
 import { BlockAssembler, type FinishReason, type LlmRuntime, type Message, type TokenUsage } from '@deepseek-ai/dsh-llm'
-import type { TodoIdentityCandidate, TodoResolutionDecision } from '../domain/types.ts'
+import type { TodoIdentityCandidate, TodoResolutionDecision, TodoResolutionPrediction } from '../domain/types.ts'
 import { contentBlocksToText, localDateStr } from '../shared/text.ts'
 
 export const TODO_RESOLVER_VERSION = 'shadow-v1'
@@ -8,13 +8,7 @@ const DECISIONS: readonly TodoResolutionDecision[] = [
   'LINK', 'UPDATE', 'REOPEN', 'NEW_OCCURRENCE', 'CREATE', 'ATTACH_STEP', 'ASK', 'NOOP',
 ]
 
-export interface ShadowTodoResolution {
-  decision: TodoResolutionDecision
-  candidate_ids: string[]
-  proposed_title?: string | null
-  confidence?: number | null
-  reason?: string | null
-}
+export type ShadowTodoResolution = TodoResolutionPrediction
 
 export interface TodoResolverObservation {
   rawText: string

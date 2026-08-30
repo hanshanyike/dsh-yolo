@@ -17,6 +17,7 @@ export const Config: z<Config> = z.object({
     minIntervalSec: z.number().default(30).min(10),
     minTurnChars: z.number().default(4).min(0),
     maxRunsPerDay: z.number().default(300).min(1),
+    todoIdentityR2Enabled: z.boolean().default(false),
   }),
   reminder: z.object({
     enabled: z.boolean().default(true),

@@ -4,6 +4,7 @@ import type { ExtractedUpdate, ExtractionResult } from '../../contracts/extracti
 import { shouldDropExtracted } from '../../shared/quality.ts'
 import { todoEvidenceFingerprint } from '../../shared/todo-identity.ts'
 import { buildKnownContext } from './known-context.ts'
+import type { TodoIdentityApplicationPlan } from './todo-identity-policy.ts'
 
 export interface ExtractionSource {
   sessionId: string
@@ -20,9 +21,10 @@ function toPriority(value: string | null | undefined): Priority | null {
   return PRIORITIES.includes(value as Priority) ? (value as Priority) : null
 }
 
-function applyUpdates(yolo: Yolo, cwd: string, updates: readonly ExtractedUpdate[], source: ExtractionSource): void {
+function applyUpdates(yolo: Yolo, cwd: string, updates: readonly ExtractedUpdate[], source: ExtractionSource, includeTodos = true): void {
   for (const update of updates) {
     if (update.kind === 'todo') {
+      if (!includeTodos) continue
       const args = { session_id: source.sessionId }
       let todo = null
       if (update.status === 'done') todo = yolo.applyTodoAction(cwd, { title: update.match_title }, 'complete', args)
@@ -48,9 +50,71 @@ function applyUpdates(yolo: Yolo, cwd: string, updates: readonly ExtractedUpdate
   }
 }
 
+export interface TodoIdentityApplicationOutcome {
+  plan: TodoIdentityApplicationPlan
+  status: 'fallback' | 'blocked' | 'linked' | 'updated' | 'no_change'
+  todo_id?: string
+  evidence_created?: boolean
+  reason?: string
+}
+
+function applyAuthorizedTodoIdentity(
+  yolo: Yolo,
+  cwd: string,
+  result: ExtractionResult,
+  source: ExtractionSource,
+  identity: TodoIdentityApplicationPlan,
+): TodoIdentityApplicationOutcome {
+  const todoId = identity.candidate_id
+  if (!todoId) return { plan: identity, status: 'blocked', reason: 'authorized_plan_missing_candidate' }
+  const before = yolo.findTodo(cwd, { id: todoId })
+  if (!before || before.record_status === 'merged' || (before.status !== 'pending' && before.status !== 'in_progress')) {
+    return { plan: identity, status: 'blocked', todo_id: todoId, reason: 'candidate_changed_before_commit' }
+  }
+
+  let after = before
+  let changed = false
+  let relation: 'mention' | 'update' = 'mention'
+  if (identity.decision === 'UPDATE') {
+    const update = result.updates.find((row) => row.kind === 'todo')
+    const extracted = result.todos[0]
+    const dueAt = update?.due_at ?? extracted?.due_at
+    if (dueAt) {
+      after = yolo.applyTodoAction(cwd, { id: todoId }, 'postpone', {
+        due_at: dueAt,
+        session_id: source.sessionId,
+      }) ?? before
+      relation = 'update'
+    }
+    changed = after.due_at !== before.due_at
+  }
+
+  const evidence = yolo.addTodoEvidence(cwd, todoId, {
+    session_id: source.sessionId,
+    turn_seq: source.turn,
+    source_kind: source.excerpt ? 'human' : 'extraction',
+    relation,
+    excerpt: source.excerpt,
+    occurred_at: source.occurredAt,
+    source_fingerprint: todoEvidenceFingerprint(source.operationId, todoId),
+  })
+  return {
+    plan: identity,
+    status: identity.decision === 'LINK' ? 'linked' : changed ? 'updated' : 'no_change',
+    todo_id: todoId,
+    evidence_created: evidence.created,
+  }
+}
+
 /** Persist one accepted extraction result. The caller owns the surrounding
  * workspace UnitOfWork so state, provenance, log and receipt commit together. */
-export function applyExtractionResult(yolo: Yolo, cwd: string, result: ExtractionResult, source: ExtractionSource): void {
+export function applyExtractionResult(
+  yolo: Yolo,
+  cwd: string,
+  result: ExtractionResult,
+  source: ExtractionSource,
+  todoIdentity?: TodoIdentityApplicationPlan,
+): TodoIdentityApplicationOutcome | undefined {
   for (const milestone of result.milestones) {
     if (!shouldDropExtracted('milestone', milestone.title)) {
       yolo.addMilestone(cwd, {
@@ -62,7 +126,14 @@ export function applyExtractionResult(yolo: Yolo, cwd: string, result: Extractio
     }
   }
   const milestoneId = (title: string | null | undefined): string | null => title ? yolo.findMilestoneId(cwd, title) : null
-  for (const item of result.todos) {
+  let identityOutcome: TodoIdentityApplicationOutcome | undefined
+  const identityControlsTodos = todoIdentity?.mode === 'authorized' || todoIdentity?.mode === 'blocked'
+  if (todoIdentity?.mode === 'authorized') {
+    identityOutcome = applyAuthorizedTodoIdentity(yolo, cwd, result, source, todoIdentity)
+  } else if (todoIdentity?.mode === 'blocked') {
+    identityOutcome = { plan: todoIdentity, status: 'blocked', reason: todoIdentity.reason }
+  }
+  for (const item of identityControlsTodos ? [] : result.todos) {
     if (shouldDropExtracted('todo', item.title)) continue
     const { todo, created } = yolo.addTodo(cwd, {
       title: item.title,
@@ -117,7 +188,15 @@ export function applyExtractionResult(yolo: Yolo, cwd: string, result: Extractio
     })
   }
   if (result.session_summary) yolo.upsertSessionSummary(cwd, source.sessionId, result.session_summary)
-  applyUpdates(yolo, cwd, result.updates, source)
+  applyUpdates(yolo, cwd, result.updates, source, !identityControlsTodos && todoIdentity?.mode !== 'create')
+  if (!identityOutcome && todoIdentity) {
+    identityOutcome = {
+      plan: todoIdentity,
+      status: 'fallback',
+      ...(todoIdentity.mode === 'create' ? { reason: 'create_uses_existing_extraction' } : {}),
+    }
+  }
+  return identityOutcome
 }
 
 export function buildKnownMemoryContext(yolo: Yolo, cwd: string): string | null {

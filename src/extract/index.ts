@@ -20,8 +20,13 @@ import { sessionCwd } from '../shared/session.ts'
 import { extractionTodoOperationId, todoOperationRequestHash } from '../shared/todo-identity.ts'
 import { isYoloSessionId } from '../runtime/session-identity.ts'
 import { contentBlocksToText, llmExtract, type LlmExtractionObservation } from './llm-extract.ts'
-import { llmResolveTodoIdentity, TODO_RESOLVER_VERSION, type TodoResolverObservation } from './todo-resolver.ts'
-import { applyExtractionResult, buildKnownMemoryContext } from '../application/ingestion/apply-extraction.ts'
+import { llmResolveTodoIdentity, TODO_RESOLVER_VERSION, type ShadowTodoResolution, type TodoResolverObservation } from './todo-resolver.ts'
+import {
+  applyExtractionResult,
+  buildKnownMemoryContext,
+  type TodoIdentityApplicationOutcome,
+} from '../application/ingestion/apply-extraction.ts'
+import { planTodoIdentityApplication } from '../application/ingestion/todo-identity-policy.ts'
 
 export const name = 'yolo-extract'
 export const inject = ['yolo', 'llm', 'sessions', 'settings'] as const
@@ -42,6 +47,7 @@ interface SettingsLike {
       minIntervalSec?: number
       minTurnChars?: number
       maxRunsPerDay?: number
+      todoIdentityR2Enabled?: boolean
     }
   } | undefined
 }
@@ -300,7 +306,29 @@ export function apply(ctx: Context): void {
             observe: (value) => { observation = value },
           })
           const hasContent = result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0 || result.updates.length > 0
+          const resolverStarted = Date.now()
+          let resolverObservation: TodoResolverObservation | undefined
+          let resolutions: ShadowTodoResolution[] = []
+          let resolverError: unknown
+          try {
+            resolutions = await llmResolveTodoIdentity({
+              llm: yctx.llm,
+              provider: route.provider,
+              model: route.model,
+              turnText,
+              candidates: todoCandidates,
+              signal: controller.signal,
+              now: new Date(acceptedAt ?? started),
+              observe: (value) => { resolverObservation = value },
+            })
+          } catch (error) {
+            resolverError = error
+          }
+          const todoIdentityPlan = resolverError
+            ? undefined
+            : planTodoIdentityApplication(result, resolutions, todoCandidates, config?.todoIdentityR2Enabled === true)
           const scope = yctx.yolo.scopeRefForCwd(cwd)
+          let todoIdentityOutcome: TodoIdentityApplicationOutcome | undefined
           const persisted = yctx.yolo.runIdempotentScopeAction(scope, operationId, requestHash, (scopedCwd) => {
             if (sourceExcerpt) {
               yctx.yolo.promoteToolTodoOrigins(scopedCwd, {
@@ -313,7 +341,7 @@ export function apply(ctx: Context): void {
                 evidence_occurred_at: acceptedAt ?? started,
               })
             }
-            applyExtractionResult(yctx.yolo, scopedCwd, result, {
+            todoIdentityOutcome = applyExtractionResult(yctx.yolo, scopedCwd, result, {
               sessionId: session.id,
               turn,
               // Compatibility fallback text is useful extraction input but is
@@ -321,7 +349,7 @@ export function apply(ctx: Context): void {
               excerpt: sourceExcerpt,
               operationId,
               occurredAt: acceptedAt ?? started,
-            })
+            }, todoIdentityPlan)
             yctx.yolo.logExtraction(scopedCwd, {
               session_id: session.id,
               turn_seq: turn,
@@ -330,6 +358,7 @@ export function apply(ctx: Context): void {
               extracted_json: JSON.stringify({
                 raw: observation?.rawText ?? null,
                 parsed: result,
+                todo_identity: todoIdentityOutcome ?? todoIdentityPlan ?? { status: 'resolver_error' },
                 finish: observation?.finish ?? null,
                 route,
                 input: {
@@ -348,22 +377,10 @@ export function apply(ctx: Context): void {
           if (persisted.status === 'conflict') {
             ctx.logger?.warn?.('[yolo-extract] operation id reused with different input: %s', operationId)
           } else {
-            // R1 shadow resolver: a separate model pass over stable-id
-            // candidates. It runs only after the existing extraction result is
-            // durably committed and writes observation logs, never domain data.
-            const resolverStarted = Date.now()
-            let resolverObservation: TodoResolverObservation | undefined
-            try {
-              const resolutions = await llmResolveTodoIdentity({
-                llm: yctx.llm,
-                provider: route.provider,
-                model: route.model,
-                turnText,
-                candidates: todoCandidates,
-                signal: controller.signal,
-                now: new Date(acceptedAt ?? started),
-                observe: (value) => { resolverObservation = value },
-              })
+            // The resolver prediction remains observational evidence. Only the
+            // deterministic R2a application policy may authorize the narrow
+            // same-workspace LINK/UPDATE subset, and its outcome is audited.
+            if (!resolverError) {
               yctx.yolo.logTodoResolution(cwd, {
                 session_id: session.id,
                 turn_seq: turn,
@@ -376,11 +393,12 @@ export function apply(ctx: Context): void {
                 status: resolutions.length ? 'ok' : 'empty',
                 candidates_json: JSON.stringify(todoCandidates),
                 resolutions_json: JSON.stringify(resolutions),
+                application_json: JSON.stringify(todoIdentityOutcome ?? todoIdentityPlan ?? null),
                 token_in: resolverObservation?.usage?.inputTokens ?? null,
                 token_out: resolverObservation?.usage?.outputTokens ?? null,
                 duration_ms: Date.now() - resolverStarted,
               })
-            } catch (resolverError) {
+            } else {
               try {
                 yctx.yolo.logTodoResolution(cwd, {
                   session_id: session.id,
@@ -395,6 +413,7 @@ export function apply(ctx: Context): void {
                   error: resolverError instanceof Error ? resolverError.message : String(resolverError),
                   candidates_json: JSON.stringify(todoCandidates),
                   resolutions_json: '[]',
+                  application_json: JSON.stringify({ status: 'fallback', reason: 'resolver_error' }),
                   token_in: resolverObservation?.usage?.inputTokens ?? null,
                   token_out: resolverObservation?.usage?.outputTokens ?? null,
                   duration_ms: Date.now() - resolverStarted,

@@ -89,6 +89,41 @@ describe('db + schema', () => {
     rmSync(root, { recursive: true, force: true })
   })
 
+  it('idempotently adds the R2 application receipt column to legacy resolver logs', () => {
+    const root = mkdtempSync(join(tmpdir(), 'yolo-old-resolver-'))
+    const path = join(root, 'old.db')
+    const old = new DatabaseSync(path)
+    old.exec(`CREATE TABLE todo_resolution_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, scope_key TEXT NOT NULL,
+      session_id TEXT NOT NULL, turn_seq INTEGER NOT NULL, operation_id TEXT NOT NULL,
+      input_fingerprint TEXT NOT NULL, input_excerpt TEXT NOT NULL, resolver_version TEXT NOT NULL,
+      model_provider TEXT NOT NULL, model_name TEXT NOT NULL, status TEXT NOT NULL, error TEXT,
+      candidates_json TEXT NOT NULL, resolutions_json TEXT NOT NULL,
+      token_in INTEGER, token_out INTEGER, duration_ms INTEGER, created_at INTEGER NOT NULL,
+      UNIQUE(session_id, turn_seq, resolver_version)
+    )`)
+    old.prepare(`INSERT INTO todo_resolution_log(
+      scope_key,session_id,turn_seq,operation_id,input_fingerprint,input_excerpt,resolver_version,
+      model_provider,model_name,status,candidates_json,resolutions_json,created_at
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      SCOPE, 'legacy-session', 1, 'extract/legacy-session/1', 'hash', '继续跟进这项安排', 'shadow-v1',
+      'provider', 'model', 'ok', '[]', '[]', 1,
+    )
+    old.close()
+
+    const migrated = openDb(path)
+    const columns = migrated.prepare('PRAGMA table_info(todo_resolution_log)').all() as Array<{ name: string }>
+    expect(columns.map((column) => column.name)).toContain('application_json')
+    expect(migrated.prepare('SELECT application_json FROM todo_resolution_log WHERE session_id=?').get('legacy-session'))
+      .toEqual({ application_json: null })
+    migrated.close()
+
+    const reopened = openDb(path)
+    expect(reopened.prepare('SELECT COUNT(*) AS n FROM todo_resolution_log').get()).toEqual({ n: 1 })
+    reopened.close()
+    rmSync(root, { recursive: true, force: true })
+  })
+
   it('adds structured subject columns after opening a real legacy events table', () => {
     const root = mkdtempSync(join(tmpdir(), 'yolo-old-events-'))
     const path = join(root, 'old.db')

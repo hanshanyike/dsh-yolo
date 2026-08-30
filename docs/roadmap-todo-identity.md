@@ -54,11 +54,17 @@
   不改变现有写入结果。
 - [x] 建立人工标注样本，分别统计漏关联和误关联；按表达改写、指代、省略、跨会话和同名异项分层。
 
-R1 的 gold seed 位于 `tests/fixtures/todo-resolver-labeled-cases.jsonl`；真实 shadow log 通过
+R1 的长期回归 gold corpus 位于 `tests/fixtures/todo-resolver-labeled-cases.jsonl`，其来源与维护约束见
+`tests/fixtures/README-todo-resolver-gold.md`。该语料是人工构造的中文 shadow-style 场景，不冒充真实生产日志，
+也不能单独证明线上准确率；真实 shadow log 通过
 `scripts/todo-resolver-eval.mjs export` 形成待标注 JSONL，补齐 `expected` 后用 `evaluate` 分别输出
 false-link / missed-link 及分层比率。完成 R1 只表示具备观察和评估闭环，不表示 R2 已获得自动写入授权。
 
 ### R2：高置信 LINK 与 UPDATE
+
+R2a 的确定性准入策略和审计脚手架已经实现，但配置默认关闭：当前人工 gold corpus 没有模型 prediction，
+因此尚未满足运行时放权门。已实现代码只为唯一开放候选的高置信 `LINK` 和明确 `due_at` `UPDATE`
+保留稳定 ID 路径；状态、优先级、标题/收件人/详情、终态、occurrence、step、多候选和跨工作区仍不授权。
 
 - [ ] 保持显式 id / source fingerprint 的确定性幂等链路；只把经指标批准的同 scope 新提及自动关联。
 - [ ] 后续提及写 evidence；字段变化按稳定 id 走领域动作，禁止依赖标题静默选中多个候选之一。

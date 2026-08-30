@@ -1539,8 +1539,8 @@ export function logTodoResolution(
     `INSERT INTO todo_resolution_log(
        scope_key, session_id, turn_seq, operation_id, input_fingerprint, input_excerpt,
        resolver_version, model_provider, model_name, status, error,
-       candidates_json, resolutions_json, token_in, token_out, duration_ms, created_at
-     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       candidates_json, resolutions_json, application_json, token_in, token_out, duration_ms, created_at
+     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(session_id, turn_seq, resolver_version) DO NOTHING`,
   ).run(
     data.scope_key,
@@ -1556,6 +1556,7 @@ export function logTodoResolution(
     data.error ?? null,
     data.candidates_json,
     data.resolutions_json,
+    data.application_json ?? null,
     data.token_in ?? null,
     data.token_out ?? null,
     data.duration_ms ?? null,

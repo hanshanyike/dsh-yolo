@@ -127,6 +127,16 @@ export interface TodoIdentityCandidate {
   rank: number
 }
 
+/** Provider-neutral resolver prediction. A prediction is evidence for the
+ * deterministic application policy; it never authorizes a write by itself. */
+export interface TodoResolutionPrediction {
+  decision: TodoResolutionDecision
+  candidate_ids: string[]
+  proposed_title?: string | null
+  confidence?: number | null
+  reason?: string | null
+}
+
 /** Append-only observation from the non-mutating todo identity resolver. */
 export interface TodoResolutionLog {
   id?: number
@@ -144,6 +154,8 @@ export interface TodoResolutionLog {
   error?: string | null
   candidates_json: string
   resolutions_json: string
+  /** Deterministic R2 application-policy decision and durable outcome. */
+  application_json?: string | null
   token_in?: number | null
   token_out?: number | null
   duration_ms?: number | null

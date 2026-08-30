@@ -196,6 +196,10 @@ function migrate(db: DB): void {
     db.prepare('UPDATE notifications SET seen_at = COALESCE(handled_at, ?) WHERE seen_at IS NULL').run(Date.now())
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_unseen ON notifications(scope_key, seen_at, created_at)')
+  const resolutionCols = db.prepare('PRAGMA table_info(todo_resolution_log)').all() as { name: string }[]
+  if (!resolutionCols.some((c) => c.name === 'application_json')) {
+    db.exec('ALTER TABLE todo_resolution_log ADD COLUMN application_json TEXT')
+  }
   db.exec("UPDATE todos SET record_status = 'canonical' WHERE record_status IS NULL")
   db.exec('CREATE INDEX IF NOT EXISTS idx_todos_record_status ON todos(scope_key, record_status, status)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_todos_merged_into ON todos(merged_into_id) WHERE merged_into_id IS NOT NULL')

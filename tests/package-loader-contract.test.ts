@@ -101,6 +101,7 @@ describe('settings and build-asset contract', () => {
         minIntervalSec: 30,
         minTurnChars: 4,
         maxRunsPerDay: 300,
+        todoIdentityR2Enabled: false,
       },
       reminder: {
         enabled: true,

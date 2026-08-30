@@ -30,6 +30,7 @@ interface SettingsStub {
       minIntervalSec?: number
       minTurnChars?: number
       maxRunsPerDay?: number
+      todoIdentityR2Enabled?: boolean
     }
   } | undefined
 }
@@ -451,6 +452,106 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(JSON.parse(log.resolutions_json)).toEqual([
       expect.objectContaining({ decision: 'UPDATE', candidate_ids: [todo.id] }),
     ])
+  })
+
+  it('R2a links one high-confidence mention to an open stable id without creating a duplicate', async () => {
+    const { todo } = yolo.addTodo(cwd, { title: '把演示稿发给研发', source: 'llm' })
+    const llmJson = JSON.stringify({
+      todos: [{ title: '给研发发送演示材料' }],
+      milestones: [], goals: [], preferences: [], events: [], updates: [],
+    })
+    const resolverText = JSON.stringify({ resolutions: [{
+      decision: 'LINK', candidate_ids: [todo.id], confidence: 0.99, reason: '同一交付物和接收方',
+    }] })
+    const { ctx, handlers } = makeCtx(yolo, llmJson, {
+      get: () => ({ extraction: { todoIdentityR2Enabled: true } }),
+    }, resolverText)
+    apply(ctx as never)
+    const session = sessionLike('s-r2-link', cwd)
+    const agent = { id: session.id, session }
+    const message = {
+      id: 'r2-link-human', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '给研发的演示材料我还在继续准备' }],
+    }
+    await handlers.get('agent/pre-step')!(
+      { agent, messages: [message], turn: 6, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [message] }),
+    )
+    await handlers.get('agent/turn-stopping')!({ agent, turn: 6 })
+
+    expect(yolo.listTodos(cwd)).toHaveLength(1)
+    expect(yolo.listTodoEvidence(cwd, todo.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ session_id: session.id, turn_seq: 6, relation: 'mention' }),
+    ]))
+    expect(JSON.parse(yolo.listTodoResolutions(cwd)[0].application_json ?? 'null')).toMatchObject({
+      status: 'linked', todo_id: todo.id,
+    })
+  })
+
+  it('R2a applies only an explicit due_at UPDATE through the stable id', async () => {
+    const { todo } = yolo.addTodo(cwd, {
+      title: '把客户访谈纪要发给产品组', due_at: '2026-09-02', source: 'llm',
+    })
+    const llmJson = JSON.stringify({
+      todos: [], milestones: [], goals: [], preferences: [], events: [],
+      updates: [{ kind: 'todo', match_title: '刚才那项', due_at: '2026-09-05' }],
+    })
+    const resolverText = JSON.stringify({ resolutions: [{
+      decision: 'UPDATE', candidate_ids: [todo.id], confidence: 0.99, reason: '明确改期',
+    }] })
+    const { ctx, handlers } = makeCtx(yolo, llmJson, {
+      get: () => ({ extraction: { todoIdentityR2Enabled: true } }),
+    }, resolverText)
+    apply(ctx as never)
+    const session = sessionLike('s-r2-update', cwd)
+    const agent = { id: session.id, session }
+    const message = {
+      id: 'r2-update-human', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '给产品组的客户访谈纪要改到 9 月 5 日再发' }],
+    }
+    await handlers.get('agent/pre-step')!(
+      { agent, messages: [message], turn: 7, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [message] }),
+    )
+    await handlers.get('agent/turn-stopping')!({ agent, turn: 7 })
+
+    expect(yolo.listTodos(cwd)).toHaveLength(1)
+    expect(yolo.findTodo(cwd, { id: todo.id })?.due_at).toBe('2026-09-05')
+    expect(yolo.listEvents(cwd).some((event) => event.kind === 'todo_postponed' && event.subject_id === todo.id)).toBe(true)
+    expect(JSON.parse(yolo.listTodoResolutions(cwd)[0].application_json ?? 'null')).toMatchObject({
+      status: 'updated', todo_id: todo.id,
+    })
+  })
+
+  it('R2a blocks status UPDATE until that decision class has prediction evidence', async () => {
+    const { todo } = yolo.addTodo(cwd, { title: '把演示稿发给研发', source: 'llm' })
+    const llmJson = JSON.stringify({
+      todos: [], milestones: [], goals: [], preferences: [], events: [],
+      updates: [{ kind: 'todo', match_title: '演示材料', status: 'done' }],
+    })
+    const resolverText = JSON.stringify({ resolutions: [{
+      decision: 'UPDATE', candidate_ids: [todo.id], confidence: 0.99, reason: '明确完成',
+    }] })
+    const { ctx, handlers } = makeCtx(yolo, llmJson, {
+      get: () => ({ extraction: { todoIdentityR2Enabled: true } }),
+    }, resolverText)
+    apply(ctx as never)
+    const session = sessionLike('s-r2-status-blocked', cwd)
+    const agent = { id: session.id, session }
+    const message = {
+      id: 'r2-status-human', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '给研发的演示材料已经发完了' }],
+    }
+    await handlers.get('agent/pre-step')!(
+      { agent, messages: [message], turn: 8, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [message] }),
+    )
+    await handlers.get('agent/turn-stopping')!({ agent, turn: 8 })
+
+    expect(yolo.findTodo(cwd, { id: todo.id })?.status).toBe('pending')
+    expect(JSON.parse(yolo.listTodoResolutions(cwd)[0].application_json ?? 'null')).toMatchObject({
+      status: 'blocked', reason: 'update_field_not_authorized',
+    })
   })
 
   it('snapshots candidate fields before same-turn assistant tools can mutate them', async () => {

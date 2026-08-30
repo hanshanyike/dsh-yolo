@@ -15,6 +15,9 @@ export interface YoloConfig {
     minIntervalSec: number
     minTurnChars: number
     maxRunsPerDay: number
+    /** Experimental R2a stable-id LINK/due-date UPDATE policy. Default off
+     * until a labeled model-prediction report satisfies the safety gate. */
+    todoIdentityR2Enabled: boolean
   }
   reminder: {
     enabled: boolean

@@ -20,10 +20,12 @@ function exportSamples(dbFile, outputFile) {
   if (!existsSync(dbPath)) throw new Error(`database not found: ${dbPath}`)
   const db = new DatabaseSync(dbPath, { readOnly: true })
   try {
+    const resolutionColumns = new Set(db.prepare('PRAGMA table_info(todo_resolution_log)').all().map((row) => row.name))
+    const applicationColumn = resolutionColumns.has('application_json') ? 'application_json' : 'NULL AS application_json'
     const rows = db.prepare(
       `SELECT id,scope_key,session_id,turn_seq,input_fingerprint,input_excerpt,
               resolver_version,model_provider,model_name,status,error,
-              candidates_json,resolutions_json,created_at
+              candidates_json,resolutions_json,${applicationColumn},created_at
        FROM todo_resolution_log ORDER BY created_at ASC,id ASC`,
     ).all()
     const samples = []
@@ -37,6 +39,7 @@ function exportSamples(dbFile, outputFile) {
         input_excerpt: row.input_excerpt,
         candidates,
         prediction,
+        application: parseJson(row.application_json, null),
         expected: null,
         provenance: {
           scope_key: row.scope_key,

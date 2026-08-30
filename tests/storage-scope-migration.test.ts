@@ -53,12 +53,13 @@ function seedLegacy(db: DB): void {
   db.prepare('INSERT INTO extraction_log(session_id,turn_seq,strategy,status,created_at) VALUES(?,?,?,?,?)').run('session-1', 1, 'llm', 'ok', 20)
   db.prepare(`INSERT INTO todo_resolution_log(
     scope_key,session_id,turn_seq,operation_id,input_fingerprint,input_excerpt,resolver_version,
-    model_provider,model_name,status,candidates_json,resolutions_json,created_at
-  ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    model_provider,model_name,status,candidates_json,resolutions_json,application_json,created_at
+  ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
     LEGACY, 'session-1', 2, 'extract/session-1/2', 'request-hash', '继续跟进功能分支事项', 'shadow-v1',
     'provider', 'model', 'ok',
     JSON.stringify([{ id: 'same-todo', title: '功能分支事项' }]),
     JSON.stringify([{ decision: 'LINK', candidate_ids: ['same-todo'] }]),
+    JSON.stringify({ policy_version: 'r2a-v1', status: 'linked', todo_id: 'same-todo' }),
     20,
   )
   db.prepare('INSERT INTO pending_reminders(id,todo_id,milestone_id,fire_at,payload,scope_key) VALUES(?,?,?,?,?,?)').run('pending-1', 'same-todo', 'same-ms', 30, '跟进功能分支', LEGACY)
@@ -214,11 +215,12 @@ describe('legacy branch scope migration', () => {
     expect(canonical.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 2 })
     expect(canonical.prepare('SELECT COUNT(*) AS n FROM session_summaries').get()).toEqual({ n: 1 })
     expect(canonical.prepare('SELECT COUNT(*) AS n FROM extraction_log').get()).toEqual({ n: 1 })
-    const resolver = canonical.prepare('SELECT scope_key,candidates_json,resolutions_json FROM todo_resolution_log').get() as
-      { scope_key: string; candidates_json: string; resolutions_json: string }
+    const resolver = canonical.prepare('SELECT scope_key,candidates_json,resolutions_json,application_json FROM todo_resolution_log').get() as
+      { scope_key: string; candidates_json: string; resolutions_json: string; application_json: string }
     expect(resolver.scope_key).toBe(CANONICAL)
     expect(JSON.parse(resolver.candidates_json)[0].id).toBe(featureTodo.id)
     expect(JSON.parse(resolver.resolutions_json)[0].candidate_ids).toEqual([featureTodo.id])
+    expect(JSON.parse(resolver.application_json).todo_id).toBe(featureTodo.id)
     expect(canonical.prepare('SELECT COUNT(*) AS n FROM recall_log').get()).toEqual({ n: 1 })
     expect(canonical.prepare('SELECT display_name FROM user_profile WHERE id=1').get()).toEqual({ display_name: '新用户资料' })
     expect(canonical.prepare("SELECT COUNT(*) AS n FROM yolo_fts WHERE yolo_fts MATCH '功能分支事项'").get()).toEqual({ n: 2 })

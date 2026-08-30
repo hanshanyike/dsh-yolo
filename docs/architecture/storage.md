@@ -56,7 +56,9 @@ catalog 写入失败不会关闭已经可用的 workspace DB，但会记录警�
 - `seen_at`、`handled_at` 和 todo status 分离。
 - `client_actions` 以 scope + client action id 保存请求 hash 和结果，和业务写入同库。
 - `pending_reminders` 只为旧库兼容保留，当前不向普通工作 session 回放。
-- FTS 是可重建索引，不是独立事实源；identity shadow resolver 不能直接执行自动 merge/update。
+- FTS 是可重建索引，不是独立事实源；identity resolver 的模型输出不能直接执行写入。R2a 的独立、
+  默认关闭策略只允许受控稳定 ID LINK/due_at UPDATE，并把计划与实际结果写入
+  `todo_resolution_log.application_json`；该 nullable 列对旧库和旧 shadow log 幂等迁移。
 
 ## Legacy scope migration
 

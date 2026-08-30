@@ -42,5 +42,7 @@ snapshot 是可重建投影。reminder adapter 只把 daily 或 turn cadence 交
 ## 当前限制
 
 - Plan command 尚未拆成多个 aggregate-specific files；当前 owner 已迁移，但物理细分仍可继续。
+- `application/ingestion/todo-identity-policy.ts` 拥有默认关闭的 R2a 确定性准入；resolver prediction 只是输入证据，
+  只有唯一开放候选的高置信 LINK 或明确 due_at UPDATE 能在显式开启后获得稳定 ID 写入资格。
 - recall/proactivity/AgentWork 尚未形成完整 application module；现有 memory/reminder 行为保持兼容，Agent task 尚未实现。
 - application 对 concrete `Yolo` service 的依赖是当前迁移事实，不应扩张为新的万能 service 调用。

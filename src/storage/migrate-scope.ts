@@ -305,12 +305,12 @@ function importAttached(db: DB, scopeKey: string, cwd: string, source: string, w
       `INSERT INTO todo_resolution_log(
          scope_key, session_id, turn_seq, operation_id, input_fingerprint, input_excerpt,
          resolver_version, model_provider, model_name, status, error,
-         candidates_json, resolutions_json, token_in, token_out, duration_ms, created_at
-       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         candidates_json, resolutions_json, application_json, token_in, token_out, duration_ms, created_at
+       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(session_id, turn_seq, resolver_version) DO UPDATE SET
          scope_key=excluded.scope_key,operation_id=excluded.operation_id,input_fingerprint=excluded.input_fingerprint,input_excerpt=excluded.input_excerpt,
          model_provider=excluded.model_provider,model_name=excluded.model_name,status=excluded.status,error=excluded.error,
-         candidates_json=excluded.candidates_json,resolutions_json=excluded.resolutions_json,
+         candidates_json=excluded.candidates_json,resolutions_json=excluded.resolutions_json,application_json=excluded.application_json,
          token_in=excluded.token_in,token_out=excluded.token_out,duration_ms=excluded.duration_ms,created_at=excluded.created_at
        WHERE excluded.created_at > todo_resolution_log.created_at`,
     ).run(
@@ -327,6 +327,7 @@ function importAttached(db: DB, scopeKey: string, cwd: string, source: string, w
       row.error as SQLInputValue,
       remapJsonText(row.candidates_json, todoMap),
       remapJsonText(row.resolutions_json, todoMap),
+      (row.application_json == null ? null : remapJsonText(row.application_json, todoMap)) as SQLInputValue,
       row.token_in as SQLInputValue,
       row.token_out as SQLInputValue,
       row.duration_ms as SQLInputValue,
