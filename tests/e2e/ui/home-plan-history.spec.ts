@@ -7,7 +7,13 @@ let fx: ReturnType<typeof createFixtures>
 test.beforeAll(async () => { api = await connectApi() })
 test.afterAll(async () => { await api.close() })
 test.beforeEach(async () => { fx = createFixtures(api) })
-test.afterEach(async () => { await fx.dispose() })
+test.afterEach(async ({ page }) => {
+  // The dashboard route may still be serving the sidebar's final refresh while
+  // Playwright starts tearing the page down. Wait for handlers before closing
+  // their APIResponse objects, otherwise response.json() can race disposal.
+  await page.unrouteAll({ behavior: 'wait' })
+  await fx.dispose()
+})
 
 function localDateOffset(days: number): string {
   const date = new Date()
