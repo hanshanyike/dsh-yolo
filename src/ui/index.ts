@@ -60,7 +60,7 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   // M8: in-place dashboard operations (complete/postpone/cancel + goal/milestone)
   // v0.3.0 E: + update/rename/abandon/quick_add/handled + snapshot sync
   registerActionsEndpoint(ctx, ctx.yolo, currentCwd)
-  // v0.3.0 A/B: the YOLO resident thread (对话 Tab + 侧栏对话)
+  // Resident thread for internal YOLO delivery (for example reminders).
   // v0.3.3: agents are created with the harness's model selection so they reply.
   const defaultModel = (): { provider: string; model: string } | undefined => {
     const sel = ctx.get('agentDefaultModel')

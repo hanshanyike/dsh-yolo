@@ -3,8 +3,8 @@
 // column, dock-input) and the full-screen expansion (720px column + capture-
 // bar-spec input). Anchored openings (聊一聊) prefix the first sent message
 // with the card context so the thread knows what "它" refers to.
-// v0.3.2: when a `threadKey` is present the pane is a FRESH ephemeral
-// conversation — it starts empty, never loads the resident thread's history.
+// When a `threadKey` is present the pane is a FRESH ephemeral conversation —
+// it starts empty, never loads the resident thread's history.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
@@ -36,7 +36,7 @@ export interface ChatPaneProps {
   anchor?: ChatAnchor | null
   /** 'side' = the kanban side dock (compact); 'full' = the expanded surface. */
   variant?: 'side' | 'full'
-  /** Anchored (聊一聊) thread key; a fresh value starts a brand-new conversation. */
+  /** Isolated thread key; a fresh value starts a brand-new conversation. */
   threadKey?: string
   /** Refresh the parent dashboard after a chat turn has completed. */
   onDashboardRefresh?: () => void | Promise<void>
@@ -436,7 +436,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey, onDashboa
           <div className="who">YOLO</div>
           {anchor
             ? `我们来讨论「${anchor.title}」。现在进展怎么样，接下来需要调整什么？`
-            : '这是 YOLO 的常驻会话——可以问「我这周干了什么」、随手记事、改计划、解读简报。工作会话不受影响。'}
+            : '这是一个新的 YOLO 会话——可以问整体安排、随手记事、改计划、解读简报。工作会话不受影响。'}
         </div>
       )}
       {state.messages.map((m, i) =>

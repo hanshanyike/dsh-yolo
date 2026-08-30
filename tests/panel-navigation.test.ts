@@ -36,7 +36,7 @@ describe('panel navigation state machine', () => {
   })
 
   it('derives presentation from usable width without mutating navigation state', () => {
-    const foreground = { kind: 'assistant_chat' } as const
+    const foreground = { kind: 'assistant_chat', threadKey: 'assistant-thread-a' } as const
     expect(derivePanelPresentation(SPLIT_MIN_WIDTH - 1, foreground, 'auto')).toBe('focus')
     expect(derivePanelPresentation(SPLIT_MIN_WIDTH, foreground, 'auto')).toBe('split')
     expect(derivePanelPresentation(SPLIT_MIN_WIDTH + 1, foreground, 'auto')).toBe('split')

@@ -74,6 +74,10 @@ const PAGE_LABELS: Record<BoardPage, string> = {
   history: '历史',
 }
 
+function freshChatThreadKey(): string {
+  return `a-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+}
+
 export function YoloPanel({
   left,
   onClose,
@@ -300,7 +304,7 @@ export function YoloPanel({
     const existing = navigation.foreground.kind === 'item_discussion' && samePanelItem(navigation.foreground.item, item)
       ? navigation.foreground.threadKey
       : discussionThreads[key]
-    const threadKey = existing ?? `a-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+    const threadKey = existing ?? freshChatThreadKey()
     setDiscussionThreads((threads) => threads[key] === threadKey ? threads : { ...threads, [key]: threadKey })
     setNavigation((current) => openForeground(current, { kind: 'item_discussion', item, threadKey }, a.todoId ? `todo-${a.todoId}` : undefined))
   }, [discussionThreads, navigation.foreground, state.data?.cwd])
@@ -311,7 +315,7 @@ export function YoloPanel({
     chatReturnTodoIdRef.current = undefined
     setNavigation((current) => current.foreground.kind === 'assistant_chat'
       ? { ...current, foreground: { kind: 'none' } }
-      : openForeground(current, { kind: 'assistant_chat' }, 'yolo-assistant-chat'))
+      : openForeground(current, { kind: 'assistant_chat', threadKey: freshChatThreadKey() }, 'yolo-assistant-chat'))
   }, [])
 
   const openSourcePreview = useCallback((item: PanelItemRef, source: NonNullable<YoloDashboardData['todos'][number]['source']>): void => {
@@ -475,7 +479,9 @@ export function YoloPanel({
     }
   }, [navigation.foreground, sourceForForeground])
 
-  const chatThread = navigation.foreground.kind === 'item_discussion' ? navigation.foreground.threadKey : undefined
+  const chatThread = navigation.foreground.kind === 'assistant_chat' || navigation.foreground.kind === 'item_discussion'
+    ? navigation.foreground.threadKey
+    : undefined
   const detailAttention = detail.attention
   const detailSource = sourceForForeground ? {
     type: sourceForForeground.type,

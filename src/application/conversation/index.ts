@@ -1,7 +1,7 @@
-// YOLO persistent session manager (v0.3.0 B) — the assistant's own resident
-// thread. One thread per WORKSPACE: the session id derives from the scope cwd,
-// so the agent's tool calls (yolo_action, memory_*) resolve the same scope the
-// panel renders — a single global thread would cross workspace isolation.
+// YOLO session managers — the assistant's own resident thread plus isolated
+// panel conversations. The resident thread remains available for internal
+// delivery (such as reminders); panel conversations use YoloChatThreads so
+// each explicit new conversation can start without inherited history.
 // Created lazily on first use; resumed across host restarts when the session
 // store still holds the log (TB-5), created fresh otherwise.
 
@@ -141,12 +141,10 @@ export class YoloSessions {
 }
 
 /**
- * Ephemeral anchored-chat threads (v0.3.2) — the backing of the kanban card's
- * 「聊一聊」. Each anchored chat is a FRESH conversation: a disposable agent
- * session (`yolo-a-<random>`) created lazily on the first message, so the pane
- * never inherits the resident thread's history. The resident thread
- * (`yolo-w-*`, YoloSessions) stays the persistent channel for the unanchored
- * 对话 tab.
+ * Ephemeral panel-chat threads — the backing of both the top-level
+ * 「和助手聊聊」 and the kanban card's 「讨论这项安排」. Each is a FRESH
+ * conversation: a disposable agent session (`yolo-a-<random>`) created lazily
+ * on the first message, so the pane never inherits resident-thread history.
  *
  * Lifecycle: handles are capped per workspace (oldest evicted + disposed);
  * the dsh session logs themselves are inert once unused, so an evicted thread

@@ -22,7 +22,7 @@ export interface ItemDetailForeground {
 }
 
 export type RestorableForeground =
-  | { kind: 'assistant_chat' }
+  | { kind: 'assistant_chat'; threadKey: string }
   | { kind: 'item_discussion'; item: PanelItemRef; threadKey: string }
   | ItemDetailForeground
   | {
