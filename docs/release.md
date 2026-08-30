@@ -211,7 +211,7 @@ gh release create <new-tag> \
   --prerelease \
   --latest=false \
   --title "<new-tag>" \
-  --notes "npm 安装：npm install dsh-plugin-yolo@<stage>" \
+  --notes "npm 安装：npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@<new-version>" \
   --generate-notes \
   --notes-start-tag <previous-tag>
 gh release view <new-tag> --json tagName,isDraft,isPrerelease,publishedAt,url
@@ -220,6 +220,10 @@ gh release view <new-tag> --json tagName,isDraft,isPrerelease,publishedAt,url
 验证结果必须满足：`tagName` 等于 `<new-tag>`、`isDraft=false`、`isPrerelease=true`，且 `publishedAt`
 非空。GitHub Release 只是已经验证的 Git tag 与 npm 发布的用户入口，不能先于标签或 npm 包创建，
 也不能用上传附件替代 npm registry 的 integrity 核验。
+
+Release 页面优先给出固定版本安装命令。刚发布的 dist-tag 可能因 dsh profile 的 pnpm
+`minimumReleaseAge` 策略暂时解析到上一个已满足等待期的版本；固定版本会让安装器明确确认并记录本次例外，
+避免用户误装旧候选版。dist-tag 仍需验证，但不作为刚发布版本的唯一安装入口。
 
 ### 8. 恢复 Unreleased
 
@@ -232,6 +236,30 @@ git diff --cached --check
 git commit -m "docs: reopen changelog after <new-version>"
 git push origin develop
 ```
+
+### 9. 同步 main 并完成远端闭环
+
+恢复 `Unreleased` 的维护提交在 `develop` CI 全部成功后，将同一个已验证的 `develop` 快进到 `main`。
+预发布同样是一次明确授权的仓库发布，因此 `main` 记录完整发布结果；tag 仍指向步骤 3～5 中通过门禁的
+版本提交，不移动到维护提交：
+
+```bash
+git checkout main
+git pull --ff-only origin main
+git merge --ff-only develop
+git push origin main
+git fetch origin --prune
+git rev-parse main
+git rev-parse origin/main
+git rev-parse develop
+git rev-parse origin/develop
+git ls-remote --heads origin
+git checkout develop
+```
+
+`main`、`origin/main`、`develop` 和 `origin/develop` 必须一致，远端长期分支仍只能有 `main` 与
+`develop`；随后等待 `main` CI 成功。任何无法快进的情况都必须停止并检查分支来源，不能使用强推或
+生成未经评审的合并提交绕过。
 
 ## 正式版晋级
 
