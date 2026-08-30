@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 // Type-only: contributes ctx.theme, the host-owned durable light/dark runtime.
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { settingsCardFor } from './settings/SettingsCard.tsx'
-import type { Config as YoloSettings } from '../src/ui/config.ts'
+import { YOLO_SETTINGS_NAMESPACE, type YoloSettings } from '../src/contracts/config.ts'
 import { YoloSidebarDashboard } from './sidebar/YoloSidebarDashboard.tsx'
 
 export const name = 'yolo-client'
@@ -27,7 +27,7 @@ export function apply(ctx: ClientContext): void {
   // 1. settings card (keyed by the 'yolo' namespace declared in the host half)
   const settingsScope = (ctx as unknown as {
     settingsScope: { bind<T>(spec: { namespace: string }): SettingsScope<T> }
-  }).settingsScope.bind<YoloSettings>({ namespace: 'yolo' })
+  }).settingsScope.bind<YoloSettings>({ namespace: YOLO_SETTINGS_NAMESPACE })
   ctx.slots.inject('settings.plugin.item', () =>
     ctx.slots.register({ name: 'settings.plugin.item', key: 'yolo' }, settingsCardFor(settingsScope)),
   )

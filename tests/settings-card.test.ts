@@ -3,7 +3,7 @@ import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-clie
 import { inject } from '../client/index.ts'
 import { changedSettingsSections, saveSettingsDraft, settingsDraftFrom, settingsFromDraft, validateSettingsDraft, type YoloSettings } from '../client/settings/model.ts'
 import { resolveReminderRuntime } from '../src/reminder/scheduler.ts'
-import { Config } from '../src/ui/config.ts'
+import { Config } from '../src/runtime/config.ts'
 
 function writableScope(initial: YoloSettings, accept = true): SettingsScope<YoloSettings> & { set: ReturnType<typeof vi.fn> } {
   let value = initial

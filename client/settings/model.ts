@@ -1,5 +1,5 @@
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
-import type { Config as YoloSettings } from '../../src/ui/config.ts'
+import type { YoloSettings } from '../../src/contracts/config.ts'
 
 export type EditableSettingsSection = 'extraction' | 'reminder' | 'brief' | 'storage'
 

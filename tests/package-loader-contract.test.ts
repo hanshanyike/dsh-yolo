@@ -7,7 +7,8 @@ import * as memoryPlugin from '../src/memory/index.ts'
 import * as extractPlugin from '../src/extract/index.ts'
 import * as reminderPlugin from '../src/reminder/index.ts'
 import * as uiPlugin from '../src/ui/index.ts'
-import { Config } from '../src/ui/config.ts'
+import { Config, YOLO_NS } from '../src/runtime/config.ts'
+import { YOLO_SETTINGS_NAMESPACE } from '../src/contracts/config.ts'
 
 const ROOT = resolve(import.meta.dirname, '..')
 
@@ -90,7 +91,8 @@ describe('package and Cordis loader contract', () => {
 
 describe('settings and build-asset contract', () => {
   it('keeps the yolo settings namespace and complete loader defaults stable', () => {
-    expect(uiPlugin.YOLO_NS).toBe('yolo')
+    expect(YOLO_SETTINGS_NAMESPACE).toBe('yolo')
+    expect(YOLO_NS).toBe('yolo')
     expect(Config(undefined)).toEqual({
       enabled: true,
       extraction: {

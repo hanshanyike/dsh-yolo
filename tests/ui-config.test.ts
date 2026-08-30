@@ -1,9 +1,21 @@
-// M4a/M5 UI config tests — schemastery schema defaults and validation.
+// Runtime config contract — schemastery defaults, validation and the legacy UI
+// import path remain stable after configuration ownership leaves the UI.
 
 import { describe, expect, it } from 'vitest'
-import { Config } from '../src/ui/config.ts'
+import { YOLO_SETTINGS_NAMESPACE, type YoloConfig } from '../src/contracts/config.ts'
+import { Config, YOLO_NS } from '../src/runtime/config.ts'
+import { Config as UiCompatibilityConfig } from '../src/ui/config.ts'
+import type { Config as UiCompatibilityConfigType } from '../src/ui/config.ts'
 
-describe('YOLO Config schema', () => {
+describe('YOLO runtime Config schema', () => {
+  it('owns the stable settings namespace outside the UI compatibility layer', () => {
+    expect(YOLO_SETTINGS_NAMESPACE).toBe('yolo')
+    expect(YOLO_NS).toBe('yolo')
+    expect(UiCompatibilityConfig).toBe(Config)
+    const compatible: UiCompatibilityConfigType = Config(undefined)
+    expect(compatible).toMatchObject({} satisfies Partial<YoloConfig>)
+  })
+
   it('applies defaults for an empty object', () => {
     const c = Config(undefined)
     expect(c.enabled).toBe(true)

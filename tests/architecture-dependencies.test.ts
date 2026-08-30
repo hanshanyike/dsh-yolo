@@ -17,8 +17,6 @@ const LEGACY_ALLOWLIST: readonly LegacyDependencyException[] = [
   { rule: 'host-features-must-not-depend-on-ui-session', source: 'src/extract/index.ts', target: 'src/ui/session.ts' },
   { rule: 'host-features-must-not-depend-on-ui-session', source: 'src/memory/index.ts', target: 'src/ui/session.ts' },
   { rule: 'host-features-must-not-depend-on-ui-session', source: 'src/reminder/index.ts', target: 'src/ui/session.ts' },
-  { rule: 'client-must-use-contracts', source: 'client/index.ts', target: 'src/ui/config.ts' },
-  { rule: 'client-must-use-contracts', source: 'client/settings/model.ts', target: 'src/ui/config.ts' },
   { rule: 'client-must-use-contracts', source: 'client/panel/HistoryView.tsx', target: 'src/storage/types.ts' },
   { rule: 'client-must-use-contracts', source: 'client/panel/KanbanView.tsx', target: 'src/shared/actions.ts' },
   { rule: 'client-must-use-contracts', source: 'client/panel/YoloPanel.tsx', target: 'src/shared/actions.ts' },
