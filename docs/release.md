@@ -1,12 +1,14 @@
 # 发布流程
 
-本文说明如何发布 `dsh-plugin-yolo`。整个流程由人工发起、脚本辅助：更新一次版本、发布一次、
-创建一个标签。
+本文说明如何发布 `dsh-plugin-yolo`。整个流程由人工发起、脚本辅助：更新一次版本、发布一次 npm 包、
+创建一个不可变标签和与其一一对应的 GitHub Release。
 
 ## 前置条件
 
 - 拥有 `dsh-plugin-yolo` 包发布权限的 npm 账号（首次发布会占用包名；
   `publishConfig.access` 已设为 `public`）。
+- GitHub CLI 已登录且对仓库拥有创建 Release 的权限；GitHub Release 必须复用已经推送并验证过的标签，
+  不得让 GitHub 在发布时隐式创建另一个 tag。
 - 发布凭据通过环境变量注入 npm Access Token；不得把 token 写进仓库、脚本参数或提交记录。
   环境中没有可用凭据时停止发布并向维护者确认。
 - develop 分支上的 `pnpm build`、`pnpm check` 和 `pnpm test:run` 均通过；
@@ -69,7 +71,7 @@ SQLite schema、配置或 API payload 时必须同时提供迁移或兼容策略
 - 稳定版发布使用 `npm publish --access public --tag latest`，并在发布后查询精确版本和全部 dist-tag。
   `rc` 可以保留在最后一个候选版，直到下一条候选版本线开始。
 
-## 候选版发布步骤
+## 预发布步骤
 
 ### 1. 冻结发布候选并完成门禁
 
@@ -197,7 +199,29 @@ npm view dsh-plugin-yolo dist-tags --json
 如果发布的是 `alpha` 或 `beta`，分别把命令中的 `--tag rc` 和验证目标改为 `alpha` 或 `beta`；阶段名必须
 与版本后缀一致。
 
-### 7. 恢复 Unreleased
+### 7. 创建并验证 GitHub prerelease
+
+npm 版本、integrity 和对应 dist-tag 全部验证后，为同一个远端标签创建 GitHub Release。`alpha`、`beta`
+和 `rc` 都必须标记为 prerelease；默认使用 GitHub 基于上一个标签生成的变更说明，并在发布页明确 npm
+安装命令：
+
+```bash
+gh release create <new-tag> \
+  --verify-tag \
+  --prerelease \
+  --latest=false \
+  --title "<new-tag>" \
+  --notes "npm 安装：npm install dsh-plugin-yolo@<stage>" \
+  --generate-notes \
+  --notes-start-tag <previous-tag>
+gh release view <new-tag> --json tagName,isDraft,isPrerelease,publishedAt,url
+```
+
+验证结果必须满足：`tagName` 等于 `<new-tag>`、`isDraft=false`、`isPrerelease=true`，且 `publishedAt`
+非空。GitHub Release 只是已经验证的 Git tag 与 npm 发布的用户入口，不能先于标签或 npm 包创建，
+也不能用上传附件替代 npm registry 的 integrity 核验。
+
+### 8. 恢复 Unreleased
 
 发布成功后，在 CHANGELOG 顶部新建空的 `## [Unreleased]` 小节，并将 `[Unreleased]` 比较链接
 更新为 `<new-tag>...HEAD`。将这项维护作为独立提交推送，并等待 CI：
@@ -214,7 +238,7 @@ git push origin develop
 正式版不是给最后一个 RC 改标签，而是发布一个没有预发布后缀的新版本。例如 `0.5.0-rc.3` 通过验证后，
 下一版本为 `0.5.0`，并拥有独立的 `v0.5.0` Git 标签和 npm 包版本。
 
-正式版复用“候选版发布步骤”中的冻结、门禁、CHANGELOG、版本提交、包内容验证、远端 CI、推标签和恢复
+正式版复用“预发布步骤”中的冻结、门禁、CHANGELOG、版本提交、包内容验证、远端 CI、推标签和恢复
 Unreleased 流程，但步骤 6 必须显式发布到 `latest`：
 
 ```bash
@@ -226,6 +250,18 @@ npm view dsh-plugin-yolo dist-tags --json
 
 发布前必须确认 `<new-version>` 不含 `alpha`、`beta` 或 `rc` 后缀；发布后 `latest` 必须严格指向
 `<new-version>`。不得通过移动 `rc` dist-tag、修改旧 Git 标签或取消发布来伪造正式版。
+
+正式版的 GitHub Release 不使用 `--prerelease`，并应显式标记为最新稳定发布：
+
+```bash
+gh release create <new-tag> \
+  --verify-tag \
+  --latest \
+  --title "<new-tag>" \
+  --generate-notes \
+  --notes-start-tag <previous-tag>
+gh release view <new-tag> --json tagName,isDraft,isPrerelease,isLatest,publishedAt,url
+```
 
 ## 失败恢复与幂等重试
 
@@ -244,6 +280,8 @@ npm view dsh-plugin-yolo dist-tags --json
   重试完全相同的 publish 命令；版本存在时不得再次发布。
 - 版本已经发布但 `rc` 指向不正确：核对版本内容后运行
   `npm dist-tag add dsh-plugin-yolo@<new-version> rc` 修复 dist-tag，再次查询确认；不要取消发布。
+- GitHub Release 创建结果不明确：先运行 `gh release view <new-tag>`。不存在时可从同一个已验证标签重试；
+  已存在时核对 tag、draft/prerelease 状态和发布时间，不得删除 Release 后重建标签，也不得因此重发 npm 包。
 - 恢复操作中一旦发现远端标签、npm 包内容和预期提交无法证明一致，停止流程并使用新的 SemVer，
   保留现有对象供审计。
 
