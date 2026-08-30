@@ -17,6 +17,7 @@ import { registerDashboardEndpoint, type WebServerLike } from './dashboard.ts'
 import { registerBadgeEndpoint } from './badge.ts'
 import { registerNotificationsEndpoint } from './notifications.ts'
 import { registerHistoryEndpoint } from './history.ts'
+import { registerIdentityReceiptsEndpoint } from './identity.ts'
 import { registerSessionEndpoints, type AgentsLike } from '../application/conversation/index.ts'
 
 /** The namespace is the join key shared with the client half (settings.plugin.item). */
@@ -57,6 +58,7 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   registerBadgeEndpoint(ctx, ctx.yolo, currentCwd)
   registerNotificationsEndpoint(ctx, ctx.yolo, currentCwd)
   registerHistoryEndpoint(ctx, ctx.yolo, currentCwd)
+  registerIdentityReceiptsEndpoint(ctx, ctx.yolo)
   // M8: in-place dashboard operations (complete/postpone/cancel + goal/milestone)
   // v0.3.0 E: + update/rename/abandon/quick_add/handled + snapshot sync
   registerActionsEndpoint(ctx, ctx.yolo, currentCwd)

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { YoloActionRequest, YoloUndoDescriptor } from '../../../src/contracts/actions.ts'
+import type { TodoIdentityReceiptsResponse } from '../../../src/contracts/identity.ts'
+import type { TodoIdentityFeedbackReason, TodoIdentityReceipt } from '../../../src/domain/types.ts'
 import type { YoloDashboardData, YoloTodoRow } from '../../../src/contracts/dashboard.ts'
 import type { ChatAnchor } from '../ChatPane.tsx'
 import type { PanelForeground } from '../navigation.ts'
@@ -34,6 +36,9 @@ export function useItemDetailController({
   receipt: LearningReceiptData | null
   undo: YoloUndoDescriptor | null
   error: string | null
+  identityReceipts: TodoIdentityReceipt[]
+  identityLoading: boolean
+  identityError: string | null
   attention: NonNullable<YoloDashboardData['attention']>[number] | undefined
   source: YoloTodoRow['source']
   setDraft: (draft: TaskEditDraft) => void
@@ -42,12 +47,16 @@ export function useItemDetailController({
   handleAction: (intent: TaskActionIntent) => void
   save: () => void
   undoReceipt: () => void
+  rejectIdentity: (receipt: TodoIdentityReceipt, reason: TodoIdentityFeedbackReason) => void
 } {
   const [draft, setDraft] = useState<TaskEditDraft | null>(null)
   const [busy, setBusy] = useState(false)
   const [receipt, setReceipt] = useState<LearningReceiptData | null>(null)
   const [undo, setUndo] = useState<YoloUndoDescriptor | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [identityReceipts, setIdentityReceipts] = useState<TodoIdentityReceipt[]>([])
+  const [identityLoading, setIdentityLoading] = useState(false)
+  const [identityError, setIdentityError] = useState<string | null>(null)
 
   const todo = useMemo(() => {
     if (!data || !('item' in foreground)) return undefined
@@ -67,7 +76,35 @@ export function useItemDetailController({
     setReceipt(null)
     setUndo(null)
     setError(null)
+    setIdentityReceipts([])
+    setIdentityError(null)
   }, [])
+
+  useEffect(() => {
+    if (foreground.kind !== 'item_detail' || !todo) {
+      setIdentityReceipts([])
+      setIdentityError(null)
+      setIdentityLoading(false)
+      return
+    }
+    const controller = new AbortController()
+    const scopeCwd = foreground.item.scopeCwd
+    setIdentityLoading(true)
+    setIdentityError(null)
+    const params = new URLSearchParams({ todo_id: todo.id, scope_cwd: scopeCwd })
+    void fetch(`/yolo/identity-receipts?${params.toString()}`, {
+      headers: { accept: 'application/json' }, cache: 'no-store', signal: controller.signal,
+    }).then(async (response) => {
+      const body = await response.json().catch(() => ({})) as Partial<TodoIdentityReceiptsResponse> & { error?: string }
+      if (!response.ok || !Array.isArray(body.receipts)) throw new Error(body.error ?? `HTTP ${response.status}`)
+      if (!controller.signal.aborted) setIdentityReceipts(body.receipts)
+    }).catch((reason) => {
+      if (!controller.signal.aborted) setIdentityError(reason instanceof Error ? reason.message : String(reason))
+    }).finally(() => {
+      if (!controller.signal.aborted) setIdentityLoading(false)
+    })
+    return () => { controller.abort() }
+  }, [foreground, todo])
 
   const prepare = useCallback((nextTodo: YoloTodoRow): void => {
     setDraft(detailDraftFor(nextTodo))
@@ -156,6 +193,15 @@ export function useItemDetailController({
       .then(() => { setUndo(null) })
   }, [foreground, run, undo])
 
+  const rejectIdentity = useCallback((identityReceipt: TodoIdentityReceipt, reason: TodoIdentityFeedbackReason): void => {
+    if (!todo || foreground.kind !== 'item_detail' || identityReceipt.todo_id !== todo.id) return
+    void run({
+      action: 'identity_reject', kind: 'todo', id: todo.id, scope_cwd: foreground.item.scopeCwd,
+      resolution_id: identityReceipt.resolution_id, identity_feedback_reason: reason,
+      client_action_id: `identity-reject:${identityReceipt.operation_id}`,
+    })
+  }, [foreground, run, todo])
+
   return {
     todo,
     draft,
@@ -163,6 +209,9 @@ export function useItemDetailController({
     receipt,
     undo,
     error,
+    identityReceipts,
+    identityLoading,
+    identityError,
     attention,
     source: todo?.source,
     setDraft,
@@ -171,5 +220,6 @@ export function useItemDetailController({
     handleAction,
     save,
     undoReceipt,
+    rejectIdentity,
   }
 }

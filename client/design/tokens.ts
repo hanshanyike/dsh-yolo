@@ -666,6 +666,13 @@ export const YOLO_CSS = `
 .yolo-scope .v2-task-action-panel section > ul { margin: 8px 0 0; padding-left: 19px; color: var(--y-text-2); font-size: 13px; }
 .yolo-scope .v2-task-action-panel section > blockquote { margin: 8px 0 0; padding: 7px 9px; border-left: 2px solid var(--y-line-strong); background: var(--y-surface-2); color: var(--y-text-2); font-size: 13px; }
 .yolo-scope .v2-task-action-panel section > button { width: 100%; padding: 0 10px; text-align: left; }
+.yolo-scope .v2-task-action-panel .v2-identity-receipts { display: grid; gap: 9px; }
+.yolo-scope .v2-task-action-panel .v2-identity-receipts article { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--y-line); border-radius: var(--y-r-sm); background: var(--y-surface-2); }
+.yolo-scope .v2-task-action-panel .v2-identity-receipts article strong { color: var(--y-text-1); font-size: 13px; }
+.yolo-scope .v2-task-action-panel .v2-identity-receipts article p { margin: 0; color: var(--y-text-2); font-size: 13px; line-height: 1.5; }
+.yolo-scope .v2-task-action-panel .v2-identity-receipts article small { color: var(--y-text-3); font-size: 13px; }
+.yolo-scope .v2-task-action-panel .v2-identity-receipts article > button { justify-self: start; min-height: 32px; padding: 0 9px; }
+.yolo-scope .v2-task-action-panel .v2-identity-receipts .v2-identity-corrected { padding-left: 8px; border-left: 2px solid var(--y-focus); }
 .yolo-scope .v2-task-action-panel [role="group"] { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
 .yolo-scope .v2-task-action-panel [role="group"] button { flex: 1 1 140px; min-width: 0; padding: 7px 10px; }
 .yolo-scope .v2-task-action-panel [role="group"][aria-label="主要处理"] button:first-child { border-color: color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); font-weight: 700; }

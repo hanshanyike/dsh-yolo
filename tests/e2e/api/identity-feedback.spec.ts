@@ -16,19 +16,20 @@ test('R2C-API: 错误自动关联保留原始证据、退出有效来源并安�
   const row = dashboard.todos.find((candidate: Record<string, unknown>) => candidate.id === created.id)
   const evidenceId = randomUUID()
   const operationId = `e2e-identity-${randomUUID()}`
+  const sessionId = `${operationId}-session`
   const resolutionId = withWorkspaceDatabase(row, (db) => {
     db.prepare('UPDATE todos SET due_at = ?, updated_at = ? WHERE id = ?').run('2026-09-05', Date.now(), row.id)
     db.prepare(`INSERT INTO todo_evidence(
       id,todo_id,source_scope_key,session_id,turn_seq,source_kind,relation,excerpt,occurred_at,source_fingerprint
     ) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(
-      evidenceId, row.id, row.ws.slug, 'e2e-r2c-session', 2, 'human', 'update',
+      evidenceId, row.id, row.ws.slug, sessionId, 2, 'human', 'update',
       '蓝鲸验收批次改到九月五日', Date.now(), `${operationId}:${row.id}`,
     )
     const inserted = db.prepare(`INSERT INTO todo_resolution_log(
       scope_key,session_id,turn_seq,operation_id,input_fingerprint,input_excerpt,resolver_version,
       model_provider,model_name,status,candidates_json,resolutions_json,application_json,created_at
     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-      row.ws.slug, 'e2e-r2c-session', 2, operationId, `hash-${operationId}`, '蓝鲸验收批次改到九月五日', 'shadow-v2',
+      row.ws.slug, sessionId, 2, operationId, `hash-${operationId}`, '蓝鲸验收批次改到九月五日', 'shadow-v2',
       'provider', 'model', 'ok',
       JSON.stringify([{ id: row.id, title: row.title, status: 'pending', due_at: '2026-09-01' }]),
       JSON.stringify([{ decision: 'UPDATE', candidate_ids: [row.id], confidence: 0.99 }]),
@@ -42,6 +43,15 @@ test('R2C-API: 错误自动关联保留原始证据、退出有效来源并安�
     return Number(inserted.lastInsertRowid)
   })
 
+  const projectedBefore = await api.req.get('/yolo/identity-receipts', {
+    params: { todo_id: row.id, scope_cwd: row.scope_cwd },
+  })
+  expect(projectedBefore.ok()).toBe(true)
+  expect(await projectedBefore.json()).toMatchObject({
+    todo_id: row.id,
+    receipts: [{ resolution_id: resolutionId, decision: 'UPDATE', application_status: 'updated', feedback: null }],
+  })
+
   const corrected = await api.action({
     action: 'identity_reject', kind: 'todo', id: row.id, scope_cwd: row.scope_cwd,
     resolution_id: resolutionId, identity_feedback_reason: 'wrong_change',
@@ -51,6 +61,13 @@ test('R2C-API: 错误自动关联保留原始证据、退出有效来源并安�
     ok: true,
     item: { id: row.id, due_at: '2026-09-01' },
     learning_receipt: { type: 'feedback_count', summary: '已记录关联反馈并撤销自动改期', reversible: false },
+  })
+
+  const projectedAfter = await api.req.get('/yolo/identity-receipts', {
+    params: { todo_id: row.id, scope_cwd: row.scope_cwd },
+  })
+  expect(await projectedAfter.json()).toMatchObject({
+    receipts: [{ resolution_id: resolutionId, feedback: { reason: 'wrong_change', undo_status: 'applied' } }],
   })
 
   const persisted = withWorkspaceDatabase(row, (db) => ({

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { TodoIdentityFeedbackReason, TodoIdentityReceipt } from '../../../src/domain/types.ts'
 import { LearningReceipt } from './LearningReceipt.tsx'
 import {
   tomorrowLocalDate,
@@ -20,6 +21,9 @@ export interface TaskActionPanelProps {
   now?: Date
   learningReceipt?: LearningReceiptData | null
   judgmentFeedbackEnabled?: boolean
+  identityReceipts?: readonly TodoIdentityReceipt[]
+  identityLoading?: boolean
+  identityError?: string | null
   onAction: (intent: TaskActionIntent) => void
   onDraftChange: (next: TaskEditDraft) => void
   onSave: () => void
@@ -27,6 +31,7 @@ export interface TaskActionPanelProps {
   onOpenSource?: (source: JudgmentSource) => void
   onUndoReceipt?: (receipt: LearningReceiptData) => void
   onOpenPreferences?: () => void
+  onRejectIdentity?: (receipt: TodoIdentityReceipt, reason: TodoIdentityFeedbackReason) => void
   /** Focus presentation is modal; a wide dock remains non-modal. */
   modal?: boolean
 }
@@ -41,6 +46,9 @@ export function TaskActionPanel({
   now = new Date(),
   learningReceipt,
   judgmentFeedbackEnabled = false,
+  identityReceipts = [],
+  identityLoading = false,
+  identityError,
   onAction,
   onDraftChange,
   onSave,
@@ -48,12 +56,14 @@ export function TaskActionPanel({
   onOpenSource,
   onUndoReceipt,
   onOpenPreferences,
+  onRejectIdentity,
   modal = true,
 }: TaskActionPanelProps): JSX.Element {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [identityCorrectionOpen, setIdentityCorrectionOpen] = useState<string | null>(null)
   const dialogRef = useRef<HTMLElement>(null)
   const titleId = `task-action-title-${item.id}`
   const reasonId = `task-action-reason-${item.id}`
@@ -128,6 +138,54 @@ export function TaskActionPanel({
             </button>
           ) : <p>{source.label}{source.workspace ? ` · ${source.workspace.label}` : ''}</p>}
           {source.excerpt ? <blockquote>{source.excerpt}</blockquote> : null}
+        </section>
+      ) : null}
+
+      {identityLoading || identityError || identityReceipts.length > 0 ? (
+        <section aria-label="自动关联记录" className="v2-identity-receipts">
+          <h3>自动关联记录</h3>
+          {identityLoading ? <p>正在读取关联记录…</p> : null}
+          {identityError ? <p>关联记录暂时无法读取：{identityError}</p> : null}
+          {identityReceipts.slice(0, 3).map((identityReceipt) => {
+            const feedback = identityReceipt.feedback
+            const title = identityReceipt.decision === 'UPDATE' && identityReceipt.application_status === 'updated'
+              ? '已自动更新截止时间'
+              : identityReceipt.application_status === 'no_change'
+                ? '已识别为同一事项，未重复修改'
+                : '已关联为同一事项'
+            const correction = feedback?.undo_status === 'applied'
+              ? '已纠正，并撤销本次自动改期。'
+              : feedback?.undo_status === 'conflict'
+                ? '已纠正；由于事项后来又被修改，保留当前截止时间。'
+                : feedback ? '已纠正，并排除本次来源。' : null
+            return (
+              <article key={identityReceipt.operation_id}>
+                <strong>{title}</strong>
+                <p>{identityReceipt.input_excerpt}</p>
+                <small>
+                  {identityReceipt.confidence !== null && identityReceipt.confidence !== undefined
+                    ? `置信度 ${Math.round(identityReceipt.confidence * 100)}%`
+                    : '置信度未记录'}
+                  {identityReceipt.reason ? ` · ${identityReceipt.reason}` : ''}
+                </small>
+                {correction ? <p className="v2-identity-corrected">{correction}</p> : null}
+                {!feedback && onRejectIdentity ? (
+                  identityCorrectionOpen === identityReceipt.operation_id ? (
+                    <div role="group" aria-label="选择自动关联不准确的原因">
+                      <button type="button" disabled={busy} onClick={() => { onRejectIdentity(identityReceipt, 'wrong_item'); setIdentityCorrectionOpen(null) }}>不是同一事项</button>
+                      {identityReceipt.decision === 'UPDATE' ? (
+                        <button type="button" disabled={busy} onClick={() => { onRejectIdentity(identityReceipt, 'wrong_change'); setIdentityCorrectionOpen(null) }}>不该修改时间</button>
+                      ) : null}
+                      <button type="button" disabled={busy} onClick={() => { onRejectIdentity(identityReceipt, 'other'); setIdentityCorrectionOpen(null) }}>其他原因</button>
+                      <button type="button" disabled={busy} onClick={() => { setIdentityCorrectionOpen(null) }}>返回</button>
+                    </div>
+                  ) : (
+                    <button type="button" disabled={busy} onClick={() => { setIdentityCorrectionOpen(identityReceipt.operation_id) }}>关联错了</button>
+                  )
+                ) : null}
+              </article>
+            )
+          })}
         </section>
       ) : null}
 

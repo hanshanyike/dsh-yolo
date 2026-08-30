@@ -644,6 +644,9 @@ export function YoloPanel({
               busy={detail.busy}
               learningReceipt={detail.receipt}
               judgmentFeedbackEnabled={detailAttention !== undefined}
+              identityReceipts={detail.identityReceipts}
+              identityLoading={detail.identityLoading}
+              identityError={detail.identityError}
               modal={presentation === 'focus'}
               onAction={detail.handleAction}
               onDraftChange={detail.setDraft}
@@ -651,6 +654,7 @@ export function YoloPanel({
               onClose={closeForeground}
               onOpenSource={() => { if (sourceForForeground) openSourcePreview(foreground.item, sourceForForeground) }}
               onUndoReceipt={detail.undo ? detail.undoReceipt : undefined}
+              onRejectIdentity={detail.rejectIdentity}
             />
           </>
         )
