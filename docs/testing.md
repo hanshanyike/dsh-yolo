@@ -91,8 +91,9 @@ UI 套件使用 Playwright 驱动真实 Edge，验证看板打开、捕获、筛
 - 模型回放必须由官方 dsh 宿主内的 `ctx.llm` 使用当前 profile 路由执行；输入 gold 不得原地改写，输出不得
   包含 credential 或原始模型文本。报告必须锁定 provider/model/resolver/as-of，并同时给出分层、置信度、
   false-link、missed-link、高置信误授权和安全覆盖；准入的 false-link=0 只针对达到 0.98 的自动候选，
-  低置信错误仍在总体质量指标中报告但不能假装成运行时放权。handcrafted engineering gate 即使通过，也必须由独立
-  隔离真实对话留出集复核后才能评审默认开启 R2a。
+  低置信错误仍在总体质量指标中报告但不能假装成运行时放权。当前对抗式 handcrafted corpus 通过后可支撑
+  默认关闭的实验入口；独立真实对话不作为近期重复建设的硬门槛。用户反馈误关联/漏关联，或模型、prompt、
+  阈值、授权范围实质变化时，必须从脱敏 shadow 日志扩充评测集并重新过门；默认开启仍需结合累计观察另行评审。
 - R2a 开启路径只允许唯一开放候选的高置信 LINK 或明确 due_at UPDATE；状态、priority/title/detail、终态、
   occurrence、step、多候选与多 mention 均应有 blocked 回归，application receipt 必须与 SQLite 实际结果一致。
 - 每个聚合事项显式携带并保留自己的 `scope_cwd`；未知 scope 被拒绝。

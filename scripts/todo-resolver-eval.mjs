@@ -200,7 +200,7 @@ function gateReport(report, rows) {
       minimum_confidence: GATE.minimumConfidence,
     },
     auto_authorization: authorization,
-    note: 'This engineering gate authorizes no runtime change by itself; a separate isolated real-host holdout is still required before enabling R2a by default.',
+    note: 'This engineering gate supports a default-off experimental toggle but does not authorize default-on behavior. Expand the labeled set from sanitized shadow logs after accuracy feedback or material model, prompt, threshold, or policy changes.',
   }
 }
 
