@@ -18,7 +18,8 @@ describe('GET /yolo/identity-receipts', () => {
     registerIdentityReceiptsEndpoint({ webServer: { register } }, yolo)
     const handler = register.mock.calls[0][0].handler as (req: unknown, res: ReturnType<typeof response>) => void
     const res = response()
-    handler({ method: 'GET', url: '/yolo/identity-receipts?todo_id=todo-1&scope_cwd=d%3A%2Fwork%2Falpha' }, res)
+    const params = new URLSearchParams({ todo_id: 'todo-1', scope_cwd: 'D:\\Work\\Alpha' })
+    handler({ method: 'GET', url: `/yolo/identity-receipts?${params.toString()}` }, res)
 
     expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object))
     expect(JSON.parse(res.end.mock.calls[0][0])).toEqual({
