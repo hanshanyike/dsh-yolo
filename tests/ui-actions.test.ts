@@ -26,6 +26,8 @@ function mockYolo(overrides: Record<string, unknown> = {}): Yolo {
   const milestone: Milestone = { id: 'm1', title: 'v0.3 发布', status: 'active', scope_key: 'k', created_at: now, updated_at: now }
   return {
     runWorkspaceTransaction: vi.fn((_cwd: string, execute: () => unknown) => execute()),
+    scopeRefForCwd: vi.fn(() => ({ kind: 'workspace' as const, workspaceId: 'fallback-workspace' })),
+    runInScopeRef: vi.fn((_scope: unknown, execute: (cwd: string) => unknown) => execute('/tmp/proj')),
     runIdempotentAction: vi.fn((_cwd: string, _id: string, _hash: string, execute: () => string) => ({
       status: 'fresh' as const,
       outcome_json: execute(),
@@ -235,12 +237,12 @@ describe('POST /yolo/actions', () => {
   })
 
   it('an equivalent known scope_cwd routes with registry-owned spelling and key', async () => {
-    const runInScope = vi.fn((_cwd: string, _scopeKey: string, fn: () => unknown) => fn())
+    const runInScopeRef = vi.fn((_scope: unknown, fn: (cwd: string) => unknown) => fn('/ws/known'))
     const listWorkspaceMeta = vi.fn(() => [{ workspaceId: 'known-workspace', cwd: '/ws/known', scopeKey: 'known/main' }])
-    const { server, yolo } = setup({ runInScope, listWorkspaceMeta })
+    const { server, yolo } = setup({ runInScopeRef, listWorkspaceMeta })
     const r = await call(server, 'POST', JSON.stringify({ action: 'complete', kind: 'todo', id: 't1', scope_cwd: '/ws/known/child/..' }))
     expect(r.status).toBe(200)
-    expect(runInScope).toHaveBeenCalledWith('/ws/known', 'known/main', expect.any(Function))
+    expect(runInScopeRef).toHaveBeenCalledWith({ kind: 'workspace', workspaceId: 'known-workspace' }, expect.any(Function))
     expect(yolo.applyTodoAction).toHaveBeenCalledWith('/ws/known', { id: 't1' }, 'complete', { session_id: null })
   })
 

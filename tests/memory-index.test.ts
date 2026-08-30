@@ -51,6 +51,15 @@ function makeCtx() {
   return { ctx, handlers, tools, sections, contexts }
 }
 
+function emitUserMessage(onEvent: Handler, text: string, session = { header: { id: 'session-1', cwd } }): void {
+  const id = session.header.id
+  const internal = id.startsWith('yolo-')
+  // ctx.yolo is the sole runtime observer. The memory plugin receives the
+  // same host event as a consumer, after the provider has updated its state.
+  yolo.observations.observeUserMessage(id, session.header.cwd, text, internal)
+  onEvent(session, { type: 'user/message', data: { content: [{ type: 'text', text }] } })
+}
+
 describe('memory apply()', () => {
   it('registers the five memory tools and the prompt contributions', () => {
     const { ctx, tools, sections, contexts } = makeCtx()
@@ -70,7 +79,7 @@ describe('memory apply()', () => {
     // seed a searchable memory row, then drive the recall context with the
     // tracked latest user message (a substring of the title — trigram MATCH)
     yolo.addTodo(cwd, { title: '准备季度汇报材料', source: 'manual' })
-    onEvent(undefined, { type: 'user/message', data: { content: [{ type: 'text', text: '季度汇报' }] } })
+    emitUserMessage(onEvent, '季度汇报')
 
     const recall = contexts[0].text()
     expect(recall).toContain('Related memory')
@@ -96,7 +105,7 @@ describe('memory apply()', () => {
 
     yolo.addTodo(cwd, { title: '准备季度汇报材料', source: 'manual' })
     const yoloThread = { header: { id: 'yolo-a-abc123def456', cwd } }
-    onEvent(yoloThread, { type: 'user/message', data: { content: [{ type: 'text', text: '季度汇报' }] } })
+    emitUserMessage(onEvent, '季度汇报', yoloThread)
 
     expect(contexts[0].text()).toBe('')
   })
@@ -116,7 +125,7 @@ describe('memory apply()', () => {
     const onEvent = handlers.get('session/event')!
 
     yolo.addTodo(cwd, { title: '准备季度汇报材料', source: 'manual' })
-    onEvent(undefined, { type: 'user/message', data: { content: [{ type: 'text', text: message }] } })
+    emitUserMessage(onEvent, message)
 
     expect(() => contexts[0].text()).not.toThrow()
   })
@@ -129,7 +138,7 @@ describe('memory apply()', () => {
     const onEvent = handlers.get('session/event')!
 
     yolo.addTodo(cwd, { title: '找研发同学评审', source: 'manual' })
-    onEvent(undefined, { type: 'user/message', data: { content: [{ type: 'text', text: '研发' }] } })
+    emitUserMessage(onEvent, '研发')
 
     const recall = contexts[0].text()
     expect(recall).toContain('Related memory')
@@ -142,7 +151,7 @@ describe('memory apply()', () => {
     const onEvent = handlers.get('session/event')!
 
     yolo.addTodo(cwd, { title: '把演示稿发给研发', source: 'manual' })
-    onEvent(undefined, { type: 'user/message', data: { content: [{ type: 'text', text: '演示稿进展如何' }] } })
+    emitUserMessage(onEvent, '演示稿进展如何')
 
     const recall = contexts[0].text()
     expect(recall).toContain('Related memory')
@@ -158,17 +167,17 @@ describe('memory apply()', () => {
     const s1 = { header: { id: 'session-1', cwd } }
     const s2 = { header: { id: 'session-2', cwd } }
 
-    onEvent(s1, { type: 'user/message', data: { content: [{ type: 'text', text: '季度汇报' }] } })
+    emitUserMessage(onEvent, '季度汇报', s1)
     expect(contexts[0].text()).toContain('准备季度汇报材料')
 
     // next message in the same session commits the previous round's keys —
     // the row is now injected and must not be rendered again (search still hits)
-    onEvent(s1, { type: 'user/message', data: { content: [{ type: 'text', text: '再看看季度汇报的安排' }] } })
+    emitUserMessage(onEvent, '再看看季度汇报的安排', s1)
     expect(yolo.search(cwd, '再看看季度汇报的安排')).not.toHaveLength(0)
     expect(contexts[0].text()).toBe('')
 
     // a different session clears the injected set — the row injects fresh
-    onEvent(s2, { type: 'user/message', data: { content: [{ type: 'text', text: '季度汇报' }] } })
+    emitUserMessage(onEvent, '季度汇报', s2)
     expect(contexts[0].text()).toContain('准备季度汇报材料')
   })
 })

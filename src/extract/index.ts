@@ -14,15 +14,14 @@ import type { LlmRuntime, Message, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type Yolo from '../storage/index.ts'
-import type { MilestoneStatus, Priority, TodoIdentityCandidate } from '../storage/types.ts'
+import type { TodoIdentityCandidate } from '../domain/types.ts'
 import { DEFAULTS } from '../shared/constants.ts'
-import { shouldDropExtracted } from '../shared/quality.ts'
 import { sessionCwd } from '../shared/session.ts'
-import { extractionTodoOperationId, todoEvidenceFingerprint, todoOperationRequestHash } from '../shared/todo-identity.ts'
-import { isYoloSessionId } from '../ui/session.ts'
-import { contentBlocksToText, llmExtract, type ExtractionResult, type ExtractedUpdate, type LlmExtractionObservation } from './llm-extract.ts'
-import { buildKnownContext } from './prompt.ts'
+import { extractionTodoOperationId, todoOperationRequestHash } from '../shared/todo-identity.ts'
+import { isYoloSessionId } from '../runtime/session-identity.ts'
+import { contentBlocksToText, llmExtract, type LlmExtractionObservation } from './llm-extract.ts'
 import { llmResolveTodoIdentity, TODO_RESOLVER_VERSION, type TodoResolverObservation } from './todo-resolver.ts'
+import { applyExtractionResult, buildKnownMemoryContext } from '../application/ingestion/apply-extraction.ts'
 
 export const name = 'yolo-extract'
 export const inject = ['yolo', 'llm', 'sessions', 'settings'] as const
@@ -45,13 +44,6 @@ interface SettingsLike {
       maxRunsPerDay?: number
     }
   } | undefined
-}
-
-const PRIORITIES: readonly Priority[] = ['low', 'medium', 'high', 'urgent']
-
-/** Coerce an LLM-provided priority string into the domain union (null when unknown). */
-function toPriority(v: string | null | undefined): Priority | null {
-  return PRIORITIES.includes(v as Priority) ? (v as Priority) : null
 }
 
 /** cwd for scope partitioning. Prefer the session's creation cwd when present. */
@@ -159,140 +151,9 @@ async function waitForSpacing(ms: number, signal: AbortSignal): Promise<void> {
   })
 }
 
-/** Merge an LLM ExtractionResult into storage. Upserts dedup by title/key;
- * events are deduped against recent timeline summaries (they have no key).
- * M8: todos/goals link to milestones by title, and updates[] apply state
- * changes to known items AFTER new items land (so "created + finished in one
- * turn" works). Unmatched updates are dropped silently — hallucinated titles
- * are the norm, not the exception.
- * v0.3.0: everything lands with session attribution — events carry
- * session_id, NEW todos write a todo_created ledger event, and a
- * session_summary keeps the ledger's source badge readable. */
-function mergeExtraction(
-  yolo: Yolo,
-  cwd: string,
-  r: ExtractionResult,
-  source: { sessionId: string; turn: number; excerpt: string | null; operationId: string; occurredAt: number },
-): void {
-  const { sessionId } = source
-  // Write-quality gate (v0.3.2 / B3): junk acknowledgements and bare meta
-  // commands never land in storage — a wrong memory can trigger a wrong reminder.
-  for (const m of r.milestones) {
-    if (shouldDropExtracted('milestone', m.title)) continue
-    yolo.addMilestone(cwd, { title: m.title, target_date: m.target_date, description: m.description, source: 'llm' })
-  }
-  const link = (title: string | null | undefined): string | null =>
-    title ? yolo.findMilestoneId(cwd, title) : null
-  for (const t of r.todos) {
-    if (shouldDropExtracted('todo', t.title)) continue
-    const { todo, created } = yolo.addTodo(cwd, {
-      title: t.title,
-      due_at: t.due_at,
-      priority: toPriority(t.priority),
-      milestone_id: link(t.milestone_title),
-      source: 'llm',
-      session_id: sessionId,
-      source_excerpt: source.excerpt,
-      source_turn: source.excerpt ? source.turn : null,
-      evidence_operation_key: source.operationId,
-      evidence_source_kind: source.excerpt ? 'human' : 'extraction',
-      evidence_occurred_at: source.occurredAt,
-    })
-    if (created) {
-      yolo.addEvent(cwd, {
-        kind: 'todo_created',
-        summary: `＋ 记录新待办「${t.title}」`,
-        detail: t.due_at ? `截止 ${t.due_at}` : null,
-        session_id: sessionId,
-        source: 'llm',
-        subject_type: 'todo',
-        subject_id: todo.id,
-        subject_title: todo.title,
-        change: {
-          status: { before: null, after: todo.status },
-          ...(todo.due_at ? { due_at: { before: null, after: todo.due_at } } : {}),
-        },
-      })
-    }
-  }
-  for (const g of r.goals) {
-    if (shouldDropExtracted('goal', g.title)) continue
-    yolo.addGoal(cwd, { title: g.title, description: g.description, milestone_id: link(g.milestone_title) })
-  }
-  for (const p of r.preferences) {
-    if (shouldDropExtracted('preference', p.key, p.value)) continue
-    yolo.addPreference(cwd, { key: p.key, value: p.value, session_id: sessionId })
-  }
-  const recentSummaries = new Set(yolo.listEvents(cwd, 30).map((e) => e.summary))
-  for (const e of r.events) {
-    if (shouldDropExtracted('event', e.summary)) continue
-    if (recentSummaries.has(e.summary)) continue
-    recentSummaries.add(e.summary)
-    yolo.addEvent(cwd, { kind: e.kind, summary: e.summary, occurred_at: e.occurred_at ? Date.parse(e.occurred_at) || undefined : undefined, session_id: sessionId, source: 'llm' })
-  }
-  if (r.session_summary) yolo.upsertSessionSummary(cwd, sessionId, r.session_summary)
-  applyUpdates(yolo, cwd, r.updates, source)
-}
-
-const MILESTONE_STATUSES: readonly MilestoneStatus[] = ['planned', 'active', 'done', 'abandoned']
-
-/** Route LLM state-change updates onto the storage domain actions (M8).
- * v0.3.0: carries session_id so ledger events stay attributed to their origin. */
-function applyUpdates(
-  yolo: Yolo,
-  cwd: string,
-  updates: readonly ExtractedUpdate[],
-  source: { sessionId: string; turn: number; excerpt: string | null; operationId: string; occurredAt: number },
-): void {
-  const { sessionId } = source
-  for (const u of updates) {
-    if (u.kind === 'todo') {
-      const args = { session_id: sessionId }
-      let todo = null
-      if (u.status === 'done') todo = yolo.applyTodoAction(cwd, { title: u.match_title }, 'complete', args)
-      else if (u.status === 'cancelled') todo = yolo.applyTodoAction(cwd, { title: u.match_title }, 'cancel', args)
-      else if (u.status === 'in_progress') todo = yolo.applyTodoAction(cwd, { title: u.match_title }, 'start', args)
-      else if (u.due_at) todo = yolo.applyTodoAction(cwd, { title: u.match_title }, 'postpone', { due_at: u.due_at, ...args })
-      if (todo) {
-        yolo.addTodoEvidence(cwd, todo.id, {
-          session_id: sessionId,
-          turn_seq: source.turn,
-          source_kind: source.excerpt ? 'human' : 'extraction',
-          relation: u.status === 'done' ? 'completion_claim' : 'update',
-          excerpt: source.excerpt,
-          occurred_at: source.occurredAt,
-          source_fingerprint: todoEvidenceFingerprint(source.operationId, todo.id),
-        })
-      }
-    } else if (u.kind === 'goal') {
-      if (typeof u.progress === 'number') yolo.applyGoalProgress(cwd, { title: u.match_title }, u.progress, u.note ?? undefined, sessionId)
-    } else if (u.kind === 'milestone' && u.status && MILESTONE_STATUSES.includes(u.status as MilestoneStatus)) {
-      yolo.applyMilestoneStatus(cwd, { title: u.match_title }, u.status as MilestoneStatus, sessionId)
-    }
-  }
-}
-
-/** Compact digest of what is already stored, so the model skips unchanged facts
- * and can target state changes (M8: rows carry status/progress/due). */
-function knownDigest(yolo: Yolo, cwd: string): string | null {
-  try {
-    return buildKnownContext({
-      todos: yolo.listTodos(cwd).map((t) => ({ title: t.title, status: t.status, due_at: t.due_at })),
-      goals: yolo.listGoals(cwd).map((g) => ({ title: g.title, progress: g.progress })),
-      milestones: yolo.listMilestones(cwd).map((m) => ({ title: m.title, status: m.status })),
-      preferences: yolo.listPreferences(cwd).map((p) => ({ key: p.key, value: p.value })),
-      events: yolo.listEvents(cwd, 15).map((e) => e.summary),
-    })
-  } catch {
-    return null
-  }
-}
-
 export function apply(ctx: Context): void {
   const yctx = ctx as YoloCtx
   const settings = (ctx as { settings?: SettingsLike }).settings
-  const captured = new Map<string, Map<number, UserMessage[]>>()
-  const capturedAt = new Map<string, Map<number, number>>()
   const capturedTodoCandidates = new Map<string, Map<number, TodoIdentityCandidate[]>>()
   const jobs = new Map<string, Promise<void>>()
   const scheduledTurns = new Set<string>()
@@ -306,14 +167,12 @@ export function apply(ctx: Context): void {
     if (decision.kind !== 'enter' || payload.signal.aborted || isYoloSessionId(payload.agent.id)) return decision
     const human = decision.messages.filter((message) => message.source?.kind === 'user')
     if (human.length) {
-      const turns = captured.get(payload.agent.id) ?? new Map<number, UserMessage[]>()
-      const current = turns.get(payload.turn) ?? []
-      const seen = new Set(current.map((message) => message.id))
-      turns.set(payload.turn, [...current, ...human.filter((message) => !seen.has(message.id))])
-      captured.set(payload.agent.id, turns)
-      const clocks = capturedAt.get(payload.agent.id) ?? new Map<number, number>()
-      if (!clocks.has(payload.turn)) clocks.set(payload.turn, Date.now())
-      capturedAt.set(payload.agent.id, clocks)
+      yctx.yolo.observations.captureHumanTurn(
+        payload.agent.id,
+        payload.turn,
+        cwdOf(payload.agent.session),
+        human,
+      )
       // Identity candidates are facts from BEFORE the assistant can run tools
       // in this turn. Capturing later at turn-stopping would let the shadow
       // resolver see the due/status that the assistant just wrote and inflate
@@ -344,8 +203,7 @@ export function apply(ctx: Context): void {
     if (event.type !== 'turn/end') return
     const reason = event.data.reason.kind
     if (reason === 'completed' || reason === 'max-tokens') return
-    captured.get(session.id)?.delete(event.data.turn)
-    capturedAt.get(session.id)?.delete(event.data.turn)
+    yctx.yolo.observations.discardHumanTurn(session.id, event.data.turn)
     capturedTodoCandidates.get(session.id)?.delete(event.data.turn)
     scheduledTurns.delete(`${session.id}:${event.data.turn}`)
   })
@@ -366,11 +224,10 @@ export function apply(ctx: Context): void {
         await agent.whenIdle?.()
         // Read only after true idle so steering accepted after an earlier
         // turn-stopping boundary is included in the same extraction.
-        const capturedMessages = captured.get(sessionId)?.get(turn) ?? []
-        const acceptedAt = capturedAt.get(sessionId)?.get(turn)
+        const capturedTurn = yctx.yolo.observations.takeHumanTurn(sessionId, turn)
+        const capturedMessages = capturedTurn?.messages ?? []
+        const acceptedAt = capturedTurn?.acceptedAt
         const preStepTodoCandidates = capturedTodoCandidates.get(sessionId)?.get(turn)
-        captured.get(sessionId)?.delete(turn)
-        capturedAt.get(sessionId)?.delete(turn)
         capturedTodoCandidates.get(sessionId)?.delete(turn)
         if (!completedTurn(agent.session, turn)) return
         const session = agent.session
@@ -435,7 +292,7 @@ export function apply(ctx: Context): void {
             provider: route.provider,
             model: route.model,
             turnText,
-            knownContext: knownDigest(yctx.yolo, cwd),
+            knownContext: buildKnownMemoryContext(yctx.yolo, cwd),
             signal: controller.signal,
             // Resolve “today/tomorrow” from when the host accepted the user's
             // input, not from a later idle/spacing boundary that may cross midnight.
@@ -443,9 +300,10 @@ export function apply(ctx: Context): void {
             observe: (value) => { observation = value },
           })
           const hasContent = result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0 || result.updates.length > 0
-          const persisted = yctx.yolo.runIdempotentAction(cwd, operationId, requestHash, () => {
+          const scope = yctx.yolo.scopeRefForCwd(cwd)
+          const persisted = yctx.yolo.runIdempotentScopeAction(scope, operationId, requestHash, (scopedCwd) => {
             if (sourceExcerpt) {
-              yctx.yolo.promoteToolTodoOrigins(cwd, {
+              yctx.yolo.promoteToolTodoOrigins(scopedCwd, {
                 session_id: session.id,
                 source_excerpt: sourceExcerpt,
                 source_turn: turn,
@@ -455,7 +313,7 @@ export function apply(ctx: Context): void {
                 evidence_occurred_at: acceptedAt ?? started,
               })
             }
-            mergeExtraction(yctx.yolo, cwd, result, {
+            applyExtractionResult(yctx.yolo, scopedCwd, result, {
               sessionId: session.id,
               turn,
               // Compatibility fallback text is useful extraction input but is
@@ -464,7 +322,7 @@ export function apply(ctx: Context): void {
               operationId,
               occurredAt: acceptedAt ?? started,
             })
-            yctx.yolo.logExtraction(cwd, {
+            yctx.yolo.logExtraction(scopedCwd, {
               session_id: session.id,
               turn_seq: turn,
               strategy: 'llm',
@@ -589,8 +447,6 @@ export function apply(ctx: Context): void {
   ;(ctx as { effect?: (effect: () => () => void) => unknown }).effect?.(() => () => {
     for (const controller of controllers) controller.abort(new Error('yolo-extract disposed'))
     controllers.clear()
-    captured.clear()
-    capturedAt.clear()
     capturedTodoCandidates.clear()
     scheduledTurns.clear()
   })

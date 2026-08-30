@@ -9,7 +9,7 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { contentBlocksToText } from '../shared/text.ts'
 import { sessionCwd, sessionId } from '../shared/session.ts'
-import { isYoloSessionId } from '../ui/session.ts'
+import { isYoloSessionId } from '../runtime/session-identity.ts'
 import { DEFAULTS } from '../shared/constants.ts'
 import { RecallDedupTracker, registerYoloPrompt } from './recall.ts'
 import { registerYoloTools, type YoloContext } from './tools.ts'
@@ -43,8 +43,6 @@ export function apply(ctx: Context): void {
 
   // track the latest user message for dynamic recall (AssembleContext has no userMessage in rc.8)
   // and the latest session cwd so recall reads the scope extraction writes to.
-  let lastUserText = ''
-  let lastSessionCwd: string | undefined
   const recallDedup = new RecallDedupTracker()
   const semantic = new SemanticRecall(readSemanticConfig((ctx as unknown as { settings?: SettingsLike }).settings))
 
@@ -54,7 +52,7 @@ export function apply(ctx: Context): void {
     const cfg = readSemanticConfig((ctx as unknown as { settings?: SettingsLike }).settings)
     semantic.setConfig(cfg)
     if (!semantic.shouldExpand(query)) return
-    const cwd = sessionCwd(session) ?? lastSessionCwd ?? process.cwd()
+    const cwd = sessionCwd(session) ?? yctx.yolo.observations.latestWorkspaceCwd(process.cwd())
     const session_id = sessionId(session) ?? null
     void (async () => {
       const started = Date.now()
@@ -104,20 +102,17 @@ export function apply(ctx: Context): void {
     // and recall prewarm skips them (reminder/tool traffic must not burn the
     // semantic-recall budget or pollute the tracked user message).
     if (isYoloSessionId(sessionId(session))) return
-    const sessionWd = sessionCwd(session)
-    if (sessionWd) lastSessionCwd = sessionWd
     if (event.type !== 'user/message') return
     const text = contentBlocksToText((event.data as { content?: readonly unknown[] }).content)
     if (!text) return
-    lastUserText = text
     recallDedup.onUserMessage(sessionId(session) ?? '', text)
     prewarmSemantic(session, text)
   })
 
   registerYoloPrompt(ctx, {
     yolo: yctx.yolo,
-    cwd: () => lastSessionCwd ?? process.cwd(),
-    getLastUserText: () => lastUserText,
+    cwd: () => yctx.yolo.observations.latestWorkspaceCwd(process.cwd()),
+    getLastUserText: () => yctx.yolo.observations.latestUserText(),
     getInjected: () => recallDedup.getInjected(),
     onRecallKept: (keys) => recallDedup.onRecallKept(keys),
     semantic,
@@ -126,4 +121,3 @@ export function apply(ctx: Context): void {
 
   ctx.logger?.info?.('[yolo] memory plugin loaded')
 }
-

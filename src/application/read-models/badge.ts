@@ -1,5 +1,5 @@
 import type Yolo from '../../storage/index.ts'
-import type { Notification } from '../../storage/types.ts'
+import type { Notification } from '../../domain/types.ts'
 import type { YoloBadgeData, YoloBadgeNotification } from '../../shared/badge.ts'
 
 function preview(notification: Notification | undefined, fallbackCwd: string): YoloBadgeNotification | undefined {

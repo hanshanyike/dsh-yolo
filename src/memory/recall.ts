@@ -6,7 +6,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type Yolo from '../storage/index.ts'
-import type { RowType, SearchHit } from '../storage/types.ts'
+import type { RowType, SearchHit } from '../domain/types.ts'
 import { DEFAULTS, PROMPT_ORDER } from '../shared/constants.ts'
 import { localClockGuidance } from '../shared/text.ts'
 import { dedupeSearchHits, type SemanticRecall, type RerankVerdict } from './semantic.ts'

@@ -7,7 +7,7 @@
 // M9 P34: every denial also leaves an action_denied audit event.
 
 import type Yolo from '../../storage/index.ts'
-import type { MilestoneStatus, Priority, TimelineEvent, Todo, TodoAction } from '../../storage/types.ts'
+import type { MilestoneStatus, Priority, TimelineEvent, Todo, TodoAction } from '../../domain/types.ts'
 import { createHash } from 'node:crypto'
 import { localDateStr } from '../../shared/text.ts'
 import { todoEvidenceFingerprint } from '../../shared/todo-identity.ts'
@@ -19,6 +19,7 @@ import type {
   YoloActionRequest,
   YoloLearningReceipt,
 } from '../../contracts/actions.ts'
+import type { ScopeRef } from '../../domain/scope.ts'
 export type {
   AttentionFeedbackReason,
   YoloActionOutcome,
@@ -162,8 +163,8 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
   const action = String(r.action ?? '')
   const kind = String(r.kind ?? '')
   const ref: { id?: string; title?: string } = {
-    id: typeof r.id === 'string' && r.id ? r.id : undefined,
-    title: typeof r.title === 'string' && r.title ? r.title : undefined,
+    ...(typeof r.id === 'string' && r.id ? { id: r.id } : {}),
+    ...(typeof r.title === 'string' && r.title ? { title: r.title } : {}),
   }
   const sessionId = typeof r.session_id === 'string' && r.session_id ? r.session_id : undefined
 
@@ -580,5 +581,20 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
     return JSON.parse(result.outcome_json) as YoloActionOutcome
   } catch {
     return { ok: false, error: 'stored action outcome is unreadable', code: 'idempotency_record_invalid', httpStatus: 409 }
+  }
+}
+
+/** Typed application entry. cwd-based `applyYoloAction` remains only as the
+ * compatibility facade for older package-internal consumers. */
+export function applyYoloActionInScope(yolo: Yolo, scope: ScopeRef, request: YoloActionRequest): YoloActionOutcome {
+  try {
+    return yolo.runInScopeRef(scope, (cwd) => applyYoloAction(yolo, cwd, request))
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      code: 'invalid_scope',
+      httpStatus: 400,
+    }
   }
 }

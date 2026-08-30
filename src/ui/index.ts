@@ -9,19 +9,18 @@
 // `.enabled` access (fixes "Cannot read properties of undefined").
 
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { installSettingsSection } from '@deepseek-ai/dsh-settings'
 import type Yolo from '../storage/index.ts'
+import { Config, YOLO_NS as YOLO_SETTINGS_NS, type Config as ConfigSchema } from '../runtime/config.ts'
 import { registerActionsEndpoint } from './actions.ts'
-import { Config, type Config as ConfigSchema } from './config.ts'
 import { registerDashboardEndpoint, type WebServerLike } from './dashboard.ts'
 import { registerBadgeEndpoint } from './badge.ts'
 import { registerNotificationsEndpoint } from './notifications.ts'
 import { registerHistoryEndpoint } from './history.ts'
-import { YoloSessions, YoloChatThreads, registerSessionEndpoints, isYoloSessionId, type AgentsLike } from './session.ts'
-import { sessionCwd } from '../shared/session.ts'
+import { registerSessionEndpoints, type AgentsLike } from '../application/conversation/index.ts'
 
 /** The namespace is the join key shared with the client half (settings.plugin.item). */
-export const YOLO_NS = settingsNamespace('yolo')
+export const YOLO_NS = YOLO_SETTINGS_NS
 
 export const name = 'yolo-ui'
 export const inject = ['yolo', 'webServer', 'agents'] as const
@@ -48,59 +47,37 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   })
 
   // ---- panel data + chat channel ----
-  // The dashboard is global (session-independent), but its scope follows the
-  // workspace of the most recent session so the panel shows what the user is
-  // actually working on. Falls back to the host process cwd.
-  let latestSessionCwd: string | undefined
-  ctx.on('agent/session-start', (payload: { agent?: unknown }) => {
-    if (isYoloSessionId((payload.agent as { id?: string } | undefined)?.id)) return // YOLO threads don't move the workspace
-    const cwd = sessionCwd((payload.agent as { session?: unknown } | undefined)?.session)
-    if (cwd) latestSessionCwd = cwd
-  })
-  ctx.on('agent/turn-stopping', (payload: { agent?: { id?: string; session?: unknown } }) => {
-    // YOLO threads own their workspace: a resident/anchored thread turn must
-    // never move the shared "latest workspace" tracker — it would silently
-    // re-target quick actions, the dashboard fallback and snapshots to another
-    // scope (mirrors the session-start guard above).
-    if (isYoloSessionId((payload.agent as { id?: string } | undefined)?.id)) return
-    const cwd = sessionCwd(payload.agent?.session)
-    if (cwd) latestSessionCwd = cwd
-  })
+  // Runtime observation has one owner on ctx.yolo; UI is only a consumer.
+  const currentCwd = (): string => ctx.yolo.observations.latestWorkspaceCwd(process.cwd())
 
-  registerDashboardEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd(), {
+  registerDashboardEndpoint(ctx, ctx.yolo, currentCwd, {
     allowAggregate: () => configSource().ui.aggregateAcrossWorkspaces,
     focusDefaultCount: () => configSource().ui.focusDefaultCount,
   })
-  registerBadgeEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
-  registerNotificationsEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
-  registerHistoryEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
+  registerBadgeEndpoint(ctx, ctx.yolo, currentCwd)
+  registerNotificationsEndpoint(ctx, ctx.yolo, currentCwd)
+  registerHistoryEndpoint(ctx, ctx.yolo, currentCwd)
   // M8: in-place dashboard operations (complete/postpone/cancel + goal/milestone)
   // v0.3.0 E: + update/rename/abandon/quick_add/handled + snapshot sync
-  registerActionsEndpoint(ctx, ctx.yolo, () => latestSessionCwd ?? process.cwd())
+  registerActionsEndpoint(ctx, ctx.yolo, currentCwd)
   // v0.3.0 A/B: the YOLO resident thread (对话 Tab + 侧栏对话)
   // v0.3.3: agents are created with the harness's model selection so they reply.
   const defaultModel = (): { provider: string; model: string } | undefined => {
     const sel = ctx.get('agentDefaultModel')
     return sel ? sel.currentSelection() : undefined
   }
-  const sessions = new YoloSessions(
+  const conversations = ctx.yolo.conversations.get(
     // inject declares 'agents' (runtime access is legal); the structural cast
     // sidesteps the AgentRegistry / AgentsLike signature mismatch
     ctx.agents as unknown as AgentsLike,
     { info: (f, ...a) => ctx.logger?.info?.(f, ...a), warn: (f, ...a) => ctx.logger?.warn?.(f, ...a) },
     defaultModel,
   )
-  // v0.3.2 聊一聊 anchored chats are fresh ephemeral threads, not resident history
-  const threads = new YoloChatThreads(
-    ctx.agents as unknown as AgentsLike,
-    { info: (f, ...a) => ctx.logger?.info?.(f, ...a), warn: (f, ...a) => ctx.logger?.warn?.(f, ...a) },
-    defaultModel,
-  )
   registerSessionEndpoints(
     ctx,
-    sessions,
-    threads,
-    () => latestSessionCwd ?? process.cwd(),
+    conversations.sessions,
+    conversations.threads,
+    currentCwd,
     () => ctx.yolo.listWorkspaceMeta(),
   )
 

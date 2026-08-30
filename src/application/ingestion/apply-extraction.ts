@@ -1,0 +1,135 @@
+import type Yolo from '../../storage/index.ts'
+import type { MilestoneStatus, Priority } from '../../domain/types.ts'
+import type { ExtractedUpdate, ExtractionResult } from '../../contracts/extraction.ts'
+import { shouldDropExtracted } from '../../shared/quality.ts'
+import { todoEvidenceFingerprint } from '../../shared/todo-identity.ts'
+import { buildKnownContext } from './known-context.ts'
+
+export interface ExtractionSource {
+  sessionId: string
+  turn: number
+  excerpt: string | null
+  operationId: string
+  occurredAt: number
+}
+
+const PRIORITIES: readonly Priority[] = ['low', 'medium', 'high', 'urgent']
+const MILESTONE_STATUSES: readonly MilestoneStatus[] = ['planned', 'active', 'done', 'abandoned']
+
+function toPriority(value: string | null | undefined): Priority | null {
+  return PRIORITIES.includes(value as Priority) ? (value as Priority) : null
+}
+
+function applyUpdates(yolo: Yolo, cwd: string, updates: readonly ExtractedUpdate[], source: ExtractionSource): void {
+  for (const update of updates) {
+    if (update.kind === 'todo') {
+      const args = { session_id: source.sessionId }
+      let todo = null
+      if (update.status === 'done') todo = yolo.applyTodoAction(cwd, { title: update.match_title }, 'complete', args)
+      else if (update.status === 'cancelled') todo = yolo.applyTodoAction(cwd, { title: update.match_title }, 'cancel', args)
+      else if (update.status === 'in_progress') todo = yolo.applyTodoAction(cwd, { title: update.match_title }, 'start', args)
+      else if (update.due_at) todo = yolo.applyTodoAction(cwd, { title: update.match_title }, 'postpone', { due_at: update.due_at, ...args })
+      if (todo) {
+        yolo.addTodoEvidence(cwd, todo.id, {
+          session_id: source.sessionId,
+          turn_seq: source.turn,
+          source_kind: source.excerpt ? 'human' : 'extraction',
+          relation: update.status === 'done' ? 'completion_claim' : 'update',
+          excerpt: source.excerpt,
+          occurred_at: source.occurredAt,
+          source_fingerprint: todoEvidenceFingerprint(source.operationId, todo.id),
+        })
+      }
+    } else if (update.kind === 'goal' && typeof update.progress === 'number') {
+      yolo.applyGoalProgress(cwd, { title: update.match_title }, update.progress, update.note ?? undefined, source.sessionId)
+    } else if (update.kind === 'milestone' && update.status && MILESTONE_STATUSES.includes(update.status as MilestoneStatus)) {
+      yolo.applyMilestoneStatus(cwd, { title: update.match_title }, update.status as MilestoneStatus, source.sessionId)
+    }
+  }
+}
+
+/** Persist one accepted extraction result. The caller owns the surrounding
+ * workspace UnitOfWork so state, provenance, log and receipt commit together. */
+export function applyExtractionResult(yolo: Yolo, cwd: string, result: ExtractionResult, source: ExtractionSource): void {
+  for (const milestone of result.milestones) {
+    if (!shouldDropExtracted('milestone', milestone.title)) {
+      yolo.addMilestone(cwd, {
+        title: milestone.title,
+        target_date: milestone.target_date,
+        description: milestone.description,
+        source: 'llm',
+      })
+    }
+  }
+  const milestoneId = (title: string | null | undefined): string | null => title ? yolo.findMilestoneId(cwd, title) : null
+  for (const item of result.todos) {
+    if (shouldDropExtracted('todo', item.title)) continue
+    const { todo, created } = yolo.addTodo(cwd, {
+      title: item.title,
+      due_at: item.due_at,
+      priority: toPriority(item.priority),
+      milestone_id: milestoneId(item.milestone_title),
+      source: 'llm',
+      session_id: source.sessionId,
+      source_excerpt: source.excerpt,
+      source_turn: source.excerpt ? source.turn : null,
+      evidence_operation_key: source.operationId,
+      evidence_source_kind: source.excerpt ? 'human' : 'extraction',
+      evidence_occurred_at: source.occurredAt,
+    })
+    if (created) {
+      yolo.addEvent(cwd, {
+        kind: 'todo_created',
+        summary: `＋ 记录新待办「${item.title}」`,
+        detail: item.due_at ? `截止 ${item.due_at}` : null,
+        session_id: source.sessionId,
+        source: 'llm',
+        subject_type: 'todo',
+        subject_id: todo.id,
+        subject_title: todo.title,
+        change: {
+          status: { before: null, after: todo.status },
+          ...(todo.due_at ? { due_at: { before: null, after: todo.due_at } } : {}),
+        },
+      })
+    }
+  }
+  for (const goal of result.goals) {
+    if (!shouldDropExtracted('goal', goal.title)) {
+      yolo.addGoal(cwd, { title: goal.title, description: goal.description, milestone_id: milestoneId(goal.milestone_title) })
+    }
+  }
+  for (const preference of result.preferences) {
+    if (!shouldDropExtracted('preference', preference.key, preference.value)) {
+      yolo.addPreference(cwd, { key: preference.key, value: preference.value, session_id: source.sessionId })
+    }
+  }
+  const recentSummaries = new Set(yolo.listEvents(cwd, 30).map((event) => event.summary))
+  for (const event of result.events) {
+    if (shouldDropExtracted('event', event.summary) || recentSummaries.has(event.summary)) continue
+    recentSummaries.add(event.summary)
+    yolo.addEvent(cwd, {
+      kind: event.kind,
+      summary: event.summary,
+      occurred_at: event.occurred_at ? Date.parse(event.occurred_at) || undefined : undefined,
+      session_id: source.sessionId,
+      source: 'llm',
+    })
+  }
+  if (result.session_summary) yolo.upsertSessionSummary(cwd, source.sessionId, result.session_summary)
+  applyUpdates(yolo, cwd, result.updates, source)
+}
+
+export function buildKnownMemoryContext(yolo: Yolo, cwd: string): string | null {
+  try {
+    return buildKnownContext({
+      todos: yolo.listTodos(cwd).map((todo) => ({ title: todo.title, status: todo.status, due_at: todo.due_at })),
+      goals: yolo.listGoals(cwd).map((goal) => ({ title: goal.title, progress: goal.progress })),
+      milestones: yolo.listMilestones(cwd).map((milestone) => ({ title: milestone.title, status: milestone.status })),
+      preferences: yolo.listPreferences(cwd).map((preference) => ({ key: preference.key, value: preference.value })),
+      events: yolo.listEvents(cwd, 15).map((event) => event.summary),
+    })
+  } catch {
+    return null
+  }
+}

@@ -11,11 +11,17 @@ import type { Context } from '@deepseek-ai/cordis'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { getMeta, openDb, setMeta, withTransaction, type DB } from './db.ts'
-import { canonicalWorkspaceCwd, computeScopeKey, resolveDataDir, dbFileName, workspaceIdentity } from './scope.ts'
+import { canonicalWorkspaceCwd, computeScopeKey, resolveDataDir, dbFileName, workspaceIdentity, USER_SCOPE_KEY, type ScopeRef } from './scope.ts'
 import { migrateLegacyScopeDatabases } from './migrate-scope.ts'
 import * as repo from './repository.ts'
 import { ftsRecallSearch, recallTodoIdentityCandidates } from './search.ts'
 import { renderSnapshot, writeSnapshot } from './snapshot.ts'
+import { WorkspaceCatalog } from '../infrastructure/catalog/workspace-catalog.ts'
+import { TurnObservationService } from '../runtime/turn-observation.ts'
+import { isYoloSessionId } from '../runtime/session-identity.ts'
+import { ConversationRuntime } from '../runtime/conversation-runtime.ts'
+import { sessionCwd, sessionId } from '../shared/session.ts'
+import { contentBlocksToText } from '../shared/text.ts'
 import type { TodoRangeSelector } from '../shared/todo-range.ts'
 import type { DuplicateTodoPair } from './types.ts'
 import type {
@@ -69,6 +75,10 @@ export interface TodoEvidenceWrite {
   source_fingerprint: string
 }
 
+export interface YoloServiceOptions {
+  catalogPath?: string
+}
+
 // NOTE: dsh loader expects the plugin as the module's DEFAULT export
 // (function, or object/class carrying an `apply` method). A bare named export
 // makes the loader pass the module namespace object and fail with
@@ -76,16 +86,48 @@ export interface TodoEvidenceWrite {
 export default class Yolo extends Service {
   private scopes = new Map<string, ScopeHandle>()
   /** Workspace registry keyed by canonical cwd identity, not Git state. */
-  private readonly knownWorkspaces = new Map<string, { cwd: string; scopeKey: string }>()
+  private readonly knownWorkspaces = new Map<string, { workspaceId: string; cwd: string; scopeKey: string }>()
+  readonly observations = new TurnObservationService()
+  readonly conversations = new ConversationRuntime()
+  readonly workspaceCatalog: WorkspaceCatalog
 
   /** Active runInScope pins (innermost last). resolve() consults these so a
    * whole operation lands in the exact registered workspace DB. */
   private readonly scopePins: Array<{ cwd: string; scopeKey: string }> = []
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, options: YoloServiceOptions = {}) {
     super(ctx, 'yolo')
+    this.workspaceCatalog = new WorkspaceCatalog(options.catalogPath)
+    for (const record of this.workspaceCatalog.list()) {
+      if (record.status === 'ready') {
+        this.knownWorkspaces.set(workspaceIdentity(record.cwd), { workspaceId: record.workspaceId, cwd: record.cwd, scopeKey: record.scopeKey })
+      }
+    }
+    // One Cordis provider owns cross-plugin runtime observation. Consumers
+    // query this service rather than keeping competing latest-cwd/session state.
+    const on = (ctx as unknown as {
+      on?: (name: string, listener: (...args: any[]) => unknown) => unknown
+    }).on?.bind(ctx)
+    on?.('agent/session-start', (payload: { agent?: { id?: string; session?: unknown } }) => {
+      const id = payload.agent?.id
+      this.observations.observeSession(id, sessionCwd(payload.agent?.session), isYoloSessionId(id))
+    })
+    on?.('session/event', (session: unknown, event: { type?: string; data?: { content?: readonly unknown[] } }) => {
+      const id = sessionId(session)
+      const cwd = sessionCwd(session)
+      if (event.type === 'user/message') {
+        const text = contentBlocksToText(event.data?.content)
+        this.observations.observeUserMessage(id, cwd, text, isYoloSessionId(id))
+      } else {
+        this.observations.observeSession(id, cwd, isYoloSessionId(id))
+      }
+    })
+    on?.('agent/turn-stopping', (payload: { agent?: { id?: string; session?: unknown }; turn?: number }) => {
+      const id = payload.agent?.id ?? sessionId(payload.agent?.session)
+      this.observations.observeTurnStopping(id, payload.turn ?? 0, sessionCwd(payload.agent?.session), isYoloSessionId(id))
+    })
     // close cached DB handles when the owning fiber unloads (Windows-safe)
-    ctx.effect(() => () => this.close())
+    ctx.effect(() => () => this.dispose())
   }
 
   /** Close every cached DB handle (idempotent). Called on dispose and in tests. */
@@ -98,6 +140,14 @@ export default class Yolo extends Service {
       }
     }
     this.scopes.clear()
+  }
+
+  /** Final service disposal. `close()` intentionally remains reopenable for
+   * compatibility tests and maintenance commands. */
+  dispose(): void {
+    this.close()
+    this.observations.clear()
+    this.workspaceCatalog.close()
   }
 
   /**
@@ -122,6 +172,39 @@ export default class Yolo extends Service {
     return withTransaction(this.resolve(cwd).db, execute)
   }
 
+  /** Resolve an application scope without leaking cwd into use-case identity. */
+  resolveScope(ref: ScopeRef): ScopeHandle {
+    if (ref.kind === 'user') return this.resolve(process.cwd(), 'user')
+    const workspace = this.listWorkspaceMeta().find((item) => item.workspaceId === ref.workspaceId)
+    if (!workspace) throw new Error(`unknown workspace scope: ${ref.workspaceId}`)
+    return this.runInScope(workspace.cwd, workspace.scopeKey, () => this.resolve(workspace.cwd))
+  }
+
+  scopeRefForCwd(cwd: string): ScopeRef {
+    const handle = this.resolve(cwd)
+    const identity = workspaceIdentity(cwd)
+    const workspace = this.knownWorkspaces.get(identity)
+    if (!workspace) throw new Error('workspace catalog registration unavailable')
+    if (workspace.scopeKey !== handle.scopeKey) throw new Error('workspace scope identity mismatch')
+    return { kind: 'workspace', workspaceId: workspace.workspaceId }
+  }
+
+  runInScopeRef<T>(ref: ScopeRef, execute: (cwd: string) => T): T {
+    if (ref.kind === 'user') throw new Error('plan commands require a workspace scope')
+    const workspace = this.listWorkspaceMeta().find((item) => item.workspaceId === ref.workspaceId)
+    if (!workspace) throw new Error(`unknown workspace scope: ${ref.workspaceId}`)
+    return this.runInScope(workspace.cwd, workspace.scopeKey, () => execute(workspace.cwd))
+  }
+
+  runIdempotentScopeAction(
+    ref: ScopeRef,
+    operationId: string,
+    requestHash: string,
+    execute: (cwd: string) => string,
+  ): ReturnType<Yolo['runIdempotentAction']> {
+    return this.runInScopeRef(ref, (cwd) => this.runIdempotentAction(cwd, operationId, requestHash, () => execute(cwd)))
+  }
+
   /** Resolve (and lazily open+cache) the DB handle for a scope. */
   resolve(cwd: string, mode: ScopeMode = 'workspace'): ScopeHandle {
     const ownerCwd = mode === 'workspace' ? canonicalWorkspaceCwd(cwd) : cwd
@@ -130,7 +213,7 @@ export default class Yolo extends Service {
       mode === 'workspace'
         ? [...this.scopePins].reverse().find((p) => p.cwd === cwdIdentity)
         : undefined
-    const scopeKey = pin ? pin.scopeKey : computeScopeKey(ownerCwd)
+    const scopeKey = pin ? pin.scopeKey : mode === 'user' ? USER_SCOPE_KEY : computeScopeKey(ownerCwd)
     const dataDir = resolveDataDir(mode, ownerCwd)
     const dbPath = join(dataDir, dbFileName(scopeKey))
     const dbCacheKey = workspaceIdentity(dbPath)
@@ -151,7 +234,21 @@ export default class Yolo extends Service {
         throw error
       }
     }
-    if (mode === 'workspace') this.knownWorkspaces.set(cwdIdentity, { cwd: ownerCwd, scopeKey })
+    if (mode === 'workspace') {
+      // Separate store: registration is intentionally idempotent and replayable,
+      // never part of the workspace transaction.
+      try {
+        const record = this.workspaceCatalog.register(ownerCwd, scopeKey)
+        setMeta(h.db, 'workspace_id', record.workspaceId)
+        setMeta(h.db, 'workspace_scope_key', scopeKey)
+        setMeta(h.db, 'workspace_identity', cwdIdentity)
+        this.knownWorkspaces.set(cwdIdentity, { workspaceId: record.workspaceId, cwd: ownerCwd, scopeKey })
+      } catch (error) {
+        this.ctx.logger?.warn?.('[yolo] workspace catalog registration failed: %s', error instanceof Error ? error.message : String(error))
+        // Catalog availability must not make an already-open workspace unusable.
+        this.knownWorkspaces.set(cwdIdentity, { workspaceId: scopeKey, cwd: ownerCwd, scopeKey })
+      }
+    }
     return h
   }
 
@@ -392,7 +489,12 @@ export default class Yolo extends Service {
   }
 
   /** Workspace scopes opened so far (aggregation registry; cwd -> scopeKey). */
-  listWorkspaceMeta(): Array<{ cwd: string; scopeKey: string }> {
+  listWorkspaceMeta(): Array<{ workspaceId?: string; cwd: string; scopeKey: string }> {
+    for (const record of this.workspaceCatalog.list()) {
+      if (record.status === 'ready' && !this.knownWorkspaces.has(workspaceIdentity(record.cwd))) {
+        this.knownWorkspaces.set(workspaceIdentity(record.cwd), { workspaceId: record.workspaceId, cwd: record.cwd, scopeKey: record.scopeKey })
+      }
+    }
     return [...this.knownWorkspaces.values()]
   }
   // ---- events ----

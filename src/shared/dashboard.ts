@@ -2,7 +2,7 @@
 // (ui plugin) at GET /yolo/dashboard and consumed by the browser bundle to
 // render the sidebar dashboard. Shared so both halves stay in sync.
 
-import type { DuplicateTodoPair } from '../storage/types.ts'
+import type { DuplicateTodoPair } from '../domain/types.ts'
 export { isTodoOverdue } from './due.ts'
 
 /** A workspace tag attached to aggregated rows (cross-workspace view, v0.3.0). */

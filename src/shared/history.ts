@@ -1,4 +1,4 @@
-import type { HistoryChangeSet, HistorySubjectType } from '../storage/types.ts'
+import type { HistoryChangeSet, HistorySubjectType } from '../domain/types.ts'
 import type { WorkspaceTag } from './dashboard.ts'
 
 export type YoloHistoryView = 'timeline' | 'items' | 'subject'

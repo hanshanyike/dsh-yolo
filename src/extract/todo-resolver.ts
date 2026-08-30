@@ -1,5 +1,5 @@
 import { BlockAssembler, type FinishReason, type LlmRuntime, type Message, type TokenUsage } from '@deepseek-ai/dsh-llm'
-import type { TodoIdentityCandidate, TodoResolutionDecision } from '../storage/types.ts'
+import type { TodoIdentityCandidate, TodoResolutionDecision } from '../domain/types.ts'
 import { contentBlocksToText, localDateStr } from '../shared/text.ts'
 
 export const TODO_RESOLVER_VERSION = 'shadow-v1'

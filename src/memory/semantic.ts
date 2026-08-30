@@ -11,7 +11,7 @@
 import { BlockAssembler, type LlmRuntime, type Message } from '@deepseek-ai/dsh-llm'
 import { contentBlocksToText } from '../shared/text.ts'
 import { DEFAULTS } from '../shared/constants.ts'
-import type { SearchHit } from '../storage/types.ts'
+import type { SearchHit } from '../domain/types.ts'
 
 /** semanticRecall config slice (lives in the yolo settings namespace). */
 export interface SemanticConfig {
@@ -273,4 +273,3 @@ export class SemanticRecall {
     this.rerankCache.set(this.rerankKey(query, candidates), [...verdicts])
   }
 }
-

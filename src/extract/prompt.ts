@@ -11,6 +11,7 @@
 // cancelled, goal progress, due moves, milestone transitions).
 
 import { localDateStr } from '../shared/text.ts'
+export { buildKnownContext } from '../application/ingestion/known-context.ts'
 
 export function buildExtractionPrompt(now: Date): string {
   const today = localDateStr(now)
@@ -71,25 +72,3 @@ Rules:
 
 /** Render the "already remembered" digest the model deduplicates against.
  * M8: rows carry their current state so the model can emit targeted updates. */
-export function buildKnownContext(known: {
-  todos: readonly { title: string; status: string; due_at?: string | null }[]
-  goals: readonly { title: string; progress: number }[]
-  milestones: readonly { title: string; status: string }[]
-  preferences: readonly { key: string; value: string }[]
-  events: readonly string[]
-}): string | null {
-  const lines: string[] = []
-  if (known.todos.length) {
-    lines.push(`Todos: ${known.todos.slice(0, 20).map((t) => `[${t.status}] ${t.title}${t.due_at ? ` (due ${t.due_at})` : ''}`).join(' | ')}`)
-  }
-  if (known.goals.length) lines.push(`Goals: ${known.goals.slice(0, 10).map((g) => `[${g.progress}%] ${g.title}`).join(' | ')}`)
-  if (known.milestones.length) lines.push(`Milestones: ${known.milestones.slice(0, 10).map((m) => `[${m.status}] ${m.title}`).join(' | ')}`)
-  if (known.preferences.length) {
-    lines.push(`Preferences: ${known.preferences.slice(0, 20).map((p) => `${p.key}=${p.value}`).join(' | ')}`)
-  }
-  if (known.events.length) lines.push(`Recent events: ${known.events.slice(0, 15).join(' | ')}`)
-  if (lines.length === 0) return null
-  const text = lines.join('\n')
-  // hard cap: the digest is a hint, not a payload
-  return text.length > 1500 ? `${text.slice(0, 1500)}…` : text
-}

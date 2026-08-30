@@ -6,7 +6,7 @@
 
 import { BlockAssembler, type LlmRuntime, type Message } from '@deepseek-ai/dsh-llm'
 import type Yolo from '../storage/index.ts'
-import type { Todo, TimelineEvent } from '../storage/types.ts'
+import type { Todo, TimelineEvent } from '../domain/types.ts'
 import { contentBlocksToText, dayBounds } from '../shared/text.ts'
 import { compareDueAt, dueAtLocalDate, isTodoOverdue } from '../shared/due.ts'
 

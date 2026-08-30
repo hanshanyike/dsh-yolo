@@ -1,5 +1,5 @@
 /** @deprecated Compatibility facade; commands and DTOs have stable owners. */
-export { applyYoloAction, hashYoloActionRequest } from '../application/commands/apply-yolo-action.ts'
+export { applyYoloAction, applyYoloActionInScope, hashYoloActionRequest } from '../application/commands/apply-yolo-action.ts'
 export type {
   AttentionFeedbackReason,
   YoloActionOutcome,

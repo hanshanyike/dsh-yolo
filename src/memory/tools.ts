@@ -4,8 +4,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool, type JsonValue } from '@deepseek-ai/dsh-tools'
 import type Yolo from '../storage/index.ts'
-import type { MilestoneStatus, Priority, RowType, TodoStatus, GoalStatus } from '../storage/types.ts'
-import { applyYoloAction } from '../application/commands/apply-yolo-action.ts'
+import type { MilestoneStatus, Priority, RowType, TodoStatus, GoalStatus } from '../domain/types.ts'
+import { applyYoloActionInScope } from '../application/commands/apply-yolo-action.ts'
 import { sessionCwd, sessionId } from '../shared/session.ts'
 import { toolTodoActionId, toolTodoFingerprint, todoOperationRequestHash } from '../shared/todo-identity.ts'
 
@@ -178,14 +178,14 @@ export function registerYoloTools(ctx: YoloContext): void {
         const origin = toolOrigin(exec)
         const client_action_id = origin.callId ? toolTodoActionId(origin.sessionId, origin.callId) : undefined
         if (args.kind === 'todo') {
-          const outcome = applyYoloAction(y, cwd, { action: 'cancel', kind: 'todo', id: args.id, session_id: origin.sessionId, session_turn: origin.turn, client_action_id })
+          const outcome = applyYoloActionInScope(y, y.scopeRefForCwd(cwd), { action: 'cancel', kind: 'todo', id: args.id, session_id: origin.sessionId, session_turn: origin.turn, client_action_id })
           return json(outcome)
         }
         if (args.kind === 'milestone') {
-          return json(applyYoloAction(y, cwd, { action: 'set_status', kind: 'milestone', id: args.id, status: 'abandoned', session_id: origin.sessionId, session_turn: origin.turn, client_action_id }))
+          return json(applyYoloActionInScope(y, y.scopeRefForCwd(cwd), { action: 'set_status', kind: 'milestone', id: args.id, status: 'abandoned', session_id: origin.sessionId, session_turn: origin.turn, client_action_id }))
         }
         if (args.kind === 'goal') {
-          return json(applyYoloAction(y, cwd, { action: 'abandon', kind: 'goal', id: args.id, session_id: origin.sessionId, session_turn: origin.turn, client_action_id }))
+          return json(applyYoloActionInScope(y, y.scopeRefForCwd(cwd), { action: 'abandon', kind: 'goal', id: args.id, session_id: origin.sessionId, session_turn: origin.turn, client_action_id }))
         }
         return json({ ok: false, error: 'unsupported kind' })
       },
@@ -221,7 +221,7 @@ export function registerYoloTools(ctx: YoloContext): void {
         const cwd = cwdOfExec(exec)
         const origin = toolOrigin(exec)
         const client_action_id = origin.callId ? toolTodoActionId(origin.sessionId, origin.callId) : undefined
-        const outcome = applyYoloAction(y, cwd, {
+        const outcome = applyYoloActionInScope(y, y.scopeRefForCwd(cwd), {
           action: args.action,
           kind: args.kind,
           id: args.id,

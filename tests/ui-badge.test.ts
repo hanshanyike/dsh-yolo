@@ -45,8 +45,8 @@ describe('lightweight badge feed', () => {
   it('aggregates known workspace counts and marks partial results', () => {
     const data = buildBadgeData(yolo({
       listWorkspaceMeta: () => [
-        { cwd: '/ws/a', scopeKey: 'a/main' },
-        { cwd: '/ws/b', scopeKey: 'b/main' },
+        { workspaceId: 'workspace-a', cwd: '/ws/a', scopeKey: 'a/main' },
+        { workspaceId: 'workspace-b', cwd: '/ws/b', scopeKey: 'b/main' },
       ],
       countUnhandledNotifications: (cwd: string) => {
         if (cwd === '/ws/b') throw new Error('locked')
@@ -60,8 +60,8 @@ describe('lightweight badge feed', () => {
   it('sorts and caps recent reminders across workspaces deterministically', () => {
     const data = buildBadgeData(yolo({
       listWorkspaceMeta: () => [
-        { cwd: '/ws/a', scopeKey: 'a/main' },
-        { cwd: '/ws/b', scopeKey: 'b/main' },
+        { workspaceId: 'workspace-a', cwd: '/ws/a', scopeKey: 'a/main' },
+        { workspaceId: 'workspace-b', cwd: '/ws/b', scopeKey: 'b/main' },
       ],
       countUnhandledNotifications: () => 3,
       countUnseenNotifications: () => 3,
@@ -84,8 +84,8 @@ describe('lightweight badge feed', () => {
   it('keeps equal raw ids distinct when they belong to different workspaces', () => {
     const data = buildBadgeData(yolo({
       listWorkspaceMeta: () => [
-        { cwd: '/ws/a', scopeKey: 'a/main' },
-        { cwd: '/ws/b', scopeKey: 'b/main' },
+        { workspaceId: 'workspace-a', cwd: '/ws/a', scopeKey: 'a/main' },
+        { workspaceId: 'workspace-b', cwd: '/ws/b', scopeKey: 'b/main' },
       ],
       countUnhandledNotifications: () => 1,
       countUnseenNotifications: () => 1,

@@ -12,11 +12,7 @@ const ROOT = resolve(import.meta.dirname, '..')
 // Phase 0 freezes only the imports that existed when the rule was introduced.
 // Migration tightens the architecture by deleting entries; adding entries is
 // an explicit architecture regression and must not be used as routine relief.
-const LEGACY_ALLOWLIST: readonly LegacyDependencyException[] = [
-  { rule: 'host-features-must-not-depend-on-ui-session', source: 'src/extract/index.ts', target: 'src/ui/session.ts' },
-  { rule: 'host-features-must-not-depend-on-ui-session', source: 'src/memory/index.ts', target: 'src/ui/session.ts' },
-  { rule: 'host-features-must-not-depend-on-ui-session', source: 'src/reminder/index.ts', target: 'src/ui/session.ts' },
-]
+const LEGACY_ALLOWLIST: readonly LegacyDependencyException[] = []
 
 describe('architecture dependency fitness', () => {
   it('has no new boundary violations and no stale legacy exceptions', () => {

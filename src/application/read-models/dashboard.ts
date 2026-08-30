@@ -11,7 +11,7 @@
 // read-only) and tags each row with its owning workspace.
 
 import type Yolo from '../../storage/index.ts'
-import type { Notification, TimelineEvent, Todo, TodoEvidence } from '../../storage/types.ts'
+import type { Notification, TimelineEvent, Todo, TodoEvidence } from '../../domain/types.ts'
 import type {
   YoloDashboardData,
   YoloLedgerEntry,

@@ -4,7 +4,7 @@
 // conversational reply produce identical state transitions + audit events.
 
 import type Yolo from '../storage/index.ts'
-import { applyYoloAction } from '../application/commands/apply-yolo-action.ts'
+import { applyYoloActionInScope } from '../application/commands/apply-yolo-action.ts'
 import type { YoloActionRequest, YoloActionOutcome } from '../contracts/actions.ts'
 import { findKnownWorkspaceScope } from '../application/workspace-scope.ts'
 
@@ -106,7 +106,10 @@ export function registerActionsEndpoint(ctx: { webServer?: WebServerLike }, yolo
         }
         const dispatch = (): YoloActionOutcome => {
           const actionCwd = meta ? meta.cwd : cwd()
-          const outcome = applyYoloAction(yolo, actionCwd, req)
+          const scope = meta?.workspaceId
+            ? { kind: 'workspace' as const, workspaceId: meta.workspaceId }
+            : yolo.scopeRefForCwd(actionCwd)
+          const outcome = applyYoloActionInScope(yolo, scope, req)
           if (outcome.ok && req.action !== 'handled' && req.kind !== 'attention') {
             // keep today's Markdown snapshot in lockstep with the DB (TE-8);
             // notification dismissals are pure UI state and skip the rewrite.
@@ -119,7 +122,7 @@ export function registerActionsEndpoint(ctx: { webServer?: WebServerLike }, yolo
           }
           return outcome
         }
-        const outcome = meta ? yolo.runInScope(meta.cwd, meta.scopeKey, dispatch) : dispatch()
+        const outcome = dispatch()
         send(res, outcome.ok ? 200 : outcome.httpStatus, outcome)
       } catch (e) {
         send(res, 400, { ok: false, error: e instanceof Error ? e.message : String(e), code: 'invalid_request' })

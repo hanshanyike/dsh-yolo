@@ -1,5 +1,5 @@
 import type Yolo from '../storage/index.ts'
-import type { HistorySubjectType } from '../storage/types.ts'
+import type { HistorySubjectType } from '../domain/types.ts'
 import type { YoloHistoryStatusFilter, YoloHistoryView } from '../shared/history.ts'
 import {
   buildHistoryData,

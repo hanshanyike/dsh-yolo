@@ -1,5 +1,5 @@
 import type Yolo from '../../storage/index.ts'
-import type { Goal, HistorySubjectStats, HistorySubjectType, Milestone, TimelineEvent, Todo } from '../../storage/types.ts'
+import type { Goal, HistorySubjectStats, HistorySubjectType, Milestone, TimelineEvent, Todo } from '../../domain/types.ts'
 import { USER_VISIBLE_CHANGE_KINDS } from '../../shared/dashboard-surfaces.ts'
 import type {
   YoloHistoryData,

@@ -1,5 +1,5 @@
 import type Yolo from '../../storage/index.ts'
-import type { Notification, Todo } from '../../storage/types.ts'
+import type { Notification, Todo } from '../../domain/types.ts'
 import type {
   YoloNotificationLogData,
   YoloNotificationLogItem,

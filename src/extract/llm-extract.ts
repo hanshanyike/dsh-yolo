@@ -7,54 +7,19 @@
 import { BlockAssembler, type FinishReason, type LlmRuntime, type Message, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import { contentBlocksToText } from '../shared/text.ts'
 import { buildExtractionPrompt } from './prompt.ts'
+import type { ExtractionResult } from '../contracts/extraction.ts'
+
+export type {
+  ExtractedEvent,
+  ExtractedGoal,
+  ExtractedMilestone,
+  ExtractedPreference,
+  ExtractedTodo,
+  ExtractedUpdate,
+  ExtractionResult,
+} from '../contracts/extraction.ts'
 
 export { contentBlocksToText }
-
-export interface ExtractedTodo {
-  title: string
-  due_at?: string | null
-  priority?: string | null
-  milestone_title?: string | null
-}
-export interface ExtractedMilestone {
-  title: string
-  target_date?: string | null
-  description?: string | null
-}
-export interface ExtractedGoal {
-  title: string
-  description?: string | null
-  milestone_title?: string | null
-}
-export interface ExtractedPreference {
-  key: string
-  value: string
-}
-export interface ExtractedEvent {
-  kind: 'note' | 'decision' | 'milestone_reached'
-  summary: string
-  occurred_at?: string | null
-}
-/** M8: state change of an item already in Known memories (matched by title). */
-export interface ExtractedUpdate {
-  kind: 'todo' | 'goal' | 'milestone'
-  match_title: string
-  status?: string | null
-  progress?: number | null
-  due_at?: string | null
-  note?: string | null
-}
-
-export interface ExtractionResult {
-  /** One-line label of what the session is about (ledger source badge, v0.3.0). */
-  session_summary?: string | null
-  milestones: ExtractedMilestone[]
-  todos: ExtractedTodo[]
-  goals: ExtractedGoal[]
-  preferences: ExtractedPreference[]
-  events: ExtractedEvent[]
-  updates: ExtractedUpdate[]
-}
 
 export const EMPTY_EXTRACTION: ExtractionResult = {
   session_summary: null,

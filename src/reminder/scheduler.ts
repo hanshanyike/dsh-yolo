@@ -14,6 +14,8 @@ import { localDateStr, localHm } from '../shared/text.ts'
 import { compareDueAt, isDueAtReached } from '../shared/due.ts'
 import { isTodoOpen } from '../shared/dashboard.ts'
 import { collectMorningFactsAcross, collectEveningFactsAcross, polishBrief, renderBriefMarkdown, type BriefKind } from './brief.ts'
+import { maybeWriteDailySnapshot } from '../application/maintenance/snapshots.ts'
+export { maybeWriteDailySnapshot, maybeWriteTurnSnapshot } from '../application/maintenance/snapshots.ts'
 
 /**
  * Delivery into the YOLO resident thread (best effort — the card is the
@@ -32,25 +34,6 @@ export function reminderText(title: string, dueAt?: string | null): string {
 }
 
 /** Write today's Markdown snapshot once per calendar day. Returns the path or null. */
-export function maybeWriteDailySnapshot(yolo: Yolo, cwd: () => string): string | null {
-  const today = localDateStr()
-  if (yolo.lastSnapshotDate(cwd()) === today) return null
-  const path = yolo.writeSnapshot(cwd(), today)
-  yolo.setSnapshotDate(cwd(), today)
-  return path
-}
-
-/**
- * Write a timestamped Markdown snapshot on a turn cadence ('every_10_turns').
- * The caller counts turns; this fires once per N turns with a unique filename.
- * Returns the path or null when the cadence has not been reached.
- */
-export function maybeWriteTurnSnapshot(yolo: Yolo, cwd: () => string, turnCount: number, every = 10): string | null {
-  if (turnCount <= 0 || turnCount % every !== 0) return null
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  return yolo.writeSnapshot(cwd(), `turn-${turnCount}-${stamp}`)
-}
-
 export interface TickResult {
   /** Due todos that produced a notification card this pass. */
   notified: number

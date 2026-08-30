@@ -7,8 +7,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { createUserMessage, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type Yolo from '../storage/index.ts'
-import { startReminderScheduler, maybeWriteTurnSnapshot, resolveReminderRuntime } from './scheduler.ts'
-import { YoloSessions, isYoloSessionId, type AgentLike, type AgentsLike } from '../ui/session.ts'
+import { startReminderScheduler, resolveReminderRuntime } from './scheduler.ts'
+import { maybeWriteTurnSnapshot } from '../application/maintenance/snapshots.ts'
+import { type AgentLike, type AgentsLike } from '../application/conversation/index.ts'
+import { isYoloSessionId } from '../runtime/session-identity.ts'
 import { sessionCwd } from '../shared/session.ts'
 import { DEFAULTS } from '../shared/constants.ts'
 
@@ -31,39 +33,21 @@ interface SettingsLike {
 /** Storage snapshot cadence the user can pick in Settings. */
 export const YOLO_NS = settingsNamespace('yolo')
 
-/** Workspace cwd of an agent's session, when the payload carries one. */
-function agentCwd(agent: unknown): string | undefined {
-  return sessionCwd((agent as { session?: unknown })?.session)
-}
-
 export function apply(ctx: Context): void {
   const yctx = ctx as ReminderCtx
   const settings = (ctx as { settings?: SettingsLike }).settings
-  // the workspace reminders/briefs/snapshots operate on — follows the latest session
-  let latestCwd: string | undefined
-
-  const trackCwd = (agent: unknown): void => {
-    const cwd = agentCwd(agent)
-    if (cwd) latestCwd = cwd
-  }
-  ctx.on('agent/session-start', (payload: { agent: unknown }) => {
-    // YOLO threads (resident + anchored chat) must NOT move the tracked workspace
-    if (!isYoloSessionId((payload.agent as { id?: string } | undefined)?.id)) trackCwd(payload.agent)
-  })
+  const currentCwd = (): string => yctx.yolo.observations.latestWorkspaceCwd(process.cwd())
 
   // turn-cadence snapshot: 'every_10_turns' writes a timestamped Markdown
   // snapshot every 10 finished turns (config read live via ctx.settings)
-  let turnCount = 0
-  ctx.on('agent/turn-stopping', (payload: { agent?: { id?: string; session?: unknown } }) => {
-    // YOLO threads own their workspace: their turns neither move latestCwd nor
-    // count toward the WORK-space snapshot cadence (mirrors session-start).
-    if (isYoloSessionId((payload?.agent as { id?: string } | undefined)?.id)) return
-    turnCount++
+  ctx.on('agent/turn-stopping', (payload: { agent?: { id?: string; session?: unknown }; turn?: number }) => {
+    const id = payload.agent?.id
+    if (isYoloSessionId(id)) return
+    const count = yctx.yolo.observations.observeTurnStopping(id, payload.turn ?? 0, sessionCwd(payload.agent?.session), false)
     try {
-      trackCwd(payload?.agent)
       const config = settings?.get(YOLO_NS)
       if (config?.storage?.snapshotInterval === 'every_10_turns') {
-        const path = maybeWriteTurnSnapshot(yctx.yolo, () => latestCwd ?? process.cwd(), turnCount)
+        const path = maybeWriteTurnSnapshot(yctx.yolo, currentCwd, count)
         if (path) ctx.logger?.info?.('[yolo-reminder] turn snapshot written: %s', path)
       }
     } catch (e) {
@@ -73,14 +57,14 @@ export function apply(ctx: Context): void {
 
   // reminder delivery target: the workspace's YOLO resident thread (v0.3.0 B)
   // v0.3.3: created with the harness model selection so the agent replies.
-  const sessions = new YoloSessions(
+  const sessions = yctx.yolo.conversations.get(
     (ctx as { agents?: AgentsLike }).agents,
     { info: (f, ...a) => ctx.logger?.info?.(f, ...a), warn: (f, ...a) => ctx.logger?.warn?.(f, ...a) },
     () => {
       const sel = (ctx as { get?: (s: string) => { currentSelection(): { provider: string; model: string } } | undefined }).get?.('agentDefaultModel')
       return sel?.currentSelection()
     },
-  )
+  ).sessions
   const deliver = async (cwd: string, text: string): Promise<void> => {
     const agent: AgentLike | undefined = await sessions.ensure(cwd)
     if (!agent) return
@@ -94,7 +78,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() =>
     startReminderScheduler(ctx, {
       yolo: yctx.yolo,
-      cwd: () => latestCwd ?? process.cwd(),
+      cwd: currentCwd,
       deliver,
       // v0.3.3 review fix: scan EVERY known workspace each tick — the board
       // aggregates all of them, and scanning only latestCwd silently dropped

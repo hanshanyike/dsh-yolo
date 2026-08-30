@@ -1,6 +1,7 @@
 import { canonicalWorkspaceCwd, workspaceIdentity } from '../domain/scope.ts'
 
 export interface WorkspaceScopeMeta {
+  workspaceId?: string
   cwd: string
   scopeKey: string
 }

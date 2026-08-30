@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/reminder/index.ts'
 import type Yolo from '../src/storage/index.ts'
+import { TurnObservationService } from '../src/runtime/turn-observation.ts'
 
 type Handler = (...args: any[]) => void
 
@@ -13,6 +14,7 @@ function makeCtx(yolo: Yolo) {
   const handlers = new Map<string, Handler>()
   const ctx = {
     yolo,
+    agents: {},
     logger: { info: vi.fn(), warn: vi.fn() },
     settings: {
       get: vi.fn(() => undefined),
@@ -28,6 +30,14 @@ function makeCtx(yolo: Yolo) {
 
 function mockYolo(over: Partial<Yolo> = {}): Yolo {
   return {
+    observations: new TurnObservationService(),
+    conversations: {
+      get: vi.fn(() => ({
+        sessions: { ensure: vi.fn(async () => undefined) },
+        threads: {},
+      })),
+    },
+    listWorkspaceMeta: vi.fn(() => []),
     listPendingReminders: vi.fn(() => []),
     deletePendingReminder: vi.fn(),
     queueReminder: vi.fn(),
@@ -45,11 +55,14 @@ describe('reminder apply: workspace tracking (v0.3.0)', () => {
     })
     apply(ctx as never)
 
-    const onStart = handlers.get('agent/session-start')!
-    onStart({ agent: { id: 'work-1', session: { header: { id: 's1', cwd: '/ws/alpha' } } } })
+    yolo.observations.observeSession('work-1', '/ws/alpha', false)
 
     const onTurn = handlers.get('agent/turn-stopping')!
-    for (let i = 0; i < 10; i++) onTurn()
+    for (let i = 1; i <= 10; i++) {
+      const payload = { agent: { id: 'work-1', session: { header: { id: 's1', cwd: '/ws/alpha' } } }, turn: i }
+      yolo.observations.observeTurnStopping('work-1', i, '/ws/alpha', false)
+      onTurn(payload)
+    }
     expect(yolo.writeSnapshot).toHaveBeenCalledWith('/ws/alpha', expect.any(String))
   })
 
@@ -61,16 +74,17 @@ describe('reminder apply: workspace tracking (v0.3.0)', () => {
     })
     apply(ctx as never)
 
-    const onStart = handlers.get('agent/session-start')!
-    onStart({ agent: { id: 'yolo-w-abc123', session: { header: { id: 'y1', cwd: '/ws/yolo' } } } })
+    yolo.observations.observeSession('work-1', '/ws/alpha', false)
+    yolo.observations.observeSession('yolo-w-abc123', '/ws/yolo', true)
 
     // v0.3.3 review regression: the turn-stopping path must skip YOLO threads
     // too — a reminder reply turn carries the thread's session (with a cwd),
     // and before the guard it moved latestCwd to the thread's workspace.
     const onTurn = handlers.get('agent/turn-stopping')!
     const yoloTurn = { agent: { id: 'yolo-w-abc123', session: { header: { id: 'y1', cwd: '/ws/yolo' } } } }
-    for (let i = 0; i < 10; i++) onTurn(yoloTurn)
+    for (let i = 1; i <= 10; i++) onTurn({ ...yoloTurn, turn: i })
     expect(yolo.writeSnapshot).not.toHaveBeenCalledWith('/ws/yolo', expect.any(String))
+    expect(yolo.observations.latestWorkspaceCwd()).toBe('/ws/alpha')
   })
 })
 
@@ -84,9 +98,9 @@ describe('reminder apply: turn-cadence snapshot', () => {
     apply(ctx as never)
 
     const onTurn = handlers.get('agent/turn-stopping')!
-    for (let i = 0; i < 9; i++) onTurn()
+    for (let i = 1; i <= 9; i++) onTurn({ agent: { id: 'work-1' }, turn: i })
     expect(yolo.writeSnapshot).not.toHaveBeenCalled()
-    onTurn() // 10th
+    onTurn({ agent: { id: 'work-1' }, turn: 10 })
     expect(yolo.writeSnapshot).toHaveBeenCalledTimes(1)
   })
 
@@ -99,7 +113,7 @@ describe('reminder apply: turn-cadence snapshot', () => {
     apply(ctx as never)
 
     const onTurn = handlers.get('agent/turn-stopping')!
-    for (let i = 0; i < 12; i++) onTurn()
+    for (let i = 1; i <= 12; i++) onTurn({ agent: { id: 'work-1' }, turn: i })
     expect(yolo.writeSnapshot).not.toHaveBeenCalled()
   })
 })

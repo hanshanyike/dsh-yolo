@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/ui/index.ts'
 import type Yolo from '../src/storage/index.ts'
+import { TurnObservationService } from '../src/runtime/turn-observation.ts'
 
 type Handler = (...args: any[]) => void
 
@@ -13,6 +14,8 @@ function makeCtx(yolo: Yolo) {
   const handlers = new Map<string, Handler>()
   const ctx = {
     yolo,
+    agents: {},
+    get: vi.fn(() => undefined),
     webServer: { register: vi.fn() },
     logger: { info: vi.fn(), warn: vi.fn() },
     // cordis dependency injection used by installSettingsSection
@@ -38,6 +41,13 @@ function makeCtx(yolo: Yolo) {
 
 function mockYolo(): Yolo {
   return {
+    observations: new TurnObservationService(),
+    conversations: {
+      get: vi.fn(() => ({
+        sessions: {},
+        threads: {},
+      })),
+    },
     resolve: () => ({ scopeKey: 'test/main', db: {}, dataDir: '' }),
     listTodos: vi.fn(() => []),
     listGoals: vi.fn(() => []),
@@ -97,11 +107,11 @@ describe('ui apply: global dashboard endpoint', () => {
         return { scopeKey: 'test/main', db: {}, dataDir: '' }
       },
     } as unknown as Yolo
-    const { ctx, handlers } = makeCtx(yolo)
+    const { ctx } = makeCtx(yolo)
     apply(ctx as never, undefined)
 
     // a turn finished in another workspace — the endpoint must follow it
-    handlers.get('agent/turn-stopping')!({ agent: { session: { header: { id: 's1', cwd: '/ws/alpha' } } } })
+    yolo.observations.observeTurnStopping('work-1', 1, '/ws/alpha', false)
 
     const register = (ctx.webServer.register as ReturnType<typeof vi.fn>).mock.calls
       .find(([opts]) => opts.path === '/yolo/dashboard')![0] as { handler: (req: unknown, res: unknown) => Promise<void> }
@@ -124,12 +134,12 @@ describe('ui apply: global dashboard endpoint', () => {
         return { scopeKey: 'test/main', db: {}, dataDir: '' }
       },
     } as unknown as Yolo
-    const { ctx, handlers } = makeCtx(yolo)
+    const { ctx } = makeCtx(yolo)
     apply(ctx as never)
 
-    handlers.get('agent/turn-stopping')!({ agent: { id: 'work-1', session: { header: { id: 's1', cwd: '/ws/alpha' } } } })
-    handlers.get('agent/turn-stopping')!({ agent: { id: 'yolo-w-abc123def456', session: { header: { id: 'y1', cwd: '/ws/beta' } } } })
-    handlers.get('agent/turn-stopping')!({ agent: { id: 'yolo-a-abc123def456', session: { header: { id: 'y2', cwd: '/ws/beta' } } } })
+    yolo.observations.observeTurnStopping('work-1', 1, '/ws/alpha', false)
+    yolo.observations.observeTurnStopping('yolo-w-abc123def456', 1, '/ws/beta', true)
+    yolo.observations.observeTurnStopping('yolo-a-abc123def456', 1, '/ws/beta', true)
 
     const register = (ctx.webServer.register as ReturnType<typeof vi.fn>).mock.calls
       .find(([opts]) => opts.path === '/yolo/dashboard')![0] as { handler: (req: unknown, res: unknown) => Promise<void> }
