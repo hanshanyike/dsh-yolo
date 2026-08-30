@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData, YoloTodoRow } from '../../src/shared/dashboard.ts'
 import type { YoloBadgeNotification } from '../../src/shared/badge.ts'
-import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/shared/actions.ts'
+import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/contracts/actions.ts'
 import { buildDashboardSurfaces } from '../../src/shared/dashboard-surfaces.ts'
 import {
   DEFAULT_FILTER,

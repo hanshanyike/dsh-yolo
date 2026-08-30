@@ -13,15 +13,9 @@ const ROOT = resolve(import.meta.dirname, '..')
 // Migration tightens the architecture by deleting entries; adding entries is
 // an explicit architecture regression and must not be used as routine relief.
 const LEGACY_ALLOWLIST: readonly LegacyDependencyException[] = [
-  { rule: 'shared-must-not-depend-on-ui', source: 'src/shared/actions.ts', target: 'src/ui/dashboard.ts' },
   { rule: 'host-features-must-not-depend-on-ui-session', source: 'src/extract/index.ts', target: 'src/ui/session.ts' },
   { rule: 'host-features-must-not-depend-on-ui-session', source: 'src/memory/index.ts', target: 'src/ui/session.ts' },
   { rule: 'host-features-must-not-depend-on-ui-session', source: 'src/reminder/index.ts', target: 'src/ui/session.ts' },
-  { rule: 'client-must-use-contracts', source: 'client/panel/HistoryView.tsx', target: 'src/storage/types.ts' },
-  { rule: 'client-must-use-contracts', source: 'client/panel/KanbanView.tsx', target: 'src/shared/actions.ts' },
-  { rule: 'client-must-use-contracts', source: 'client/panel/YoloPanel.tsx', target: 'src/shared/actions.ts' },
-  { rule: 'client-must-use-contracts', source: 'client/panel/v2/api.ts', target: 'src/shared/actions.ts' },
-  { rule: 'client-must-use-contracts', source: 'client/panel/v2/model.ts', target: 'src/shared/actions.ts' },
 ]
 
 describe('architecture dependency fitness', () => {

@@ -1,4 +1,4 @@
-import type { YoloActionRequest, YoloLearningReceipt, YoloUndoDescriptor } from '../../../src/shared/actions.ts'
+import type { YoloActionRequest, YoloLearningReceipt, YoloUndoDescriptor } from '../../../src/contracts/actions.ts'
 import type { LearningReceiptData } from './model.ts'
 
 export interface ClientActionOutcome {

@@ -10,7 +10,7 @@ import type { YoloDashboardData, YoloItemSource, YoloMilestoneRow, YoloTodoRow }
 import type { YoloHistoryEvent } from '../../src/shared/history.ts'
 import { isTodoOpen } from '../../src/shared/dashboard.ts'
 import { buildDashboardSurfaces } from '../../src/shared/dashboard-surfaces.ts'
-import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/shared/actions.ts'
+import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/contracts/actions.ts'
 import {
   applyKanbanFilter,
   focusCounts,

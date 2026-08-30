@@ -1,5 +1,5 @@
 import type { WorkspaceTag, YoloTodoRow } from '../../../src/shared/dashboard.ts'
-import type { AttentionFeedbackReason } from '../../../src/shared/actions.ts'
+import type { AttentionFeedbackReason } from '../../../src/contracts/actions.ts'
 import { dueAtLocalDate, isTodoOverdue } from '../../../src/shared/due.ts'
 
 export type JudgmentPresentation = 'full' | 'compact'

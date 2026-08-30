@@ -6,7 +6,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { openDb, type DB } from '../src/storage/db.ts'
 import * as repo from '../src/storage/repository.ts'
 import Yolo from '../src/storage/index.ts'
@@ -456,6 +456,72 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
     expect(yolo.applyTodoConsolidate(cwd, { id: source.id }, { id: target.id }).ok).toBe(true)
     expect(yolo.resolveCanonicalTodo(cwd, source.id)?.id).toBe(target.id)
     expect(yolo.listTodoEvidence(cwd, target.id).some((row) => row.id === appended.evidence.id)).toBe(true)
+  })
+
+  it('rolls back action state, audit, evidence and idempotency receipt when a mid-action write fails', () => {
+    const { todo } = yolo.addTodo(cwd, { title: '把演示稿发给研发', source: 'manual' })
+    const baselineEvents = yolo.listEvents(cwd).length
+    const baselineEvidence = yolo.listTodoEvidence(cwd, todo.id).length
+    vi.spyOn(yolo, 'addTodoEvidence').mockImplementationOnce(() => {
+      throw new Error('evidence write failed')
+    })
+
+    expect(() => applyYoloAction(yolo, cwd, {
+      action: 'complete',
+      kind: 'todo',
+      id: todo.id,
+      client_action_id: 'atomic-action-failure',
+      session_id: 'session-atomic',
+      session_turn: 3,
+    })).toThrow('evidence write failed')
+
+    expect(yolo.findTodo(cwd, { id: todo.id })).toMatchObject({ status: 'pending', completed_at: null })
+    expect(yolo.listEvents(cwd)).toHaveLength(baselineEvents)
+    expect(yolo.listTodoEvidence(cwd, todo.id)).toHaveLength(baselineEvidence)
+    expect(yolo.getClientAction(cwd, 'atomic-action-failure')).toBeUndefined()
+  })
+
+  it('rolls back extraction-like domain, evidence, log and receipt writes as one workspace unit', () => {
+    const handle = yolo.resolve(cwd)
+
+    expect(() => yolo.runIdempotentAction(cwd, 'atomic-extraction-failure', 'request-hash', () => {
+      const { todo } = yolo.addTodo(cwd, { title: '整理客户访谈纪要', source: 'llm' })
+      yolo.addEvent(cwd, {
+        kind: 'todo_created',
+        summary: `新增待办：${todo.title}`,
+        detail: null,
+        session_id: 'session-extract',
+        source: null,
+        subject_type: 'todo',
+        subject_id: todo.id,
+        subject_title: todo.title,
+        related_subject_type: null,
+        related_subject_id: null,
+        related_subject_title: null,
+        change: null,
+      })
+      yolo.addTodoEvidence(cwd, todo.id, {
+        session_id: 'session-extract',
+        turn_seq: 5,
+        source_kind: 'extraction',
+        relation: 'origin',
+        excerpt: '整理客户访谈纪要',
+        source_fingerprint: 'atomic-extraction-failure/todo-0',
+      })
+      yolo.logExtraction(cwd, {
+        session_id: 'session-extract',
+        turn_seq: 5,
+        strategy: 'llm',
+        status: 'ok',
+      })
+      throw new Error('extraction persistence failed')
+    })).toThrow('extraction persistence failed')
+
+    expect(yolo.listTodoRecords(cwd)).toHaveLength(0)
+    expect(yolo.listEvents(cwd)).toHaveLength(0)
+    expect(handle.db.prepare('SELECT COUNT(*) AS n FROM todo_evidence').get()).toEqual({ n: 0 })
+    expect(handle.db.prepare('SELECT COUNT(*) AS n FROM extraction_log').get()).toEqual({ n: 0 })
+    expect(yolo.getClientAction(cwd, 'atomic-extraction-failure')).toBeUndefined()
   })
 
   it('audits an unsupported action as action_denied', () => {

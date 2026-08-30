@@ -1,5 +1,8 @@
 // YOLO domain types — mirror src/storage/schema.sql tables.
 
+import type { HistoryChangeSet } from '../contracts/history.ts'
+export type { HistoryChangeSet, HistoryChangeValue, HistoryFieldChange } from '../contracts/history.ts'
+
 export type MilestoneStatus = 'planned' | 'active' | 'done' | 'abandoned'
 export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'cancelled'
 export type TodoRecordStatus = 'canonical' | 'merged' | 'rejected'
@@ -43,13 +46,6 @@ export type ExtractionStatus = 'ok' | 'empty' | 'error'
 export type ScopeMode = 'workspace' | 'user' | 'global'
 export type RowType = 'todo' | 'milestone' | 'goal' | 'preference' | 'event'
 export type HistorySubjectType = 'todo' | 'goal' | 'milestone'
-
-export type HistoryChangeValue = string | number | boolean | null
-export interface HistoryFieldChange {
-  before: HistoryChangeValue
-  after: HistoryChangeValue
-}
-export type HistoryChangeSet = Record<string, HistoryFieldChange>
 
 /** Where a memory item came from — for audit + dedup. */
 export type Source = 'rule' | 'llm' | 'tool' | 'manual'

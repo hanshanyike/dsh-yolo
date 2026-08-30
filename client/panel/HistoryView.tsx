@@ -6,7 +6,7 @@ import type {
   YoloHistoryItem,
   YoloHistoryStatusFilter,
 } from '../../src/shared/history.ts'
-import type { HistoryChangeValue } from '../../src/storage/types.ts'
+import type { HistoryChangeValue } from '../../src/contracts/history.ts'
 import { IcChevron, IcPin } from '../design/icons.tsx'
 import { postYoloAction } from './v2/api.ts'
 

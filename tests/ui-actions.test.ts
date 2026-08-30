@@ -25,12 +25,18 @@ function mockYolo(overrides: Record<string, unknown> = {}): Yolo {
   const goal: Goal = { id: 'g1', title: '学会 Rust', status: 'active', progress: 40, scope_key: 'k', created_at: now, updated_at: now }
   const milestone: Milestone = { id: 'm1', title: 'v0.3 发布', status: 'active', scope_key: 'k', created_at: now, updated_at: now }
   return {
+    runWorkspaceTransaction: vi.fn((_cwd: string, execute: () => unknown) => execute()),
+    runIdempotentAction: vi.fn((_cwd: string, _id: string, _hash: string, execute: () => string) => ({
+      status: 'fresh' as const,
+      outcome_json: execute(),
+    })),
     applyTodoAction: vi.fn(() => todo),
     cancelTodosInRange: vi.fn(() => [todo]),
     deleteTodosInRange: vi.fn(() => ({ ids: [todo.id], deleted_record_count: 1 })),
     deleteTodoPermanently: vi.fn(() => ({ id: todo.id, deleted_record_count: 1 })),
     applyGoalProgress: vi.fn(() => goal),
     applyMilestoneStatus: vi.fn(() => milestone),
+    listWorkspaceMeta: vi.fn(() => []),
     ...overrides,
   } as unknown as Yolo
 }
@@ -220,7 +226,7 @@ describe('POST /yolo/actions', () => {
   // v0.3.3 review fix: scope routing validates against the workspace registry.
   it('unknown scope_cwd → 400 without creating a ghost workspace or dispatching', async () => {
     const { server, yolo } = setup({
-      listWorkspaceMeta: vi.fn(() => [{ cwd: '/ws/known', scopeKey: 'known/main' }]),
+      listWorkspaceMeta: vi.fn(() => [{ workspaceId: 'known-workspace', cwd: '/ws/known', scopeKey: 'known/main' }]),
     })
     const r = await call(server, 'POST', JSON.stringify({ action: 'complete', kind: 'todo', id: 't1', scope_cwd: '/ws/ghost' }))
     expect(r.status).toBe(400)
@@ -230,7 +236,7 @@ describe('POST /yolo/actions', () => {
 
   it('an equivalent known scope_cwd routes with registry-owned spelling and key', async () => {
     const runInScope = vi.fn((_cwd: string, _scopeKey: string, fn: () => unknown) => fn())
-    const listWorkspaceMeta = vi.fn(() => [{ cwd: '/ws/known', scopeKey: 'known/main' }])
+    const listWorkspaceMeta = vi.fn(() => [{ workspaceId: 'known-workspace', cwd: '/ws/known', scopeKey: 'known/main' }])
     const { server, yolo } = setup({ runInScope, listWorkspaceMeta })
     const r = await call(server, 'POST', JSON.stringify({ action: 'complete', kind: 'todo', id: 't1', scope_cwd: '/ws/known/child/..' }))
     expect(r.status).toBe(200)

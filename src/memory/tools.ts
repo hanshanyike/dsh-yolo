@@ -5,7 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool, type JsonValue } from '@deepseek-ai/dsh-tools'
 import type Yolo from '../storage/index.ts'
 import type { MilestoneStatus, Priority, RowType, TodoStatus, GoalStatus } from '../storage/types.ts'
-import { applyYoloAction } from '../shared/actions.ts'
+import { applyYoloAction } from '../application/commands/apply-yolo-action.ts'
 import { sessionCwd, sessionId } from '../shared/session.ts'
 import { toolTodoActionId, toolTodoFingerprint, todoOperationRequestHash } from '../shared/todo-identity.ts'
 

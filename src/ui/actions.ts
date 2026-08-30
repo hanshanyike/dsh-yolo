@@ -4,8 +4,9 @@
 // conversational reply produce identical state transitions + audit events.
 
 import type Yolo from '../storage/index.ts'
-import { applyYoloAction, type YoloActionRequest, type YoloActionOutcome } from '../shared/actions.ts'
-import { findKnownWorkspaceScope } from './workspace-scope.ts'
+import { applyYoloAction } from '../application/commands/apply-yolo-action.ts'
+import type { YoloActionRequest, YoloActionOutcome } from '../contracts/actions.ts'
+import { findKnownWorkspaceScope } from '../application/workspace-scope.ts'
 
 export interface WebServerLike {
   register(opts: {

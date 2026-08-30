@@ -116,6 +116,12 @@ export default class Yolo extends Service {
     }
   }
 
+  /** Single-store UnitOfWork. It never spans the workspace catalog or another
+   * workspace DB; cross-store orchestration must remain idempotent/partial. */
+  runWorkspaceTransaction<T>(cwd: string, execute: () => T): T {
+    return withTransaction(this.resolve(cwd).db, execute)
+  }
+
   /** Resolve (and lazily open+cache) the DB handle for a scope. */
   resolve(cwd: string, mode: ScopeMode = 'workspace'): ScopeHandle {
     const ownerCwd = mode === 'workspace' ? canonicalWorkspaceCwd(cwd) : cwd
