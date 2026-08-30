@@ -1,14 +1,20 @@
 /** Stable transport DTO surface. Pure display rules remain in shared/dashboard. */
 export type {
   WorkspaceTag,
+  YoloAttentionEvidence,
+  YoloAttentionReasonCode,
+  YoloAttentionRow,
+  YoloDashboardCapabilities,
   YoloDashboardData,
   YoloDashboardSummary,
+  YoloEventRow,
   YoloGoalRow,
   YoloItemSource,
   YoloLedgerEntry,
   YoloMemoryHealth,
   YoloMilestoneRow,
   YoloNotificationRow,
+  YoloPreferenceRow,
   YoloTodoRow,
   YoloWorkspaceInfo,
 } from '../shared/dashboard.ts'

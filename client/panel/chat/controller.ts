@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatMessagesPayload, ChatRequestSnapshot } from '../../../src/shared/chat.ts'
+import type { ChatMessage, ChatMessagesPayload, ChatRequestSnapshot } from '../../../src/contracts/chat.ts'
 import { isActiveChatRequest } from '../../../src/shared/chat.ts'
 
 export interface LocalChatRequest {

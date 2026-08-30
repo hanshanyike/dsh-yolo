@@ -1,4 +1,4 @@
-import type { WorkspaceTag, YoloTodoRow } from '../../../src/shared/dashboard.ts'
+import type { WorkspaceTag, YoloTodoRow } from '../../../src/contracts/dashboard.ts'
 import type { AttentionFeedbackReason } from '../../../src/contracts/actions.ts'
 import { dueAtLocalDate, isTodoOverdue } from '../../../src/shared/due.ts'
 

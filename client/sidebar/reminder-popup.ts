@@ -1,4 +1,4 @@
-import type { YoloBadgeData, YoloBadgeNotification } from '../../src/shared/badge.ts'
+import type { YoloBadgeData, YoloBadgeNotification } from '../../src/contracts/badge.ts'
 
 /** Browser-run baseline for deciding whether a polled reminder is genuinely new. */
 export interface ReminderObservationState {

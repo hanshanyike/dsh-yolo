@@ -6,11 +6,10 @@
 // + audit events.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { YoloDashboardData, YoloItemSource, YoloMilestoneRow, YoloTodoRow } from '../../src/shared/dashboard.ts'
-import type { YoloHistoryEvent } from '../../src/shared/history.ts'
+import type { YoloDashboardData, YoloItemSource, YoloMilestoneRow, YoloTodoRow } from '../../src/contracts/dashboard.ts'
+import type { YoloHistoryEvent } from '../../src/contracts/history.ts'
 import { isTodoOpen } from '../../src/shared/dashboard.ts'
 import { buildDashboardSurfaces } from '../../src/shared/dashboard-surfaces.ts'
-import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/contracts/actions.ts'
 import {
   applyKanbanFilter,
   focusCounts,
@@ -26,16 +25,12 @@ import { HistoryView } from './HistoryView.tsx'
 import {
   TaskActionPanel,
   TodaySurface,
-  type JudgmentEvidence,
-  type JudgmentSource,
-  type LearningReceiptData,
-  type TaskActionIntent,
-  type TaskEditDraft,
-  type TodaySurfaceIntent,
-  type YoloTodoRowV2,
 } from './v2/index.ts'
-import { postYoloAction, type ClientActionOutcome } from './v2/api.ts'
 import { formatDueLabel } from './due-label.ts'
+import { useKanbanActions } from './kanban/use-kanban-actions.ts'
+import type { BoardSurfaceKey } from './kanban/surfaces.ts'
+
+export type { BoardSurfaceKey } from './kanban/surfaces.ts'
 
 export interface KanbanViewProps {
   data: YoloDashboardData
@@ -55,15 +50,6 @@ export interface KanbanViewProps {
   onOpenItemDetail?: (todo: YoloTodoRow) => void
 }
 
-export type BoardSurfaceKey =
-  | 'home'
-  | 'plan-today'
-  | 'plan-upcoming'
-  | 'plan-goals'
-  | 'plan-all'
-  | 'history-timeline'
-  | 'history-items'
-
 interface EditorDraft {
   id: string
   scopeCwd?: string
@@ -71,21 +57,6 @@ interface EditorDraft {
   due: string
   priority: string
   milestoneTitle: string
-}
-
-interface JudgmentBinding {
-  id: string
-  reasonVersion: string
-  evidenceFingerprint: string
-}
-
-interface OpenTaskPanel {
-  item: YoloTodoRowV2
-  scopeCwd: string
-  reason: string
-  evidence: readonly JudgmentEvidence[]
-  source?: JudgmentSource
-  binding?: JudgmentBinding
 }
 
 const DAY_MS = 86_400_000
@@ -101,34 +72,13 @@ function dayOf(iso: string | null | undefined): string {
   return iso ? iso.slice(0, 10) : ''
 }
 
-function localDayStr(d: Date): string {
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
-function addDays(day: string, n: number): string {
-  const d = new Date(`${day}T00:00:00`)
-  d.setDate(d.getDate() + n)
-  return localDayStr(d)
-}
-
 function nextDayStr(dueAt: string | null | undefined): string {
   const today = localDateStr()
   const dueDay = dayOf(dueAt)
-  const base = dueDay > today ? dueDay : today
-  return addDays(base, 1)
-}
-
-function draftForTodo(todo: YoloTodoRowV2): TaskEditDraft {
-  const due = todo.due_at ?? ''
-  const dueAt = due.length === 10 ? `${due}T09:00` : due.slice(0, 16)
-  return {
-    title: todo.title,
-    dueAt,
-    priority: todo.priority ?? 'medium',
-    milestone: todo.milestone_title ?? '',
-    detail: todo.detail ?? '',
-  }
+  const date = new Date(`${dueDay > today ? dueDay : today}T00:00:00`)
+  date.setDate(date.getDate() + 1)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
 /** Due text: 今天/明天/昨天 · 周X M/D within a week · M/D beyond (5.2). */
@@ -157,25 +107,20 @@ function dotPos(target: string | null | undefined): number {
 }
 
 export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail }: KanbanViewProps): JSX.Element {
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [busyKey, setBusyKey] = useState<string | null>(null)
-  const [completing, setCompleting] = useState<Set<string>>(new Set())
-  const [toast, setToast] = useState<{ text: string; undo?: YoloTodoRow } | null>(null)
   const [editor, setEditor] = useState<EditorDraft | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const [quickBusy, setQuickBusy] = useState(false)
   const [renameDraft, setRenameDraft] = useState<{ kind: 'goal' | 'milestone'; id: string; title: string } | null>(null)
   const [msPop, setMsPop] = useState<{ id: string; x: number } | null>(null)
-  const [taskPanel, setTaskPanel] = useState<OpenTaskPanel | null>(null)
-  const [taskDraft, setTaskDraft] = useState<TaskEditDraft | null>(null)
-  const [taskReceipt, setTaskReceipt] = useState<LearningReceiptData | null>(null)
-  const [taskUndo, setTaskUndo] = useState<YoloUndoDescriptor | null>(null)
-  const [judgmentExpanded, setJudgmentExpanded] = useState(false)
-  // v0.3.2: completion/处理 animations — rows retire with a height collapse
-  // before being removed, so nothing "jumps" out of the board.
-  const [, setRetiring] = useState<YoloTodoRow[]>([])
   const bodyRef = useRef<HTMLDivElement>(null)
-  const taskReturnFocus = useRef<HTMLElement | null>(null)
+  const actions = useKanbanActions({
+    data, refresh, filter, patchFilter, onSurfaceChange, onOpenChat, onOpenSource, onOpenItemDetail,
+  })
+  const {
+    actionError, setActionError, busyKey, completing, toast, setToast,
+    quickBusy, taskPanel, taskDraft, setTaskDraft, taskReceipt, taskUndo,
+    judgmentExpanded, act, completeTodo, undoComplete, sendQuickAdd,
+    closeTaskPanel, handleTodayIntent, handleTaskAction, saveTaskPanel, undoTaskReceipt,
+  } = actions
 
   // Toast auto-retire (5.1): 2.4s; completion toasts hold the 4s undo window (5.4).
   useEffect(() => {
@@ -187,71 +132,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
   // Each face scrolls independently: switching tabs starts at the top.
   useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }) }, [surface])
 
-
-  // Map every board row to its owning workspace cwd so an action on an
-  // all-workspaces row routes to that scope (the board is always scope=all).
-  const wsCwdById = useMemo(() => {
-    const m = new Map<string, string | null>()
-    const add = (id: string, cwd: string | undefined): void => {
-      if (!cwd) return
-      const current = m.get(id)
-      if (current === undefined || current === cwd) m.set(id, cwd)
-      else m.set(id, null)
-    }
-    for (const t of data.todos) add(t.id, t.scope_cwd ?? t.ws?.cwd)
-    for (const g of data.goals) add(g.id, g.ws?.cwd)
-    for (const ms of data.milestones) add(ms.id, ms.ws?.cwd)
-    for (const n of data.notifications) add(n.id, n.scope_cwd ?? n.ws?.cwd)
-    return m
-  }, [data])
-
-  const act = useCallback(
-    async (
-      key: string,
-      body: YoloActionRequest,
-      options: { refresh?: boolean } = {},
-    ): Promise<ClientActionOutcome | null> => {
-      setBusyKey(key)
-      setActionError(null)
-      try {
-        const payload = { ...body }
-        const scopeCwd = wsCwdById.get(String(body.id))
-        if (!payload.scope_cwd && scopeCwd) payload.scope_cwd = scopeCwd
-        const outcome = await postYoloAction(payload)
-        if (options.refresh !== false) await refresh()
-        return outcome
-      } catch (e) {
-        setActionError(e instanceof Error ? e.message : String(e))
-        return null
-      } finally {
-        setBusyKey(null)
-      }
-    },
-    [refresh, wsCwdById],
-  )
-
-  // Complete flow (5.4): optimistic fill + retire, POST, refresh, toast with undo.
-  const completeTodo = useCallback(async (t: YoloTodoRow): Promise<void> => {
-    setCompleting((s) => { const n = new Set(s); n.add(t.id); return n })
-    const ok = await act(t.id, { action: 'complete', kind: 'todo', id: t.id, scope_cwd: t.scope_cwd ?? t.ws?.cwd })
-    setCompleting((s) => { const n = new Set(s); n.delete(t.id); return n })
-    if (ok) {
-      const snapshot = { ...t }
-      setRetiring((r) => [...r, snapshot])
-      window.setTimeout(() => { setRetiring((r) => r.filter((x) => x.id !== snapshot.id)) }, 520)
-      setToast({ text: `已完成 · ${t.title}`, undo: t })
-    }
-  }, [act])
-
-  // Undo of complete (5.4, 4s window): reopen restores the row.
-  const undoComplete = useCallback(async (t: YoloTodoRow): Promise<void> => {
-    setToast(null)
-    const ok = await act(`reopen-${t.id}`, { action: 'reopen', kind: 'todo', id: t.id, scope_cwd: t.scope_cwd ?? t.ws?.cwd })
-    if (ok) {
-      setRetiring((r) => r.filter((x) => x.id !== t.id))
-      setToast({ text: `已撤销 · ${t.title}` })
-    }
-  }, [act])
 
   const counts = useMemo(() => focusCounts(data.todos), [data.todos])
   const surfaces = useMemo(() => buildDashboardSurfaces(data), [data])
@@ -292,260 +172,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
     })
     if (ok) setEditor(null)
   }
-
-  const sendQuickAdd = useCallback(async (text: string): Promise<boolean> => {
-    if (quickBusy) return false
-    setQuickBusy(true)
-    const ok = await act('quick-add', { action: 'quick_add', kind: 'todo', title: text })
-    if (ok) {
-      setToast({ text: '已记下 · 今日到期' })
-      onSurfaceChange('home')
-    }
-    setQuickBusy(false)
-    return ok !== null
-  }, [act, quickBusy, onSurfaceChange])
-
-  const openTaskPanel = useCallback((next: OpenTaskPanel): void => {
-    taskReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setTaskPanel(next)
-    setTaskDraft(draftForTodo(next.item))
-    setTaskReceipt(null)
-    setTaskUndo(null)
-  }, [])
-
-  const dismissTaskPanel = useCallback((restoreFocus: boolean): void => {
-    setTaskPanel(null)
-    setTaskDraft(null)
-    setTaskReceipt(null)
-    setTaskUndo(null)
-    if (restoreFocus) window.setTimeout(() => { taskReturnFocus.current?.focus() }, 0)
-  }, [])
-
-  const closeTaskPanel = useCallback((): void => {
-    dismissTaskPanel(true)
-  }, [dismissTaskPanel])
-
-  const openJudgmentPanel = useCallback((todo: YoloTodoRowV2, binding: JudgmentBinding): void => {
-    if (onOpenItemDetail) {
-      onOpenItemDetail(todo)
-      return
-    }
-    const attention = data.attention?.find((row) =>
-      (row.id === binding.id || row.todo_id === todo.id)
-      && row.scope_cwd === (todo.scope_cwd ?? todo.ws?.cwd ?? data.cwd),
-    )
-    openTaskPanel({
-      item: todo,
-      scopeCwd: todo.scope_cwd ?? todo.ws?.cwd ?? data.cwd,
-      reason: attention?.explanation ?? '根据当前事项状态，需要你确认下一步。',
-      evidence: attention?.evidence ?? [],
-      source: todo.source,
-      binding,
-    })
-  }, [data, onOpenItemDetail, openTaskPanel])
-
-  const handleTodayIntent = useCallback((intent: TodaySurfaceIntent): void => {
-    if (intent.type === 'quick_capture') return
-    if (intent.type === 'open_empty_chat') {
-      onOpenChat({ title: '梳理今天', detail: '从今天想继续推进的一件事开始。' })
-      return
-    }
-    if (intent.type === 'mark_judgment_seen') {
-      void act(`seen-${intent.judgmentId}`, {
-        action: 'seen', kind: 'attention', id: intent.judgmentId, scope_cwd: intent.scopeCwd,
-        reason_version: intent.reasonVersion, evidence_fingerprint: intent.evidenceFingerprint,
-      }, { refresh: false })
-      return
-    }
-    if (intent.type === 'expand_judgment') {
-      setJudgmentExpanded(true)
-      return
-    }
-    if (intent.type === 'collapse_judgment') {
-      setJudgmentExpanded(false)
-      return
-    }
-    if (intent.type === 'complete_todo') {
-      void completeTodo(intent.todo)
-      return
-    }
-    if (intent.type === 'open_task') {
-      if (onOpenItemDetail) {
-        onOpenItemDetail(intent.todo)
-        return
-      }
-      openTaskPanel({
-        item: intent.todo,
-        scopeCwd: intent.scopeCwd,
-        reason: intent.todo.overdue ? '这项事情已经逾期。' : intent.todo.stale ? '这项事情已经一段时间没有变化。' : '这项事情安排在今天。',
-        evidence: [],
-        source: intent.todo.source,
-      })
-      return
-    }
-    if (intent.type === 'open_source') {
-      const rawTodo = data.todos.find((todo) => todo.id === intent.todo.id
-        && (todo.scope_cwd ?? todo.ws?.cwd ?? data.cwd) === intent.scopeCwd)
-      if (rawTodo?.source) onOpenSource?.(rawTodo, rawTodo.source)
-      return
-    }
-    if (intent.type === 'handle_notification') {
-      void act(`n-${intent.notificationId}`, {
-        action: 'handled', kind: 'notification', id: intent.notificationId, scope_cwd: intent.scopeCwd,
-      })
-      return
-    }
-    if (intent.type === 'open_ledger' || intent.type === 'review_changes') {
-      onSurfaceChange('history-timeline')
-      return
-    }
-    if (intent.type === 'discuss_closure') {
-      onOpenChat({ title: '今天的工作与生活收束', detail: '回顾今天的变化，确认仍需要回应的事情。' })
-      return
-    }
-    if (intent.type === 'suppress_judgment') {
-      void (async () => {
-        const outcome = await act(`suppress-${intent.judgmentId}`, {
-          action: 'suppress', kind: 'attention', id: intent.judgmentId, scope_cwd: intent.scopeCwd,
-          reason_version: intent.reasonVersion, evidence_fingerprint: intent.evidenceFingerprint,
-          suppressed_until: Date.now() + DAY_MS,
-        })
-        if (outcome?.learningReceipt) setToast({ text: outcome.learningReceipt.summary })
-      })()
-      return
-    }
-    if (intent.type === 'feedback_judgment') {
-      const todo = data.todos.find((row) => row.id === data.attention?.[0]?.todo_id && (row.scope_cwd ?? row.ws?.cwd ?? data.cwd) === intent.scopeCwd)
-      if (todo) {
-        openJudgmentPanel(todo, {
-          id: intent.judgmentId,
-          reasonVersion: intent.reasonVersion,
-          evidenceFingerprint: intent.evidenceFingerprint,
-        })
-      }
-      return
-    }
-    if (intent.type === 'judgment_action') {
-      const binding = {
-        id: data.attention?.[0]?.id ?? intent.todo.id,
-        reasonVersion: intent.reasonVersion,
-        evidenceFingerprint: intent.evidenceFingerprint,
-      }
-      if (intent.action === 'complete') {
-        void completeTodo(intent.todo)
-      } else if (intent.action === 'postpone_tomorrow') {
-        void (async () => {
-          const outcome = await act(`postpone-${intent.todo.id}`, {
-            action: 'postpone', kind: 'todo', id: intent.todo.id,
-            due_at: nextDayStr(intent.todo.due_at), scope_cwd: intent.scopeCwd,
-          })
-          if (outcome?.learningReceipt) setToast({ text: outcome.learningReceipt.summary })
-        })()
-      } else if (intent.action === 'discuss') {
-        onOpenChat({
-          title: intent.todo.title,
-          detail: data.attention?.[0]?.explanation ?? intent.todo.detail,
-          todoId: intent.todo.id,
-          scopeCwd: intent.scopeCwd,
-          source: intent.todo.source,
-        })
-      } else {
-        openJudgmentPanel(intent.todo, binding)
-      }
-    }
-  }, [act, completeTodo, data, onOpenChat, onOpenItemDetail, onOpenSource, onSurfaceChange, openJudgmentPanel, openTaskPanel])
-
-  const handleTaskAction = useCallback((intent: TaskActionIntent): void => {
-    if (!taskPanel) return
-    if (intent.type === 'discuss') {
-      // The task dialog and anchored chat both own the right edge. Retire the
-      // modal first, without its delayed focus restoration stealing focus from
-      // ChatPane's autofocus input, so the chat is visible and interactive.
-      dismissTaskPanel(false)
-      onOpenChat({
-        title: taskPanel.item.title,
-        detail: taskPanel.reason,
-        todoId: taskPanel.item.id,
-        scopeCwd: taskPanel.scopeCwd,
-        source: taskPanel.source,
-      })
-      return
-    }
-    void (async () => {
-      let request: YoloActionRequest
-      if (intent.type === 'postpone') {
-        request = { action: 'postpone', kind: 'todo', id: taskPanel.item.id, due_at: intent.dueAt, scope_cwd: taskPanel.scopeCwd }
-      } else if (intent.type === 'suppress' || intent.type === 'feedback') {
-        if (!taskPanel.binding) {
-          setActionError('当前事项没有可回应的助手判断，请刷新后重试。')
-          return
-        }
-        request = {
-          action: intent.type,
-          kind: 'attention',
-          id: taskPanel.binding.id,
-          scope_cwd: taskPanel.scopeCwd,
-          reason_version: taskPanel.binding.reasonVersion,
-          evidence_fingerprint: taskPanel.binding.evidenceFingerprint,
-          ...(intent.type === 'suppress'
-            ? { suppressed_until: Date.now() + DAY_MS }
-            : { feedback_reason: intent.reason }),
-        }
-      } else {
-        request = intent.type === 'delete'
-          ? { action: 'delete', kind: 'todo', id: taskPanel.item.id, scope_cwd: taskPanel.scopeCwd, confirmation: 'PERMANENT_DELETE' }
-          : { action: intent.type, kind: 'todo', id: taskPanel.item.id, scope_cwd: taskPanel.scopeCwd }
-      }
-      const outcome = await act(`panel-${taskPanel.item.id}`, request)
-      if (!outcome) return
-      if (intent.type === 'delete') {
-        dismissTaskPanel(false)
-        setToast({ text: '事项已永久删除' })
-        return
-      }
-      setTaskReceipt(outcome.learningReceipt ?? null)
-      setTaskUndo(outcome.undo ?? null)
-      setTaskPanel((current) => current ? { ...current, item: { ...current.item, ...outcome.item } } : current)
-    })()
-  }, [act, dismissTaskPanel, onOpenChat, taskPanel])
-
-  const saveTaskPanel = useCallback((): void => {
-    if (!taskPanel || !taskDraft) return
-    void (async () => {
-      const outcome = await act(`panel-edit-${taskPanel.item.id}`, {
-        action: 'update',
-        kind: 'todo',
-        id: taskPanel.item.id,
-        scope_cwd: taskPanel.scopeCwd,
-        title: taskDraft.title,
-        due_at: taskDraft.dueAt || null,
-        priority: taskDraft.priority,
-        milestone_title: taskDraft.milestone,
-        detail: taskDraft.detail,
-      })
-      if (!outcome) return
-      setTaskPanel((current) => current ? { ...current, item: { ...current.item, ...outcome.item } } : current)
-      setToast({ text: '已保存事项编辑' })
-    })()
-  }, [act, taskDraft, taskPanel])
-
-  const undoTaskReceipt = useCallback((): void => {
-    if (!taskPanel || !taskUndo) return
-    if (taskUndo.expires_at !== undefined && taskUndo.expires_at < Date.now()) {
-      setActionError('撤销窗口已结束；当前事项没有被再次修改。')
-      setTaskUndo(null)
-      return
-    }
-    void (async () => {
-      const outcome = await act(`panel-undo-${taskPanel.item.id}`, {
-        ...taskUndo,
-        scope_cwd: taskPanel.scopeCwd,
-      })
-      if (!outcome) return
-      setTaskReceipt(outcome.learningReceipt ?? null)
-      setTaskUndo(null)
-    })()
-  }, [act, taskPanel, taskUndo])
 
   const rowActions = (t: YoloTodoRow): { onComplete: () => void; onAct: (action: string, extra?: { due_at?: string }) => void; onEdit: () => void; onChat: () => void; onSource?: () => void } => ({
     onComplete: () => { void completeTodo(t) },

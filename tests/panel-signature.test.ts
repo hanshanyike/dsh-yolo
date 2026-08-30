@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { dashboardSignature } from '../client/panel/YoloPanel.tsx'
-import type { YoloDashboardData } from '../src/shared/dashboard.ts'
+import type { YoloDashboardData } from '../src/contracts/dashboard.ts'
 
 function dashboard(at: number): YoloDashboardData {
   return {

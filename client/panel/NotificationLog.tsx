@@ -3,7 +3,7 @@ import type {
   YoloNotificationLogData,
   YoloNotificationLogItem,
   YoloNotificationSeenOutcome,
-} from '../../src/shared/notifications.ts'
+} from '../../src/contracts/notifications.ts'
 import { IcBell, IcChevron, IcClose } from '../design/icons.tsx'
 
 export interface NotificationLogProps {

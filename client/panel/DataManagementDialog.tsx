@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { YoloDashboardData, YoloTodoRow } from '../../src/shared/dashboard.ts'
+import type { YoloDashboardData, YoloTodoRow } from '../../src/contracts/dashboard.ts'
 import { dueAtLocalDate } from '../../src/shared/due.ts'
 import { localDateStr } from '../../src/shared/text.ts'
 import {

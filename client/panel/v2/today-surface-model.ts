@@ -4,7 +4,7 @@ import type {
   YoloItemSource,
   YoloLedgerEntry,
   YoloTodoRow,
-} from '../../../src/shared/dashboard.ts'
+} from '../../../src/contracts/dashboard.ts'
 import type {
   AssistantJudgmentView,
   JudgmentSource,

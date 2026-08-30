@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { YoloDashboardData } from '../../../src/shared/dashboard.ts'
+import type { YoloDashboardData } from '../../../src/contracts/dashboard.ts'
 import { AssistantJudgment } from './AssistantJudgment.tsx'
 import type {
   JudgmentActionIntent,

@@ -1,4 +1,4 @@
-import type { YoloItemSource } from '../../src/shared/dashboard.ts'
+import type { YoloItemSource } from '../../src/contracts/dashboard.ts'
 import type { ItemDetailForeground, PanelForeground, PanelItemRef } from './navigation.ts'
 
 export type SourcePreviewForeground = Extract<PanelForeground, { kind: 'source_preview' }>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ChatConversationController, chatWaitingText, isChatWaiting } from '../client/panel/chat/controller.ts'
-import type { ChatRequestSnapshot } from '../src/shared/chat.ts'
+import type { ChatRequestSnapshot } from '../src/contracts/chat.ts'
 
 function request(over: Partial<ChatRequestSnapshot> = {}): ChatRequestSnapshot {
   return {

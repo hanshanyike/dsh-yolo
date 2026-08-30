@@ -13,10 +13,10 @@ import {
   isChatWaiting,
   type ChatConversationSnapshot,
 } from './chat/controller.ts'
-import type { ChatMessagesPayload, ChatRequestSnapshot } from '../../src/shared/chat.ts'
+import type { ChatMessagesPayload, ChatRequestSnapshot } from '../../src/contracts/chat.ts'
 import { decideChatScroll, isNearChatBottom } from './chat/scroll.ts'
 
-export type { ChatMessage } from '../../src/shared/chat.ts'
+export type { ChatMessage } from '../../src/contracts/chat.ts'
 
 /** What a card's 聊一聊 anchors the conversation to. */
 export interface ChatAnchor {

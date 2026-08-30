@@ -5,9 +5,8 @@
 // not change when presentation changes.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { YoloDashboardData, YoloTodoRow } from '../../src/shared/dashboard.ts'
-import type { YoloBadgeNotification } from '../../src/shared/badge.ts'
-import type { YoloActionRequest, YoloUndoDescriptor } from '../../src/contracts/actions.ts'
+import type { YoloDashboardData, YoloTodoRow } from '../../src/contracts/dashboard.ts'
+import type { YoloBadgeNotification } from '../../src/contracts/badge.ts'
 import { buildDashboardSurfaces } from '../../src/shared/dashboard-surfaces.ts'
 import {
   DEFAULT_FILTER,
@@ -24,7 +23,8 @@ import { yoloTokens } from '../design/tokens.ts'
 import { IcBell, IcCheck, IcChevron, IcClose, IcFilter } from '../design/icons.tsx'
 import { YoloLogo } from '../YoloLogo.tsx'
 import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
-import { KanbanView, type BoardSurfaceKey } from './KanbanView.tsx'
+import { KanbanView } from './KanbanView.tsx'
+import type { BoardSurfaceKey } from './kanban/surfaces.ts'
 import { NotificationLog } from './NotificationLog.tsx'
 import { MoreMenu } from './MoreMenu.tsx'
 import { DataManagementDialog } from './DataManagementDialog.tsx'
@@ -33,8 +33,6 @@ import { ForegroundContext, type SessionNavigationState } from './ForegroundCont
 import { readPanelState, writePanelState } from './state.ts'
 import { buildTodaySurfaceModel } from './v2/today-surface-model.ts'
 import { TaskActionPanel } from './v2/TaskActionPanel.tsx'
-import type { LearningReceiptData, TaskActionIntent, TaskEditDraft } from './v2/model.ts'
-import { postYoloAction } from './v2/api.ts'
 import {
   backFromForeground,
   derivePanelPresentation,
@@ -46,6 +44,11 @@ import {
   type PanelItemRef,
   type PanelNavigationState,
 } from './navigation.ts'
+import { useDashboardController } from './controllers/use-dashboard-controller.ts'
+import { useNotificationNavigation } from './controllers/use-notification-navigation.ts'
+import { useItemDetailController } from './controllers/use-item-detail-controller.ts'
+
+export { dashboardSignature } from './controllers/use-dashboard-controller.ts'
 
 export interface YoloPanelProps {
   /** Panel left edge (the sidebar's right edge) — spans to the viewport right. */
@@ -65,42 +68,10 @@ export interface YoloPanelProps {
   surfaceLabel?: string
 }
 
-interface LoadState {
-  loading: boolean
-  error: string | null
-  data: YoloDashboardData | null
-}
-
-/** Stable business signature; response time alone must not trigger the sweep. */
-export function dashboardSignature(d: YoloDashboardData): string {
-  return JSON.stringify({
-    contract: d.ui_contract_version ?? 1,
-    todos: d.todos.map((row) => [row.ws?.slug, row.id, row.status, row.due_at, row.priority, row.updated_at, row.completed_at]),
-    attention: (d.attention ?? []).map((row) => [row.id, row.evidence_fingerprint, row.seen_at, row.suppressed_until]),
-    notifications: d.notifications.map((row) => [row.ws?.slug, row.id, row.handled, row.created_at]),
-    ledger: d.ledger.map((row) => [row.ws?.slug, row.id, row.kind, row.occurred_at]),
-    goals: d.goals.map((row) => [row.ws?.slug, row.id, row.progress, row.status]),
-    milestones: d.milestones.map((row) => [row.ws?.slug, row.id, row.status, row.target_date]),
-    partial: d.summary?.partial ?? false,
-    workspaceErrors: d.workspaceErrors ?? [],
-  })
-}
-
 const PAGE_LABELS: Record<BoardPage, string> = {
   home: '首页',
   plan: '计划',
   history: '历史',
-}
-
-function detailDraftFor(todo: YoloTodoRow): TaskEditDraft {
-  const due = todo.due_at ?? ''
-  return {
-    title: todo.title,
-    dueAt: due.length === 10 ? `${due}T09:00` : due.slice(0, 16),
-    priority: todo.priority ?? 'medium',
-    milestone: todo.milestone_title ?? '',
-    detail: todo.detail ?? '',
-  }
 }
 
 export function YoloPanel({
@@ -116,7 +87,10 @@ export function YoloPanel({
   ensureYoloStyle()
   const [theme, setTheme] = useState<'dark' | 'light'>(() => detectYoloTheme())
 
-  const [state, setState] = useState<LoadState>({ loading: true, error: null, data: null })
+  const { state, load, sweepTick, updateUnseen } = useDashboardController({
+    notificationRefreshRequest,
+    onUnseenChange,
+  })
   const initial = useMemo(() => readPanelState(), [])
   const [filter, setFilter] = useState<KanbanFilter>(initial.filter)
   const [navigation, setNavigation] = useState<PanelNavigationState>(initial.navigation)
@@ -124,25 +98,25 @@ export function YoloPanel({
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [dataManagementOpen, setDataManagementOpen] = useState(false)
   const [sessionNavigation, setSessionNavigation] = useState<SessionNavigationState>({ status: 'idle' })
-  const [detailDraft, setDetailDraft] = useState<TaskEditDraft | null>(null)
-  const [detailBusy, setDetailBusy] = useState(false)
-  const [detailReceipt, setDetailReceipt] = useState<LearningReceiptData | null>(null)
-  const [detailUndo, setDetailUndo] = useState<YoloUndoDescriptor | null>(null)
-  const [detailError, setDetailError] = useState<string | null>(null)
-  const [sweepTick, setSweepTick] = useState(0)
-  const lastSig = useRef<string | null>(null)
-  const previousNotificationRefreshRequest = useRef<number | null>(null)
-  const previousNotificationOpenSequence = useRef<number | null>(null)
-  const unseenRevisionRef = useRef(0)
   const fltBtnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const chatToggleRef = useRef<HTMLButtonElement>(null)
   const notificationButtonRef = useRef<HTMLButtonElement>(null)
   const chatOpenerRef = useRef<HTMLElement | null>(null)
   const contextRef = useRef<HTMLElement>(null)
+  const openDiscussionRef = useRef<(anchor: ChatAnchor) => void>(() => {})
   const chatReturnTodoIdRef = useRef<string | undefined>(
     navigation.foreground.kind === 'item_discussion' ? navigation.foreground.item.id : undefined,
   )
+  const openDetailDiscussion = useCallback((anchor: ChatAnchor): void => {
+    openDiscussionRef.current(anchor)
+  }, [])
+  const detail = useItemDetailController({
+    data: state.data,
+    foreground: navigation.foreground,
+    refresh: load,
+    openDiscussion: openDetailDiscussion,
+  })
 
   // Panel width → Compact gear (<480px: chat opens full-screen).
   const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 1000 : Math.max(0, window.innerWidth - left)))
@@ -172,34 +146,6 @@ export function YoloPanel({
     setTheme(next)
   }, [themeControl])
 
-  const load = useCallback(async (): Promise<void> => {
-    setState((s) => ({ ...s, loading: true, error: null }))
-    try {
-      // v0.3.3: always the all-workspaces board — no 当前/全部 toggle.
-      const r = await fetch('/yolo/dashboard?scope=all', { headers: { accept: 'application/json' }, cache: 'no-store' })
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      const data = (await r.json()) as YoloDashboardData
-      const sig = dashboardSignature(data)
-      if (lastSig.current !== null && sig !== lastSig.current) setSweepTick((t) => t + 1)
-      lastSig.current = sig
-      if (data.unseen !== undefined) {
-        if (data.at >= unseenRevisionRef.current) {
-          unseenRevisionRef.current = data.at
-          onUnseenChange?.(data.unseen, data.at)
-        } else {
-          setState((current) => {
-            if (current.data?.unseen !== undefined) data.unseen = current.data.unseen
-            return { loading: false, error: null, data }
-          })
-          return
-        }
-      }
-      setState({ loading: false, error: null, data })
-    } catch (e) {
-      setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }))
-    }
-  }, [onUnseenChange])
-
   // Persist view state so reopening keeps the filter and side chat (TA-6).
   useEffect(() => { writePanelState({ filter }) }, [filter])
   useEffect(() => { writePanelState({ navigation }) }, [navigation])
@@ -224,25 +170,6 @@ export function YoloPanel({
         ? { page: 'plan', section: 'today' }
         : { page: 'history', section: 'timeline' })
   }, [setRoute])
-
-  useEffect(() => { void load() }, [load])
-
-  // New deliveries refresh the board but never change route or foreground.
-  useEffect(() => {
-    const shouldRefresh = notificationRefreshRequest > 0
-      && previousNotificationRefreshRequest.current !== notificationRefreshRequest
-    previousNotificationRefreshRequest.current = notificationRefreshRequest
-    if (shouldRefresh) void load()
-  }, [load, notificationRefreshRequest])
-
-  const updateUnseen = useCallback((unseen: number, revision: number): void => {
-    if (revision < unseenRevisionRef.current) return
-    unseenRevisionRef.current = revision
-    setState((current) => current.data
-      ? { ...current, data: { ...current.data, unseen } }
-      : current)
-    onUnseenChange?.(unseen, revision)
-  }, [onUnseenChange])
 
   const focusChatOpener = useCallback((returnFocusId = navigation.returnFocusId, todoId = chatReturnTodoIdRef.current): void => {
     window.setTimeout(() => {
@@ -291,23 +218,17 @@ export function YoloPanel({
       return { ...current, foreground: { kind: 'none' } }
     })
     setSessionNavigation({ status: 'idle' })
-    setDetailDraft(null)
-    setDetailReceipt(null)
-    setDetailUndo(null)
-    setDetailError(null)
+    detail.reset()
     focusChatOpener(returnFocusId, returnTodoId)
-  }, [focusChatOpener, navigation.foreground, navigation.returnFocusId])
+  }, [detail, focusChatOpener, navigation.foreground, navigation.returnFocusId])
 
   const openDataManagement = useCallback((): void => {
     setFilterMenuOpen(false)
     setNavigation((current) => ({ ...current, foreground: { kind: 'none' }, returnFocusId: undefined }))
     setSessionNavigation({ status: 'idle' })
-    setDetailDraft(null)
-    setDetailReceipt(null)
-    setDetailUndo(null)
-    setDetailError(null)
+    detail.reset()
     setDataManagementOpen(true)
-  }, [])
+  }, [detail])
   const closeDataManagement = useCallback((): void => {
     setDataManagementOpen(false)
     window.setTimeout(() => {
@@ -321,13 +242,10 @@ export function YoloPanel({
     setNavigation((current) => backFromForeground(current))
     setSessionNavigation({ status: 'idle' })
     if (navigation.foreground.kind === 'item_detail') {
-      setDetailDraft(null)
-      setDetailReceipt(null)
-      setDetailUndo(null)
-      setDetailError(null)
+      detail.reset()
     }
     focusChatOpener(returnFocusId, returnTodoId)
-  }, [focusChatOpener, navigation.foreground, navigation.returnFocusId])
+  }, [detail, focusChatOpener, navigation.foreground, navigation.returnFocusId])
 
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {
@@ -386,6 +304,7 @@ export function YoloPanel({
     setDiscussionThreads((threads) => threads[key] === threadKey ? threads : { ...threads, [key]: threadKey })
     setNavigation((current) => openForeground(current, { kind: 'item_discussion', item, threadKey }, a.todoId ? `todo-${a.todoId}` : undefined))
   }, [discussionThreads, navigation.foreground, state.data?.cwd])
+  openDiscussionRef.current = openAnchoredChat
 
   const toggleAssistantChat = useCallback(() => {
     chatOpenerRef.current = chatToggleRef.current
@@ -419,12 +338,9 @@ export function YoloPanel({
     }
     chatOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     chatReturnTodoIdRef.current = todo.id
-    setDetailDraft(detailDraftFor(todo))
-    setDetailReceipt(null)
-    setDetailUndo(null)
-    setDetailError(null)
+    detail.prepare(todo)
     setNavigation((current) => openForeground(current, { kind: 'item_detail', item }, `todo-${todo.id}`))
-  }, [state.data?.cwd])
+  }, [detail, state.data?.cwd])
 
   const openNotificationLog = useCallback((targetId?: string): void => {
     chatOpenerRef.current = notificationButtonRef.current
@@ -446,32 +362,18 @@ export function YoloPanel({
     })
   }, [])
 
-  useEffect(() => {
-    const request = notificationOpenRequest
-    if (!request || !state.data || previousNotificationOpenSequence.current === request.sequence) return
-    previousNotificationOpenSequence.current = request.sequence
-    const notification = request.notification
-    void fetch('/yolo/notifications/seen', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ notification: { id: notification.id, scope_cwd: notification.scope_cwd } }),
-    }).then(async (response) => {
-      if (!response.ok) return
-      const outcome = await response.json() as { unseen: number; revision: number }
-      updateUnseen(outcome.unseen, outcome.revision)
-    }).catch(() => {})
+  const openReminderTodo = useCallback((todo: YoloTodoRow): void => {
+    setRoute({ page: 'home' })
+    openItemDetail(todo)
+  }, [openItemDetail, setRoute])
 
-    if (notification.kind === 'reminder' && notification.todo_id) {
-      const todo = state.data.todos.find((row) => row.id === notification.todo_id
-        && (row.scope_cwd ?? row.ws?.cwd ?? state.data!.cwd) === notification.scope_cwd)
-      if (todo) {
-        setRoute({ page: 'home' })
-        openItemDetail(todo)
-        return
-      }
-    }
-    openNotificationLog(notification.id)
-  }, [notificationOpenRequest, openItemDetail, openNotificationLog, setRoute, state.data, updateUnseen])
+  useNotificationNavigation({
+    request: notificationOpenRequest,
+    data: state.data,
+    updateUnseen,
+    openReminderTodo,
+    openNotificationLog,
+  })
 
   const navigateToSourceSession = useCallback((sessionId: string): void => {
     if (!openSession) {
@@ -552,18 +454,11 @@ export function YoloPanel({
     const exists = state.data.todos.some((todo) => todo.id === item.id && (todo.scope_cwd ?? todo.ws?.cwd ?? state.data!.cwd) === item.scopeCwd)
     if (exists) return
     setNavigation((current) => ({ ...current, route: { page: 'home' }, foreground: { kind: 'none' } }))
-    setDetailDraft(null)
-    setDetailReceipt(null)
-    setDetailUndo(null)
-    setDetailError(null)
-  }, [navigation.foreground, state.data])
+    detail.reset()
+  }, [detail, navigation.foreground, state.data])
 
-  const foregroundTodo = useMemo(() => {
-    if (!state.data || !('item' in navigation.foreground)) return undefined
-    const target = navigation.foreground.item
-    return state.data.todos.find((todo) => todo.id === target.id && (todo.scope_cwd ?? todo.ws?.cwd ?? state.data!.cwd) === target.scopeCwd)
-  }, [navigation.foreground, state.data])
-  const sourceForForeground = foregroundTodo?.source
+  const foregroundTodo = detail.todo
+  const sourceForForeground = detail.source
 
   const chatAnchor = useMemo<ChatAnchor | null>(() => {
     if (navigation.foreground.kind !== 'item_discussion') return null
@@ -581,11 +476,7 @@ export function YoloPanel({
   }, [navigation.foreground, sourceForForeground])
 
   const chatThread = navigation.foreground.kind === 'item_discussion' ? navigation.foreground.threadKey : undefined
-  const detailAttention = useMemo(() => {
-    if (!foregroundTodo || !state.data) return undefined
-    const scopeCwd = foregroundTodo.scope_cwd ?? foregroundTodo.ws?.cwd ?? state.data.cwd
-    return state.data.attention?.find((row) => row.todo_id === foregroundTodo.id && row.scope_cwd === scopeCwd)
-  }, [foregroundTodo, state.data])
+  const detailAttention = detail.attention
   const detailSource = sourceForForeground ? {
     type: sourceForForeground.type,
     label: sourceForForeground.label,
@@ -593,84 +484,6 @@ export function YoloPanel({
     excerpt: sourceForForeground.excerpt,
     workspace: sourceForForeground.workspace,
   } : undefined
-
-  useEffect(() => {
-    if (navigation.foreground.kind === 'item_detail' && foregroundTodo && detailDraft === null) {
-      setDetailDraft(detailDraftFor(foregroundTodo))
-    }
-  }, [detailDraft, foregroundTodo, navigation.foreground.kind])
-
-  const runDetailAction = useCallback(async (request: YoloActionRequest): Promise<void> => {
-    setDetailBusy(true)
-    setDetailError(null)
-    try {
-      const outcome = await postYoloAction(request)
-      setDetailReceipt(outcome.learningReceipt ?? null)
-      setDetailUndo(outcome.undo ?? null)
-      await load()
-    } catch (error) {
-      setDetailError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setDetailBusy(false)
-    }
-  }, [load])
-
-  const handleDetailAction = useCallback((intent: TaskActionIntent): void => {
-    if (!foregroundTodo || navigation.foreground.kind !== 'item_detail') return
-    const scopeCwd = navigation.foreground.item.scopeCwd
-    if (intent.type === 'discuss') {
-      openAnchoredChat({ title: foregroundTodo.title, detail: foregroundTodo.detail, todoId: foregroundTodo.id, scopeCwd })
-      return
-    }
-    if (intent.type === 'suppress' || intent.type === 'feedback') {
-      if (!detailAttention) {
-        setDetailError('当前事项没有可回应的助手判断，请刷新后重试。')
-        return
-      }
-      void runDetailAction({
-        action: intent.type,
-        kind: 'attention',
-        id: detailAttention.id,
-        scope_cwd: scopeCwd,
-        reason_version: detailAttention.reason_version,
-        evidence_fingerprint: detailAttention.evidence_fingerprint,
-        ...(intent.type === 'suppress'
-          ? { suppressed_until: Date.now() + 86_400_000 }
-          : { feedback_reason: intent.reason }),
-      })
-      return
-    }
-    const request: YoloActionRequest = intent.type === 'postpone'
-      ? { action: 'postpone', kind: 'todo', id: foregroundTodo.id, scope_cwd: scopeCwd, due_at: intent.dueAt }
-      : intent.type === 'delete'
-        ? { action: 'delete', kind: 'todo', id: foregroundTodo.id, scope_cwd: scopeCwd, confirmation: 'PERMANENT_DELETE' }
-        : { action: intent.type, kind: 'todo', id: foregroundTodo.id, scope_cwd: scopeCwd }
-    void runDetailAction(request)
-  }, [detailAttention, foregroundTodo, navigation.foreground, openAnchoredChat, runDetailAction])
-
-  const saveDetail = useCallback((): void => {
-    if (!foregroundTodo || !detailDraft || navigation.foreground.kind !== 'item_detail') return
-    void runDetailAction({
-      action: 'update', kind: 'todo', id: foregroundTodo.id,
-      scope_cwd: navigation.foreground.item.scopeCwd,
-      title: detailDraft.title,
-      due_at: detailDraft.dueAt || null,
-      priority: detailDraft.priority,
-      milestone_title: detailDraft.milestone,
-      detail: detailDraft.detail,
-    })
-  }, [detailDraft, foregroundTodo, navigation.foreground, runDetailAction])
-
-  const undoDetail = useCallback((): void => {
-    if (!detailUndo || navigation.foreground.kind !== 'item_detail') return
-    if (detailUndo.expires_at !== undefined && detailUndo.expires_at < Date.now()) {
-      setDetailError('撤销窗口已结束；当前事项没有被再次修改。')
-      setDetailUndo(null)
-      return
-    }
-    void runDetailAction({ ...detailUndo, scope_cwd: navigation.foreground.item.scopeCwd } as YoloActionRequest)
-      .then(() => { setDetailUndo(null) })
-  }, [detailUndo, navigation.foreground, runDetailAction])
 
   // The board column, extracted so the fullscreen-chat branch can keep it
   // mounted (display:none) instead of unmounting KanbanView and losing
@@ -812,26 +625,26 @@ export function YoloPanel({
           : foreground.kind === 'notification_log' ? '通知' : ''
   const contextContent = foreground.kind === 'assistant_chat' || foreground.kind === 'item_discussion'
     ? <ChatPane variant={presentation === 'split' ? 'side' : 'full'} anchor={foreground.kind === 'item_discussion' ? chatAnchor : null} threadKey={chatThread} onDashboardRefresh={load} />
-    : foreground.kind === 'item_detail' && foregroundTodo && detailDraft
+    : foreground.kind === 'item_detail' && foregroundTodo && detail.draft
       ? (
           <>
-            {detailError ? <div className="err-line" role="alert">操作失败：{detailError}</div> : null}
+            {detail.error ? <div className="err-line" role="alert">操作失败：{detail.error}</div> : null}
             <TaskActionPanel
               item={{ ...foregroundTodo, source: detailSource }}
               reason={detailAttention?.explanation ?? '这是当前保存的事项信息。'}
               evidence={detailAttention?.evidence ?? []}
               source={detailSource}
-              draft={detailDraft}
-              busy={detailBusy}
-              learningReceipt={detailReceipt}
+              draft={detail.draft}
+              busy={detail.busy}
+              learningReceipt={detail.receipt}
               judgmentFeedbackEnabled={detailAttention !== undefined}
               modal={presentation === 'focus'}
-              onAction={handleDetailAction}
-              onDraftChange={setDetailDraft}
-              onSave={saveDetail}
+              onAction={detail.handleAction}
+              onDraftChange={detail.setDraft}
+              onSave={detail.save}
               onClose={closeForeground}
               onOpenSource={() => { if (sourceForForeground) openSourcePreview(foreground.item, sourceForForeground) }}
-              onUndoReceipt={detailUndo ? undoDetail : undefined}
+              onUndoReceipt={detail.undo ? detail.undoReceipt : undefined}
             />
           </>
         )

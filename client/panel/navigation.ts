@@ -1,4 +1,4 @@
-import type { YoloItemSource } from '../../src/shared/dashboard.ts'
+import type { YoloItemSource } from '../../src/contracts/dashboard.ts'
 
 export type BoardPage = 'home' | 'plan' | 'history'
 export type PlanSection = 'today' | 'upcoming' | 'goals' | 'all'

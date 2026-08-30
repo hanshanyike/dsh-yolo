@@ -5,7 +5,7 @@
 // the badge follows reminders even while the panel is closed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { YoloBadgeData } from '../../src/shared/badge.ts'
+import type { YoloBadgeData } from '../../src/contracts/badge.ts'
 import { YoloLogo } from '../YoloLogo.tsx'
 import { nextYoloSurfaceLabel, YOLO_SURFACE_LABELS, yoloSurfaceTitle } from '../brand.ts'
 import { YoloPanel } from '../panel/YoloPanel.tsx'

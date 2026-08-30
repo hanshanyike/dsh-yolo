@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { YoloDashboardData, YoloItemSource, YoloTodoRow } from '../../src/shared/dashboard.ts'
+import type { YoloDashboardData, YoloItemSource, YoloTodoRow } from '../../src/contracts/dashboard.ts'
 import type {
   YoloHistoryData,
   YoloHistoryEvent,
   YoloHistoryItem,
   YoloHistoryStatusFilter,
-} from '../../src/shared/history.ts'
+} from '../../src/contracts/history.ts'
 import type { HistoryChangeValue } from '../../src/contracts/history.ts'
 import { IcChevron, IcPin } from '../design/icons.tsx'
 import { postYoloAction } from './v2/api.ts'
