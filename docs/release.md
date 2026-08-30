@@ -159,8 +159,8 @@ git status --short
 
 `npm pack --dry-run` 会触发 `prepare`，但不会留下 tarball；保存 JSON 输出中的 `integrity` 供发布后核对。
 清单必须包含 `dist/`、
-`cordis.patch.yml`、`src/storage/schema.sql`、README、许可和 CHANGELOG，且不得包含源码目录、测试、
-`docs/` 或凭据。最后工作区仍须干净。
+`cordis.patch.yml`、`src/storage/schema.sql`、根 README、`docs/README.md`、许可、CHANGELOG 和明确白名单中的品牌资源，
+且不得包含其他源码、测试、文档或凭据。最后工作区仍须干净。
 
 ### 5. 先推版本提交并等待 CI，再推标签
 
