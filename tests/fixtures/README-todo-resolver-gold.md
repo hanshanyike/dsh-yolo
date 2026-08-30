@@ -22,6 +22,27 @@
 4. 同一条 JSONL 可添加 tags，但主分层只能有一个，以保证 evaluator 的分层统计口径稳定。
 5. 修改后运行 `pnpm exec vitest run tests/todo-resolver-eval.test.ts`；需要评估模型输出时，复制 corpus、写入 `prediction` 后再运行 `node scripts/todo-resolver-eval.mjs evaluate <副本>`。
 
+## 使用宿主配置回放
+
+仓库提供一条默认休眠的宿主内回放路径。它复用 dsh `web` profile 已配置的 provider、模型和凭据，
+不会读取或复制 API key 到输出，也不会开放评估 HTTP 端点。先构建并确认当前 checkout 已通过
+`dsh plugin --profile web add .` 链接，然后运行：
+
+```powershell
+pnpm build
+pnpm eval:todo-resolver -- tests/fixtures/todo-resolver-labeled-cases.jsonl output/todo-resolver-predictions.jsonl --report output/todo-resolver-report.json
+```
+
+runner 会在临时空工作区和随机端口启动官方 `dsh web`，由 `yolo-extract` 内部使用 `ctx.llm` 顺序回放，
+完成后停止自己启动的宿主并删除临时工作区。gold 的统一语义时钟固定为
+`2026-08-30T09:00:00+08:00`，可用 `--as-of` 显式覆盖；输入永不原地改写，已存在的输出也会拒绝覆盖。
+生成副本只保留解析后的 prediction、provider/model/resolver 版本、finish 和 token usage，不保存原始模型文本。
+
+报告始终包含 7 个分层、置信度分桶和 R2a engineering gate。增加 `--require-gate` 时，门禁不通过会以
+退出码 2 结束。门禁要求 prediction 完整且来自单一路由、每层至少 6 条、0.98 自动候选中的 false-link 为 0、总体 exact
+不低于 0.8、missed-link 不高于 0.15、0.98 高置信自动候选无误授权且覆盖至少一半安全 LINK/UPDATE。
+这仍是工程回归门，不单独构成默认开启 R2a 的授权；还必须有独立的隔离真实对话留出集。
+
 ## 隔离真实宿主 observation
 
 `todo-resolver-observed-cases.jsonl` 另存从一次隔离真实 dsh 宿主导出的、经人工标注和脱敏的

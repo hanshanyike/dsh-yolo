@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LlmRuntime, StreamChunk } from '@deepseek-ai/dsh-llm'
 import Yolo from '../src/storage/index.ts'
 import { apply, sourceExcerptFromMessages } from '../src/extract/index.ts'
+import { TODO_RESOLVER_VERSION } from '../src/extract/todo-resolver.ts'
 
 type Handler = (...args: any[]) => void
 
@@ -443,7 +444,7 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(log).toMatchObject({
       session_id: 's-shadow-update',
       turn_seq: 3,
-      resolver_version: 'shadow-v1',
+      resolver_version: TODO_RESOLVER_VERSION,
       status: 'ok',
     })
     expect(JSON.parse(log.candidates_json)).toEqual([

@@ -16,6 +16,7 @@ node scripts/e2e.mjs --suite ui    # 真实浏览器交互
 node scripts/e2e.mjs --spec panel-flow
 node scripts/todo-resolver-eval.mjs export <yolo.db> <samples.jsonl>
 node scripts/todo-resolver-eval.mjs evaluate <labeled-samples.jsonl>
+pnpm eval:todo-resolver -- tests/fixtures/todo-resolver-labeled-cases.jsonl output/todo-resolver-predictions.jsonl --report output/todo-resolver-report.json
 ```
 
 单元测试只运行 `tests/**/*.test.ts`，不要求启动 dsh。E2E 使用真实 dsh 宿主、真实 SQLite 和系统安装的 Edge，默认串行执行。
@@ -87,6 +88,11 @@ UI 套件使用 Playwright 驱动真实 Edge，验证看板打开、捕获、筛
   不能只报告总体准确率，也不能把没有 prediction 的 gold 样本计为模型错误。
 - 长期 gold corpus 必须保持候选 shape、decision/target 基数和风险标签自检；人工构造但没有当前模型
   prediction 的样本只能验证 schema 与策略边界，不能授权打开 `todoIdentityR2Enabled`。
+- 模型回放必须由官方 dsh 宿主内的 `ctx.llm` 使用当前 profile 路由执行；输入 gold 不得原地改写，输出不得
+  包含 credential 或原始模型文本。报告必须锁定 provider/model/resolver/as-of，并同时给出分层、置信度、
+  false-link、missed-link、高置信误授权和安全覆盖；准入的 false-link=0 只针对达到 0.98 的自动候选，
+  低置信错误仍在总体质量指标中报告但不能假装成运行时放权。handcrafted engineering gate 即使通过，也必须由独立
+  隔离真实对话留出集复核后才能评审默认开启 R2a。
 - R2a 开启路径只允许唯一开放候选的高置信 LINK 或明确 due_at UPDATE；状态、priority/title/detail、终态、
   occurrence、step、多候选与多 mention 均应有 blocked 回归，application receipt 必须与 SQLite 实际结果一致。
 - 每个聚合事项显式携带并保留自己的 `scope_cwd`；未知 scope 被拒绝。

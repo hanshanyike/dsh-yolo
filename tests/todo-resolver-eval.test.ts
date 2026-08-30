@@ -59,6 +59,11 @@ describe('todo resolver labeling tool', () => {
       overall: { labeled: 2, exact: 2, false_link: 0, missed_link: 0 },
       by_stratum: { cross_session: { labeled: 2, exact: 2, false_link: 0, missed_link: 0 } },
     })
+    const gated = spawnSync(process.execPath, [resolve('scripts/todo-resolver-eval.mjs'), 'gate', observedPath], { encoding: 'utf8' })
+    expect(gated.status).toBe(2)
+    expect(JSON.parse(gated.stdout)).toMatchObject({
+      gate: { passed: false, checks: { strata_complete: false, safe_coverage: true } },
+    })
   })
 
   it('keeps the handcrafted Chinese gold corpus valid, bounded and risk-stratified', () => {
@@ -144,6 +149,46 @@ describe('todo resolver labeling tool', () => {
     expect([...requiredStrata].every((stratum) => strataCounts.get(stratum) === 6)).toBe(true)
     expect([...requiredTags].every((tag) => seenTags.has(tag))).toBe(true)
     expect(seenDecisions).toEqual(allowedDecisions)
+  })
+
+  it('passes the R2a engineering gate only for complete, single-route, safe predictions', () => {
+    const root = mkdtempSync(join(tmpdir(), 'yolo-resolver-gate-'))
+    roots.push(root)
+    const source = resolve('tests/fixtures/todo-resolver-labeled-cases.jsonl')
+    const generated = join(root, 'predictions.jsonl')
+    const reportPath = join(root, 'report.json')
+    const rows = readFileSync(source, 'utf8').split(/\r?\n/u).filter(Boolean).map((line) => {
+      const row = JSON.parse(line)
+      return {
+        ...row,
+        prediction: { ...row.expected, confidence: 0.99, reason: 'fixture-perfect prediction' },
+        provenance: {
+          ...row.provenance,
+          replay: { model_provider: 'provider', model_name: 'model', resolver_version: 'shadow-v1' },
+        },
+      }
+    })
+    writeFileSync(generated, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8')
+
+    const gated = spawnSync(process.execPath, [resolve('scripts/todo-resolver-eval.mjs'), 'gate', generated, reportPath], { encoding: 'utf8' })
+    expect(gated.status, gated.stderr).toBe(0)
+    const report = JSON.parse(readFileSync(reportPath, 'utf8'))
+    expect(report).toMatchObject({
+      samples: 42,
+      model_routes: ['provider/model@shadow-v1'],
+      gate: {
+        passed: true,
+        checks: {
+          predictions_complete: true,
+          one_model_route: true,
+          strata_complete: true,
+          false_link_zero: true,
+          unsafe_auto_zero: true,
+          safe_coverage: true,
+        },
+        auto_authorization: { safe_expected: 15, eligible: 15, correct: 15, unsafe: 0, safe_coverage: 1 },
+      },
+    })
   })
 
   it('exports local shadow logs and reports stratified exact/error rates', () => {

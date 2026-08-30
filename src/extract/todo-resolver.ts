@@ -2,7 +2,7 @@ import { BlockAssembler, type FinishReason, type LlmRuntime, type Message, type 
 import type { TodoIdentityCandidate, TodoResolutionDecision, TodoResolutionPrediction } from '../domain/types.ts'
 import { contentBlocksToText, localDateStr } from '../shared/text.ts'
 
-export const TODO_RESOLVER_VERSION = 'shadow-v1'
+export const TODO_RESOLVER_VERSION = 'shadow-v2'
 
 const DECISIONS: readonly TodoResolutionDecision[] = [
   'LINK', 'UPDATE', 'REOPEN', 'NEW_OCCURRENCE', 'CREATE', 'ATTACH_STEP', 'ASK', 'NOOP',
@@ -44,8 +44,8 @@ Return ONLY JSON with this schema:
 {"resolutions":[{"decision":"LINK|UPDATE|REOPEN|NEW_OCCURRENCE|CREATE|ATTACH_STEP|ASK|NOOP","candidate_ids":["stable-id"],"proposed_title":string|null,"confidence":0.0,"reason":string}]}
 
 Decision meanings:
-- LINK: the turn mentions the same current occurrence without changing fields.
-- UPDATE: it changes fields or state of the same open occurrence.
+- LINK: the turn mentions or continues the same current occurrence without explicitly changing a stored field or state. Words such as "继续", "接着" and "还在处理" alone are LINK, not UPDATE.
+- UPDATE: it explicitly changes a field or state of the same open occurrence, including due time, recipient, priority, status or another named attribute.
 - REOPEN: it explicitly corrects a terminal occurrence (for example, "其实还没完成").
 - NEW_OCCURRENCE: it explicitly introduces another occurrence (for example, "下周再做一次").
 - CREATE: it is a new independent commitment.
@@ -56,11 +56,12 @@ Decision meanings:
 Rules:
 - Use only ids present in Candidate todos. Never invent an id.
 - CREATE and NOOP normally use an empty candidate_ids array.
+- An explicit personal obligation or plan such as "我要", "我得", "需要" or a deadline-bound action is durable. If it is independent of every candidate, use CREATE rather than NOOP.
 - Prefer ASK over a risky link. Similar wording alone is insufficient: compare deliverable, actor, recipient, project, time and occurrence.
-- A completed/cancelled candidate needs explicit correction for REOPEN or explicit recurrence for NEW_OCCURRENCE; otherwise ASK or NOOP.
+- A completed/cancelled candidate needs an explicit correction such as "其实还没完成" or "之前标错了" for REOPEN, or an explicit recurrence for NEW_OCCURRENCE. Vague wording such as "还得处理一下" is ASK, not REOPEN.
 - Different workspaces are outside this candidate set and must not be inferred.
 - Emit one row per distinct todo mention. If the turn contains no todo mention, return {"resolutions":[]}.
-- confidence is a number from 0 to 1. Keep reason concise and in the user's language.`
+- confidence measures identity and decision certainty, not how important the task is. Use 0.98 or above only for LINK/UPDATE when exactly one open candidate matches every available distinguishing fact, no plausible competitor exists, and the decision follows the rules above. Use at most 0.95 for any residual ambiguity or non-authorized decision. Keep reason concise and in the user's language.`
 }
 
 function jsonCandidates(text: string): string[] {

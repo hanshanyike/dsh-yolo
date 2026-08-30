@@ -66,6 +66,15 @@ R2a 的确定性准入策略和审计脚手架已经实现，但配置默认关�
 因此尚未满足运行时放权门。已实现代码只为唯一开放候选的高置信 `LINK` 和明确 `due_at` `UPDATE`
 保留稳定 ID 路径；状态、优先级、标题/收件人/详情、终态、occurrence、step、多候选和跨工作区仍不授权。
 
+R2b 已提供宿主配置回放与 engineering gate：`pnpm eval:todo-resolver` 在临时空工作区启动官方 dsh，
+直接复用 `ctx.llm` 的 provider/model/credential，把 prediction 写到 gold 之外的新 JSONL，并生成分层、
+置信度和自动准入报告。门禁结果仍须由独立真实对话留出集复核，不能因一次 handcrafted corpus 通过就
+自动改写 `todoIdentityR2Enabled` 默认值。
+
+- [x] 使用真实宿主模型配置回放长期 gold，生成不含凭据和原始模型文本、路由与时钟可审计的 prediction/report。
+- [x] 对 prediction 完整性、单一路由、分层样本、false-link、missed-link、exact、高置信误授权和安全覆盖设门。
+- [ ] 扩充并独立标注隔离真实对话留出集；只有 gold 与 holdout 同时过门才评审默认开启 R2a。
+
 - [ ] 保持显式 id / source fingerprint 的确定性幂等链路；只把经指标批准的同 scope 新提及自动关联。
 - [ ] 后续提及写 evidence；字段变化按稳定 id 走领域动作，禁止依赖标题静默选中多个候选之一。
 - [ ] 多候选、终态语义不明和助手自行拆出的顶层事项进入 `ASK`，不自动修改。

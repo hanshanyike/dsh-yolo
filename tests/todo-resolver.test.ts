@@ -27,6 +27,9 @@ describe('todo identity shadow resolver', () => {
     }
     expect(prompt).toContain('OBSERVATION ONLY')
     expect(prompt).toContain('MUST NOT be treated as authorization')
+    expect(prompt).toContain('Use 0.98 or above only for LINK/UPDATE')
+    expect(prompt).toContain('"继续", "接着" and "还在处理" alone are LINK')
+    expect(prompt).toContain('"还得处理一下" is ASK, not REOPEN')
   })
 
   it('drops invented ids, clamps confidence and rejects the wrong schema', () => {

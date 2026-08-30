@@ -27,6 +27,16 @@ import {
   type TodoIdentityApplicationOutcome,
 } from '../application/ingestion/apply-extraction.ts'
 import { planTodoIdentityApplication } from '../application/ingestion/todo-identity-policy.ts'
+import {
+  runTodoResolverReplay,
+  writeTodoResolverReplayStatus,
+  TODO_RESOLVER_GOLD_AS_OF,
+  TODO_RESOLVER_REPLAY_AS_OF,
+  TODO_RESOLVER_REPLAY_FLAG,
+  TODO_RESOLVER_REPLAY_INPUT,
+  TODO_RESOLVER_REPLAY_OUTPUT,
+  TODO_RESOLVER_REPLAY_STATUS,
+} from '../evaluation/todo-resolver-replay.ts'
 
 export const name = 'yolo-extract'
 export const inject = ['yolo', 'llm', 'sessions', 'settings'] as const
@@ -141,6 +151,66 @@ function routeFor(ctx: Context, agent: ExtractAgent, configuredModel?: string): 
   }
 }
 
+function replayRouteFor(ctx: Context, configuredModel?: string): { provider: string; model: string } {
+  const selected = (ctx as { get?: (name: string) => { currentSelection(): { provider: string; model: string } } | undefined })
+    .get?.('agentDefaultModel')?.currentSelection()
+  const provider = selected?.provider || 'deepseek'
+  return {
+    provider,
+    model: provider === 'deepseek'
+      ? (configuredModel || selected?.model || 'deepseek-chat')
+      : (selected?.model || configuredModel || 'deepseek-chat'),
+  }
+}
+
+function startConfiguredResolverReplay(ctx: Context, yctx: YoloCtx, settings?: SettingsLike): void {
+  if (process.env[TODO_RESOLVER_REPLAY_FLAG] !== '1') return
+  const input = process.env[TODO_RESOLVER_REPLAY_INPUT]
+  const output = process.env[TODO_RESOLVER_REPLAY_OUTPUT]
+  const status = process.env[TODO_RESOLVER_REPLAY_STATUS]
+  if (!input || !output || !status) {
+    ctx.logger?.warn?.('[yolo-extract] resolver replay requested without input/output/status paths')
+    return
+  }
+
+  // Defer until the profile has finished registering its configured LLM
+  // adapter and default-model selection. The normal product path remains
+  // untouched when the explicit replay flag is absent.
+  const controller = new AbortController()
+  const timer = setTimeout(() => {
+    const route = replayRouteFor(ctx, settings?.get(YOLO_NS)?.extraction?.model)
+    const rawAsOf = process.env[TODO_RESOLVER_REPLAY_AS_OF] || TODO_RESOLVER_GOLD_AS_OF
+    const asOf = new Date(rawAsOf)
+    void runTodoResolverReplay({
+      llm: yctx.llm,
+      provider: route.provider,
+      model: route.model,
+      inputFile: input,
+      outputFile: output,
+      asOf,
+      signal: controller.signal,
+      onProgress: (completed, total, sampleId) => {
+        ctx.logger?.info?.('[yolo-extract] resolver replay %d/%d: %s', completed, total, sampleId)
+      },
+    }).then((summary) => {
+      writeTodoResolverReplayStatus(status, { status: 'ok', ...summary })
+      ctx.logger?.info?.('[yolo-extract] resolver replay complete: %d/%d predicted', summary.predicted, summary.samples)
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      try {
+        writeTodoResolverReplayStatus(status, { status: 'error', error: message.slice(0, 1000) })
+      } catch (statusError) {
+        ctx.logger?.warn?.('[yolo-extract] failed to write resolver replay status: %s', statusError instanceof Error ? statusError.message : String(statusError))
+      }
+      ctx.logger?.warn?.('[yolo-extract] resolver replay failed: %s', message)
+    })
+  }, 1_000)
+  ctx.effect(() => () => {
+    clearTimeout(timer)
+    controller.abort(new Error('todo resolver replay host stopped'))
+  })
+}
+
 async function waitForSpacing(ms: number, signal: AbortSignal): Promise<void> {
   if (ms <= 0) return
   await new Promise<void>((resolve, reject) => {
@@ -160,6 +230,7 @@ async function waitForSpacing(ms: number, signal: AbortSignal): Promise<void> {
 export function apply(ctx: Context): void {
   const yctx = ctx as YoloCtx
   const settings = (ctx as { settings?: SettingsLike }).settings
+  startConfiguredResolverReplay(ctx, yctx, settings)
   const capturedTodoCandidates = new Map<string, Map<number, TodoIdentityCandidate[]>>()
   const jobs = new Map<string, Promise<void>>()
   const scheduledTurns = new Set<string>()

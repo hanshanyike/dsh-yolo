@@ -35,7 +35,8 @@
     "check": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:e2e": "node scripts/e2e.mjs"
+    "test:e2e": "node scripts/e2e.mjs",
+    "eval:todo-resolver": "node scripts/todo-resolver-replay.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*"
