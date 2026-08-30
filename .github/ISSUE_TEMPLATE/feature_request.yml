@@ -1,0 +1,50 @@
+name: 功能建议 / Feature request
+description: 建议新的能力或体验改进 / Suggest a capability or experience improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        YOLO 的边界是“管理而非代办”。请从用户问题开始，说明希望它帮助管理什么，而不只是列出一个实现方案。
+        YOLO manages work instead of executing it for you. Start with the user problem, not only an implementation idea.
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户问题 / User problem
+      description: 现在什么事情难以管理？谁会遇到它？
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 理想结果 / Desired outcome
+      description: 描述用户可观察到的结果和成功标准。
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及范围 / Area
+      options:
+        - 对话整理 / Conversation extraction
+        - 计划与历史 / Plans and history
+        - 提醒与通知 / Reminders and notifications
+        - 助手看板 / Dashboard
+        - 数据与隐私 / Data and privacy
+        - 开发体验与文档 / Developer experience and docs
+        - 其他 / Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 已尝试方案 / Alternatives considered
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认 / Pre-submission checks
+      options:
+        - label: 我已阅读产品愿景并搜索现有 issue。 / I read the product vision and searched existing issues.
+          required: true

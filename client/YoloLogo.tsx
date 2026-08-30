@@ -1,7 +1,11 @@
-// YOLO brand mark — inline reproduction of docs/logo.svg (a friendly chat
-// bubble), kept component-shaped so the UI can size it anywhere without
-// touching the asset pipeline. Stays in sync with docs/logo.svg.
+// YOLO brand mark — focus rings + the next item moving into attention. This is
+// the original target composition, refined to dsh's DeepSeek blue system.
+// Keep these exported values in sync with docs/logo.svg; tests guard the two
+// public renderers against drift.
 import type { CSSProperties } from 'react'
+
+export const YOLO_LOGO_BACKGROUND = '#4176E6'
+export const YOLO_LOGO_ATTENTION_ARC = 'M 168 100 A 62 62 0 0 0 190 66'
 
 export interface YoloLogoProps {
   size?: number
@@ -18,11 +22,12 @@ export function YoloLogo({ size = 18, style }: YoloLogoProps): JSX.Element {
       aria-label="YOLO logo"
       style={{ flex: 'none', display: 'block', ...style }}
     >
-      <rect width="256" height="256" rx="60" fill="#5B5BD6" />
-      <path d="M52 76c0-13.255 10.745-24 24-24h104c30.928 0 56 25.072 56 56v16c0 30.928-25.072 56-56 56h-38l-38 25v-25H76c-13.255 0-24-10.745-24-24V76Z" fill="#FFFFFF" />
-      <circle cx="105" cy="108" r="10" fill="#5B5BD6" />
-      <circle cx="151" cy="108" r="10" fill="#5B5BD6" />
-      <path d="M96 137c8 12 19 18 32 18s24-6 32-18" fill="none" stroke="#5B5BD6" strokeWidth="10" strokeLinecap="round" />
+      <rect width="256" height="256" rx="56" fill={YOLO_LOGO_BACKGROUND} />
+      <circle cx="124" cy="132" r="62" fill="none" stroke="#FFFFFF" strokeWidth="13" opacity="0.95" />
+      <circle cx="124" cy="132" r="30" fill="none" stroke="#FFFFFF" strokeWidth="11" opacity="0.9" />
+      <circle cx="124" cy="132" r="10" fill="#FFFFFF" />
+      <circle cx="204" cy="74" r="15" fill="#FFFFFF" />
+      <path d={YOLO_LOGO_ATTENTION_ARC} fill="none" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" opacity="0.55" />
     </svg>
   )
 }

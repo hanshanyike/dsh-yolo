@@ -1,8 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="YOLO logo">
-  <rect width="256" height="256" rx="60" fill="#5B5BD6"/>
-  <!-- friendly chat bubble -->
-  <path d="M52 76c0-13.255 10.745-24 24-24h104c30.928 0 56 25.072 56 56v16c0 30.928-25.072 56-56 56h-38l-38 25v-25H76c-13.255 0-24-10.745-24-24V76Z" fill="#FFFFFF"/>
-  <circle cx="105" cy="108" r="10" fill="#5B5BD6"/>
-  <circle cx="151" cy="108" r="10" fill="#5B5BD6"/>
-  <path d="M96 137c8 12 19 18 32 18s24-6 32-18" fill="none" stroke="#5B5BD6" stroke-width="10" stroke-linecap="round"/>
+  <rect width="256" height="256" rx="56" fill="#4176E6"/>
+  <!-- Focus rings: keep the most important thing clear. -->
+  <circle cx="124" cy="132" r="62" fill="none" stroke="#FFFFFF" stroke-width="13" opacity="0.95"/>
+  <circle cx="124" cy="132" r="30" fill="none" stroke="#FFFFFF" stroke-width="11" opacity="0.9"/>
+  <circle cx="124" cy="132" r="10" fill="#FFFFFF"/>
+  <!-- The next item moving into the user's focus. -->
+  <circle cx="204" cy="74" r="15" fill="#FFFFFF"/>
+  <path d="M 168 100 A 62 62 0 0 0 190 66" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" opacity="0.55"/>
 </svg>

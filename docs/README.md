@@ -37,5 +37,7 @@
 - [项目首页](../README.md)
 - [English README](../README.en.md)
 - [参与贡献](../CONTRIBUTING.md)
+- [获取帮助](../SUPPORT.md)
+- [安全政策](../SECURITY.md)
 
 如果希望参与开发，请阅读[贡献指南](../CONTRIBUTING.md)。

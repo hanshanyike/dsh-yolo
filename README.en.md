@@ -26,6 +26,12 @@ the user's authorization, it maintains continuity across conversations and gradu
 connects people with delegated agents. The current release focuses on cross-session
 organization, reminders, and user control.
 
+<p align="center">
+  <img src="docs/assets/readme/dashboard-home.png" width="100%" alt="YOLO dashboard Home view with a daily summary, assistant judgment, quick capture, and items requiring attention"/>
+</p>
+
+<p align="center"><sub>The YOLO dashboard in a real dsh host · illustrative data</sub></p>
+
 YOLO organizes information and tracks progress; you still decide what to do and
 how to do it. It can:
 
@@ -54,6 +60,10 @@ how to do it. It can:
 YOLO understands follow-up items in a conversation without requiring fixed
 keywords. It keeps items and rules that need continued management while filtering
 acknowledgements, generic knowledge, and unrelated personal profiling.
+
+<p align="center">
+  <img src="docs/assets/readme/workflow.svg" width="100%" alt="YOLO workflow: conversation, organize, track, and remind"/>
+</p>
 
 ## Quick Start
 
@@ -92,15 +102,20 @@ npx @deepseek-ai/dsh web
 
 ### A typical flow
 
-```
-Mention an item and its timing in any dsh conversation
-        ↓
-YOLO organizes it as a todo, goal, or milestone
-        ↓
-Update it later from a conversation or the dashboard
-        ↓
-YOLO reminds you through notifications and its own conversation
-```
+In any dsh conversation, say “Remind me tomorrow at 3 PM to send the customer
+interview notes to the product team.” After the turn completes, YOLO organizes
+the item. Later, say “move it to Friday” or “it is done,” or handle it directly
+from the dashboard. Due reminders stay in YOLO notifications and its dedicated
+conversation instead of interrupting your active work session.
+
+<details>
+<summary>See the traceable History timeline</summary>
+
+<p align="center">
+  <img src="docs/assets/readme/dashboard-history.png" width="100%" alt="YOLO History timeline showing item creation, completion, and field changes over time"/>
+</p>
+
+</details>
 
 ## Data and privacy
 
@@ -125,8 +140,10 @@ authorization. See the full direction in [docs/VISION.md](docs/VISION.md).
 
 ## Contributing
 
-Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). If you find a
-problem or have an idea, open an issue.
+If YOLO solves a cross-session follow-up problem for you, a Star helps other
+people with the same problem discover it. Contributions are welcome; see
+[CONTRIBUTING.md](CONTRIBUTING.md). Open an issue for bugs and ideas, and use the
+private channel in [SECURITY.md](SECURITY.md) for security reports.
 
 ## License
 

@@ -237,7 +237,7 @@ export function YoloSidebarDashboard({ wide = true, openSession, setTheme }: Yol
                 width: 6,
                 height: 6,
                 borderRadius: 999,
-                background: 'var(--accent, #5B5BD6)',
+                background: 'var(--accent, #4176E6)',
                 boxShadow: '0 0 0 1.5px var(--background, #FAFAFA)',
               }}
             />

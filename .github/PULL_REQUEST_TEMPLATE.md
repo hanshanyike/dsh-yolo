@@ -5,10 +5,17 @@
 ## Checklist
 
 - [ ] `pnpm check` passes (tsc --noEmit clean)
-- [ ] `pnpm test` passes (all tests green)
-- [ ] If the change touches plugin seams or dsh platform behavior, notes are added to
-      `docs/extension-points.md` / `docs/dev-notes.md`
-- [ ] `CHANGELOG.md` has an entry under **Unreleased** (for user-visible changes)
+- [ ] `pnpm test:run` passes
+- [ ] `pnpm build` passes
+- [ ] Tests cover new or changed behavior at the nearest appropriate layer
+- [ ] UI or payload changes include affected E2E and W1–W16 results from `docs/testing.md`
+- [ ] User-visible, architecture, or contract changes update the matching long-lived docs
+- [ ] User-visible changes have an entry under **Unreleased** in `CHANGELOG.md`
+- [ ] The PR contains no secrets, personal conversations, local databases, or temporary browser artifacts
+
+## Verification
+
+<!-- List the exact commands and real-host/browser scenarios you ran. Include any SKIP or failure with its reason. -->
 
 ## Notes for reviewers
 

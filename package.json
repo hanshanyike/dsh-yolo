@@ -51,6 +51,11 @@
     "plugin",
     "memory",
     "ai-agent",
+    "ai-assistant",
+    "personal-assistant",
+    "task-management",
+    "reminders",
+    "local-first",
     "sqlite",
     "fts5"
   ],
@@ -59,6 +64,11 @@
     "cordis.patch.yml",
     "src/storage/schema.sql",
     "README.md",
+    "README.en.md",
+    "docs/logo.svg",
+    "docs/assets/readme/dashboard-home.png",
+    "docs/assets/readme/dashboard-history.png",
+    "docs/assets/readme/workflow.svg",
     "LICENSE",
     "CHANGELOG.md"
   ],

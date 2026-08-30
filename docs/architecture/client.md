@@ -27,7 +27,7 @@
 | `panel/state.ts` | 页面、单一前景、筛选及事项讨论 episode 的模块级读写 |
 | `panel/v2/` | Today 投影模型、助手判断、任务动作、学习回执、撤销和 API client |
 | `design/` | Mono tokens、全局样式注入和单色图标 |
-| `YoloLogo.tsx` | 产品标识组件 |
+| `YoloLogo.tsx` | 产品标识组件：关注圆心与下一项进入焦点的动态圆点 |
 
 ## 加载与刷新策略
 

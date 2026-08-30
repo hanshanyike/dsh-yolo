@@ -1,0 +1,60 @@
+name: 缺陷报告 / Bug report
+description: 报告可复现的错误或异常行为 / Report reproducible broken or unexpected behavior
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。提交前请先搜索现有 issue，并删除日志、截图中的密钥、对话和本地路径。
+        Thanks for helping improve YOLO. Search existing issues first and redact secrets, conversations, and local paths.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述 / What happened?
+      description: 说明实际行为、期望行为，以及这个问题如何影响你。
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      placeholder: |
+        1. Run `npx @deepseek-ai/dsh web`
+        2. Open the YOLO dashboard
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: YOLO 版本 / YOLO version
+      placeholder: dsh-plugin-yolo@0.4.0-rc5
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境 / Environment
+      placeholder: |
+        OS: Windows 11 / macOS 15 / Ubuntu 24.04
+        Node: 22.19.0
+        dsh: version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 已脱敏的日志 / Redacted logs
+      description: 仅粘贴与问题相关的输出，不要包含 API Key、私人对话或完整本地路径。
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认 / Pre-submission checks
+      options:
+        - label: 我已搜索现有 issue，并确认这不是重复报告。 / I searched existing issues and found no duplicate.
+          required: true
+        - label: 我已移除所有密钥和私人数据。 / I removed all secrets and personal data.
+          required: true
