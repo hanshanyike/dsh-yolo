@@ -14,6 +14,8 @@ node scripts/e2e.mjs               # API + UI E2E
 node scripts/e2e.mjs --suite api   # 真实宿主 HTTP 接口
 node scripts/e2e.mjs --suite ui    # 真实浏览器交互
 node scripts/e2e.mjs --spec panel-flow
+node scripts/todo-resolver-eval.mjs export <yolo.db> <samples.jsonl>
+node scripts/todo-resolver-eval.mjs evaluate <labeled-samples.jsonl>
 ```
 
 单元测试只运行 `tests/**/*.test.ts`，不要求启动 dsh。E2E 使用真实 dsh 宿主、真实 SQLite 和系统安装的 Edge，默认串行执行。
@@ -64,6 +66,10 @@ UI 套件使用 Playwright 驱动真实 Edge，验证看板打开、捕获、筛
   不进入开放列表、提醒或普通 reopen，旧 id 仍能解析到规范事项。
 - 标题去重只在 open canonical 候选中确定性选择，终态和 merged 不得误命中；同名不同 occurrence 尚未
   建模，作为[后续路线](roadmap-todo-identity.md)的明确已知边界。
+- resolver 专用召回必须覆盖 open、terminal、merged alias 和 evidence 改写，同时保持普通 FTS/提醒边界；
+  shadow 裁决只能写 `todo_resolution_log`，resolver 错误不能改变或阻断原抽取。
+- shadow 人工样本按改写、指代、省略、跨会话、同名异项、终态和步骤分层；统计 false-link 与 missed-link，
+  不能只报告总体准确率，也不能把没有 prediction 的 gold 样本计为模型错误。
 - 每个聚合事项显式携带并保留自己的 `scope_cwd`；未知 scope 被拒绝。
 - 工作区身份只取 canonical cwd；同一 cwd 的非 Git/main/feature 状态和 Windows 等价路径不得重复注册或拆库。
 - 常驻对话与事项对话隔离，旧请求或轮询结果不能覆盖新对话。

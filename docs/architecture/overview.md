@@ -216,8 +216,12 @@ Dashboard v2 是**单一聚合读取投影**，以 `ui_contract_version: 2` 标�
 - **记录状态。** 用户可见的 pending/in_progress/done/cancelled 与 canonical/merged/rejected 分离。
   普通列表、搜索、提醒和 dashboard 只使用 canonical 事项；旧 merged id 解析到目标，普通 reopen 不会
   复活副本。显式 consolidate 可处理业务终态重复，但目标业务状态保持权威。
-- **自动化边界。** 本版仍不进行语义近义自动 LINK/consolidate、跨工作区自动关联、REOPEN 与
-  NEW_OCCURRENCE 语义裁决，也没有父事项/step 模型。后续工作见
+- **shadow 身份裁决。** R1 在 `agent/pre-step` 的工具执行前快照 resolver 专用候选，并在原抽取提交后以
+  独立模型调用读取：开放项、终态项、
+  merged alias 和 evidence 改写都会解析为 canonical 稳定 id。模型输出 LINK / UPDATE / REOPEN /
+  NEW_OCCURRENCE / CREATE / ATTACH_STEP / ASK / NOOP，但只写 `todo_resolution_log`，失败不影响原抽取。
+- **自动化边界。** 本版仍不根据 shadow 结果自动 LINK/consolidate、跨工作区关联、REOPEN、创建
+  occurrence 或挂 step；已有写入结果仍由原抽取与领域动作决定。后续授权与质量门见
   [事项身份、去重与会话关联路线](../roadmap-todo-identity.md)。
 
 ### v0.3.2——管理型助手能力细化
@@ -269,8 +273,8 @@ Dashboard v2 是**单一聚合读取投影**，以 `ui_contract_version: 2` 标�
 data/
 ├── yolo-<scope>.db     # SQLite：todos、todo_evidence、milestones、goals、preferences、events，
 │                       #   session_summaries, notifications, attention_feedback,
-│                       #   client_actions
-│                       #   + FTS5 虚拟表（trigram tokenizer）
+│                       #   client_actions, todo_resolution_log
+│                       #   + ordinary / identity FTS5 虚拟表（trigram tokenizer）
 └── snapshots/*.md      # Markdown：可读、可 diff 的审阅投影
 ```
 

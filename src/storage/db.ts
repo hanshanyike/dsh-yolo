@@ -236,6 +236,21 @@ function migrate(db: DB): void {
       WHERE e.todo_id = todos.id AND e.relation = 'origin'
     )
   `)
+  // Existing databases predate the resolver-only identity index. Seed any
+  // missing todo records once; subsequent writes stay synchronized by schema
+  // triggers, including evidence excerpts and merged historical aliases.
+  db.exec(`
+    INSERT INTO todo_identity_fts(record_id, title, body)
+    SELECT todos.id, todos.title,
+      trim(COALESCE(todos.detail, '') || ' ' || COALESCE((
+        SELECT group_concat(excerpt, ' ') FROM todo_evidence
+        WHERE todo_id = todos.id AND excerpt IS NOT NULL
+      ), ''))
+    FROM todos
+    WHERE NOT EXISTS (
+      SELECT 1 FROM todo_identity_fts WHERE record_id = todos.id
+    )
+  `)
 }
 
 export function setMeta(db: DB, key: string, value: string): void {

@@ -43,8 +43,9 @@ Markdown 快照只是可读、可 diff 的审阅投影；当前没有从快照�
 
 当前表包括：`meta`、`user_profile`、`milestones`、`todos`、`goals`、`preferences`、
 `preference_history`、`events`、`session_summaries`、`notifications`、`attention_feedback`、
-`client_actions`、`extraction_log`、`pending_reminders`、`recall_log`、`todo_evidence`，以及 FTS5 虚表
-`yolo_fts`。`pending_reminders` 仅为兼容旧库保留，当前主动提醒不再向工作会话回放它。
+`client_actions`、`extraction_log`、`todo_resolution_log`、`pending_reminders`、`recall_log`、
+`todo_evidence`，以及 FTS5 虚表 `yolo_fts` 与 `todo_identity_fts`。`pending_reminders` 仅为兼容旧库保留，
+当前主动提醒不再向工作会话回放它。
 
 `notifications.seen_at` 表示投递是否已查看，驱动通知按钮；`handled_at` 表示提醒是否已经被用户回应或
 关联事项动作消解，驱动首页提醒投影。两者不能互相回填。旧库首次增加 `seen_at` 时以迁移时刻建立阅读
@@ -112,11 +113,21 @@ todo FTS 和直接保存该 id 的 client action / recall 投影；写入一条�
 `client_actions` 以 `(scope_key, client_action_id)` 保存请求哈希和序列化结果；
 `attention_feedback` 以 scope、todo、规则版本和证据指纹联合绑定。
 
+`todo_resolution_log` 是 R1 的追加式 shadow 观测：保存 session/turn、operation id、输入 fingerprint、
+1000 字符有界输入摘录、resolver/model 版本、候选与裁决 JSON、状态、错误、token 和耗时。其 schema 不含
+任何领域动作或已执行结果字段，`logTodoResolution` 遇到同一 `(session, turn, resolver_version)` 重放只保留
+首条记录。跨 scope 迁移会改写候选/裁决 JSON 内发生 ID 冲突的 todo id，避免日志引用旧分支中的失效 id。
+
 ## 搜索与快照
 
 FTS5 使用 trigram tokenizer。`ftsRecallSearch` 合并整句查询、最多若干 token 的 OR 查询，
 并为独立的 2 字 CJK 标题词增加 `LIKE` fallback，最后按 `(row_type, row_id)` 去重。
 终态或软删除条目的 FTS 清理由 repository 显式同步，新增行由 schema trigger 写入。
+
+`todo_identity_fts` 与普通召回隔离：它故意保留 open、done、cancelled 和 merged todo，并把有界 evidence
+摘录放入检索正文。`recallTodoIdentityCandidates` 对整句、token OR 和二字标题 fallback 做混合召回，再把
+merged 记录解析到 canonical 稳定 id、折叠历史 alias、按 rank/id 确定性排序。该索引只服务 shadow
+resolver；终态项仍不会重新进入 `yolo_fts`、模型日常召回、提醒或看板开放集合。
 
 `writeSnapshot` 先写同目录临时文件再 rename，避免中途失败留下半份快照。日快照和每 10 turn
 快照的触发节奏由 [提醒模块](reminder.md) 负责，存储模块只负责渲染和写入。
@@ -128,7 +139,7 @@ FTS5 使用 trigram tokenizer。`ftsRecallSearch` 合并整句查询、最多若
 |---|---|
 | scope | `resolve`、`runInScope`、`listWorkspaceMeta`、`close` |
 | domain | `add/list/find*`、`applyTodo*`、`applyGoal*`、`applyMilestone*` |
-| todo identity | `addTodoEvidence`、`listTodoEvidence`、`resolveCanonicalTodo`、`listTodoRecords` |
+| todo identity | `addTodoEvidence`、`listTodoEvidence`、`resolveCanonicalTodo`、`listTodoRecords`、`recallTodoIdentityCandidates`、`log/listTodoResolutions` |
 | history | `add/listEvents*`、`upsert/listSessionSummaries` |
 | notification | `add/list/count/markNotification*`、brief stamp |
 | trust/idempotency | attention feedback、client action、`runIdempotentAction` |

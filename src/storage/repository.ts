@@ -38,6 +38,7 @@ import type {
   DuplicateTodoPair,
   AttentionFeedback,
   ClientActionRecord,
+  TodoResolutionLog,
 } from './types.ts'
 
 const now = () => Date.now()
@@ -1526,6 +1527,47 @@ export function countExtractionsSince(db: DB, sinceMs: number): number {
     .prepare("SELECT COUNT(*) AS n FROM extraction_log WHERE strategy = 'llm' AND created_at >= ?")
     .get(sinceMs) as { n: number } | undefined
   return row?.n ?? 0
+}
+
+// ---------- todo identity shadow resolver ----------
+
+export function logTodoResolution(
+  db: DB,
+  data: Omit<TodoResolutionLog, 'id' | 'created_at'>,
+): void {
+  db.prepare(
+    `INSERT INTO todo_resolution_log(
+       scope_key, session_id, turn_seq, operation_id, input_fingerprint, input_excerpt,
+       resolver_version, model_provider, model_name, status, error,
+       candidates_json, resolutions_json, token_in, token_out, duration_ms, created_at
+     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(session_id, turn_seq, resolver_version) DO NOTHING`,
+  ).run(
+    data.scope_key,
+    data.session_id,
+    data.turn_seq,
+    data.operation_id,
+    data.input_fingerprint,
+    data.input_excerpt,
+    data.resolver_version,
+    data.model_provider,
+    data.model_name,
+    data.status,
+    data.error ?? null,
+    data.candidates_json,
+    data.resolutions_json,
+    data.token_in ?? null,
+    data.token_out ?? null,
+    data.duration_ms ?? null,
+    now(),
+  )
+}
+
+export function listTodoResolutions(db: DB, scopeKey: string, limit = 100): TodoResolutionLog[] {
+  return db.prepare(
+    `SELECT * FROM todo_resolution_log
+     WHERE scope_key = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+  ).all(scopeKey, limit) as TodoResolutionLog[]
 }
 
 // ---------- pending reminders ----------

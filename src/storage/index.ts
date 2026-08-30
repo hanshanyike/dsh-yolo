@@ -14,7 +14,7 @@ import { getMeta, openDb, setMeta, withTransaction, type DB } from './db.ts'
 import { canonicalWorkspaceCwd, computeScopeKey, resolveDataDir, dbFileName, workspaceIdentity } from './scope.ts'
 import { migrateLegacyScopeDatabases } from './migrate-scope.ts'
 import * as repo from './repository.ts'
-import { ftsRecallSearch } from './search.ts'
+import { ftsRecallSearch, recallTodoIdentityCandidates } from './search.ts'
 import { renderSnapshot, writeSnapshot } from './snapshot.ts'
 import type { TodoRangeSelector } from '../shared/todo-range.ts'
 import type { DuplicateTodoPair } from './types.ts'
@@ -48,6 +48,8 @@ import type {
   ExtractionStrategy,
   Priority,
   AttentionFeedback,
+  TodoIdentityCandidate,
+  TodoResolutionLog,
   ClientActionRecord,
 } from './types.ts'
 
@@ -549,6 +551,10 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return ftsRecallSearch(h.db, query, topK, kinds)
   }
+  /** Resolver-only candidate recall across open, terminal and merged records. */
+  recallTodoIdentityCandidates(cwd: string, query: string, topK = 12): TodoIdentityCandidate[] {
+    return recallTodoIdentityCandidates(this.resolve(cwd).db, query, topK)
+  }
 
   // ---- extraction log ----
   logExtraction(
@@ -563,6 +569,17 @@ export default class Yolo extends Service {
   /** LLM extraction runs since a timestamp — the daily-cap gate input (M9 P44). */
   countExtractionsSince(cwd: string, sinceMs: number): number {
     return repo.countExtractionsSince(this.resolve(cwd).db, sinceMs)
+  }
+  logTodoResolution(
+    cwd: string,
+    data: Omit<TodoResolutionLog, 'id' | 'scope_key' | 'created_at'>,
+  ): void {
+    const h = this.resolve(cwd)
+    repo.logTodoResolution(h.db, { ...data, scope_key: h.scopeKey })
+  }
+  listTodoResolutions(cwd: string, limit = 100): TodoResolutionLog[] {
+    const h = this.resolve(cwd)
+    return repo.listTodoResolutions(h.db, h.scopeKey, limit)
   }
   /** Semantic-recall rows since a timestamp — budget/health input (v0.3.0). */
   countRecallSince(cwd: string, sinceMs: number): number {

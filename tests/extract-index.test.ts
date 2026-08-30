@@ -34,9 +34,16 @@ interface SettingsStub {
   } | undefined
 }
 
-function makeCtx(yolo: Yolo, llmText: string, settings?: SettingsStub) {
+function makeCtx(
+  yolo: Yolo,
+  llmText: string,
+  settings?: SettingsStub,
+  resolverText = '{"resolutions":[]}',
+) {
   const handlers = new Map<string, Handler>()
-  const stream = vi.fn((_opts: unknown) => chunkStream(llmText))
+  const stream = vi.fn((opts: { system?: string }) => chunkStream(
+    opts.system?.includes('shadow identity resolver') ? resolverText : llmText,
+  ))
   const llm = { stream } as unknown as LlmRuntime
   const ctx = {
     yolo,
@@ -146,7 +153,7 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
       await handlers.get('agent/turn-stopping')!({ agent, turn: 7 })
     }
 
-    expect(stream).toHaveBeenCalledTimes(2)
+    expect(stream).toHaveBeenCalledTimes(4)
     const todo = yolo.listTodos(cwd).find((row) => row.title === '确认发布前的回归结果')
     expect(todo).toBeTruthy()
     expect(yolo.listTodoEvidence(cwd, todo!.id)).toHaveLength(1)
@@ -184,7 +191,7 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     events.push({ type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } })
     agent.status = 'idle'
     releaseIdle()
-    await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(2))
 
     const call = stream.mock.calls[0][0] as { provider: string; model: string; messages: Array<{ content: Array<{ text: string }> }> }
     expect(call.provider).toBe('custom-route')
@@ -218,9 +225,9 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     )
     // Mirrors the host agent's synchronous memory_write after pre-step and
     // before the independent post-turn extractor starts.
-    yolo.addTodo(cwd, { title, due_at: '2026-08-27T15:00:00+08:00', source: 'tool', session_id: 's-tool-race' })
+    yolo.addTodo(cwd, { title, due_at: '2026-08-27T15:00:00+08:00', source: 'tool', session_id: 's-tool-race', source_turn: 1 })
     await handlers.get('agent/turn-stopping')!({ agent, turn: 1 })
-    await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(2))
 
     const todos = yolo.listTodos(cwd)
     expect(todos).toHaveLength(1)
@@ -236,6 +243,7 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
       expect.objectContaining({ session_id: 's-tool-race', turn_seq: 1, source_kind: 'human', relation: 'origin' }),
     ]))
     expect(yolo.listTodoEvidence(cwd, todos[0]!.id)).toHaveLength(2)
+    expect(JSON.parse(yolo.listTodoResolutions(cwd)[0].candidates_json)).toEqual([])
   })
 
   it('does not extract automatic Goal rounds that carry user-role goal messages', async () => {
@@ -314,7 +322,7 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     )
     await handlers.get('agent/turn-stopping')!({ agent: { id: session.id, session }, turn: 2 })
 
-    expect(stream).toHaveBeenCalledTimes(1)
+    expect(stream).toHaveBeenCalledTimes(2)
     const call = stream.mock.calls[0][0] as { messages: Array<{ content: Array<{ text: string }> }> }
     expect(call.messages[0].content[0].text).toContain('发布说明改到明天完成')
     expect(call.messages[0].content[0].text).not.toContain('继续完成目标的下一步')
@@ -345,7 +353,7 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     agent.status = 'idle'
     clock = new Date(2026, 7, 27, 0, 2).getTime()
     releaseIdle()
-    await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(2))
 
     const call = stream.mock.calls[0][0] as { system: string }
     expect(call.system).toContain('Current local datetime: 2026-08-26T23:58:00')
@@ -388,9 +396,9 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     const onTurn = handlers.get('agent/turn-stopping')!
 
     await onTurn({ agent: { session }, turn: 1 })
-    expect(stream).toHaveBeenCalledTimes(1)
-    await onTurn({ agent: { session }, turn: 2 })
     expect(stream).toHaveBeenCalledTimes(2)
+    await onTurn({ agent: { session }, turn: 2 })
+    expect(stream).toHaveBeenCalledTimes(4)
   })
 
   it('passes the dedup digest of known memories to the model', async () => {
@@ -406,6 +414,109 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(userText).toContain('已知待办甲')
     expect(userText).toContain('Known memories')
     expect(userText).toContain('新的一轮对话')
+  })
+
+  it('logs stable-id shadow decisions without applying them to the todo', async () => {
+    const { todo } = yolo.addTodo(cwd, {
+      title: '把演示稿发给研发',
+      due_at: '2026-09-01',
+      source: 'llm',
+    })
+    const resolverText = JSON.stringify({ resolutions: [{
+      decision: 'UPDATE',
+      candidate_ids: [todo.id],
+      proposed_title: '把演示稿改到周五发给研发',
+      confidence: 0.94,
+      reason: '同一交付物和接收方，用户明确改期',
+    }] })
+    const { ctx, handlers, stream } = makeCtx(yolo, EMPTY_JSON, undefined, resolverText)
+    apply(ctx as never)
+    const session = sessionLike('s-shadow-update', cwd)
+    session.push('user', '把演示稿改到周五发给研发')
+
+    await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 3 })
+
+    expect(stream).toHaveBeenCalledTimes(2)
+    expect(yolo.listTodos(cwd).find((row) => row.id === todo.id)?.due_at).toBe('2026-09-01')
+    const [log] = yolo.listTodoResolutions(cwd)
+    expect(log).toMatchObject({
+      session_id: 's-shadow-update',
+      turn_seq: 3,
+      resolver_version: 'shadow-v1',
+      status: 'ok',
+    })
+    expect(JSON.parse(log.candidates_json)).toEqual([
+      expect.objectContaining({ id: todo.id, title: todo.title }),
+    ])
+    expect(JSON.parse(log.resolutions_json)).toEqual([
+      expect.objectContaining({ decision: 'UPDATE', candidate_ids: [todo.id] }),
+    ])
+  })
+
+  it('snapshots candidate fields before same-turn assistant tools can mutate them', async () => {
+    const { todo } = yolo.addTodo(cwd, {
+      title: '把季度复盘材料发给产品负责人',
+      due_at: '2026-09-04',
+      source: 'manual',
+    })
+    const resolverText = JSON.stringify({ resolutions: [{
+      decision: 'UPDATE', candidate_ids: [todo.id], confidence: 0.95, reason: '明确改期',
+    }] })
+    const { ctx, handlers } = makeCtx(yolo, EMPTY_JSON, undefined, resolverText)
+    apply(ctx as never)
+    const session = sessionLike('s-pre-tool-snapshot', cwd)
+    const agent = { id: session.id, session }
+    const { todo: secondTodo } = yolo.addTodo(cwd, {
+      title: '把客户访谈纪要发给产品组',
+      due_at: '2026-09-06',
+      source: 'manual',
+    })
+    const message = {
+      id: 'human-pre-tool-snapshot', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '把季度复盘材料改到 9 月 9 日再发给产品负责人' }],
+    }
+    await handlers.get('agent/pre-step')!(
+      { agent, messages: [message], turn: 5, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [message] }),
+    )
+    // Mirrors the main agent's yolo_action before background extraction.
+    yolo.applyTodoAction(cwd, { id: todo.id }, 'postpone', { due_at: '2026-09-09', session_id: session.id })
+    const steering = {
+      id: 'human-pre-tool-steering', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '另外，客户访谈纪要那项保持原计划' }],
+    }
+    await handlers.get('agent/pre-step')!(
+      { agent, messages: [steering], turn: 5, step: 2, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [steering] }),
+    )
+    await handlers.get('agent/turn-stopping')!({ agent, turn: 5 })
+
+    expect(yolo.listTodos(cwd).find((row) => row.id === todo.id)?.due_at).toBe('2026-09-09')
+    const candidates = JSON.parse(yolo.listTodoResolutions(cwd)[0].candidates_json)
+    expect(candidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: todo.id, due_at: '2026-09-04' }),
+      expect.objectContaining({ id: secondTodo.id, due_at: '2026-09-06' }),
+    ]))
+  })
+
+  it('keeps extraction authoritative when the shadow resolver fails', async () => {
+    const llmJson = JSON.stringify({
+      todos: [{ title: '发送项目周报给负责人' }],
+      milestones: [], goals: [], preferences: [], events: [], updates: [],
+    })
+    const { ctx, handlers } = makeCtx(yolo, llmJson, undefined, '{"wrong":[]}')
+    apply(ctx as never)
+    const session = sessionLike('s-shadow-error', cwd)
+    session.push('user', '提醒我发送项目周报给负责人')
+
+    await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 4 })
+
+    expect(yolo.listTodos(cwd).some((row) => row.title === '发送项目周报给负责人')).toBe(true)
+    expect(yolo.listTodoResolutions(cwd)[0]).toMatchObject({
+      session_id: 's-shadow-error',
+      status: 'error',
+      resolutions_json: '[]',
+    })
   })
 
   it('never throws into the agent loop', async () => {
@@ -471,7 +582,7 @@ describe('extract apply: config gating', () => {
     } finally {
       spy.mockRestore()
     }
-    expect(stream).toHaveBeenCalledTimes(2)
+    expect(stream).toHaveBeenCalledTimes(4)
   })
 })
 
@@ -493,7 +604,7 @@ describe('extract apply: frequency gates (M9 P44)', () => {
     const session = sessionLike('s-gate2', cwd)
     session.push('user', '周三交稿')
     await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })
-    expect(stream).toHaveBeenCalledTimes(1)
+    expect(stream).toHaveBeenCalledTimes(2)
   })
 
   it('measures the threshold on the last user message, not the whole turn tail', async () => {
@@ -503,7 +614,7 @@ describe('extract apply: frequency gates (M9 P44)', () => {
     session.push('user', '帮我把演示稿发给研发，明天截止')
     session.push('assistant', '收到。')
     await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })
-    expect(stream).toHaveBeenCalledTimes(1)
+    expect(stream).toHaveBeenCalledTimes(2)
   })
 
   it('honors a larger minTurnChars from settings', async () => {
@@ -525,14 +636,14 @@ describe('extract apply: frequency gates (M9 P44)', () => {
     const first = sessionLike('s-cap1', cwd)
     first.push('user', '帮我把演示稿发给研发，明天截止')
     await handlers.get('agent/turn-stopping')!({ agent: { session: first }, turn: 1 })
-    expect(stream).toHaveBeenCalledTimes(1)
+    expect(stream).toHaveBeenCalledTimes(2)
     const todayStart = new Date().setHours(0, 0, 0, 0)
     expect(yolo.countExtractionsSince(cwd, todayStart)).toBe(1)
 
     const second = sessionLike('s-cap2', cwd)
     second.push('user', '这周先把登录的 bug 修了')
     await handlers.get('agent/turn-stopping')!({ agent: { session: second }, turn: 1 })
-    expect(stream).toHaveBeenCalledTimes(1) // capped — no second pull
+    expect(stream).toHaveBeenCalledTimes(2) // capped — no second extraction or resolver pull
     expect((ctx.logger.warn as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1)
   })
 
