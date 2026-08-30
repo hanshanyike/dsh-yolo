@@ -24,6 +24,7 @@ export interface TaskActionPanelProps {
   identityReceipts?: readonly TodoIdentityReceipt[]
   identityLoading?: boolean
   identityError?: string | null
+  mergeSuggestions?: readonly TodoMergeSuggestion[]
   onAction: (intent: TaskActionIntent) => void
   onDraftChange: (next: TaskEditDraft) => void
   onSave: () => void
@@ -32,8 +33,24 @@ export interface TaskActionPanelProps {
   onUndoReceipt?: (receipt: LearningReceiptData) => void
   onOpenPreferences?: () => void
   onRejectIdentity?: (receipt: TodoIdentityReceipt, reason: TodoIdentityFeedbackReason) => void
+  onConsolidate?: (sourceId: string, targetId: string) => void
   /** Focus presentation is modal; a wide dock remains non-modal. */
   modal?: boolean
+}
+
+export interface TodoMergeSuggestion {
+  key: string
+  other: YoloTodoRowV2
+}
+
+const TODO_STATUS_LABEL: Record<string, string> = {
+  pending: '待处理', in_progress: '进行中', done: '已完成', completed: '已完成', cancelled: '已取消',
+}
+
+function mergeOutcome(target: YoloTodoRowV2, source: YoloTodoRowV2): string {
+  const due = target.due_at ?? source.due_at ?? '无截止时间'
+  const priority = target.priority ?? source.priority ?? '普通'
+  return `状态：${TODO_STATUS_LABEL[target.status] ?? target.status}；截止：${due}；优先级：${priority}`
 }
 
 export function TaskActionPanel({
@@ -49,6 +66,7 @@ export function TaskActionPanel({
   identityReceipts = [],
   identityLoading = false,
   identityError,
+  mergeSuggestions = [],
   onAction,
   onDraftChange,
   onSave,
@@ -57,6 +75,7 @@ export function TaskActionPanel({
   onUndoReceipt,
   onOpenPreferences,
   onRejectIdentity,
+  onConsolidate,
   modal = true,
 }: TaskActionPanelProps): JSX.Element {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -64,6 +83,7 @@ export function TaskActionPanel({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [identityCorrectionOpen, setIdentityCorrectionOpen] = useState<string | null>(null)
+  const [mergePreviewOpen, setMergePreviewOpen] = useState<string | null>(null)
   const dialogRef = useRef<HTMLElement>(null)
   const titleId = `task-action-title-${item.id}`
   const reasonId = `task-action-reason-${item.id}`
@@ -183,6 +203,43 @@ export function TaskActionPanel({
                     <button type="button" disabled={busy} onClick={() => { setIdentityCorrectionOpen(identityReceipt.operation_id) }}>关联错了</button>
                   )
                 ) : null}
+              </article>
+            )
+          })}
+        </section>
+      ) : null}
+
+      {mergeSuggestions.length > 0 && onConsolidate ? (
+        <section aria-label="重复事项合并建议" className="v2-merge-suggestions">
+          <h3>可能重复</h3>
+          <p>这里只给出建议，不会自动合并。确认前请先核对两项的状态和保留结果。</p>
+          {mergeSuggestions.slice(0, 3).map((suggestion) => {
+            const other = suggestion.other
+            const previewing = mergePreviewOpen === suggestion.key
+            const statusConflict = item.status !== other.status
+            return (
+              <article key={suggestion.key}>
+                <strong>{other.title}</strong>
+                <small>{TODO_STATUS_LABEL[other.status] ?? other.status}{other.due_at ? ` · 截止 ${other.due_at}` : ' · 无截止时间'}</small>
+                {!previewing ? (
+                  <button type="button" disabled={busy} onClick={() => { setMergePreviewOpen(suggestion.key) }}>预览合并</button>
+                ) : (
+                  <div className="v2-merge-preview">
+                    {statusConflict ? <p className="v2-merge-warning">两项状态不同。你选择保留的事项决定合并后的业务状态。</p> : null}
+                    <div>
+                      <strong>保留当前事项</strong>
+                      <small>{mergeOutcome(item, other)}</small>
+                      <button type="button" disabled={busy} onClick={() => { onConsolidate(other.id, item.id); setMergePreviewOpen(null) }}>保留当前事项并合并</button>
+                    </div>
+                    <div>
+                      <strong>保留另一事项</strong>
+                      <small>{mergeOutcome(other, item)}</small>
+                      <button type="button" disabled={busy} onClick={() => { onConsolidate(item.id, other.id); setMergePreviewOpen(null) }}>保留“{other.title}”并合并</button>
+                    </div>
+                    <p>被合并项会进入历史；未处理通知、待投递提醒和来源关系会跟随保留项。之后可在历史中撤销。</p>
+                    <button type="button" disabled={busy} onClick={() => { setMergePreviewOpen(null) }}>取消预览</button>
+                  </div>
+                )}
               </article>
             )
           })}

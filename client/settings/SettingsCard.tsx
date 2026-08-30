@@ -86,6 +86,12 @@ export function SettingsCard({ scope }: SettingsCardProps): JSX.Element {
         </label>
         <p id="todo-identity-r2-help" style={{ margin: 0, ...hintStyle }}>开启后，仅在模型置信度至少为 0.98 且只有一个开放候选时，将后续提及关联到原事项，或按稳定 ID 修改明确的截止时间。不会自动重开、合并、修改状态或处理多候选。</p>
         {draft.todoIdentityR2Enabled ? <p style={{ margin: 0, padding: '8px 10px', borderLeft: '2px solid var(--accent, #6366f1)', background: 'color-mix(in srgb, var(--accent, #6366f1) 7%, transparent)', ...hintStyle }}>保存即确认启用实验能力。关联结果仍受确定性安全门限制；遇到歧义时不会修改事项。</p> : null}
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <input type="checkbox" checked={draft.todoIdentityR3Enabled} aria-describedby="todo-identity-r3-help" onChange={(event) => patch('todoIdentityR3Enabled', event.target.checked)} />
+          <span>重复事项合并建议 <strong style={{ fontSize: 11, fontWeight: 700, color: 'var(--foreground-secondary, #666)' }}>实验性</strong> <span style={hintStyle}>{defaultHint(defaults.extraction?.todoIdentityR3Enabled)}</span></span>
+        </label>
+        <p id="todo-identity-r3-help" style={{ margin: 0, ...hintStyle }}>开启后，看板会提示规范化标题相同的可能重复事项。系统只提供预览；必须由你选择保留哪一项并确认，绝不会自动合并。</p>
+        {draft.todoIdentityR3Enabled ? <p style={{ margin: 0, padding: '8px 10px', borderLeft: '2px solid var(--accent, #6366f1)', background: 'color-mix(in srgb, var(--accent, #6366f1) 7%, transparent)', ...hintStyle }}>保存后开始显示合并建议。完成、取消等终态会在确认前明确展示，由你决定最终保留状态。</p> : null}
       </fieldset>
       <fieldset style={sectionStyle}>
         <legend>到期提醒</legend>

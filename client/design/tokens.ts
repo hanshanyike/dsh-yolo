@@ -673,6 +673,16 @@ export const YOLO_CSS = `
 .yolo-scope .v2-task-action-panel .v2-identity-receipts article small { color: var(--y-text-3); font-size: 13px; }
 .yolo-scope .v2-task-action-panel .v2-identity-receipts article > button { justify-self: start; min-height: 32px; padding: 0 9px; }
 .yolo-scope .v2-task-action-panel .v2-identity-receipts .v2-identity-corrected { padding-left: 8px; border-left: 2px solid var(--y-focus); }
+.yolo-scope .v2-task-action-panel .v2-merge-suggestions { display: grid; gap: 9px; }
+.yolo-scope .v2-task-action-panel .v2-merge-suggestions article { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--y-line); border-radius: var(--y-r-sm); background: var(--y-surface-2); }
+.yolo-scope .v2-task-action-panel .v2-merge-suggestions article > strong,
+.yolo-scope .v2-task-action-panel .v2-merge-preview strong { color: var(--y-text-1); font-size: 13px; }
+.yolo-scope .v2-task-action-panel .v2-merge-suggestions small { color: var(--y-text-3); font-size: 13px; }
+.yolo-scope .v2-task-action-panel .v2-merge-preview { display: grid; gap: 8px; }
+.yolo-scope .v2-task-action-panel .v2-merge-preview > div { display: grid; gap: 5px; padding: 8px; border: 1px solid var(--y-line); border-radius: var(--y-r-sm); background: var(--y-surface); }
+.yolo-scope .v2-task-action-panel .v2-merge-preview p { margin: 0; color: var(--y-text-2); font-size: 13px; line-height: 1.5; }
+.yolo-scope .v2-task-action-panel .v2-merge-preview .v2-merge-warning { padding-left: 8px; border-left: 2px solid var(--y-danger); }
+.yolo-scope .v2-task-action-panel .v2-merge-preview button { min-height: 32px; padding: 0 9px; }
 .yolo-scope .v2-task-action-panel [role="group"] { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
 .yolo-scope .v2-task-action-panel [role="group"] button { flex: 1 1 140px; min-width: 0; padding: 7px 10px; }
 .yolo-scope .v2-task-action-panel [role="group"][aria-label="主要处理"] button:first-child { border-color: color-mix(in srgb, var(--y-focus) 55%, var(--y-line-strong)); background: color-mix(in srgb, var(--y-focus) 12%, var(--y-surface)); font-weight: 700; }

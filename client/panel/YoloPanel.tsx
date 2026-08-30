@@ -463,6 +463,19 @@ export function YoloPanel({
 
   const foregroundTodo = detail.todo
   const sourceForForeground = detail.source
+  const mergeSuggestions = useMemo(() => {
+    if (!foregroundTodo || !state.data?.health?.duplicateTodos) return []
+    const scopeCwd = foregroundTodo.scope_cwd ?? foregroundTodo.ws?.cwd ?? state.data.cwd
+    const scopeKey = foregroundTodo.ws?.slug
+    return state.data.health.duplicateTodos.flatMap((pair) => {
+      if (pair.scopeKey && scopeKey && pair.scopeKey !== scopeKey) return []
+      const otherId = pair.a === foregroundTodo.id ? pair.b : pair.b === foregroundTodo.id ? pair.a : null
+      if (!otherId) return []
+      const other = state.data!.todos.find((todo) => todo.id === otherId
+        && (todo.scope_cwd ?? todo.ws?.cwd ?? state.data!.cwd) === scopeCwd)
+      return other ? [{ key: `${scopeCwd}:${pair.a}:${pair.b}`, other }] : []
+    })
+  }, [foregroundTodo, state.data])
 
   const chatAnchor = useMemo<ChatAnchor | null>(() => {
     if (navigation.foreground.kind !== 'item_discussion') return null
@@ -647,6 +660,7 @@ export function YoloPanel({
               identityReceipts={detail.identityReceipts}
               identityLoading={detail.identityLoading}
               identityError={detail.identityError}
+              mergeSuggestions={mergeSuggestions}
               modal={presentation === 'focus'}
               onAction={detail.handleAction}
               onDraftChange={detail.setDraft}
@@ -655,6 +669,7 @@ export function YoloPanel({
               onOpenSource={() => { if (sourceForForeground) openSourcePreview(foreground.item, sourceForForeground) }}
               onUndoReceipt={detail.undo ? detail.undoReceipt : undefined}
               onRejectIdentity={detail.rejectIdentity}
+              onConsolidate={detail.consolidate}
             />
           </>
         )

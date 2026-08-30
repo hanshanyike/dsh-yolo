@@ -27,6 +27,10 @@
 
 `POST /yolo/actions` 与模型工具复用 `application/commands/apply-yolo-action.ts`。HTTP 不直接调用 repository 裸 mutation，也不重新实现 idempotency、evidence 或 attention trust binding。
 
+R3 开启时，dashboard 只投影同工作区的确定性重复候选。事项详情先展示两侧状态和字段结果，用户选择保留项后
+才发送带 `CONFIRM_CONSOLIDATE` 的动作；合并后可从即时回执或历史事项发送 `undo_consolidate`。关闭开关时
+候选数组为空，后台不执行自动合并。
+
 ## 对话端点
 
 session messages/send 通过 `application/conversation` 与 `ctx.yolo.conversations` 使用统一 runtime。无 `thread` 的 resident 路径只为提醒等内部兼容投递保留；面板总是传入 thread：顶层“和助手聊聊”每次显式打开生成新的 ephemeral key，事项讨论按事项 episode 复用。请求 registry 仍是宿主生命周期状态而非持久账本；重复 `client_request_id` 返回同一 request，不重复 `followup`。
@@ -41,6 +45,7 @@ UI 只渲染和保存 `contracts/config.ts` 定义的 `yolo` 设置。运行时 
 - `GET /yolo/badge`
 - `GET /yolo/notifications`
 - `GET /yolo/history`
+- `GET /yolo/identity-receipts`
 - `POST /yolo/notifications/seen`
 - `POST /yolo/actions`
 - `GET /yolo/session/messages`

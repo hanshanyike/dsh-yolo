@@ -388,9 +388,11 @@ export interface RecallLog {
 /** One canonical-todo near-duplicate pair (normalized-title collision) with both
  * rows' titles, so the memory-health surface can render and offer a merge. */
 export interface DuplicateTodoPair {
-  /** Keeper id: the earliest-created open todo in the collision group. */
+  /** Owning scope; older payloads may omit it. */
+  scopeKey?: string
+  /** Suggested keeper id: the earliest-created canonical todo in the collision group. */
   a: string
-  /** Duplicate id: a later open todo that shares the normalized title. */
+  /** Duplicate id: a later canonical todo that shares the normalized title. */
   b: string
   aTitle: string
   bTitle: string

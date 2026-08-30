@@ -199,6 +199,7 @@ function ItemRow({
     : undefined
   const canReopen = item.type === 'todo' && item.record_status !== 'merged'
     && ['done', 'completed', 'cancelled'].includes(item.status)
+  const canUndoMerge = item.type === 'todo' && item.record_status === 'merged' && item.merge_undo_available === true
   const displayStatus = item.record_status === 'merged' ? '已合并' : STATUS_LABEL[item.status] ?? item.status
 
   const reopen = async (): Promise<void> => {
@@ -206,6 +207,20 @@ function ItemRow({
     setError(null)
     try {
       await postYoloAction({ action: 'reopen', kind: 'todo', id: item.id, scope_cwd: item.scope_cwd })
+      await refreshDashboard()
+      onChanged()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const undoMerge = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      await postYoloAction({ action: 'undo_consolidate', kind: 'todo', id: item.id, scope_cwd: item.scope_cwd })
       await refreshDashboard()
       onChanged()
     } catch (reason) {
@@ -233,6 +248,7 @@ function ItemRow({
         <div className="history-item__actions">
           {currentTodo && onOpenItemDetail ? <button type="button" onClick={() => { onOpenItemDetail(currentTodo) }}>查看事项</button> : null}
           {canReopen ? <button type="button" disabled={busy} onClick={() => { void reopen() }}>{busy ? '处理中…' : '重新打开'}</button> : null}
+          {canUndoMerge ? <button type="button" disabled={busy} onClick={() => { void undoMerge() }}>{busy ? '处理中…' : '撤销合并'}</button> : null}
         </div>
       </div>
       {error ? <p className="history-inline-state is-error" role="alert">{error}</p> : null}

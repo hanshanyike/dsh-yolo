@@ -1999,7 +1999,7 @@ export function listDuplicateTodos(db: DB, scopeKey: string): DuplicateTodoPair[
     const keeper = group[0]
     for (let i = 1; i < group.length; i++) {
       const dup = group[i]
-      pairs.push({ a: keeper.id, b: dup.id, aTitle: keeper.title, bTitle: dup.title })
+      pairs.push({ scopeKey, a: keeper.id, b: dup.id, aTitle: keeper.title, bTitle: dup.title })
     }
   }
   return pairs

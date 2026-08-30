@@ -73,7 +73,7 @@ describe('listDuplicateTodos (repo)', () => {
       .run('done', '只做 一次', 'done', SCOPE, now + 1, now + 1)
     repo.upsertTodo(db, { title: '另一个任务', scope_key: SCOPE, source: 'manual' })
     expect(repo.listDuplicateTodos(db, SCOPE)).toEqual([
-      { a: 'open', b: 'done', aTitle: '只做-一次', bTitle: '只做 一次' },
+      { scopeKey: SCOPE, a: 'open', b: 'done', aTitle: '只做-一次', bTitle: '只做 一次' },
     ])
   })
 })

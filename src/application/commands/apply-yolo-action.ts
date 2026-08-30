@@ -526,10 +526,15 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
   }
 
   if (action === 'undo_consolidate') {
-    if (kind !== 'todo' || typeof r.merge_id !== 'string' || !r.merge_id) {
-      return deny(yolo, cwd, r, 'undo_consolidate requires kind=todo and merge_id', 400, 'invalid_merge_undo')
+    const mergeId = typeof r.merge_id === 'string' && r.merge_id
+      ? r.merge_id
+      : typeof r.id === 'string' && r.id
+        ? yolo.findActiveTodoMerge(cwd, r.id)?.id
+        : undefined
+    if (kind !== 'todo' || !mergeId) {
+      return deny(yolo, cwd, r, 'undo_consolidate requires an active merged todo or merge_id', 400, 'invalid_merge_undo')
     }
-    const res = yolo.undoTodoConsolidation(cwd, r.merge_id, sessionId)
+    const res = yolo.undoTodoConsolidation(cwd, mergeId, sessionId)
     return res.ok
       ? {
           ok: true,

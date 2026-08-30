@@ -48,6 +48,7 @@ export function useItemDetailController({
   save: () => void
   undoReceipt: () => void
   rejectIdentity: (receipt: TodoIdentityReceipt, reason: TodoIdentityFeedbackReason) => void
+  consolidate: (sourceId: string, targetId: string) => void
 } {
   const [draft, setDraft] = useState<TaskEditDraft | null>(null)
   const [busy, setBusy] = useState(false)
@@ -202,6 +203,14 @@ export function useItemDetailController({
     })
   }, [foreground, run, todo])
 
+  const consolidate = useCallback((sourceId: string, targetId: string): void => {
+    if (foreground.kind !== 'item_detail' || sourceId === targetId) return
+    void run({
+      action: 'consolidate', kind: 'todo', id: sourceId, into_id: targetId,
+      scope_cwd: foreground.item.scopeCwd, confirmation: 'CONFIRM_CONSOLIDATE',
+    })
+  }, [foreground, run])
+
   return {
     todo,
     draft,
@@ -221,5 +230,6 @@ export function useItemDetailController({
     save,
     undoReceipt,
     rejectIdentity,
+    consolidate,
   }
 }

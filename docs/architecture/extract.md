@@ -107,6 +107,8 @@ cross_session、same_name_distinct、terminal、step 等层统计 false-link 与
 - `extraction.minTurnChars`：短闲聊闸门，默认 4。
 - `extraction.maxRunsPerDay`：每日运行次数上限，默认 300。
 - `extraction.todoIdentityR2Enabled`：R2a 实验开关，默认关闭；助手看板设置可显式保存该值。
+- `extraction.todoIdentityR3Enabled`：R3 重复事项合并建议开关，默认关闭；只控制看板候选投影，合并仍需
+  用户预览、选择保留项并提交 `CONFIRM_CONSOLIDATE`。
 - 模型流量使用宿主允许的 `purpose: 'session-title'`；该联合类型没有自定义 purpose。
 - 每个通过现有抽取闸门的 turn 在主抽取解析后运行一次 resolver；它沿用同一 provider/model
   路由，但独立记录 token 和耗时。每日上限仍按主抽取 turn 计数，不把第二次调用误算成第二个 turn。

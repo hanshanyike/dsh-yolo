@@ -32,6 +32,7 @@ export interface YoloHistoryItem {
   status: string
   record_status?: string
   merged_into_id?: string | null
+  merge_undo_available?: boolean
   last_changed_at: number
   change_count: number
   latest_summary: string | null

@@ -92,6 +92,7 @@ function buildWorkspaceItems(
   milestones: readonly Milestone[],
   stats: readonly HistorySubjectStats[],
   latest: readonly TimelineEvent[],
+  activeMergeSourceIds: ReadonlySet<string>,
 ): YoloHistoryItem[] {
   const statMap = new Map(stats.map((row) => [statsKey(row.subject_type, row.subject_id), row]))
   const latestMap = new Map(latest
@@ -115,6 +116,7 @@ function buildWorkspaceItems(
       ...common('todo', row.id, row.title, row.status, row.updated_at),
       record_status: row.record_status ?? 'canonical',
       merged_into_id: row.merged_into_id ?? null,
+      merge_undo_available: activeMergeSourceIds.has(row.id),
     })),
     ...goals.map((row) => common('goal', row.id, row.title, row.status, row.updated_at)),
     ...milestones.map((row) => common('milestone', row.id, row.title, row.status, row.updated_at)),
@@ -174,9 +176,13 @@ export function buildHistoryData(
         }
         const stats = yolo.listEventSubjectStats(meta.cwd, openedAt, VISIBLE_KINDS)
         const latest = yolo.listLatestEventsBySubject(meta.cwd, openedAt, VISIBLE_KINDS)
+        const todoRecords = yolo.listTodoRecords(meta.cwd)
+        const activeMergeSourceIds = new Set(todoRecords
+          .filter((row) => row.record_status === 'merged' && yolo.findActiveTodoMerge?.(meta.cwd, row.id))
+          .map((row) => row.id))
         items.push(...buildWorkspaceItems(
           meta.cwd, meta.scopeKey, label,
-          yolo.listTodoRecords(meta.cwd), yolo.listGoals(meta.cwd), yolo.listMilestones(meta.cwd), stats, latest,
+          todoRecords, yolo.listGoals(meta.cwd), yolo.listMilestones(meta.cwd), stats, latest, activeMergeSourceIds,
         ))
       })
     } catch (error) {
