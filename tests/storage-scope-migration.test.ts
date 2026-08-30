@@ -59,8 +59,14 @@ function seedLegacy(db: DB): void {
     'provider', 'model', 'ok',
     JSON.stringify([{ id: 'same-todo', title: '功能分支事项' }]),
     JSON.stringify([{ decision: 'LINK', candidate_ids: ['same-todo'] }]),
-    JSON.stringify({ policy_version: 'r2a-v1', status: 'linked', todo_id: 'same-todo' }),
+    JSON.stringify({ policy_version: 'r2a-v1', status: 'linked', todo_id: 'same-todo', evidence_id: 'evidence-1' }),
     20,
+  )
+  db.prepare(`INSERT INTO todo_identity_feedback(
+    id,resolution_operation_id,scope_key,todo_id,evidence_id,verdict,reason,undo_status,created_at
+  ) VALUES(?,?,?,?,?,?,?,?,?)`).run(
+    'identity-feedback-1', 'extract/session-1/2', LEGACY, 'same-todo', 'evidence-1',
+    'incorrect', 'wrong_item', 'not_needed', 21,
   )
   db.prepare('INSERT INTO pending_reminders(id,todo_id,milestone_id,fire_at,payload,scope_key) VALUES(?,?,?,?,?,?)').run('pending-1', 'same-todo', 'same-ms', 30, '跟进功能分支', LEGACY)
   db.prepare('INSERT INTO recall_log(scope_key,query,source,status,created_at) VALUES(?,?,?,?,?)').run(LEGACY, '功能分支', 'user', 'ok', 20)
@@ -221,6 +227,8 @@ describe('legacy branch scope migration', () => {
     expect(JSON.parse(resolver.candidates_json)[0].id).toBe(featureTodo.id)
     expect(JSON.parse(resolver.resolutions_json)[0].candidate_ids).toEqual([featureTodo.id])
     expect(JSON.parse(resolver.application_json).todo_id).toBe(featureTodo.id)
+    expect(canonical.prepare('SELECT scope_key,todo_id,evidence_id FROM todo_identity_feedback WHERE resolution_operation_id=?').get('extract/session-1/2'))
+      .toEqual({ scope_key: CANONICAL, todo_id: featureTodo.id, evidence_id: 'evidence-1' })
     expect(canonical.prepare('SELECT COUNT(*) AS n FROM recall_log').get()).toEqual({ n: 1 })
     expect(canonical.prepare('SELECT display_name FROM user_profile WHERE id=1').get()).toEqual({ display_name: '新用户资料' })
     expect(canonical.prepare("SELECT COUNT(*) AS n FROM yolo_fts WHERE yolo_fts MATCH '功能分支事项'").get()).toEqual({ n: 2 })

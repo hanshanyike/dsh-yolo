@@ -200,6 +200,38 @@ function migrate(db: DB): void {
   if (!resolutionCols.some((c) => c.name === 'application_json')) {
     db.exec('ALTER TABLE todo_resolution_log ADD COLUMN application_json TEXT')
   }
+  // Trigger definitions use IF NOT EXISTS in schema.sql, so replace the two
+  // pre-R2c versions on existing databases. Rejected evidence remains in the
+  // append-only ledger but no longer participates in active identity recall.
+  db.exec('DROP TRIGGER IF EXISTS trg_todo_identity_au')
+  db.exec('DROP TRIGGER IF EXISTS trg_todo_evidence_identity_ai')
+  db.exec(`CREATE TRIGGER trg_todo_identity_au AFTER UPDATE OF title, detail, record_status, merged_into_id ON todos BEGIN
+    DELETE FROM todo_identity_fts WHERE record_id = old.id;
+    INSERT INTO todo_identity_fts(record_id, title, body)
+    SELECT new.id, new.title,
+      trim(COALESCE(new.detail, '') || ' ' || COALESCE((
+        SELECT group_concat(excerpt, ' ') FROM todo_evidence
+        WHERE todo_id = new.id AND excerpt IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM todo_identity_feedback feedback
+            WHERE feedback.evidence_id = todo_evidence.id AND feedback.verdict = 'incorrect'
+          )
+      ), ''));
+  END`)
+  db.exec(`CREATE TRIGGER trg_todo_evidence_identity_ai AFTER INSERT ON todo_evidence BEGIN
+    DELETE FROM todo_identity_fts WHERE record_id = new.todo_id;
+    INSERT INTO todo_identity_fts(record_id, title, body)
+    SELECT todos.id, todos.title,
+      trim(COALESCE(todos.detail, '') || ' ' || COALESCE((
+        SELECT group_concat(excerpt, ' ') FROM todo_evidence
+        WHERE todo_id = todos.id AND excerpt IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM todo_identity_feedback feedback
+            WHERE feedback.evidence_id = todo_evidence.id AND feedback.verdict = 'incorrect'
+          )
+      ), ''))
+    FROM todos WHERE todos.id = new.todo_id;
+  END`)
   db.exec("UPDATE todos SET record_status = 'canonical' WHERE record_status IS NULL")
   db.exec('CREATE INDEX IF NOT EXISTS idx_todos_record_status ON todos(scope_key, record_status, status)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_todos_merged_into ON todos(merged_into_id) WHERE merged_into_id IS NOT NULL')
@@ -249,6 +281,10 @@ function migrate(db: DB): void {
       trim(COALESCE(todos.detail, '') || ' ' || COALESCE((
         SELECT group_concat(excerpt, ' ') FROM todo_evidence
         WHERE todo_id = todos.id AND excerpt IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM todo_identity_feedback feedback
+            WHERE feedback.evidence_id = todo_evidence.id AND feedback.verdict = 'incorrect'
+          )
       ), ''))
     FROM todos
     WHERE NOT EXISTS (

@@ -40,6 +40,7 @@ export type EventKind =
   // M9 P34/P35: rejected-action audit + explicit todo merge
   | 'action_denied'
   | 'todo_consolidated'
+  | 'todo_identity_corrected'
 /** Domain action applicable to a todo (M8 Organizer). reopen = undo of complete (5.4). */
 export type TodoAction = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again' | 'reopen'
 export type ExtractionStrategy = 'rule' | 'llm'
@@ -160,6 +161,41 @@ export interface TodoResolutionLog {
   token_out?: number | null
   duration_ms?: number | null
   created_at: number
+}
+
+export type TodoIdentityFeedbackReason = 'wrong_item' | 'wrong_change' | 'other'
+export type TodoIdentityUndoStatus = 'not_needed' | 'applied' | 'conflict'
+
+/** Append-only user correction of one applied resolver decision. The original
+ * resolution/evidence rows remain immutable and auditable. */
+export interface TodoIdentityFeedback {
+  id: string
+  resolution_operation_id: string
+  scope_key: string
+  todo_id: string
+  evidence_id: string
+  verdict: 'incorrect'
+  reason: TodoIdentityFeedbackReason
+  undo_status: TodoIdentityUndoStatus
+  due_before?: string | null
+  due_after?: string | null
+  created_at: number
+}
+
+export interface TodoIdentityReceipt {
+  resolution_id: number
+  operation_id: string
+  todo_id: string
+  decision: 'LINK' | 'UPDATE'
+  application_status: 'linked' | 'updated' | 'no_change'
+  confidence?: number | null
+  reason?: string | null
+  input_excerpt: string
+  evidence_id: string
+  due_before?: string | null
+  due_after?: string | null
+  created_at: number
+  feedback?: TodoIdentityFeedback | null
 }
 
 export interface Goal {

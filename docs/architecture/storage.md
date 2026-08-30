@@ -55,6 +55,8 @@ catalog 写入失败不会关闭已经可用的 workspace DB，但会记录警�
 - `record_status` 与业务 `status` 分离；merge 不伪装为 cancel。
 - `seen_at`、`handled_at` 和 todo status 分离。
 - `client_actions` 以 scope + client action id 保存请求 hash 和结果，和业务写入同库。
+- `todo_identity_feedback` 追加用户对已应用 R2 决策的纠错；原 `todo_resolution_log` 与 `todo_evidence` 不改写，
+  被纠错 evidence 通过投影排除，自动截止时间只在无后续写入冲突时恢复。
 - `pending_reminders` 只为旧库兼容保留，当前不向普通工作 session 回放。
 - FTS 是可重建索引，不是独立事实源；identity resolver 的模型输出不能直接执行写入。R2a 的独立、
   默认关闭策略只允许受控稳定 ID LINK/due_at UPDATE，并把计划与实际结果写入

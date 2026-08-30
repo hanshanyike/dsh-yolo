@@ -484,9 +484,9 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(yolo.listTodoEvidence(cwd, todo.id)).toEqual(expect.arrayContaining([
       expect.objectContaining({ session_id: session.id, turn_seq: 6, relation: 'mention' }),
     ]))
-    expect(JSON.parse(yolo.listTodoResolutions(cwd)[0].application_json ?? 'null')).toMatchObject({
-      status: 'linked', todo_id: todo.id,
-    })
+    const application = JSON.parse(yolo.listTodoResolutions(cwd)[0].application_json ?? 'null')
+    expect(application).toMatchObject({ status: 'linked', todo_id: todo.id, evidence_created: true })
+    expect(application.evidence_id).toBeTypeOf('string')
   })
 
   it('R2a applies only an explicit due_at UPDATE through the stable id', async () => {
@@ -520,7 +520,8 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(yolo.findTodo(cwd, { id: todo.id })?.due_at).toBe('2026-09-05')
     expect(yolo.listEvents(cwd).some((event) => event.kind === 'todo_postponed' && event.subject_id === todo.id)).toBe(true)
     expect(JSON.parse(yolo.listTodoResolutions(cwd)[0].application_json ?? 'null')).toMatchObject({
-      status: 'updated', todo_id: todo.id,
+      status: 'updated', todo_id: todo.id, evidence_created: true,
+      due_before: '2026-09-02', due_after: '2026-09-05',
     })
   })
 

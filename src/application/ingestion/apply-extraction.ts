@@ -55,6 +55,9 @@ export interface TodoIdentityApplicationOutcome {
   status: 'fallback' | 'blocked' | 'linked' | 'updated' | 'no_change'
   todo_id?: string
   evidence_created?: boolean
+  evidence_id?: string
+  due_before?: string | null
+  due_after?: string | null
   reason?: string
 }
 
@@ -103,6 +106,8 @@ function applyAuthorizedTodoIdentity(
     status: identity.decision === 'LINK' ? 'linked' : changed ? 'updated' : 'no_change',
     todo_id: todoId,
     evidence_created: evidence.created,
+    evidence_id: evidence.evidence.id,
+    ...(identity.decision === 'UPDATE' ? { due_before: before.due_at ?? null, due_after: after.due_at ?? null } : {}),
   }
 }
 

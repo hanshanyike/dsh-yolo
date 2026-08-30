@@ -30,6 +30,7 @@
 | `api/dashboard-scope.spec.ts` | 真实 HTTP 的 `single / all` 聚合契约、workspace/source owner、未知 scope 拒绝后恢复；`partial / all-fail / recovery` 与同 id 双 scope 由 `tests/dashboard-aggregate.test.ts` 确定性覆盖 | W13 / WS-01 / WS-03 |
 | `api/dashboard-surfaces.spec.ts` | 首页安静/正常/高压和 partial；最多一个首要事项、跨区去重、计划与历史边界、最近变化过滤 | W2 / W11 / W13 / HOME / HIST |
 | `api/source-provenance.spec.ts` | 会话来源保存有界摘录、时间、工作区、session id 和可选 turn；manual/tool/legacy/旧数据降级；capability 与字段一致 | W8 / W16 / SRC-01～03 |
+| `api/identity-feedback.spec.ts` | R2c 错误关联纠错：原 evidence 保留、有效来源排除、无后续冲突时安全恢复自动截止时间，并写 feedback/audit | R2C-API |
 | `api/due-semantics.spec.ts` | date-only、精确 datetime 与终态的 overdue/attention/summary 一致，并正确进入首页和计划投影；快速记录不会立即生成提醒 | W2 / W4 / W11 |
 | `api/notifications.spec.ts` | 未读与处理分离、20 条稳定分页、完整可达和已读基线 | W12 / W14 / NOTIF-API-01 |
 | `api/history.spec.ts` | 完整时间线分页、内部审计排除、稳定事项身份、改名连续、终态筛选和结构化字段变化 | W8 / W15 / HIST-03～04 |

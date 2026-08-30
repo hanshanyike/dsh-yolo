@@ -19,6 +19,7 @@ import type {
   YoloActionRequest,
   YoloLearningReceipt,
 } from '../../contracts/actions.ts'
+import type { TodoIdentityFeedbackReason } from '../../domain/types.ts'
 import type { ScopeRef } from '../../domain/scope.ts'
 export type {
   AttentionFeedbackReason,
@@ -46,6 +47,7 @@ const ATTENTION_FEEDBACK_REASONS = [
   'stale_signal_unhelpful',
   'other',
 ] as const satisfies readonly AttentionFeedbackReason[]
+const IDENTITY_FEEDBACK_REASONS = ['wrong_item', 'wrong_change', 'other'] as const satisfies readonly TodoIdentityFeedbackReason[]
 
 function latestAuditFor(yolo: Yolo, cwd: string, action: string, startedAt: number): TimelineEvent | undefined {
   const expected: Partial<Record<TodoAction, string>> = {
@@ -365,6 +367,39 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
     }
   }
 
+  if (action === 'identity_reject') {
+    if (kind !== 'todo' || typeof r.id !== 'string' || !r.id || !Number.isInteger(r.resolution_id)) {
+      return deny(yolo, cwd, r, 'identity_reject requires kind=todo, id and integer resolution_id', 400, 'invalid_identity_feedback')
+    }
+    if (!IDENTITY_FEEDBACK_REASONS.includes(r.identity_feedback_reason as TodoIdentityFeedbackReason)) {
+      return deny(yolo, cwd, r, 'identity_reject requires identity_feedback_reason', 400, 'invalid_identity_feedback')
+    }
+    const rejected = yolo.rejectTodoIdentityResolution(
+      cwd,
+      r.resolution_id!,
+      r.id,
+      r.identity_feedback_reason as TodoIdentityFeedbackReason,
+    )
+    if (!rejected.ok) {
+      return deny(yolo, cwd, r, rejected.error, rejected.kind === 'not-found' ? 404 : 409, `identity_feedback_${rejected.kind}`)
+    }
+    return {
+      ok: true,
+      item: rejected.todo as unknown as Record<string, unknown>,
+      ...(rejected.audit_event_id ? { audit_event_id: rejected.audit_event_id } : {}),
+      learning_receipt: {
+        type: 'feedback_count',
+        summary: rejected.feedback.undo_status === 'applied'
+          ? '已记录关联反馈并撤销自动改期'
+          : rejected.feedback.undo_status === 'conflict'
+            ? '已记录关联反馈；保留你后来修改的截止时间'
+            : '已记录关联反馈并排除本次来源',
+        scope: 'item',
+        reversible: false,
+      },
+    }
+  }
+
   if (!ref.id && !ref.title) return deny(yolo, cwd, r, 'pass id or title', 400)
 
   if (action === 'delete') {
@@ -522,6 +557,8 @@ export function hashYoloActionRequest(r: YoloActionRequest): string {
     reason_version: r.reason_version ?? null,
     evidence_fingerprint: r.evidence_fingerprint ?? null,
     feedback_reason: r.feedback_reason ?? null,
+    resolution_id: r.resolution_id ?? null,
+    identity_feedback_reason: r.identity_feedback_reason ?? null,
     suppressed_until: r.suppressed_until ?? null,
     range_field: r.range_field ?? null,
     range_from: r.range_from ?? null,
@@ -550,7 +587,7 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
       const todoId = outcome.ok && r.kind === 'todo' && typeof outcome.item?.id === 'string'
         ? outcome.item.id
         : undefined
-      if (todoId && r.action !== 'delete') {
+      if (todoId && r.action !== 'delete' && r.action !== 'identity_reject') {
         const relation = r.action === 'quick_add'
           ? 'origin'
           : r.action === 'complete'

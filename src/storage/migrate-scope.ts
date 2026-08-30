@@ -16,6 +16,12 @@ function sqlPath(path: string): string {
   return `'${path.replaceAll("'", "''")}'`
 }
 
+function legacyHasTable(db: DB, table: string): boolean {
+  return Boolean(db.prepare(
+    `SELECT 1 FROM ${LEGACY_ALIAS}.sqlite_master WHERE type = 'table' AND name = ?`,
+  ).get(table))
+}
+
 function markerFor(file: string): string {
   const digest = createHash('sha1').update(file).digest('hex').slice(0, 16)
   return `scope_migration_${MIGRATION_VERSION}_${digest}`
@@ -155,6 +161,7 @@ function normalizeCanonicalRows(db: DB, scopeKey: string, cwd: string): void {
   db.prepare('UPDATE attention_feedback SET scope_key = ? WHERE scope_key <> ?').run(scopeKey, scopeKey)
   db.prepare('UPDATE client_actions SET scope_key = ? WHERE scope_key <> ?').run(scopeKey, scopeKey)
   db.prepare('UPDATE todo_evidence SET source_scope_key = ? WHERE source_scope_key <> ?').run(scopeKey, scopeKey)
+  db.prepare('UPDATE todo_identity_feedback SET scope_key = ? WHERE scope_key <> ?').run(scopeKey, scopeKey)
 }
 
 function importAttached(db: DB, scopeKey: string, cwd: string, source: string, warnings: string[]): void {
@@ -333,6 +340,51 @@ function importAttached(db: DB, scopeKey: string, cwd: string, source: string, w
       row.duration_ms as SQLInputValue,
       row.created_at as SQLInputValue,
     )
+  }
+  if (legacyHasTable(db, 'todo_identity_feedback')) {
+    const feedbackRows = db.prepare(
+      `SELECT feedback.*, evidence.source_fingerprint
+       FROM ${LEGACY_ALIAS}.todo_identity_feedback feedback
+       JOIN ${LEGACY_ALIAS}.todo_evidence evidence ON evidence.id = feedback.evidence_id
+       ORDER BY feedback.created_at ASC, feedback.id ASC`,
+    ).all() as Array<Record<string, unknown>>
+    for (const row of feedbackRows) {
+      const todoId = todoMap.get(String(row.todo_id)) ?? String(row.todo_id)
+      const evidence = db.prepare('SELECT id FROM todo_evidence WHERE source_fingerprint = ?').get(row.source_fingerprint as SQLInputValue) as
+        | { id: string }
+        | undefined
+      if (!evidence) {
+        warnings.push(`${source}: identity feedback evidence missing ${String(row.evidence_id)}`)
+        continue
+      }
+      const existing = db.prepare('SELECT id FROM todo_identity_feedback WHERE resolution_operation_id = ?').get(row.resolution_operation_id as SQLInputValue) as
+        | { id: string }
+        | undefined
+      if (existing) continue
+      const idOwner = db.prepare('SELECT resolution_operation_id FROM todo_identity_feedback WHERE id = ?').get(row.id as SQLInputValue) as
+        | { resolution_operation_id: string }
+        | undefined
+      const id = idOwner && idOwner.resolution_operation_id !== row.resolution_operation_id
+        ? remappedId(source, 'todo_identity_feedback', row.id)
+        : String(row.id)
+      db.prepare(
+        `INSERT INTO todo_identity_feedback(
+           id,resolution_operation_id,scope_key,todo_id,evidence_id,verdict,reason,undo_status,due_before,due_after,created_at
+         ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        id,
+        row.resolution_operation_id as SQLInputValue,
+        scopeKey,
+        todoId,
+        evidence.id,
+        row.verdict as SQLInputValue,
+        row.reason as SQLInputValue,
+        row.undo_status as SQLInputValue,
+        row.due_before as SQLInputValue,
+        row.due_after as SQLInputValue,
+        row.created_at as SQLInputValue,
+      )
+    }
   }
   const reminderColumns = ['id', 'todo_id', 'milestone_id', 'fire_at', 'payload', 'scope_key', 'session_hint']
   mergeIdTable(db, source, 'pending_reminders', reminderColumns, reminderColumns.filter((c) => c !== 'scope_key'), (row) => ({

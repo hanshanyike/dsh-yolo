@@ -1,4 +1,5 @@
 import type { TodoRangeField } from '../shared/todo-range.ts'
+import type { TodoIdentityFeedbackReason } from '../domain/types.ts'
 
 export interface YoloActionRequest {
   action: string
@@ -22,6 +23,8 @@ export interface YoloActionRequest {
   reason_version?: string
   evidence_fingerprint?: string
   feedback_reason?: AttentionFeedbackReason
+  resolution_id?: number
+  identity_feedback_reason?: TodoIdentityFeedbackReason
   suppressed_until?: number
   range_field?: TodoRangeField
   range_from?: string

@@ -56,6 +56,8 @@ import type {
   AttentionFeedback,
   TodoIdentityCandidate,
   TodoResolutionLog,
+  TodoIdentityFeedbackReason,
+  TodoIdentityReceipt,
   ClientActionRecord,
 } from './types.ts'
 
@@ -688,6 +690,19 @@ export default class Yolo extends Service {
   listTodoResolutions(cwd: string, limit = 100): TodoResolutionLog[] {
     const h = this.resolve(cwd)
     return repo.listTodoResolutions(h.db, h.scopeKey, limit)
+  }
+  listTodoIdentityReceipts(cwd: string, todoId: string, limit = 20): TodoIdentityReceipt[] {
+    const h = this.resolve(cwd)
+    return repo.listTodoIdentityReceipts(h.db, h.scopeKey, todoId, limit)
+  }
+  rejectTodoIdentityResolution(
+    cwd: string,
+    resolutionId: number,
+    todoId: string,
+    reason: TodoIdentityFeedbackReason,
+  ): repo.TodoIdentityRejectResult {
+    const h = this.resolve(cwd)
+    return repo.rejectTodoIdentityResolution(h.db, h.scopeKey, resolutionId, todoId, reason)
   }
   /** Semantic-recall rows since a timestamp — budget/health input (v0.3.0). */
   countRecallSince(cwd: string, sinceMs: number): number {

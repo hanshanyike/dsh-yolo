@@ -88,6 +88,11 @@ R2a 的确定性 application policy 版本为 `r2a-v1`，配置 `extraction.todo
 当前模型 prediction 的分层 false-link/missed-link 报告获得单独批准。策略计划与实际结果写入
 `todo_resolution_log.application_json`，便于区分模型建议和系统动作。
 
+R2c 在 application receipt 中同时保存实际 `evidence_id`，UPDATE 还保存 `due_before/due_after`。用户判定
+关联不准确时，统一动作 `identity_reject` 追加 `todo_identity_feedback`，不会改写 resolver/evidence 原始行；
+错误 evidence 从有效来源和 identity FTS 排除。只有事项截止时间仍等于该 receipt 写入值时才撤销自动改期，
+否则记录 `conflict` 并保留用户后续修改。
+
 日志保存本轮输入的 1000 字符有界摘录和请求 fingerprint，供本机人工标注；不保存完整 transcript。
 `scripts/todo-resolver-eval.mjs` 可以导出 JSONL 标注队列，并按 paraphrase、pronoun、ellipsis、
 cross_session、same_name_distinct、terminal、step 等层统计 false-link 与 missed-link。人工标签和当前模型
@@ -101,7 +106,7 @@ cross_session、same_name_distinct、terminal、step 等层统计 false-link 与
   不再直接跳过已完成轮次。
 - `extraction.minTurnChars`：短闲聊闸门，默认 4。
 - `extraction.maxRunsPerDay`：每日运行次数上限，默认 300。
-- `extraction.todoIdentityR2Enabled`：R2a 实验开关，默认关闭；人工构造 gold corpus 不能单独作为开启依据。
+- `extraction.todoIdentityR2Enabled`：R2a 实验开关，默认关闭；助手看板设置可显式保存该值。
 - 模型流量使用宿主允许的 `purpose: 'session-title'`；该联合类型没有自定义 purpose。
 - 每个通过现有抽取闸门的 turn 在主抽取解析后运行一次 resolver；它沿用同一 provider/model
   路由，但独立记录 token 和耗时。每日上限仍按主抽取 turn 计数，不把第二次调用误算成第二个 turn。

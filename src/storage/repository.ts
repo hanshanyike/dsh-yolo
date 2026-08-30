@@ -39,6 +39,9 @@ import type {
   AttentionFeedback,
   ClientActionRecord,
   TodoResolutionLog,
+  TodoIdentityFeedback,
+  TodoIdentityFeedbackReason,
+  TodoIdentityReceipt,
 } from './types.ts'
 
 const now = () => Date.now()
@@ -257,6 +260,8 @@ export function listTodoEvidence(db: DB, todoId: string): TodoEvidence[] {
      )
      SELECT e.* FROM todo_evidence e
      JOIN related ON related.id = e.todo_id
+     LEFT JOIN todo_identity_feedback feedback ON feedback.evidence_id = e.id AND feedback.verdict = 'incorrect'
+     WHERE feedback.id IS NULL
      ORDER BY e.occurred_at ASC, e.rowid ASC`,
   ).all(canonical.id) as TodoEvidence[]
 }
@@ -1569,6 +1574,165 @@ export function listTodoResolutions(db: DB, scopeKey: string, limit = 100): Todo
     `SELECT * FROM todo_resolution_log
      WHERE scope_key = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
   ).all(scopeKey, limit) as TodoResolutionLog[]
+}
+
+interface AppliedTodoIdentityJson {
+  plan?: {
+    decision?: unknown
+    confidence?: unknown
+    reason?: unknown
+  }
+  status?: unknown
+  todo_id?: unknown
+  evidence_id?: unknown
+  due_before?: unknown
+  due_after?: unknown
+}
+
+function parseAppliedTodoIdentity(text: string | null | undefined): AppliedTodoIdentityJson | null {
+  if (!text) return null
+  try {
+    const value = JSON.parse(text)
+    return value && typeof value === 'object' ? value as AppliedTodoIdentityJson : null
+  } catch {
+    return null
+  }
+}
+
+function identityFeedbackFor(db: DB, operationId: string): TodoIdentityFeedback | null {
+  return db.prepare(
+    'SELECT * FROM todo_identity_feedback WHERE resolution_operation_id = ?',
+  ).get(operationId) as TodoIdentityFeedback | undefined ?? null
+}
+
+/** Bounded product projection of applied R2 decisions for one canonical todo. */
+export function listTodoIdentityReceipts(
+  db: DB,
+  scopeKey: string,
+  todoId: string,
+  limit = 20,
+): TodoIdentityReceipt[] {
+  const canonical = resolveCanonicalTodo(db, todoId)
+  if (!canonical || canonical.scope_key !== scopeKey) return []
+  const rows = db.prepare(
+    `SELECT * FROM todo_resolution_log
+     WHERE scope_key = ? AND status = 'ok' AND application_json IS NOT NULL
+     ORDER BY created_at DESC, id DESC LIMIT ?`,
+  ).all(scopeKey, Math.max(1, Math.min(100, limit * 4))) as TodoResolutionLog[]
+  const receipts: TodoIdentityReceipt[] = []
+  for (const row of rows) {
+    const application = parseAppliedTodoIdentity(row.application_json)
+    if (!application || application.todo_id !== canonical.id) continue
+    if (application.status !== 'linked' && application.status !== 'updated' && application.status !== 'no_change') continue
+    if (application.plan?.decision !== 'LINK' && application.plan?.decision !== 'UPDATE') continue
+    if (typeof application.evidence_id !== 'string' || !application.evidence_id) continue
+    receipts.push({
+      resolution_id: row.id!,
+      operation_id: row.operation_id,
+      todo_id: canonical.id,
+      decision: application.plan.decision,
+      application_status: application.status,
+      confidence: typeof application.plan.confidence === 'number' ? application.plan.confidence : null,
+      reason: typeof application.plan.reason === 'string' ? application.plan.reason : null,
+      input_excerpt: row.input_excerpt,
+      evidence_id: application.evidence_id,
+      due_before: typeof application.due_before === 'string' ? application.due_before : application.due_before === null ? null : undefined,
+      due_after: typeof application.due_after === 'string' ? application.due_after : application.due_after === null ? null : undefined,
+      created_at: row.created_at,
+      feedback: identityFeedbackFor(db, row.operation_id),
+    })
+    if (receipts.length >= limit) break
+  }
+  return receipts
+}
+
+export type TodoIdentityRejectResult =
+  | { ok: true; todo: Todo; feedback: TodoIdentityFeedback; audit_event_id?: string }
+  | { ok: false; kind: 'not-found' | 'mismatch' | 'unsupported'; error: string }
+
+/** Reject one applied R2 decision without rewriting its immutable resolver or
+ * evidence rows. The feedback trigger removes that evidence from active
+ * identity recall. An automatic due change is reverted only when the todo
+ * still holds the exact value written by this receipt, so later user edits win. */
+export function rejectTodoIdentityResolution(
+  db: DB,
+  scopeKey: string,
+  resolutionId: number,
+  todoId: string,
+  reason: TodoIdentityFeedbackReason,
+): TodoIdentityRejectResult {
+  const resolution = db.prepare(
+    'SELECT * FROM todo_resolution_log WHERE id = ? AND scope_key = ?',
+  ).get(resolutionId, scopeKey) as TodoResolutionLog | undefined
+  if (!resolution) return { ok: false, kind: 'not-found', error: 'identity resolution not found' }
+  const application = parseAppliedTodoIdentity(resolution.application_json)
+  if (!application || application.todo_id !== todoId) {
+    return { ok: false, kind: 'mismatch', error: 'identity resolution does not belong to this todo' }
+  }
+  if (typeof application.evidence_id !== 'string' || !application.evidence_id) {
+    return { ok: false, kind: 'unsupported', error: 'identity resolution has no correctable evidence receipt' }
+  }
+  const existing = identityFeedbackFor(db, resolution.operation_id)
+  const todo = db.prepare('SELECT * FROM todos WHERE id = ? AND scope_key = ?').get(todoId, scopeKey) as Todo | undefined
+  if (!todo) return { ok: false, kind: 'not-found', error: 'todo not found' }
+  if (existing) return { ok: true, todo, feedback: existing }
+  const evidence = db.prepare('SELECT id FROM todo_evidence WHERE id = ? AND todo_id = ?').get(application.evidence_id, todoId) as
+    | { id: string }
+    | undefined
+  if (!evidence) return { ok: false, kind: 'mismatch', error: 'identity evidence does not belong to this todo' }
+
+  const dueBefore = typeof application.due_before === 'string' ? application.due_before : application.due_before === null ? null : undefined
+  const dueAfter = typeof application.due_after === 'string' ? application.due_after : application.due_after === null ? null : undefined
+  let undoStatus: TodoIdentityFeedback['undo_status'] = 'not_needed'
+  let changedTodo = todo
+  if (application.status === 'updated' && dueAfter !== undefined) {
+    if ((todo.due_at ?? null) === dueAfter) {
+      const ts = now()
+      db.prepare('UPDATE todos SET due_at = ?, last_reminded_at = NULL, updated_at = ? WHERE id = ?').run(dueBefore ?? null, ts, todo.id)
+      changedTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(todo.id) as Todo
+      undoStatus = 'applied'
+    } else {
+      undoStatus = 'conflict'
+    }
+  }
+
+  const feedback: TodoIdentityFeedback = {
+    id: genId(),
+    resolution_operation_id: resolution.operation_id,
+    scope_key: scopeKey,
+    todo_id: todo.id,
+    evidence_id: evidence.id,
+    verdict: 'incorrect',
+    reason,
+    undo_status: undoStatus,
+    due_before: dueBefore,
+    due_after: dueAfter,
+    created_at: now(),
+  }
+  db.prepare(
+    `INSERT INTO todo_identity_feedback(
+       id,resolution_operation_id,scope_key,todo_id,evidence_id,verdict,reason,undo_status,due_before,due_after,created_at
+     ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    feedback.id, feedback.resolution_operation_id, feedback.scope_key, feedback.todo_id, feedback.evidence_id,
+    feedback.verdict, feedback.reason, feedback.undo_status, feedback.due_before ?? null, feedback.due_after ?? null, feedback.created_at,
+  )
+  const audit = addEvent(db, {
+    kind: 'todo_identity_corrected',
+    summary: `纠正自动关联：「${todo.title}」`,
+    detail: undoStatus === 'applied'
+      ? `已撤销自动截止时间修改：${dueAfter ?? '无'} → ${dueBefore ?? '无'}`
+      : undoStatus === 'conflict'
+        ? '事项后来已被再次修改；保留当前截止时间，仅排除错误关联证据。'
+        : '已排除本次错误关联证据。',
+    scope_key: scopeKey,
+    source: 'manual',
+    subject_type: 'todo',
+    subject_id: todo.id,
+    subject_title: todo.title,
+    change: undoStatus === 'applied' ? { due_at: { before: dueAfter ?? null, after: dueBefore ?? null } } : undefined,
+  })
+  return { ok: true, todo: changedTodo, feedback, ...(audit?.id ? { audit_event_id: audit.id } : {}) }
 }
 
 // ---------- pending reminders ----------

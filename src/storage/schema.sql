@@ -249,6 +249,24 @@ CREATE TABLE IF NOT EXISTS todo_resolution_log (
 CREATE INDEX IF NOT EXISTS idx_todo_resolution_time ON todo_resolution_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_todo_resolution_scope ON todo_resolution_log(scope_key, created_at DESC);
 
+-- User corrections for applied R2 decisions. Resolution/evidence rows stay
+-- immutable; this append-only row removes rejected evidence from active
+-- projections and records whether an automatic due-date write was reverted.
+CREATE TABLE IF NOT EXISTS todo_identity_feedback (
+  id                      TEXT PRIMARY KEY,
+  resolution_operation_id TEXT NOT NULL UNIQUE,
+  scope_key               TEXT NOT NULL,
+  todo_id                 TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  evidence_id             TEXT NOT NULL REFERENCES todo_evidence(id) ON DELETE CASCADE,
+  verdict                 TEXT NOT NULL CHECK (verdict = 'incorrect'),
+  reason                  TEXT NOT NULL CHECK (reason IN ('wrong_item','wrong_change','other')),
+  undo_status             TEXT NOT NULL CHECK (undo_status IN ('not_needed','applied','conflict')),
+  due_before              TEXT,
+  due_after               TEXT,
+  created_at              INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_identity_feedback_todo ON todo_identity_feedback(todo_id, created_at DESC);
+
 -- pending reminders queued while no active session (replayed on agent/session-start)
 CREATE TABLE IF NOT EXISTS pending_reminders (
   id           TEXT PRIMARY KEY,     -- ULID
@@ -320,6 +338,10 @@ CREATE TRIGGER IF NOT EXISTS trg_todo_identity_au AFTER UPDATE OF title, detail,
     trim(COALESCE(new.detail, '') || ' ' || COALESCE((
       SELECT group_concat(excerpt, ' ') FROM todo_evidence
       WHERE todo_id = new.id AND excerpt IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM todo_identity_feedback feedback
+          WHERE feedback.evidence_id = todo_evidence.id AND feedback.verdict = 'incorrect'
+        )
     ), ''));
 END;
 CREATE TRIGGER IF NOT EXISTS trg_todo_identity_ad AFTER DELETE ON todos BEGIN
@@ -348,6 +370,24 @@ CREATE TRIGGER IF NOT EXISTS trg_todo_evidence_identity_ai AFTER INSERT ON todo_
     trim(COALESCE(todos.detail, '') || ' ' || COALESCE((
       SELECT group_concat(excerpt, ' ') FROM todo_evidence
       WHERE todo_id = todos.id AND excerpt IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM todo_identity_feedback feedback
+          WHERE feedback.evidence_id = todo_evidence.id AND feedback.verdict = 'incorrect'
+        )
+    ), ''))
+  FROM todos WHERE todos.id = new.todo_id;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_todo_identity_feedback_ai AFTER INSERT ON todo_identity_feedback BEGIN
+  DELETE FROM todo_identity_fts WHERE record_id = new.todo_id;
+  INSERT INTO todo_identity_fts(record_id, title, body)
+  SELECT todos.id, todos.title,
+    trim(COALESCE(todos.detail, '') || ' ' || COALESCE((
+      SELECT group_concat(excerpt, ' ') FROM todo_evidence
+      WHERE todo_id = todos.id AND excerpt IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM todo_identity_feedback feedback
+          WHERE feedback.evidence_id = todo_evidence.id AND feedback.verdict = 'incorrect'
+        )
     ), ''))
   FROM todos WHERE todos.id = new.todo_id;
 END;
