@@ -23,7 +23,7 @@ interface HistoryViewProps {
 const KIND_LABEL: Record<string, string> = {
   todo_created: '新增', todo_started: '开始', todo_completed: '完成', todo_cancelled: '取消',
   todo_postponed: '改期', todo_remind_again: '再提醒', todo_updated: '更新', todo_reopened: '重新打开',
-  todo_consolidated: '合并', todo_deleted: '删除', goal_progress: '目标进度', goal_status: '目标状态',
+  todo_consolidated: '合并', todo_consolidation_undone: '撤销合并', todo_deleted: '删除', goal_progress: '目标进度', goal_status: '目标状态',
   goal_updated: '目标更新', milestone_status: '里程碑状态', milestone_updated: '里程碑更新',
   decision: '决定', milestone_reached: '里程碑达成',
 }

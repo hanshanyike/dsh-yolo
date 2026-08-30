@@ -18,6 +18,9 @@ export interface YoloConfig {
     /** Experimental R2a stable-id LINK/due-date UPDATE policy. Default off
      * until a labeled model-prediction report satisfies the safety gate. */
     todoIdentityR2Enabled: boolean
+    /** Experimental R3 duplicate suggestions. Suggestions require a preview
+     * and explicit confirmation; this switch never authorizes auto-merge. */
+    todoIdentityR3Enabled: boolean
   }
   reminder: {
     enabled: boolean

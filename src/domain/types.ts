@@ -39,8 +39,9 @@ export type EventKind =
   | 'attention_feedback'
   // M9 P34/P35: rejected-action audit + explicit todo merge
   | 'action_denied'
-  | 'todo_consolidated'
-  | 'todo_identity_corrected'
+    | 'todo_consolidated'
+    | 'todo_consolidation_undone'
+    | 'todo_identity_corrected'
 /** Domain action applicable to a todo (M8 Organizer). reopen = undo of complete (5.4). */
 export type TodoAction = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again' | 'reopen'
 export type ExtractionStrategy = 'rule' | 'llm'
@@ -196,6 +197,23 @@ export interface TodoIdentityReceipt {
   due_after?: string | null
   created_at: number
   feedback?: TodoIdentityFeedback | null
+}
+
+/** Durable R3 merge operation. Snapshots and migrated relation ids make the
+ * explicit user-confirmed merge reversible without rewriting old events. */
+export interface TodoMergeRecord {
+  id: string
+  scope_key: string
+  source_id: string
+  target_id: string
+  source_snapshot_json: string
+  target_before_json: string
+  target_after_json: string
+  notification_ids_json: string
+  reminder_ids_json: string
+  status: 'active' | 'undone'
+  created_at: number
+  undone_at?: number | null
 }
 
 export interface Goal {
@@ -367,7 +385,7 @@ export interface RecallLog {
   created_at: number
 }
 
-/** One open-todo near-duplicate pair (normalized-title collision) with both
+/** One canonical-todo near-duplicate pair (normalized-title collision) with both
  * rows' titles, so the memory-health surface can render and offer a merge. */
 export interface DuplicateTodoPair {
   /** Keeper id: the earliest-created open todo in the collision group. */

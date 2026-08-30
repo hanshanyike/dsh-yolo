@@ -509,10 +509,38 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
     if ((!ref.id && !ref.title) || (!into.id && !into.title)) {
       return deny(yolo, cwd, r, 'consolidate requires source (id|title) and target (into_id|into_title)', 400)
     }
+    if (r.confirmation !== 'CONFIRM_CONSOLIDATE') {
+      return deny(yolo, cwd, r, 'consolidate requires an explicit preview confirmation', 409, 'consolidation_confirmation_required')
+    }
     const res = yolo.applyTodoConsolidate(cwd, ref, into, sessionId)
     return res.ok
-      ? { ok: true, item: res.target as unknown as Record<string, unknown> }
+      ? {
+          ok: true,
+          item: { ...res.target, merge_id: res.merge.id } as unknown as Record<string, unknown>,
+          learning_receipt: {
+            type: 'state_change', summary: `已合并重复事项「${res.target.title}」`, scope: 'item', reversible: true,
+          },
+          undo: { action: 'undo_consolidate', kind: 'todo', id: res.merge.source_id, merge_id: res.merge.id },
+        }
       : deny(yolo, cwd, r, res.error, res.kind === 'not-found' ? 404 : 400)
+  }
+
+  if (action === 'undo_consolidate') {
+    if (kind !== 'todo' || typeof r.merge_id !== 'string' || !r.merge_id) {
+      return deny(yolo, cwd, r, 'undo_consolidate requires kind=todo and merge_id', 400, 'invalid_merge_undo')
+    }
+    const res = yolo.undoTodoConsolidation(cwd, r.merge_id, sessionId)
+    return res.ok
+      ? {
+          ok: true,
+          item: { ...res.source, target_restore_status: res.target_restore_status } as unknown as Record<string, unknown>,
+          learning_receipt: {
+            type: 'state_change',
+            summary: res.target_restore_status === 'applied' ? '已撤销事项合并' : '已撤销事项关系；保留后续编辑',
+            scope: 'item', reversible: false,
+          },
+        }
+      : deny(yolo, cwd, r, res.error, res.kind === 'not-found' ? 404 : 409, `consolidation_undo_${res.kind}`)
   }
 
   if (kind !== 'todo' || !TODO_ACTIONS.includes(action as TodoAction)) {
@@ -550,6 +578,7 @@ export function hashYoloActionRequest(r: YoloActionRequest): string {
     milestone_title: r.milestone_title ?? null,
     into_id: r.into_id ?? null,
     into_title: r.into_title ?? null,
+    merge_id: r.merge_id ?? null,
     session_id: r.session_id ?? null,
     session_turn: r.session_turn ?? null,
     notif_kind: r.notif_kind ?? null,
@@ -587,7 +616,7 @@ export function applyYoloAction(yolo: Yolo, cwd: string, r: YoloActionRequest): 
       const todoId = outcome.ok && r.kind === 'todo' && typeof outcome.item?.id === 'string'
         ? outcome.item.id
         : undefined
-      if (todoId && r.action !== 'delete' && r.action !== 'identity_reject') {
+      if (todoId && r.action !== 'delete' && r.action !== 'identity_reject' && r.action !== 'consolidate' && r.action !== 'undo_consolidate') {
         const relation = r.action === 'quick_add'
           ? 'origin'
           : r.action === 'complete'

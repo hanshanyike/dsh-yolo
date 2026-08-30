@@ -33,7 +33,16 @@ test('合并两条待办：保留方继承字段、被并方退场、审计保�
   // quick_add 默认今日到期；继承规则只在 target 无截止时触发，先清空它
   await api.action({ action: 'update', kind: 'todo', id: target.id, due_at: null })
 
-  const res = await api.action({ action: 'consolidate', kind: 'todo', id: source.id, into_id: target.id })
+  const unconfirmed = await api.req.post('/yolo/actions', {
+    data: { action: 'consolidate', kind: 'todo', id: source.id, into_id: target.id },
+  })
+  expect(unconfirmed.status()).toBe(409)
+  expect(await unconfirmed.json()).toMatchObject({ code: 'consolidation_confirmation_required' })
+
+  const res = await api.action({
+    action: 'consolidate', kind: 'todo', id: source.id, into_id: target.id,
+    confirmation: 'CONFIRM_CONSOLIDATE',
+  })
   expect(res.ok).toBe(true)
   const item = res.item as Record<string, any>
   expect(item).toMatchObject({ id: target.id, status: 'pending' })
@@ -41,7 +50,7 @@ test('合并两条待办：保留方继承字段、被并方退场、审计保�
   expect(String(item.detail)).toContain('已并入')
 
   const d = await api.dashboard()
-  const rows = (d.todos ?? []) as { id: string; title: string; status: string }[]
+  const rows = (d.todos ?? []) as { id: string; title: string; status: string; scope_cwd?: string }[]
   const src = rows.find((t) => t.id === source.id)
   const dst = rows.find((t) => t.id === target.id)
   expect(src).toBeUndefined()
@@ -57,6 +66,14 @@ test('合并两条待办：保留方继承字段、被并方退场、审计保�
   expect(ev?.summary).toContain('合并')
   const surfaces = buildDashboardSurfaces(d as YoloDashboardData)
   expect(surfaces.history.recentChanges.some((row) => row.kind === 'todo_consolidated' && row.summary.includes('合并'))).toBe(true)
+
+  const undo = res.undo as Record<string, unknown>
+  const undone = await api.action({ ...undo, scope_cwd: dst!.scope_cwd })
+  expect(undone).toMatchObject({ ok: true, item: { id: source.id, record_status: 'canonical' } })
+  const restored = await api.dashboard()
+  expect(restored.todos.find((todo: Record<string, unknown>) => todo.id === source.id)).toBeTruthy()
+  expect(restored.todos.find((todo: Record<string, unknown>) => todo.id === target.id)).toMatchObject({ due_at: null })
+  expect(restored.ledger.some((event: Record<string, unknown>) => event.kind === 'todo_consolidation_undone')).toBe(true)
 })
 
 test('非法动作被拒绝且落 action_denied 审计（P34）', async () => {

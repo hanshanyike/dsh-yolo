@@ -223,4 +223,21 @@ describe('registerDashboardEndpoint', () => {
     registerDashboardEndpoint({ webServer: server } as never, broken, () => '/tmp/proj')
     expect(res.writeHead).toHaveBeenCalledWith(500, expect.objectContaining({ 'content-type': 'application/json; charset=utf-8' }))
   })
+
+  it('projects R3 duplicate suggestions only while the experimental switch is enabled', async () => {
+    const pair = { a: 't1', b: 't2', aTitle: '发送纪要', bTitle: '发送-纪要' }
+    const yolo = { ...mockYolo(), listDuplicateTodos: () => [pair] } as unknown as Yolo
+    const invoke = async (enabled: boolean): Promise<Record<string, any>> => {
+      let handler: ((req: unknown, res: any) => Promise<void> | void) | undefined
+      const server = { register: vi.fn((opts: { handler: typeof handler }) => { handler = opts.handler }) }
+      registerDashboardEndpoint({ webServer: server } as never, yolo, () => '/tmp/proj', {
+        duplicateSuggestionsEnabled: () => enabled,
+      })
+      const res = { writeHead: vi.fn(), end: vi.fn() }
+      await handler?.({}, res)
+      return JSON.parse(String(res.end.mock.calls[0]?.[0])) as Record<string, any>
+    }
+    expect((await invoke(false)).health.duplicateTodos).toEqual([])
+    expect((await invoke(true)).health.duplicateTodos).toEqual([pair])
+  })
 })

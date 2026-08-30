@@ -98,6 +98,8 @@ UI 套件使用 Playwright 驱动真实 Edge，验证看板打开、捕获、筛
   occurrence、step、多候选与多 mention 均应有 blocked 回归，application receipt 必须与 SQLite 实际结果一致。
 - R2c 纠错必须保留原 resolution/evidence，追加 feedback 并让错误 evidence 退出有效来源和 identity recall；
   自动改期仅在当前值仍等于 receipt 的 `due_after` 时恢复 `due_before`，后续人工编辑必须得到 conflict 保护。
+- R3 合并必须先预览并显式确认；一开一终态/两终态由用户选择保留项。未处理通知、待投递提醒和来源关系
+  随 canonical identity 迁移；撤销恢复原关系，且不得覆盖合并后产生的用户编辑或改写旧审计事件。
 - 每个聚合事项显式携带并保留自己的 `scope_cwd`；未知 scope 被拒绝。
 - 工作区身份只取 canonical cwd；同一 cwd 的非 Git/main/feature 状态和 Windows 等价路径不得重复注册或拆库。
 - 顶层“和助手聊聊”每次显式打开都是新的 ephemeral thread 且不显示 resident 历史；事项讨论按事项 episode 复用，旧请求或轮询结果不能覆盖新对话。

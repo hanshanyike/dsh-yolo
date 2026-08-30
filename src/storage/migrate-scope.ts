@@ -153,7 +153,7 @@ function mergeMeta(db: DB): void {
 }
 
 function normalizeCanonicalRows(db: DB, scopeKey: string, cwd: string): void {
-  for (const table of ['milestones', 'todos', 'goals', 'preferences', 'preference_history', 'events', 'session_summaries', 'pending_reminders', 'recall_log']) {
+  for (const table of ['milestones', 'todos', 'goals', 'preferences', 'preference_history', 'events', 'session_summaries', 'pending_reminders', 'recall_log', 'todo_merge_log']) {
     db.prepare(`UPDATE ${table} SET scope_key = ? WHERE scope_key <> ?`).run(scopeKey, scopeKey)
   }
   db.prepare('UPDATE notifications SET scope_key = ?, scope_cwd = ? WHERE scope_key <> ? OR scope_cwd IS NULL OR scope_cwd <> ?')
@@ -249,7 +249,7 @@ function importAttached(db: DB, scopeKey: string, cwd: string, source: string, w
   ).run(scopeKey)
 
   const notificationColumns = ['id', 'kind', 'title', 'body', 'todo_id', 'scope_cwd', 'created_at', 'seen_at', 'handled_at', 'scope_key']
-  mergeIdTable(db, source, 'notifications', notificationColumns, notificationColumns.filter((c) => c !== 'scope_key' && c !== 'scope_cwd'), (row) => ({
+  const notificationMap = mergeIdTable(db, source, 'notifications', notificationColumns, notificationColumns.filter((c) => c !== 'scope_key' && c !== 'scope_cwd'), (row) => ({
     ...row,
     todo_id: row.todo_id == null ? null : todoMap.get(String(row.todo_id)) ?? row.todo_id,
     scope_cwd: cwd,
@@ -387,12 +387,45 @@ function importAttached(db: DB, scopeKey: string, cwd: string, source: string, w
     }
   }
   const reminderColumns = ['id', 'todo_id', 'milestone_id', 'fire_at', 'payload', 'scope_key', 'session_hint']
-  mergeIdTable(db, source, 'pending_reminders', reminderColumns, reminderColumns.filter((c) => c !== 'scope_key'), (row) => ({
+  const reminderMap = mergeIdTable(db, source, 'pending_reminders', reminderColumns, reminderColumns.filter((c) => c !== 'scope_key'), (row) => ({
     ...row,
     todo_id: row.todo_id == null ? null : todoMap.get(String(row.todo_id)) ?? row.todo_id,
     milestone_id: row.milestone_id == null ? null : milestoneMap.get(String(row.milestone_id)) ?? row.milestone_id,
     scope_key: scopeKey,
   }))
+  if (legacyHasTable(db, 'todo_merge_log')) {
+    const mergeRows = db.prepare(`SELECT * FROM ${LEGACY_ALIAS}.todo_merge_log ORDER BY created_at ASC, id ASC`).all() as
+      Array<Record<string, unknown>>
+    for (const row of mergeRows) {
+      const sourceId = todoMap.get(String(row.source_id))
+      const targetId = todoMap.get(String(row.target_id))
+      if (!sourceId || !targetId) {
+        warnings.push(`${source}: todo merge relation missing ${String(row.id)}`)
+        continue
+      }
+      const id = db.prepare('SELECT 1 FROM todo_merge_log WHERE id = ?').get(row.id as SQLInputValue)
+        ? remappedId(source, 'todo_merge_log', row.id)
+        : String(row.id)
+      try {
+        db.prepare(
+          `INSERT INTO todo_merge_log(
+             id,scope_key,source_id,target_id,source_snapshot_json,target_before_json,target_after_json,
+             notification_ids_json,reminder_ids_json,status,created_at,undone_at
+           ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+        ).run(
+          id, scopeKey, sourceId, targetId,
+          remapJsonText(row.source_snapshot_json, todoMap),
+          remapJsonText(row.target_before_json, todoMap),
+          remapJsonText(row.target_after_json, todoMap),
+          remapJsonText(row.notification_ids_json, notificationMap),
+          remapJsonText(row.reminder_ids_json, reminderMap),
+          row.status as SQLInputValue, row.created_at as SQLInputValue, row.undone_at as SQLInputValue,
+        )
+      } catch {
+        warnings.push(`${source}: active todo merge conflict ${String(row.id)}; kept canonical relation`)
+      }
+    }
+  }
   db.prepare(
     `INSERT INTO recall_log(scope_key, session_id, query, expansions, kept_keys, drop_reasons, rerank_outcome, latency_ms, source, status, error, created_at)
      SELECT ?, session_id, query, expansions, kept_keys, drop_reasons, rerank_outcome, latency_ms, source, status, error, created_at

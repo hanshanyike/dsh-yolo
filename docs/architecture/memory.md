@@ -48,7 +48,7 @@ YOLO 常驻线程和卡片锚定线程属于助手自己的交互表面。它们
 | `yolo_query` | `view`、`status?`、`limit?` | 查询当前工作区的 timeline、todos、goals、milestones 或 preferences |
 | `yolo_action` | `action`、`kind`、条目 `id?`/`title?` 及动作参数 | 把提醒回复或计划更新交给 `applyYoloAction`；与看板 HTTP 动作复用领域状态迁移和事件审计 |
 
-`yolo_action` 的 todo 状态动作包括 `complete`、`start`、`cancel`、`postpone`、`remind_again`、`reopen`，也支持把重复 todo 显式 `consolidate` 到保留项；goal 支持 `set_progress`，milestone 支持 `set_status`。工具声明没有把共享动作分发器的所有看板维护能力都暴露成专用参数，新增动作时应同时核对 `tools.ts` 与 `src/shared/actions.ts`。
+`yolo_action` 的 todo 状态动作包括 `complete`、`start`、`cancel`、`postpone`、`remind_again`、`reopen`，也支持把重复 todo 显式 `consolidate` 到保留项；R3 合并必须携带界面预览后产生的 `CONFIRM_CONSOLIDATE` 确认，并通过 `undo_consolidate` 撤销。goal 支持 `set_progress`，milestone 支持 `set_status`。工具声明没有把共享动作分发器的所有看板维护能力都暴露成专用参数，新增动作时应同时核对 `tools.ts` 与 `src/shared/actions.ts`。
 
 `memory_write` 是直接模型工具入口，不经过 `src/extract/` 的 `shouldDropExtracted` 写质量门。它主要依靠工具描述约束用途，存储层仍会执行各领域对象自己的 upsert 规则。
 

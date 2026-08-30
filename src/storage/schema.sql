@@ -267,6 +267,26 @@ CREATE TABLE IF NOT EXISTS todo_identity_feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_identity_feedback_todo ON todo_identity_feedback(todo_id, created_at DESC);
 
+-- R3 explicit duplicate consolidation ledger. The source/target snapshots and
+-- migrated relation ids support an auditable undo without deleting history.
+CREATE TABLE IF NOT EXISTS todo_merge_log (
+  id                    TEXT PRIMARY KEY,
+  scope_key             TEXT NOT NULL,
+  source_id             TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  target_id             TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  source_snapshot_json  TEXT NOT NULL,
+  target_before_json    TEXT NOT NULL,
+  target_after_json     TEXT NOT NULL,
+  notification_ids_json TEXT NOT NULL,
+  reminder_ids_json     TEXT NOT NULL,
+  status                TEXT NOT NULL CHECK (status IN ('active','undone')),
+  created_at            INTEGER NOT NULL,
+  undone_at             INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_todo_merge_active_source
+  ON todo_merge_log(source_id) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_todo_merge_scope_time ON todo_merge_log(scope_key, created_at DESC);
+
 -- pending reminders queued while no active session (replayed on agent/session-start)
 CREATE TABLE IF NOT EXISTS pending_reminders (
   id           TEXT PRIMARY KEY,     -- ULID

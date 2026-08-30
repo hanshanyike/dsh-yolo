@@ -54,6 +54,7 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   registerDashboardEndpoint(ctx, ctx.yolo, currentCwd, {
     allowAggregate: () => configSource().ui.aggregateAcrossWorkspaces,
     focusDefaultCount: () => configSource().ui.focusDefaultCount,
+    duplicateSuggestionsEnabled: () => configSource().extraction.todoIdentityR3Enabled,
   })
   registerBadgeEndpoint(ctx, ctx.yolo, currentCwd)
   registerNotificationsEndpoint(ctx, ctx.yolo, currentCwd)

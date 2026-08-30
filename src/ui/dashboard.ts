@@ -32,7 +32,7 @@ export function registerDashboardEndpoint(
   ctx: { webServer?: WebServerLike; logger?: { warn?(fmt: string, ...args: unknown[]): void } },
   yolo: Yolo,
   cwd: () => string,
-  opts?: { allowAggregate?: () => boolean; focusDefaultCount?: () => number },
+  opts?: { allowAggregate?: () => boolean; focusDefaultCount?: () => number; duplicateSuggestionsEnabled?: () => boolean },
 ): void {
   ctx.webServer?.register({
     kind: 'prefix',
@@ -64,6 +64,7 @@ export function registerDashboardEndpoint(
         if (list.length === 0) throw new Error(errors[0] ?? 'no workspace could be read')
         const data = aggregateDashboards(list)
         data.focusDefaultCount = opts?.focusDefaultCount?.() ?? 0
+        if (!opts?.duplicateSuggestionsEnabled?.() && data.health) data.health.duplicateTodos = []
         if (errors.length > 0) {
           data.workspaceErrors = errors
           if (data.summary) data.summary.partial = true

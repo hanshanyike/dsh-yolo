@@ -41,7 +41,7 @@ import type {
   TodoResolutionLog,
   TodoIdentityFeedback,
   TodoIdentityFeedbackReason,
-  TodoIdentityReceipt,
+  TodoIdentityReceipt, TodoMergeRecord,
 } from './types.ts'
 
 const now = () => Date.now()
@@ -1265,8 +1265,37 @@ const PRIORITY_RANK: Record<Priority, number> = { low: 0, medium: 1, high: 2, ur
 
 /** Consolidate outcome: the surviving target row, or why the merge was refused. */
 export type TodoConsolidateResult =
-  | { ok: true; target: Todo }
+  | { ok: true; target: Todo; merge: TodoMergeRecord }
   | { ok: false; kind: 'not-found' | 'same-item' | 'terminal'; error: string }
+
+export type TodoConsolidationUndoResult =
+  | { ok: true; source: Todo; target: Todo; merge: TodoMergeRecord; target_restore_status: 'applied' | 'conflict' }
+  | { ok: false; kind: 'not-found' | 'conflict'; error: string }
+
+type MergeTodoSnapshot = Pick<Todo, 'id' | 'title' | 'detail' | 'status' | 'priority' | 'due_at' | 'milestone_id' | 'record_status' | 'merged_into_id'>
+
+function mergeSnapshot(todo: Todo): MergeTodoSnapshot {
+  return {
+    id: todo.id,
+    title: todo.title,
+    detail: todo.detail ?? null,
+    status: todo.status,
+    priority: todo.priority ?? null,
+    due_at: todo.due_at ?? null,
+    milestone_id: todo.milestone_id ?? null,
+    record_status: todo.record_status ?? 'canonical',
+    merged_into_id: todo.merged_into_id ?? null,
+  }
+}
+
+function readStringIds(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
 
 /**
  * Merge a duplicate todo (source) into its keeper (target) — M9 P35, one
@@ -1295,6 +1324,9 @@ export function applyTodoConsolidate(
   if (source.record_status !== 'canonical' || target.record_status !== 'canonical') {
     return { ok: false, kind: 'terminal', error: 'consolidate requires both todos to be canonical records' }
   }
+  if (db.prepare("SELECT 1 FROM todo_merge_log WHERE target_id = ? AND status = 'active' LIMIT 1").get(source.id)) {
+    return { ok: false, kind: 'terminal', error: 'undo active child merges before merging this keeper' }
+  }
   const ts = now()
   const mergeNote = `（已并入「${source.title}」${source.due_at ? `，原截止 ${source.due_at}` : ''}）`
   const mergedDetail = target.detail ? target.detail + mergeNote : mergeNote
@@ -1305,6 +1337,15 @@ export function applyTodoConsolidate(
         ? target.priority
         : source.priority
       : (target.priority ?? source.priority ?? null)
+  const notificationIds = (db.prepare(
+    "SELECT id FROM notifications WHERE todo_id = ? AND handled_at IS NULL ORDER BY created_at ASC, id ASC",
+  ).all(source.id) as Array<{ id: string }>).map((row) => row.id)
+  const reminderIds = (db.prepare(
+    'SELECT id FROM pending_reminders WHERE todo_id = ? ORDER BY fire_at ASC, id ASC',
+  ).all(source.id) as Array<{ id: string }>).map((row) => row.id)
+  const mergeId = genId()
+  const sourceSnapshot = mergeSnapshot(source)
+  const targetBefore = mergeSnapshot(target)
   db.prepare('UPDATE todos SET detail = ?, due_at = ?, priority = ?, updated_at = ? WHERE id = ?').run(
     mergedDetail,
     due,
@@ -1318,7 +1359,21 @@ export function applyTodoConsolidate(
     "UPDATE todos SET record_status = 'merged', merged_into_id = ?, updated_at = ? WHERE id = ? AND record_status = 'canonical'",
   ).run(target.id, ts, source.id)
   db.prepare("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id = ?").run(source.id)
-  markTodoNotificationsHandled(db, source.id)
+  if (notificationIds.length > 0) {
+    db.prepare("UPDATE notifications SET todo_id = ? WHERE todo_id = ? AND handled_at IS NULL").run(target.id, source.id)
+  }
+  if (reminderIds.length > 0) db.prepare('UPDATE pending_reminders SET todo_id = ? WHERE todo_id = ?').run(target.id, source.id)
+  const mergedTarget = db.prepare('SELECT * FROM todos WHERE id = ?').get(target.id) as Todo
+  db.prepare(
+    `INSERT INTO todo_merge_log(
+       id,scope_key,source_id,target_id,source_snapshot_json,target_before_json,target_after_json,
+       notification_ids_json,reminder_ids_json,status,created_at,undone_at
+     ) VALUES(?,?,?,?,?,?,?,?,?,'active',?,NULL)`,
+  ).run(
+    mergeId, target.scope_key, source.id, target.id,
+    JSON.stringify(sourceSnapshot), JSON.stringify(targetBefore), JSON.stringify(mergeSnapshot(mergedTarget)),
+    JSON.stringify(notificationIds), JSON.stringify(reminderIds), ts,
+  )
   const inherited: string[] = []
   if (due && due !== target.due_at) inherited.push(`继承截止 ${due}`)
   if (pri !== target.priority) inherited.push(`优先级升为 ${pri}`)
@@ -1338,7 +1393,99 @@ export function applyTodoConsolidate(
     related_subject_title: target.title,
     change: { record_status: { before: 'canonical', after: 'merged' } },
   })
-  return { ok: true, target: db.prepare('SELECT * FROM todos WHERE id = ?').get(target.id) as Todo }
+  return {
+    ok: true,
+    target: mergedTarget,
+    merge: db.prepare('SELECT * FROM todo_merge_log WHERE id = ?').get(mergeId) as TodoMergeRecord,
+  }
+}
+
+/** Undo one active R3 merge. Relation rows created before the merge return to
+ * the source. Target fields are restored only when they still equal the merge
+ * result, so a later user edit is never overwritten. Old audit events remain. */
+export function undoTodoConsolidation(
+  db: DB,
+  mergeId: string,
+  sessionId?: string | null,
+  scopeKey?: string,
+): TodoConsolidationUndoResult {
+  const merge = db.prepare(
+    "SELECT * FROM todo_merge_log WHERE id = ? AND status = 'active'",
+  ).get(mergeId) as TodoMergeRecord | undefined
+  if (!merge || (scopeKey && merge.scope_key !== scopeKey)) {
+    return { ok: false, kind: 'not-found', error: 'active todo merge not found' }
+  }
+  const source = db.prepare('SELECT * FROM todos WHERE id = ?').get(merge.source_id) as Todo | undefined
+  const target = db.prepare('SELECT * FROM todos WHERE id = ?').get(merge.target_id) as Todo | undefined
+  if (!source || !target) return { ok: false, kind: 'not-found', error: 'merged todo record not found' }
+  if (source.record_status !== 'merged' || source.merged_into_id !== target.id) {
+    return { ok: false, kind: 'conflict', error: 'todo merge relation has changed' }
+  }
+  const sourceBefore = JSON.parse(merge.source_snapshot_json) as MergeTodoSnapshot
+  const targetBefore = JSON.parse(merge.target_before_json) as MergeTodoSnapshot
+  const targetAfter = JSON.parse(merge.target_after_json) as MergeTodoSnapshot
+  const targetUnchanged = target.detail === targetAfter.detail
+    && target.due_at === targetAfter.due_at
+    && target.priority === targetAfter.priority
+    && target.milestone_id === targetAfter.milestone_id
+    && target.status === targetAfter.status
+    && target.title === targetAfter.title
+  const ts = now()
+  db.prepare(
+    `UPDATE todos SET record_status = ?, merged_into_id = ?, updated_at = ? WHERE id = ?`,
+  ).run(sourceBefore.record_status ?? 'canonical', sourceBefore.merged_into_id ?? null, ts, source.id)
+  if (targetUnchanged) {
+    db.prepare(
+      `UPDATE todos SET title=?,detail=?,status=?,priority=?,due_at=?,milestone_id=?,updated_at=? WHERE id=?`,
+    ).run(
+      targetBefore.title, targetBefore.detail ?? null, targetBefore.status, targetBefore.priority ?? null,
+      targetBefore.due_at ?? null, targetBefore.milestone_id ?? null, ts, target.id,
+    )
+  }
+  for (const id of readStringIds(merge.notification_ids_json)) {
+    db.prepare('UPDATE notifications SET todo_id = ? WHERE id = ? AND todo_id = ?').run(source.id, id, target.id)
+  }
+  for (const id of readStringIds(merge.reminder_ids_json)) {
+    db.prepare('UPDATE pending_reminders SET todo_id = ? WHERE id = ? AND todo_id = ?').run(source.id, id, target.id)
+  }
+  const restoredSource = db.prepare('SELECT * FROM todos WHERE id = ?').get(source.id) as Todo
+  const restoredTarget = db.prepare('SELECT * FROM todos WHERE id = ?').get(target.id) as Todo
+  if (restoredSource.status === 'pending' || restoredSource.status === 'in_progress') {
+    syncTodoFts(db, restoredSource.id, restoredSource.title, restoredSource.detail ?? null)
+  } else db.prepare("DELETE FROM yolo_fts WHERE row_type='todo' AND row_id=?").run(restoredSource.id)
+  if (restoredTarget.status === 'pending' || restoredTarget.status === 'in_progress') {
+    syncTodoFts(db, restoredTarget.id, restoredTarget.title, restoredTarget.detail ?? null)
+  } else db.prepare("DELETE FROM yolo_fts WHERE row_type='todo' AND row_id=?").run(restoredTarget.id)
+  db.prepare("UPDATE todo_merge_log SET status='undone', undone_at=? WHERE id=? AND status='active'").run(ts, merge.id)
+  addEvent(db, {
+    kind: 'todo_consolidation_undone',
+    summary: `撤销合并：「${source.title}」←「${target.title}」`,
+    detail: targetUnchanged ? '已恢复合并前字段与关联。' : '已恢复事项关系；保留合并后的用户编辑。',
+    scope_key: merge.scope_key,
+    occurred_at: ts,
+    session_id: sessionId ?? null,
+    source: sessionId ? null : 'manual',
+    subject_type: 'todo',
+    subject_id: source.id,
+    subject_title: source.title,
+    related_subject_type: 'todo',
+    related_subject_id: target.id,
+    related_subject_title: target.title,
+    change: { record_status: { before: 'merged', after: sourceBefore.record_status ?? 'canonical' } },
+  })
+  return {
+    ok: true,
+    source: restoredSource,
+    target: restoredTarget,
+    merge: db.prepare('SELECT * FROM todo_merge_log WHERE id = ?').get(merge.id) as TodoMergeRecord,
+    target_restore_status: targetUnchanged ? 'applied' : 'conflict',
+  }
+}
+
+export function findActiveTodoMerge(db: DB, sourceId: string): TodoMergeRecord | undefined {
+  return db.prepare(
+    "SELECT * FROM todo_merge_log WHERE source_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+  ).get(sourceId) as TodoMergeRecord | undefined
 }
 
 /** Inline-edit a todo's plan fields (v0.3.0 E). Only provided fields change;
@@ -1831,10 +1978,12 @@ export function countEventKindSince(db: DB, kind: string, sinceMs: number): numb
   return row?.n ?? 0
 }
 
-/** Open-todo near-duplicate candidate pairs within a scope, by normalized title. */
+/** R3 near-duplicate candidate pairs within a scope, by normalized title.
+ * Terminal rows are included because their business status must be presented
+ * during confirmation rather than silently excluding a possible duplicate. */
 export function listDuplicateTodos(db: DB, scopeKey: string): DuplicateTodoPair[] {
   const rows = db
-    .prepare("SELECT id, title FROM todos WHERE scope_key = ? AND record_status = 'canonical' AND status IN ('pending','in_progress') ORDER BY created_at ASC")
+    .prepare("SELECT id, title FROM todos WHERE scope_key = ? AND record_status = 'canonical' ORDER BY created_at ASC")
     .all(scopeKey) as Array<{ id: string; title: string }>
   const byNorm = new Map<string, Array<{ id: string; title: string }>>()
   for (const r of rows) {

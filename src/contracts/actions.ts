@@ -15,6 +15,7 @@ export interface YoloActionRequest {
   detail?: string | null
   into_id?: string
   into_title?: string
+  merge_id?: string
   session_id?: string
   session_turn?: number | null
   notif_kind?: string
@@ -54,6 +55,7 @@ export interface YoloUndoDescriptor {
   kind: string
   id: string
   due_at?: string | null
+  merge_id?: string
   expires_at?: number
 }
 

@@ -102,6 +102,7 @@ describe('settings and build-asset contract', () => {
         minTurnChars: 4,
         maxRunsPerDay: 300,
         todoIdentityR2Enabled: false,
+        todoIdentityR3Enabled: false,
       },
       reminder: {
         enabled: true,

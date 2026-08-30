@@ -25,7 +25,7 @@ describe('db + schema', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[]
     const tableNames = names.map((t) => t.name)
-    for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'todo_evidence', 'goals', 'preferences', 'preference_history', 'events', 'extraction_log', 'todo_resolution_log', 'todo_identity_feedback', 'pending_reminders', 'yolo_fts', 'todo_identity_fts']) {
+    for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'todo_evidence', 'goals', 'preferences', 'preference_history', 'events', 'extraction_log', 'todo_resolution_log', 'todo_identity_feedback', 'todo_merge_log', 'pending_reminders', 'yolo_fts', 'todo_identity_fts']) {
       expect(tableNames).toContain(t)
     }
   })

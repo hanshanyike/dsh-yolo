@@ -65,12 +65,16 @@ describe('listDuplicateTodos (repo)', () => {
     expect(pairs[0].bTitle).toBe('提醒我 周三交周报')
   })
 
-  it('ignores terminal todos and different-titled todos', () => {
-    repo.upsertTodo(db, { title: '只做一次', scope_key: SCOPE, source: 'manual' })
+  it('includes terminal/open conflicts for confirmation and ignores different titles', () => {
+    const now = Date.now()
+    db.prepare("INSERT INTO todos(id,title,status,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?)")
+      .run('open', '只做-一次', 'pending', SCOPE, now, now)
+    db.prepare("INSERT INTO todos(id,title,status,scope_key,created_at,updated_at) VALUES(?,?,?,?,?,?)")
+      .run('done', '只做 一次', 'done', SCOPE, now + 1, now + 1)
     repo.upsertTodo(db, { title: '另一个任务', scope_key: SCOPE, source: 'manual' })
-    const done = repo.upsertTodo(db, { title: '只做一次', scope_key: SCOPE, source: 'manual' }).row
-    repo.setTodoStatus(db, done.id, 'done')
-    expect(repo.listDuplicateTodos(db, SCOPE)).toEqual([])
+    expect(repo.listDuplicateTodos(db, SCOPE)).toEqual([
+      { a: 'open', b: 'done', aTitle: '只做-一次', bTitle: '只做 一次' },
+    ])
   })
 })
 

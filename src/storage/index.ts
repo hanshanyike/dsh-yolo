@@ -407,6 +407,13 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.applyTodoConsolidate(h.db, sourceRef, intoRef, sessionId, h.scopeKey)
   }
+  undoTodoConsolidation(cwd: string, mergeId: string, sessionId?: string | null): repo.TodoConsolidationUndoResult {
+    const h = this.resolve(cwd)
+    return repo.undoTodoConsolidation(h.db, mergeId, sessionId, h.scopeKey)
+  }
+  findActiveTodoMerge(cwd: string, sourceId: string) {
+    return repo.findActiveTodoMerge(this.resolve(cwd).db, sourceId)
+  }
   applyGoalProgress(cwd: string, ref: { id?: string; title?: string }, progress: number, note?: string | null, sessionId?: string | null): Goal | null {
     const h = this.resolve(cwd)
     const id = ref.id ?? (ref.title ? repo.findGoalByTitle(h.db, h.scopeKey, ref.title)?.id : undefined)

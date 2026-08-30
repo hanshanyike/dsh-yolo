@@ -219,7 +219,7 @@ export interface YoloMemoryHealth {
   extractionErrorsToday: number
   /** Rejected actions today (action_denied). */
   deniedToday: number
-  /** Open-todo near-duplicate candidate pairs (normalized title collision within scope). */
+  /** R3 canonical-todo duplicate suggestions (normalized title collision within scope). */
   duplicateTodos: DuplicateTodoPair[]
 }/** Cross-workspace aggregate summary (v0.3.0). */
 export interface YoloWorkspaceInfo {
