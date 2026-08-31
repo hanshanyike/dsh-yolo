@@ -155,9 +155,9 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
     [filter, surfaces.plan.all],
   )
 
-  const activeGoals = data.goals.filter((g) => g.status === 'active')
+  const activeGoals = data.goals.filter((g) => !['achieved', 'abandoned'].includes(g.status))
   const openMilestones = data.milestones.filter((m) => m.status === 'planned' || m.status === 'active')
-  const avgGoalPct = Math.round(activeGoals.reduce((a, g) => a + g.progress, 0) / Math.max(activeGoals.length, 1))
+  const openGoalTodos = data.todos.filter((todo) => isTodoOpen(todo.status))
 
   const patch = useCallback((p: Partial<KanbanFilter>) => { patchFilter(p) }, [patchFilter])
 
@@ -317,15 +317,16 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
 
           {surface === 'plan-goals' && (
             <>
-              <div className="heading"><h2>目标与里程碑</h2><span className="hint">{activeGoals.length} 目标 · 平均 {avgGoalPct}% · 进度只读</span></div>
+              <div className="heading"><h2>目标与里程碑</h2><span className="hint">{activeGoals.length} 个长期结果 · 下一步优先</span></div>
               {activeGoals.map((g) => (
                 <GoalBlock
                   key={g.id}
                   goal={g}
-                  milestones={data.milestones.filter((m) => m.title === g.milestone_title)}
+                  milestones={data.milestones.filter((m) => m.id === g.current_milestone?.id || m.title === g.milestone_title)}
+                  availableTodos={openGoalTodos}
                   renaming={renameDraft?.kind === 'goal' && renameDraft.id === g.id}
                   renameValue={renameDraft?.kind === 'goal' && renameDraft.id === g.id ? renameDraft.title : ''}
-                  busy={busyKey === `goal-${g.id}`}
+                  busy={busyKey !== null && busyKey.includes(g.id)}
                   onRenameStart={() => { setRenameDraft({ kind: 'goal', id: g.id, title: g.title }) }}
                   onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
                   onRenameSave={async () => {
@@ -335,6 +336,17 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
                   }}
                   onRenameCancel={() => { setRenameDraft(null) }}
                   onAbandon={() => { void act(`goal-${g.id}`, { action: 'abandon', kind: 'goal', id: g.id, scope_cwd: g.ws?.cwd }) }}
+                  onSetNext={(todoId) => { void act(`goal-${g.id}`, { action: 'set_next', kind: 'goal', id: g.id, todo_id: todoId, scope_cwd: g.ws?.cwd }) }}
+                  onClearNext={() => { void act(`goal-${g.id}`, { action: 'clear_next', kind: 'goal', id: g.id, scope_cwd: g.ws?.cwd }) }}
+                  onOpenDiscussion={() => {
+                    onOpenChat({
+                      title: g.title,
+                      detail: g.completion_criteria ? `完成标准：${g.completion_criteria}` : '目标回顾：进展、卡点和下一步',
+                      scopeCwd: g.ws?.cwd,
+                      source: g.source ? { type: g.source.type, label: g.source.label, sessionId: g.source.session_id, excerpt: g.source.excerpt } : undefined,
+                    })
+                  }}
+                  onStatus={(status) => { void act(`goal-status-${g.id}-${status}`, { action: status === 'achieved' ? 'achieve' : status === 'paused' ? 'pause' : status === 'active' ? 'resume' : 'activate', kind: 'goal', id: g.id, scope_cwd: g.ws?.cwd }) }}
                   onMsDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
                   msPopId={msPop?.id ?? null}
                 />
@@ -361,7 +373,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
               {activeGoals.length === 0 && openMilestones.length === 0 && (
                 <div className="empty">
                   <h4>暂无进行中的目标</h4>
-                  <p>目标与里程碑会出现在这里（进度只读）。</p>
+                  <p>目标会显示当前下一步；没有下一步的目标需要补充安排或暂停。</p>
                 </div>
               )}
             </>
@@ -593,9 +605,10 @@ function TodoEditor({ draft, milestones, busy, confirming, onChange, onSave, onC
   )
 }
 
-function GoalBlock({ goal, milestones, renaming, renameValue, busy, onRenameStart, onRenameChange, onRenameSave, onRenameCancel, onAbandon, onMsDot, msPopId }: {
+function GoalBlock({ goal, milestones, availableTodos, renaming, renameValue, busy, onRenameStart, onRenameChange, onRenameSave, onRenameCancel, onAbandon, onSetNext, onClearNext, onOpenDiscussion, onStatus, onMsDot, msPopId }: {
   goal: YoloDashboardData['goals'][number]
   milestones: YoloMilestoneRow[]
+  availableTodos: YoloTodoRow[]
   renaming: boolean
   renameValue: string
   busy: boolean
@@ -604,10 +617,18 @@ function GoalBlock({ goal, milestones, renaming, renameValue, busy, onRenameStar
   onRenameSave: () => void
   onRenameCancel: () => void
   onAbandon: () => void
+  onSetNext: (todoId: string) => void
+  onClearNext: () => void
+  onOpenDiscussion: () => void
+  onStatus: (status: 'active' | 'paused' | 'achieved') => void
   onMsDot: (m: YoloMilestoneRow, x: number) => void
   msPopId: string | null
 }): JSX.Element {
   const pct = Math.max(0, Math.min(100, goal.progress))
+  const [selectedNext, setSelectedNext] = useState(goal.next_todo_id ?? '')
+  const statusLabel = goal.status === 'candidate' ? '待确认' : goal.status === 'paused' ? '已暂停' : '进行中'
+  const nextTodo = goal.next_todo
+  const availableForNext = availableTodos.filter((todo) => todo.id !== nextTodo?.id)
   return (
     <div className="goal">
       <div className="goal-head">
@@ -625,26 +646,44 @@ function GoalBlock({ goal, milestones, renaming, renameValue, busy, onRenameStar
         ) : (
           <button type="button" className="goal-name" title="点击改名" onClick={onRenameStart}>{goal.title}</button>
         )}
-        <span className="goal-pct">{pct}%</span>
-        <button type="button" className="nact" disabled={busy} title="放弃该目标（进度来自对话陈述，只读）" onClick={onAbandon}>放弃</button>
+        <span className="goal-pct">{pct > 0 ? `${pct}%` : '尚未开始'}</span>
+        <span className="inprog-tag" style={{ marginLeft: 'auto' }}>{statusLabel}</span>
       </div>
-      <div className="goal-track">
-        <div className="goal-fill" style={{ width: `${pct}%` }} />
-        {milestones.map((m) => {
-          const x = dotPos(m.target_date)
-          return (
-            <button
-              key={m.id}
-              type="button"
-              className={`ms-dot${m.status === 'done' ? ' done' : m.status === 'active' ? ' active' : ''}${msPopId === m.id ? ' hl' : ''}`}
-              style={{ left: `${x}%` }}
-              title={m.title}
-              onClick={() => { onMsDot(m, x) }}
-            >
-              <span className="ms-label"><b>{m.title}</b><i>{m.target_date ? m.target_date.slice(5, 10) : ''}</i></span>
-            </button>
-          )
-        })}
+      <div style={{ display: 'grid', gap: 7, marginTop: 8, fontSize: 12, color: 'var(--y-text-2)' }}>
+        <div><span style={{ color: 'var(--y-text-3)' }}>完成标准：</span>{goal.completion_criteria || '尚未设置'}</div>
+        <div><span style={{ color: 'var(--y-text-3)' }}>当前下一步：</span>{nextTodo ? nextTodo.title : '还没有下一步'}</div>
+        {goal.target_date ? <div><span style={{ color: 'var(--y-text-3)' }}>目标日期：</span>{goal.target_date}</div> : null}
+        {goal.next_review_at ? <div><span style={{ color: 'var(--y-text-3)' }}>下次回顾：</span>{goal.next_review_at}</div> : null}
+        {goal.progress_note ? <div><span style={{ color: 'var(--y-text-3)' }}>最近进展：</span>{goal.progress_note}</div> : null}
+        {milestones.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+            <span style={{ color: 'var(--y-text-3)' }}>阶段：</span>
+            {milestones.map((m) => (
+              <button key={m.id} type="button" className={`cap${msPopId === m.id ? ' on' : ''}`} style={{ padding: '2px 7px' }} onClick={() => { onMsDot(m, dotPos(m.target_date)) }}>
+                {m.title}{m.target_date ? ` · ${m.target_date.slice(5, 10)}` : ''}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center', marginTop: 12 }}>
+        <button type="button" className="btn btn-ghost ef-btn" style={{ fontWeight: 700 }} disabled={busy} onClick={goal.status === 'candidate' ? () => { onStatus('active') } : onOpenDiscussion}>
+          {goal.status === 'candidate' ? '开始跟进' : '推进目标'}
+        </button>
+        {!nextTodo && availableForNext.length > 0 ? (
+          <>
+            <select className="ef-sel" aria-label={`为目标「${goal.title}」设置下一步`} value={selectedNext} onChange={(event) => { setSelectedNext(event.target.value) }}>
+              <option value="">选择已有事项</option>
+              {availableForNext.map((todo) => <option key={todo.id} value={todo.id}>{todo.title}</option>)}
+            </select>
+            <button type="button" className="btn btn-ghost ef-btn" disabled={busy || !selectedNext} onClick={() => { onSetNext(selectedNext) }}>设为下一步</button>
+          </>
+        ) : null}
+        {nextTodo ? <button type="button" className="btn btn-ghost ef-btn" disabled={busy} onClick={onClearNext}>清除下一步</button> : null}
+        {goal.status === 'active' ? <button type="button" className="btn btn-ghost ef-btn" disabled={busy} onClick={() => { onStatus('paused') }}>暂停</button> : null}
+        {goal.status === 'paused' ? <button type="button" className="btn btn-ghost ef-btn" disabled={busy} onClick={() => { onStatus('active') }}>恢复</button> : null}
+        {goal.status === 'active' ? <button type="button" className="btn btn-ghost ef-btn" disabled={busy} onClick={() => { onStatus('achieved') }}>达成</button> : null}
+        <button type="button" className="nact" disabled={busy} title="停止继续跟进，但保留目标历史" onClick={onAbandon}>放弃</button>
       </div>
     </div>
   )
