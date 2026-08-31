@@ -472,6 +472,7 @@ export default class Yolo extends Service {
       title: string
       description?: string | null
       milestone_id?: string | null
+      status?: GoalStatus
       completion_criteria?: string | null
       target_date?: string | null
       next_review_at?: string | null
@@ -503,6 +504,12 @@ export default class Yolo extends Service {
   }
   applyGoalAbandon(cwd: string, id: string, sessionId?: string | null): Goal | null {
     return repo.applyGoalAbandon(this.resolve(cwd).db, id, sessionId)
+  }
+  updateGoal(cwd: string, id: string, patch: repo.UpdateGoalInput): Goal | null {
+    return repo.updateGoal(this.resolve(cwd).db, id, patch)
+  }
+  setGoalStatus(cwd: string, id: string, status: GoalStatus): Goal | null {
+    return repo.setGoalStatus(this.resolve(cwd).db, id, status)
   }
   listGoalTodoLinks(cwd: string, goalId: string): GoalTodoLink[] {
     return repo.listGoalTodoLinks(this.resolve(cwd).db, goalId)

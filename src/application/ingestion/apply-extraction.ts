@@ -172,7 +172,32 @@ export function applyExtractionResult(
   }
   for (const goal of result.goals) {
     if (!shouldDropExtracted('goal', goal.title)) {
-      yolo.addGoal(cwd, { title: goal.title, description: goal.description, milestone_id: milestoneId(goal.milestone_title) })
+      const status = goal.management_intent === 'explicit' ? 'active' : 'candidate'
+      const stored = yolo.addGoal(cwd, {
+        title: goal.title,
+        description: goal.description,
+        milestone_id: milestoneId(goal.milestone_title),
+        completion_criteria: goal.completion_hint,
+        target_date: goal.target_date,
+        status,
+        source: 'llm',
+        session_id: source.sessionId,
+        source_excerpt: source.excerpt,
+        source_turn: source.excerpt ? source.turn : null,
+      })
+      if (status === 'active' && stored.status === 'candidate') {
+        const activated = yolo.setGoalStatus(cwd, stored.id, 'active')
+        if (activated) {
+          yolo.addEvent(cwd, {
+            kind: 'goal_status',
+            summary: `目标「${activated.title}」已确认持续跟进`,
+            session_id: source.sessionId,
+            source: null,
+            subject_type: 'goal', subject_id: activated.id, subject_title: activated.title,
+            change: { status: { before: 'candidate', after: 'active' } },
+          })
+        }
+      }
     }
   }
   for (const preference of result.preferences) {

@@ -133,6 +133,27 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(yolo.listEvents(cwd).some((e) => e.summary === 'LLM 决策')).toBe(true)
   })
 
+  it('keeps ambiguous goals as candidates and activates only explicit tracking intent', async () => {
+    const llmJson = JSON.stringify({
+      goals: [
+        { title: '持续推进产品发布', management_intent: 'explicit', completion_hint: '生产环境稳定运行', target_date: '2026-09-30' },
+        { title: '以后学会摄影', management_intent: 'unclear' },
+      ],
+      milestones: [], todos: [], preferences: [], events: [], updates: [],
+    })
+    const { ctx, handlers } = makeCtx(yolo, llmJson)
+    apply(ctx as never)
+    const session = sessionLike('s-candidate-goal', cwd)
+    session.push('user', '我想持续推进产品发布，也许以后学会摄影')
+
+    await handlers.get('agent/turn-stopping')!({ agent: { session }, turn: 1 })
+
+    expect(yolo.listGoals(cwd)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: '持续推进产品发布', status: 'active', completion_criteria: '生产环境稳定运行', target_date: '2026-09-30' }),
+      expect.objectContaining({ title: '以后学会摄影', status: 'candidate' }),
+    ]))
+  })
+
   it('persists one extraction operation only once when the same session turn is replayed', async () => {
     const llmJson = JSON.stringify({
       todos: [{ title: '确认发布前的回归结果', due_at: '2026-09-02' }],

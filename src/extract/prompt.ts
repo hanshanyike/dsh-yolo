@@ -32,7 +32,7 @@ Return ONLY JSON, no commentary, no markdown fence. Schema:
   "session_summary": string | null,
   "milestones": [{"title": string, "target_date": "YYYY-MM-DD" | null, "description": string | null}],
   "todos":      [{"title": string, "due_at": "YYYY-MM-DD" | ISO-8601 datetime with timezone | null, "priority": "low|medium|high|urgent" | null, "milestone_title": string | null}],
-  "goals":      [{"title": string, "description": string | null, "milestone_title": string | null}],
+  "goals":      [{"title": string, "description": string | null, "milestone_title": string | null, "completion_hint": string | null, "target_date": "YYYY-MM-DD" | null, "management_intent": "explicit|inferred|unclear"}],
   "preferences":[{"key": string, "value": string}],
   "events":     [{"kind": "decision|milestone_reached", "summary": string, "occurred_at": "YYYY-MM-DD" | null}],
   "updates":    [
@@ -45,7 +45,9 @@ Return ONLY JSON, no commentary, no markdown fence. Schema:
 What to extract:
 - session_summary: ONE line (<= 24 chars, user's language) naming what this session is about — e.g. "修复登录bug"、"写季度报告"、"聊产品方向". It labels the session as the source badge of daily ledger entries. Update it when the session's focus shifts; null only when the turn carries no hint of a topic.
 - todos: NEW concrete commitments the user made, AND scheduled commitments with a date/time — meetings, trips, appointments, deliveries, deadlines someone must hit. (These are what YOLO reminds about.)
-- goals: NEW long-term aims spanning days/weeks (not single-turn asks).
+- goals: NEW long-term aims spanning days/weeks (not single-turn asks). Set management_intent to explicit only when the user clearly authorizes ongoing tracking, reminders, or review; use inferred for a likely plan without explicit tracking authorization; use unclear for wishes, topics, examples, or ambiguous discussion. Unclear goals must not become active reminders.
+- completion_hint: what the user says would count as reaching the goal, only when stated or directly expressed; do not invent a metric.
+- target_date: the goal's explicit target date when stated; do not copy a todo deadline into the goal.
 - milestones: NEW named project phases or checkpoints with target dates.
 - preferences: ONLY rules that shape HOW YOLO tracks or reminds — e.g. reminder timing ("提前1小时提醒"), working hours ("工作日9-18别打扰"), per-project tracking rules ("这个项目每天跟进"). Store a short stable key (e.g. "reminder-ahead", "working-hours", "project:demo-track"). NEVER store personal taste, communication style, coding style, general facts, or the user's life details.
 - events: decisions made ("we chose SQLite because ..."), milestone completions, and scheduled plans with dates (trips, launches) that belong on a timeline. NOT generic notes.

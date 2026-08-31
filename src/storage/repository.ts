@@ -295,6 +295,7 @@ export function upsertTodo(
     priority?: Priority | null
     due_at?: string | null
     milestone_id?: string | null
+    status?: GoalStatus
     scope_key: string
     source?: Source
     session_id?: string | null
@@ -641,6 +642,7 @@ export function upsertGoal(
     description?: string | null
     scope_key: string
     milestone_id?: string | null
+    status?: GoalStatus
     completion_criteria?: string | null
     target_date?: string | null
     next_review_at?: string | null
@@ -663,7 +665,7 @@ export function upsertGoal(
     title: data.title,
     description: data.description ?? null,
     progress: 0,
-    status: 'active',
+    status: data.status ?? 'active',
     milestone_id: data.milestone_id ?? null,
     completion_criteria: data.completion_criteria ?? null,
     target_date: data.target_date ?? null,
@@ -771,6 +773,20 @@ export function updateGoal(db: DB, id: string, patch: UpdateGoalInput): Goal | n
     db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('goal', id, updated.title, updated.description ?? '')
   }
   return getGoal(db, id)!
+}
+
+/** Change only the explicit goal lifecycle status; callers own event policy. */
+export function setGoalStatus(db: DB, id: string, status: GoalStatus): Goal | null {
+  const current = getGoal(db, id)
+  if (!current || current.status === status) return current ?? null
+  db.prepare('UPDATE goals SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id)
+  if (status === 'active' || status === 'candidate' || status === 'paused') {
+    db.prepare("DELETE FROM yolo_fts WHERE row_type = 'goal' AND row_id = ?").run(id)
+    db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('goal', id, current.title, current.description ?? '')
+  } else {
+    db.prepare("DELETE FROM yolo_fts WHERE row_type = 'goal' AND row_id = ?").run(id)
+  }
+  return getGoal(db, id) ?? null
 }
 
 function goalAndTodo(db: DB, goalId: string, todoId: string): { goal: Goal; todo: Todo } | null {

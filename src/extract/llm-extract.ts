@@ -104,6 +104,11 @@ export function validateExtraction(raw: Partial<ExtractionResult> | null | undef
         title: g.title,
         description: typeof g.description === 'string' ? g.description : null,
         milestone_title: typeof g.milestone_title === 'string' ? g.milestone_title : null,
+        completion_hint: typeof g.completion_hint === 'string' ? g.completion_hint : null,
+        target_date: validDueAt(g.target_date),
+        management_intent: g.management_intent === 'explicit' || g.management_intent === 'inferred' || g.management_intent === 'unclear'
+          ? g.management_intent
+          : 'unclear',
       })
     }
   }

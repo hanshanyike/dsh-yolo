@@ -13,6 +13,9 @@ export interface ExtractedGoal {
   title: string
   description?: string | null
   milestone_title?: string | null
+  completion_hint?: string | null
+  target_date?: string | null
+  management_intent?: 'explicit' | 'inferred' | 'unclear'
 }
 export interface ExtractedPreference {
   key: string
