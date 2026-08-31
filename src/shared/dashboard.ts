@@ -168,6 +168,23 @@ export interface YoloGoalRow {
   /** Owning workspace when aggregated across scopes (v0.3.0). */
   ws?: WorkspaceTag
 }
+export interface YoloGoalHistoryEntry {
+  id: string
+  kind: string
+  summary: string
+  detail?: string | null
+  occurred_at: number
+  source?: YoloItemSource
+}
+
+export interface YoloGoalDetail {
+  goal: YoloGoalRow
+  support_todos: YoloTodoRow[]
+  milestones: YoloMilestoneRow[]
+  recent_progress: YoloGoalHistoryEntry[]
+  history: YoloGoalHistoryEntry[]
+  partial?: boolean
+}
 export interface YoloMilestoneRow {
   id: string
   title: string

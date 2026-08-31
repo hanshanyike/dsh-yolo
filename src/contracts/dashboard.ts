@@ -9,6 +9,8 @@ export type {
   YoloDashboardSummary,
   YoloEventRow,
   YoloGoalRow,
+  YoloGoalDetail,
+  YoloGoalHistoryEntry,
   YoloItemSource,
   YoloLedgerEntry,
   YoloMemoryHealth,

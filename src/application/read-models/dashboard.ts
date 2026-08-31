@@ -11,7 +11,7 @@
 // read-only) and tags each row with its owning workspace.
 
 import type Yolo from '../../storage/index.ts'
-import type { Notification, TimelineEvent, Todo, TodoEvidence } from '../../domain/types.ts'
+import type { Goal, Notification, TimelineEvent, Todo, TodoEvidence } from '../../domain/types.ts'
 import type {
   YoloDashboardData,
   YoloLedgerEntry,
@@ -20,6 +20,8 @@ import type {
   YoloMemoryHealth,
   YoloItemSource,
   YoloTodoRow,
+  YoloGoalRow,
+  YoloMilestoneRow,
   WorkspaceTag,
 } from '../../shared/dashboard.ts'
 import { isTodoOpen, isTodoOverdue, isTodoStale } from '../../shared/dashboard.ts'
@@ -96,6 +98,18 @@ function itemSource(todo: Todo, sessions: Map<string, string>, ws: WorkspaceTag)
   }
   if (todo.source === 'llm') return { type: 'legacy', label: '会话记录', session_id: null, workspace: ws }
   return { type: 'legacy', label: '早期记录', session_id: null, workspace: ws }
+}
+
+function goalSource(goal: Goal, sessions: Map<string, string>, ws: WorkspaceTag): YoloItemSource {
+  if (goal.source === 'manual') return { type: 'manual', label: '快速记一条', session_id: null, workspace: ws }
+  if (goal.source === 'tool') return { type: 'tool', label: '助手操作', session_id: null, workspace: ws }
+  if (goal.session_id) {
+    return {
+      type: 'session', label: sessions.get(goal.session_id) ?? '来源会话', session_id: goal.session_id,
+      excerpt: goal.source_excerpt ?? null, turn: goal.source_turn ?? null, created_at: goal.created_at, workspace: ws,
+    }
+  }
+  return { type: 'legacy', label: goal.source === 'llm' ? '会话记录' : '早期记录', session_id: null, workspace: ws }
 }
 
 function evidenceSource(evidence: TodoEvidence, sessions: Map<string, string>, ws: WorkspaceTag): YoloItemSource {
@@ -296,6 +310,57 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
       },
     }
   })
+  const milestoneRows: YoloMilestoneRow[] = milestones.map((m) => ({
+    id: m.id,
+    title: m.title,
+    status: m.status,
+    target_date: m.target_date,
+    ws: owner,
+  }))
+  const projectedById = new Map(projectedTodos.map((todo) => [todo.id, todo]))
+  const goals: YoloGoalRow[] = yolo.listGoals(cwd).map((g) => {
+    const links = yolo.listGoalTodoLinks?.(cwd, g.id) ?? []
+    const linkedTodos = links
+      .map((link) => projectedById.get(link.todo_id))
+      .filter((todo): todo is YoloTodoRow => todo !== undefined)
+    const nextTodo = g.next_todo_id ? projectedById.get(g.next_todo_id) ?? null : null
+    const goalMilestones = yolo.listGoalMilestones?.(cwd, g.id) ?? []
+    const currentMilestone = goalMilestones.find((m) => m.status === 'active')
+      ?? goalMilestones.find((m) => m.status === 'planned')
+      ?? goalMilestones[0]
+    const attention = g.status === 'active'
+      ? !nextTodo
+        ? 'no_next_step' as const
+        : g.next_review_at && Date.parse(g.next_review_at) <= now
+          ? 'waiting_review' as const
+          : null
+      : null
+    return {
+      id: g.id,
+      title: g.title,
+      description: g.description ?? null,
+      status: g.status,
+      progress: g.progress,
+      completion_criteria: g.completion_criteria ?? null,
+      target_date: g.target_date ?? null,
+      progress_note: g.progress_note ?? null,
+      progress_source: g.progress_source ?? null,
+      next_review_at: g.next_review_at ?? null,
+      next_todo_id: g.next_todo_id ?? null,
+      next_todo: nextTodo,
+      open_todo_count: linkedTodos.filter((todo) => isTodoOpen(todo.status)).length,
+      linked_todo_count: linkedTodos.length,
+      current_milestone: currentMilestone
+        ? milestoneRows.find((row) => row.id === currentMilestone.id) ?? null
+        : null,
+      milestone_count: goalMilestones.length,
+      attention,
+      source: goalSource(g, sessions, owner),
+      updated_at: g.updated_at,
+      milestone_title: g.milestone_id ? msTitle.get(g.milestone_id) ?? null : null,
+      ws: owner,
+    }
+  })
   return {
     scopeKey,
     cwd,
@@ -309,21 +374,8 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
       sourceExcerpt: true,
     },
     todos: projectedTodos,
-    goals: yolo.listGoals(cwd).map((g) => ({
-      id: g.id,
-      title: g.title,
-      status: g.status,
-      progress: g.progress,
-      milestone_title: g.milestone_id ? msTitle.get(g.milestone_id) ?? null : null,
-      ws: owner,
-    })),
-    milestones: milestones.map((m) => ({
-      id: m.id,
-      title: m.title,
-      status: m.status,
-      target_date: m.target_date,
-      ws: owner,
-    })),
+    goals,
+    milestones: milestoneRows,
     events: recentEvents.slice(0, 30).map((e) => ({
       id: e.id,
       kind: e.kind,
