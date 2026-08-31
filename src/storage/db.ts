@@ -188,6 +188,108 @@ function migrate(db: DB): void {
   if (!todoCols.some((c) => c.name === 'merged_into_id')) {
     db.exec('ALTER TABLE todos ADD COLUMN merged_into_id TEXT')
   }
+  // Goal management fields are additive so older workspace databases keep
+  // opening without rebuilding the goals table. The legacy milestone_id is
+  // intentionally retained as a read-only compatibility projection.
+  const goalCols = db.prepare('PRAGMA table_info(goals)').all() as { name: string }[]
+  for (const [name, type] of [
+    ['completion_criteria', 'TEXT'],
+    ['target_date', 'TEXT'],
+    ['next_review_at', 'TEXT'],
+    ['next_todo_id', 'TEXT REFERENCES todos(id) ON DELETE SET NULL'],
+    ['progress_note', 'TEXT'],
+    ['progress_source', 'TEXT'],
+    ['source', 'TEXT'],
+    ['session_id', 'TEXT'],
+    ['source_excerpt', 'TEXT'],
+    ['source_turn', 'INTEGER'],
+  ] as const) {
+    if (!goalCols.some((c) => c.name === name)) db.exec(`ALTER TABLE goals ADD COLUMN ${name} ${type}`)
+  }
+  // Rows from the pre-C1 schema have no trustworthy progress provenance.
+  // Mark only NULL values; fresh schema rows retain the explicit 'none' default.
+  db.exec("UPDATE goals SET progress_source = 'legacy' WHERE progress_source IS NULL")
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS goal_todos (
+      goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+      todo_id TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+      relation TEXT NOT NULL DEFAULT 'support' CHECK (relation IN ('support','next')),
+      is_primary INTEGER NOT NULL DEFAULT 0 CHECK (is_primary IN (0,1)),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (goal_id, todo_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_goal_todos_goal ON goal_todos(goal_id, created_at, todo_id);
+    CREATE INDEX IF NOT EXISTS idx_goal_todos_todo ON goal_todos(todo_id, goal_id);
+    CREATE INDEX IF NOT EXISTS idx_goal_todos_primary ON goal_todos(todo_id, is_primary) WHERE is_primary = 1;
+    CREATE INDEX IF NOT EXISTS idx_goal_todos_next ON goal_todos(goal_id, relation) WHERE relation = 'next';
+    CREATE TABLE IF NOT EXISTS goal_milestones (
+      goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+      milestone_id TEXT NOT NULL REFERENCES milestones(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (goal_id, milestone_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_goal_milestones_goal ON goal_milestones(goal_id, position, milestone_id);
+    CREATE INDEX IF NOT EXISTS idx_goal_milestones_milestone ON goal_milestones(milestone_id, goal_id);
+    CREATE TABLE IF NOT EXISTS goal_evidence (
+      id TEXT PRIMARY KEY,
+      goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+      source_scope_key TEXT NOT NULL,
+      session_id TEXT,
+      turn_seq INTEGER,
+      source_kind TEXT NOT NULL,
+      relation TEXT NOT NULL,
+      excerpt TEXT,
+      occurred_at INTEGER NOT NULL,
+      source_fingerprint TEXT NOT NULL UNIQUE
+    );
+    CREATE INDEX IF NOT EXISTS idx_goal_evidence_goal ON goal_evidence(goal_id, occurred_at ASC);
+    CREATE INDEX IF NOT EXISTS idx_goal_evidence_session ON goal_evidence(session_id, turn_seq) WHERE session_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_goals_target_date ON goals(target_date) WHERE target_date IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_goals_next_review ON goals(next_review_at) WHERE next_review_at IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_goals_next_todo ON goals(next_todo_id) WHERE next_todo_id IS NOT NULL;
+  `)
+  // Idempotent legacy relationship backfill. Joins enforce both sides' scope
+  // and skip dangling legacy references instead of inventing relationships.
+  db.exec(`
+    INSERT OR IGNORE INTO goal_milestones(goal_id, milestone_id, position, created_at)
+    SELECT g.id, g.milestone_id, 0, COALESCE(g.updated_at, g.created_at, 0)
+    FROM goals g
+    JOIN milestones m ON m.id = g.milestone_id AND m.scope_key = g.scope_key
+    WHERE g.milestone_id IS NOT NULL
+  `)
+  db.exec(`
+    INSERT OR IGNORE INTO goal_todos(goal_id, todo_id, relation, is_primary, created_at)
+    SELECT g.id, t.id, 'support', 0, COALESCE(g.updated_at, t.created_at, 0)
+    FROM goals g
+    JOIN todos t ON t.milestone_id = g.milestone_id AND t.scope_key = g.scope_key
+    WHERE g.milestone_id IS NOT NULL
+      AND t.record_status = 'canonical'
+  `)
+  // A migrated next step is safe only when there is one unambiguous earliest
+  // candidate. Same-date ties remain unset so migration never plans for users.
+  const legacyGoals = db.prepare(
+    `SELECT id FROM goals WHERE next_todo_id IS NULL AND milestone_id IS NOT NULL ORDER BY id`,
+  ).all() as Array<{ id: string }>
+  for (const goal of legacyGoals) {
+    const candidates = db.prepare(
+      `SELECT t.id, t.due_at, t.created_at
+       FROM goal_todos gt JOIN todos t ON t.id = gt.todo_id
+       JOIN goals g ON g.id = gt.goal_id
+       WHERE gt.goal_id = ? AND g.scope_key = t.scope_key
+         AND t.record_status = 'canonical' AND t.status IN ('pending','in_progress')
+       ORDER BY CASE WHEN t.due_at IS NULL THEN 1 ELSE 0 END, t.due_at ASC, t.created_at ASC, t.id ASC`,
+    ).all(goal.id) as Array<{ id: string; due_at: string | null; created_at: number }>
+    if (candidates.length === 0) continue
+    const earliestDue = candidates.find((candidate) => candidate.due_at !== null)?.due_at ?? null
+    const earliest = earliestDue === null
+      ? candidates[0]
+      : candidates.find((candidate) => candidate.due_at === earliestDue)
+    if (!earliest) continue
+    if (earliestDue !== null && candidates.filter((candidate) => candidate.due_at === earliestDue).length > 1) continue
+    db.prepare('UPDATE goals SET next_todo_id = ? WHERE id = ? AND next_todo_id IS NULL').run(earliest.id, goal.id)
+    db.prepare("UPDATE goal_todos SET relation = 'next' WHERE goal_id = ? AND todo_id = ?").run(goal.id, earliest.id)
+  }
   const notificationCols = db.prepare('PRAGMA table_info(notifications)').all() as { name: string }[]
   if (!notificationCols.some((c) => c.name === 'seen_at')) {
     db.exec('ALTER TABLE notifications ADD COLUMN seen_at INTEGER')

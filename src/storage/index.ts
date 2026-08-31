@@ -26,7 +26,12 @@ import type { TodoRangeSelector } from '../shared/todo-range.ts'
 import type { DuplicateTodoPair } from './types.ts'
 import type {
   Goal,
+  GoalEvidence,
+  GoalMilestoneLink,
+  GoalProgressSource,
   GoalStatus,
+  GoalTodoLink,
+  GoalTodoRelation,
   HistorySubjectStats,
   HistorySubjectType,
   Milestone,
@@ -463,13 +468,31 @@ export default class Yolo extends Service {
   // ---- goals ----
   addGoal(
     cwd: string,
-    data: { title: string; description?: string | null; milestone_id?: string | null },
+    data: {
+      title: string
+      description?: string | null
+      milestone_id?: string | null
+      completion_criteria?: string | null
+      target_date?: string | null
+      next_review_at?: string | null
+      next_todo_id?: string | null
+      progress_note?: string | null
+      progress_source?: GoalProgressSource
+      source?: Source | null
+      session_id?: string | null
+      source_excerpt?: string | null
+      source_turn?: number | null
+    },
   ): Goal {
     const h = this.resolve(cwd)
     return repo.upsertGoal(h.db, { ...data, scope_key: h.scopeKey })
   }
   setGoalProgress(cwd: string, id: string, progress: number): void {
     repo.setGoalProgress(this.resolve(cwd).db, id, progress)
+  }
+  getGoal(cwd: string, id: string): Goal | null {
+    const h = this.resolve(cwd)
+    return repo.getGoal(h.db, id, h.scopeKey) ?? null
   }
   listGoals(cwd: string, status?: GoalStatus): Goal[] {
     const h = this.resolve(cwd)
@@ -480,6 +503,43 @@ export default class Yolo extends Service {
   }
   applyGoalAbandon(cwd: string, id: string, sessionId?: string | null): Goal | null {
     return repo.applyGoalAbandon(this.resolve(cwd).db, id, sessionId)
+  }
+  listGoalTodoLinks(cwd: string, goalId: string): GoalTodoLink[] {
+    return repo.listGoalTodoLinks(this.resolve(cwd).db, goalId)
+  }
+  listGoalTodos(cwd: string, goalId: string): Todo[] {
+    return repo.listGoalTodos(this.resolve(cwd).db, goalId)
+  }
+  linkGoalTodo(cwd: string, goalId: string, todoId: string, options?: { relation?: GoalTodoRelation; is_primary?: boolean }): GoalTodoLink {
+    return repo.linkGoalTodo(this.resolve(cwd).db, goalId, todoId, options)
+  }
+  unlinkGoalTodo(cwd: string, goalId: string, todoId: string): boolean {
+    return repo.unlinkGoalTodo(this.resolve(cwd).db, goalId, todoId)
+  }
+  setGoalNextTodo(cwd: string, goalId: string, todoId: string): Goal | null {
+    return repo.setGoalNextTodo(this.resolve(cwd).db, goalId, todoId)
+  }
+  clearGoalNextTodo(cwd: string, goalId: string): Goal | null {
+    return repo.clearGoalNextTodo(this.resolve(cwd).db, goalId)
+  }
+  listGoalMilestoneLinks(cwd: string, goalId: string): GoalMilestoneLink[] {
+    return repo.listGoalMilestoneLinks(this.resolve(cwd).db, goalId)
+  }
+  listGoalMilestones(cwd: string, goalId: string): Milestone[] {
+    return repo.listGoalMilestones(this.resolve(cwd).db, goalId)
+  }
+  linkGoalMilestone(cwd: string, goalId: string, milestoneId: string, position?: number): GoalMilestoneLink {
+    return repo.linkGoalMilestone(this.resolve(cwd).db, goalId, milestoneId, position)
+  }
+  unlinkGoalMilestone(cwd: string, goalId: string, milestoneId: string): boolean {
+    return repo.unlinkGoalMilestone(this.resolve(cwd).db, goalId, milestoneId)
+  }
+  addGoalEvidence(cwd: string, data: Omit<repo.AddGoalEvidenceInput, 'goal_id' | 'source_scope_key'> & { goal_id: string }): { row: GoalEvidence; created: boolean } {
+    const h = this.resolve(cwd)
+    return repo.addGoalEvidence(h.db, { ...data, source_scope_key: h.scopeKey })
+  }
+  listGoalEvidence(cwd: string, goalId: string): GoalEvidence[] {
+    return repo.listGoalEvidence(this.resolve(cwd).db, goalId)
   }
 
   // ---- preferences ----

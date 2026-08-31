@@ -172,7 +172,7 @@ describe('yolo_action', () => {
     expect(yolo.listTodoEvidence(cwd, todo.id).filter((row) => row.source_kind === 'assistant_action')).toHaveLength(1)
   })
 
-  it('start / cancel / remind_again work and set_goal progress flips achieved', async () => {
+  it('start / cancel / remind_again work and goal progress does not infer achievement', async () => {
     const { todo: t } = yolo.addTodo(cwd, { title: '修登录', source: 'llm' })
     await tool('yolo_action').execute({ action: 'start', kind: 'todo', id: t.id })
     expect(yolo.listTodos(cwd)[0].status).toBe('in_progress')
@@ -187,7 +187,7 @@ describe('yolo_action', () => {
     yolo.addGoal(cwd, { title: '学会 Rust' })
     const g = (await tool('yolo_action').execute({ action: 'set_progress', kind: 'goal', title: '学会 Rust', progress: 100 })) as { ok: boolean; item: { status: string } }
     expect(g.ok).toBe(true)
-    expect(g.item.status).toBe('achieved')
+    expect(g.item.status).toBe('active')
   })
 
   it('set_status transitions a milestone', async () => {

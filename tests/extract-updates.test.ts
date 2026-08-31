@@ -138,7 +138,7 @@ describe('merge: state updates land on known items', () => {
     expect(kinds).toContain('todo_postponed')
   })
 
-  it('updates goal progress and flips achieved at 100', async () => {
+  it('updates goal progress without inferring achievement at 100', async () => {
     yolo.addGoal(cwd, { title: '学会 Rust' })
     await runTurn(JSON.stringify({ updates: [{ kind: 'goal', match_title: '学会 Rust', progress: 60 }] }))
     expect(yolo.listGoals(cwd)[0].progress).toBe(60)
@@ -146,7 +146,7 @@ describe('merge: state updates land on known items', () => {
     await runTurn(JSON.stringify({ updates: [{ kind: 'goal', match_title: '学会 Rust', progress: 100 }] }), 's2')
     const g = yolo.listGoals(cwd)[0]
     expect(g.progress).toBe(100)
-    expect(g.status).toBe('achieved')
+    expect(g.status).toBe('active')
     expect(yolo.listEvents(cwd).some((e) => e.kind === 'goal_progress' && e.summary.includes('100%'))).toBe(true)
   })
 

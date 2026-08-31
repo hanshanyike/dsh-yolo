@@ -25,7 +25,7 @@ describe('db + schema', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[]
     const tableNames = names.map((t) => t.name)
-    for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'todo_evidence', 'goals', 'preferences', 'preference_history', 'events', 'extraction_log', 'todo_resolution_log', 'todo_identity_feedback', 'todo_merge_log', 'todo_merge_suggestion_feedback', 'pending_reminders', 'yolo_fts', 'todo_identity_fts']) {
+    for (const t of ['meta', 'user_profile', 'milestones', 'todos', 'todo_evidence', 'goals', 'goal_todos', 'goal_milestones', 'goal_evidence', 'preferences', 'preference_history', 'events', 'extraction_log', 'todo_resolution_log', 'todo_identity_feedback', 'todo_merge_log', 'todo_merge_suggestion_feedback', 'pending_reminders', 'yolo_fts', 'todo_identity_fts']) {
       expect(tableNames).toContain(t)
     }
   })
@@ -400,13 +400,13 @@ describe('milestones & goals', () => {
     expect(ms[0].target_date).toBe('2026-09-01')
   })
 
-  it('goal is idempotent (re-insert does not duplicate) and progress clamps', () => {
+  it('goal is idempotent (re-insert does not duplicate), progress clamps, and 100 stays active', () => {
     repo.upsertGoal(db, { title: '掌握 dsh', scope_key: SCOPE })
     repo.upsertGoal(db, { title: '掌握 dsh', scope_key: SCOPE })
     expect(repo.listGoals(db, SCOPE)).toHaveLength(1)
     const g = repo.listGoals(db, SCOPE)[0]
     repo.setGoalProgress(db, g.id, 150)
-    expect(repo.listGoals(db, SCOPE, 'achieved')[0].progress).toBe(100)
+    expect(repo.listGoals(db, SCOPE, 'active')[0].progress).toBe(100)
   })
 
   it('setMilestoneStatus(done) stops matching search (FTS soft-delete)', () => {

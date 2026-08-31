@@ -88,18 +88,70 @@ CREATE INDEX IF NOT EXISTS idx_todo_evidence_session ON todo_evidence(session_id
 
 -- goals
 CREATE TABLE IF NOT EXISTS goals (
-  id           TEXT PRIMARY KEY,     -- ULID
-  title        TEXT NOT NULL,
-  description  TEXT,
-  progress     INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
-  status       TEXT NOT NULL DEFAULT 'active',  -- active|achieved|abandoned
-  milestone_id TEXT REFERENCES milestones(id) ON DELETE SET NULL,
-  scope_key    TEXT NOT NULL,
-  created_at   INTEGER NOT NULL,
-  updated_at   INTEGER NOT NULL
+  id                  TEXT PRIMARY KEY,     -- ULID
+  title               TEXT NOT NULL,
+  description         TEXT,
+  progress            INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  status              TEXT NOT NULL DEFAULT 'active',  -- candidate|active|paused|achieved|abandoned
+  milestone_id        TEXT REFERENCES milestones(id) ON DELETE SET NULL, -- legacy compatibility
+  completion_criteria TEXT,
+  target_date         TEXT,                -- ISO8601 date YYYY-MM-DD (nullable)
+  next_review_at      TEXT,                -- ISO8601 instant (nullable)
+  next_todo_id        TEXT REFERENCES todos(id) ON DELETE SET NULL,
+  progress_note       TEXT,
+  progress_source     TEXT NOT NULL DEFAULT 'none', -- user_claimed|milestone_evidence|legacy|none
+  scope_key           TEXT NOT NULL,
+  source              TEXT,
+  session_id          TEXT,
+  source_excerpt      TEXT,
+  source_turn         INTEGER,
+  created_at          INTEGER NOT NULL,
+  updated_at          INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
 CREATE INDEX IF NOT EXISTS idx_goals_scope  ON goals(scope_key);
+
+-- Direct goal relationships. These are management links and do not own the
+-- lifecycle of the linked todo or milestone.
+CREATE TABLE IF NOT EXISTS goal_todos (
+  goal_id     TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  todo_id     TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  relation    TEXT NOT NULL DEFAULT 'support' CHECK (relation IN ('support','next')),
+  is_primary  INTEGER NOT NULL DEFAULT 0 CHECK (is_primary IN (0,1)),
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (goal_id, todo_id)
+);
+CREATE INDEX IF NOT EXISTS idx_goal_todos_goal ON goal_todos(goal_id, created_at, todo_id);
+CREATE INDEX IF NOT EXISTS idx_goal_todos_todo ON goal_todos(todo_id, goal_id);
+CREATE INDEX IF NOT EXISTS idx_goal_todos_primary ON goal_todos(todo_id, is_primary) WHERE is_primary = 1;
+CREATE INDEX IF NOT EXISTS idx_goal_todos_next ON goal_todos(goal_id, relation) WHERE relation = 'next';
+
+CREATE TABLE IF NOT EXISTS goal_milestones (
+  goal_id      TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  milestone_id TEXT NOT NULL REFERENCES milestones(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  created_at   INTEGER NOT NULL,
+  PRIMARY KEY (goal_id, milestone_id)
+);
+CREATE INDEX IF NOT EXISTS idx_goal_milestones_goal ON goal_milestones(goal_id, position, milestone_id);
+CREATE INDEX IF NOT EXISTS idx_goal_milestones_milestone ON goal_milestones(milestone_id, goal_id);
+
+-- Immutable provenance for goal creation and explicitly recorded progress.
+-- It is evidence only; current state remains in goals and relationship tables.
+CREATE TABLE IF NOT EXISTS goal_evidence (
+  id                 TEXT PRIMARY KEY,
+  goal_id            TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  source_scope_key   TEXT NOT NULL,
+  session_id         TEXT,
+  turn_seq           INTEGER,
+  source_kind        TEXT NOT NULL, -- human|assistant_action|panel_action|extraction
+  relation           TEXT NOT NULL, -- origin|mention|update|progress|review
+  excerpt            TEXT,
+  occurred_at        INTEGER NOT NULL,
+  source_fingerprint TEXT NOT NULL UNIQUE
+);
+CREATE INDEX IF NOT EXISTS idx_goal_evidence_goal ON goal_evidence(goal_id, occurred_at ASC);
+CREATE INDEX IF NOT EXISTS idx_goal_evidence_session ON goal_evidence(session_id, turn_seq) WHERE session_id IS NOT NULL;
 
 -- preferences (key-value, confidence-weighted)
 CREATE TABLE IF NOT EXISTS preferences (

@@ -14,6 +14,13 @@ import type {
   ExtractionStatus,
   ExtractionStrategy,
   Goal,
+  GoalEvidence,
+  GoalEvidenceRelation,
+  GoalEvidenceSourceKind,
+  GoalMilestoneLink,
+  GoalProgressSource,
+  GoalTodoLink,
+  GoalTodoRelation,
   GoalStatus,
   HistorySubjectStats,
   HistorySubjectType,
@@ -629,7 +636,22 @@ function syncTodoFts(db: DB, id: string, title: string, detail: string | null): 
 
 export function upsertGoal(
   db: DB,
-  data: { title: string; description?: string | null; scope_key: string; milestone_id?: string | null },
+  data: {
+    title: string
+    description?: string | null
+    scope_key: string
+    milestone_id?: string | null
+    completion_criteria?: string | null
+    target_date?: string | null
+    next_review_at?: string | null
+    next_todo_id?: string | null
+    progress_note?: string | null
+    progress_source?: GoalProgressSource
+    source?: Source | null
+    session_id?: string | null
+    source_excerpt?: string | null
+    source_turn?: number | null
+  },
 ): Goal {
   const existing = db
     .prepare('SELECT * FROM goals WHERE title = ? AND scope_key = ?')
@@ -643,26 +665,62 @@ export function upsertGoal(
     progress: 0,
     status: 'active',
     milestone_id: data.milestone_id ?? null,
+    completion_criteria: data.completion_criteria ?? null,
+    target_date: data.target_date ?? null,
+    next_review_at: data.next_review_at ?? null,
+    next_todo_id: data.next_todo_id ?? null,
+    progress_note: data.progress_note ?? null,
+    progress_source: data.progress_source ?? 'none',
     scope_key: data.scope_key,
+    source: data.source ?? null,
+    session_id: data.session_id ?? null,
+    source_excerpt: data.source_excerpt ?? null,
+    source_turn: data.source_turn ?? null,
     created_at: ts,
     updated_at: ts,
   }
   db.prepare(
-    `INSERT INTO goals(id, title, description, progress, status, milestone_id, scope_key, created_at, updated_at)
-     VALUES(?,?,?,?,?,?,?,?,?)`,
-  ).run(row.id, row.title, row.description, row.progress, row.status, row.milestone_id, row.scope_key, row.created_at, row.updated_at)
+    `INSERT INTO goals(
+       id, title, description, progress, status, milestone_id,
+       completion_criteria, target_date, next_review_at, next_todo_id,
+       progress_note, progress_source, scope_key, source, session_id,
+       source_excerpt, source_turn, created_at, updated_at
+     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    row.id, row.title, row.description, row.progress, row.status, row.milestone_id,
+    row.completion_criteria, row.target_date, row.next_review_at, row.next_todo_id,
+    row.progress_note, row.progress_source, row.scope_key, row.source, row.session_id,
+    row.source_excerpt, row.source_turn, row.created_at, row.updated_at,
+  )
+  if (row.milestone_id) linkGoalMilestone(db, row.id, row.milestone_id)
+  if (row.next_todo_id) setGoalNextTodo(db, row.id, row.next_todo_id)
   return row
 }
 
-export function setGoalProgress(db: DB, id: string, progress: number): void {
+export function getGoal(db: DB, id: string, scopeKey?: string): Goal | undefined {
+  return (scopeKey
+    ? db.prepare('SELECT * FROM goals WHERE id = ? AND scope_key = ?').get(id, scopeKey)
+    : db.prepare('SELECT * FROM goals WHERE id = ?').get(id)) as Goal | undefined
+}
+
+/** Update progress without inferring goal completion. Only an explicit goal
+ * status action may move a goal to achieved. */
+export function setGoalProgress(
+  db: DB,
+  id: string,
+  progress: number,
+  note?: string | null,
+  progressSource: GoalProgressSource = 'user_claimed',
+): Goal | null {
   const clamped = Math.max(0, Math.min(100, progress))
-  const status: GoalStatus = clamped >= 100 ? 'achieved' : 'active'
-  db.prepare('UPDATE goals SET progress = ?, status = ?, updated_at = ? WHERE id = ?').run(
-    clamped,
-    status,
-    now(),
-    id,
-  )
+  const fields = note === undefined
+    ? 'progress = ?, progress_source = ?, updated_at = ?'
+    : 'progress = ?, progress_note = ?, progress_source = ?, updated_at = ?'
+  const params = note === undefined
+    ? [clamped, progressSource, now(), id]
+    : [clamped, note, progressSource, now(), id]
+  db.prepare(`UPDATE goals SET ${fields} WHERE id = ?`).run(...params)
+  return getGoal(db, id) ?? null
 }
 
 export function listGoals(db: DB, scopeKey: string, status?: GoalStatus): Goal[] {
@@ -676,6 +734,183 @@ export function findGoalByTitle(db: DB, scopeKey: string, title: string): Goal |
   if (!normalize(title)) return undefined
   const rows = db.prepare("SELECT * FROM goals WHERE scope_key = ? AND status = 'active'").all(scopeKey) as Goal[]
   return bestByTitle(rows, title, (s) => (s === 'active' ? 1 : 0))
+}
+
+export interface UpdateGoalInput {
+  title?: string
+  description?: string | null
+  completion_criteria?: string | null
+  target_date?: string | null
+  next_review_at?: string | null
+  progress_note?: string | null
+  progress_source?: GoalProgressSource
+  source?: Source | null
+  session_id?: string | null
+  source_excerpt?: string | null
+  source_turn?: number | null
+}
+
+/** Atomic current-state patch primitive. It deliberately does not emit events
+ * or choose a product state transition; application commands own that policy. */
+export function updateGoal(db: DB, id: string, patch: UpdateGoalInput): Goal | null {
+  const current = getGoal(db, id)
+  if (!current) return null
+  const allowed: Array<keyof UpdateGoalInput> = [
+    'title', 'description', 'completion_criteria', 'target_date', 'next_review_at',
+    'progress_note', 'progress_source', 'source', 'session_id', 'source_excerpt', 'source_turn',
+  ]
+  const entries = allowed.filter((key) => patch[key] !== undefined)
+  if (entries.length === 0) return current
+  const assignments = entries.map((key) => `${key} = ?`).join(', ')
+  const values = entries.map((key) => key === 'title' ? String(patch[key]).trim() : patch[key])
+  if (entries.includes('title') && !values[entries.indexOf('title')]) return current
+  db.prepare(`UPDATE goals SET ${assignments}, updated_at = ? WHERE id = ?`).run(...values, now(), id)
+  if (entries.includes('title')) {
+    const updated = getGoal(db, id)!
+    db.prepare("DELETE FROM yolo_fts WHERE row_type = 'goal' AND row_id = ?").run(id)
+    db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('goal', id, updated.title, updated.description ?? '')
+  }
+  return getGoal(db, id)!
+}
+
+function goalAndTodo(db: DB, goalId: string, todoId: string): { goal: Goal; todo: Todo } | null {
+  const row = db.prepare(
+    `SELECT g.id AS goal_id, g.scope_key AS goal_scope, t.*
+     FROM goals g JOIN todos t ON t.id = ? WHERE g.id = ?`,
+  ).get(todoId, goalId) as (Todo & { goal_id: string; goal_scope: string }) | undefined
+  if (!row || row.goal_scope !== row.scope_key) return null
+  return { goal: getGoal(db, goalId)!, todo: row }
+}
+
+export function listGoalTodoLinks(db: DB, goalId: string): GoalTodoLink[] {
+  return db.prepare('SELECT * FROM goal_todos WHERE goal_id = ? ORDER BY created_at ASC, todo_id ASC').all(goalId) as GoalTodoLink[]
+}
+
+/** List direct supporting todos; the join keeps the relation table separate
+ * from the todo lifecycle and never infers a goal from milestone_id. */
+export function listGoalTodos(db: DB, goalId: string): Todo[] {
+  return db.prepare(
+    `SELECT t.* FROM todos t JOIN goal_todos gt ON gt.todo_id = t.id
+     WHERE gt.goal_id = ? ORDER BY gt.created_at ASC, t.created_at ASC, t.id ASC`,
+  ).all(goalId) as Todo[]
+}
+
+export function linkGoalTodo(
+  db: DB,
+  goalId: string,
+  todoId: string,
+  options: { relation?: GoalTodoRelation; is_primary?: boolean } = {},
+): GoalTodoLink {
+  const pair = goalAndTodo(db, goalId, todoId)
+  if (!pair) throw new Error('goal and todo must exist in the same scope')
+  const existingPrimary = options.is_primary
+    ? db.prepare('SELECT goal_id FROM goal_todos WHERE todo_id = ? AND is_primary = 1 AND goal_id <> ?').get(todoId, goalId) as { goal_id: string } | undefined
+    : undefined
+  if (existingPrimary) throw new Error(`todo already has a primary goal: ${todoId}`)
+  const existing = db.prepare('SELECT * FROM goal_todos WHERE goal_id = ? AND todo_id = ?').get(goalId, todoId) as GoalTodoLink | undefined
+  if (existing) {
+    if (existing.relation !== (options.relation ?? existing.relation) || existing.is_primary !== (options.is_primary ? 1 : existing.is_primary)) {
+      db.prepare('UPDATE goal_todos SET relation = ?, is_primary = ? WHERE goal_id = ? AND todo_id = ?').run(options.relation ?? existing.relation, options.is_primary ? 1 : existing.is_primary, goalId, todoId)
+    }
+    return db.prepare('SELECT * FROM goal_todos WHERE goal_id = ? AND todo_id = ?').get(goalId, todoId) as GoalTodoLink
+  }
+  const row: GoalTodoLink = { goal_id: goalId, todo_id: todoId, relation: options.relation ?? 'support', is_primary: options.is_primary ? 1 : 0, created_at: now() }
+  db.prepare('INSERT INTO goal_todos(goal_id, todo_id, relation, is_primary, created_at) VALUES(?,?,?,?,?)').run(row.goal_id, row.todo_id, row.relation, row.is_primary, row.created_at)
+  return row
+}
+
+export function unlinkGoalTodo(db: DB, goalId: string, todoId: string): boolean {
+  const changed = db.prepare('DELETE FROM goal_todos WHERE goal_id = ? AND todo_id = ?').run(goalId, todoId)
+  if (Number(changed.changes) > 0) {
+    db.prepare('UPDATE goals SET next_todo_id = NULL, updated_at = ? WHERE id = ? AND next_todo_id = ?').run(now(), goalId, todoId)
+  }
+  return Number(changed.changes) > 0
+}
+
+export function setGoalNextTodo(db: DB, goalId: string, todoId: string): Goal | null {
+  const pair = goalAndTodo(db, goalId, todoId)
+  if (!pair || !['pending', 'in_progress'].includes(pair.todo.status)) throw new Error('next todo must be an open todo in the same scope')
+  linkGoalTodo(db, goalId, todoId)
+  db.prepare("UPDATE goal_todos SET relation = CASE WHEN todo_id = ? THEN 'next' ELSE 'support' END WHERE goal_id = ?").run(todoId, goalId)
+  db.prepare('UPDATE goals SET next_todo_id = ?, updated_at = ? WHERE id = ?').run(todoId, now(), goalId)
+  return getGoal(db, goalId) ?? null
+}
+
+export function clearGoalNextTodo(db: DB, goalId: string): Goal | null {
+  db.prepare("UPDATE goal_todos SET relation = 'support' WHERE goal_id = ? AND relation = 'next'").run(goalId)
+  db.prepare('UPDATE goals SET next_todo_id = NULL, updated_at = ? WHERE id = ?').run(now(), goalId)
+  return getGoal(db, goalId) ?? null
+}
+
+export function listGoalMilestoneLinks(db: DB, goalId: string): GoalMilestoneLink[] {
+  return db.prepare('SELECT * FROM goal_milestones WHERE goal_id = ? ORDER BY position ASC, created_at ASC, milestone_id ASC').all(goalId) as GoalMilestoneLink[]
+}
+
+export function listGoalMilestones(db: DB, goalId: string): Milestone[] {
+  return db.prepare(
+    `SELECT m.* FROM milestones m JOIN goal_milestones gm ON gm.milestone_id = m.id
+     WHERE gm.goal_id = ? ORDER BY gm.position ASC, gm.created_at ASC, m.id ASC`,
+  ).all(goalId) as Milestone[]
+}
+
+export function linkGoalMilestone(db: DB, goalId: string, milestoneId: string, position = 0): GoalMilestoneLink {
+  const pair = db.prepare(
+    `SELECT g.scope_key AS goal_scope, m.scope_key AS milestone_scope
+     FROM goals g JOIN milestones m ON m.id = ? WHERE g.id = ?`,
+  ).get(milestoneId, goalId) as { goal_scope: string; milestone_scope: string } | undefined
+  if (!pair || pair.goal_scope !== pair.milestone_scope) throw new Error('goal and milestone must exist in the same scope')
+  const existing = db.prepare('SELECT * FROM goal_milestones WHERE goal_id = ? AND milestone_id = ?').get(goalId, milestoneId) as GoalMilestoneLink | undefined
+  if (existing) return existing
+  const row: GoalMilestoneLink = { goal_id: goalId, milestone_id: milestoneId, position: Math.max(0, Math.round(position)), created_at: now() }
+  db.prepare('INSERT INTO goal_milestones(goal_id, milestone_id, position, created_at) VALUES(?,?,?,?)').run(row.goal_id, row.milestone_id, row.position, row.created_at)
+  return row
+}
+
+export function unlinkGoalMilestone(db: DB, goalId: string, milestoneId: string): boolean {
+  const changed = db.prepare('DELETE FROM goal_milestones WHERE goal_id = ? AND milestone_id = ?').run(goalId, milestoneId)
+  return Number(changed.changes) > 0
+}
+
+export interface AddGoalEvidenceInput {
+  goal_id: string
+  source_scope_key: string
+  session_id?: string | null
+  turn_seq?: number | null
+  source_kind: GoalEvidenceSourceKind
+  relation: GoalEvidenceRelation
+  excerpt?: string | null
+  occurred_at?: number
+  source_fingerprint: string
+}
+
+export function addGoalEvidence(db: DB, data: AddGoalEvidenceInput): { row: GoalEvidence; created: boolean } {
+  const fingerprint = data.source_fingerprint.trim()
+  if (!fingerprint) throw new Error('goal evidence requires source_fingerprint')
+  const existing = db.prepare('SELECT * FROM goal_evidence WHERE source_fingerprint = ?').get(fingerprint) as GoalEvidence | undefined
+  if (existing) {
+    if (existing.goal_id !== data.goal_id) throw new Error(`goal evidence fingerprint conflict: ${fingerprint}`)
+    return { row: existing, created: false }
+  }
+  const row: GoalEvidence = {
+    id: genId(), goal_id: data.goal_id, source_scope_key: data.source_scope_key,
+    session_id: data.session_id ?? null, turn_seq: Number.isInteger(data.turn_seq) ? data.turn_seq as number : null,
+    source_kind: data.source_kind, relation: data.relation, excerpt: normalizeEvidenceExcerpt(data.excerpt),
+    occurred_at: data.occurred_at ?? now(), source_fingerprint: fingerprint,
+  }
+  const inserted = db.prepare(
+    `INSERT OR IGNORE INTO goal_evidence(
+       id, goal_id, source_scope_key, session_id, turn_seq, source_kind,
+       relation, excerpt, occurred_at, source_fingerprint
+     ) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+  ).run(row.id, row.goal_id, row.source_scope_key, row.session_id, row.turn_seq, row.source_kind, row.relation, row.excerpt, row.occurred_at, row.source_fingerprint)
+  if (Number(inserted.changes) > 0) return { row, created: true }
+  const concurrent = db.prepare('SELECT * FROM goal_evidence WHERE source_fingerprint = ?').get(fingerprint) as GoalEvidence
+  if (concurrent.goal_id !== data.goal_id) throw new Error(`goal evidence fingerprint conflict: ${fingerprint}`)
+  return { row: concurrent, created: false }
+}
+
+export function listGoalEvidence(db: DB, goalId: string): GoalEvidence[] {
+  return db.prepare('SELECT * FROM goal_evidence WHERE goal_id = ? ORDER BY occurred_at ASC, rowid ASC').all(goalId) as GoalEvidence[]
 }
 
 // ---------- preferences ----------
@@ -1578,12 +1813,12 @@ export function applyTodoUpdate(
   return db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo
 }
 
-/** Set goal progress with a timeline event; >= 100 flips status to achieved. */
+/** Set goal progress with a timeline event; 100% never infers achievement. */
 export function applyGoalProgress(db: DB, id: string, progress: number, note?: string | null, sessionId?: string | null): Goal | null {
   const g = db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal | undefined
   if (!g) return null
   const clamped = Math.max(0, Math.min(100, Math.round(progress)))
-  setGoalProgress(db, id, clamped)
+  setGoalProgress(db, id, clamped, note, 'user_claimed')
   addEvent(db, {
     kind: 'goal_progress',
     summary: `目标「${g.title}」进度 ${clamped}%`,
@@ -1596,7 +1831,8 @@ export function applyGoalProgress(db: DB, id: string, progress: number, note?: s
     subject_title: g.title,
     change: {
       progress: { before: g.progress, after: clamped },
-      ...(clamped >= 100 && g.status !== 'achieved' ? { status: { before: g.status, after: 'achieved' } } : {}),
+      ...(note !== undefined ? { progress_note: { before: g.progress_note ?? null, after: note } } : {}),
+      progress_source: { before: g.progress_source ?? 'none', after: 'user_claimed' },
     },
   })
   return db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as Goal

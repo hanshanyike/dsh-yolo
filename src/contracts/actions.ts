@@ -12,6 +12,13 @@ export interface YoloActionRequest {
   note?: string
   priority?: string | null
   milestone_title?: string | null
+  /** Goal management fields; optional to preserve older action payloads. */
+  todo_id?: string
+  next_todo_id?: string | null
+  relation?: 'support' | 'next'
+  completion_criteria?: string | null
+  target_date?: string | null
+  next_review_at?: string | null
   detail?: string | null
   into_id?: string
   into_title?: string

@@ -145,8 +145,24 @@ export interface YoloTodoRow {
 export interface YoloGoalRow {
   id: string
   title: string
+  description?: string | null
   status: string
   progress: number
+  completion_criteria?: string | null
+  target_date?: string | null
+  progress_note?: string | null
+  progress_source?: string | null
+  next_review_at?: string | null
+  next_todo_id?: string | null
+  next_todo?: YoloTodoRow | null
+  open_todo_count?: number
+  linked_todo_count?: number
+  current_milestone?: YoloMilestoneRow | null
+  milestone_count?: number
+  attention?: 'no_next_step' | 'waiting_review' | 'blocked' | 'stale' | null
+  source?: YoloItemSource
+  sources?: YoloItemSource[]
+  updated_at?: number
   /** Owning milestone title (M8 plan view); null when unlinked. */
   milestone_title?: string | null
   /** Owning workspace when aggregated across scopes (v0.3.0). */

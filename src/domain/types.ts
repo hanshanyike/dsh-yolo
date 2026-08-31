@@ -10,7 +10,7 @@ export type TodoRecordStatus = 'canonical' | 'merged' | 'rejected'
 export type TodoEvidenceSourceKind = 'human' | 'assistant_action' | 'panel_action' | 'extraction'
 export type TodoEvidenceRelation = 'origin' | 'mention' | 'update' | 'correction' | 'completion_claim' | 'discussion'
 export type TodoResolutionDecision = 'LINK' | 'UPDATE' | 'REOPEN' | 'NEW_OCCURRENCE' | 'CREATE' | 'ATTACH_STEP' | 'ASK' | 'NOOP'
-export type GoalStatus = 'active' | 'achieved' | 'abandoned'
+export type GoalStatus = 'candidate' | 'active' | 'paused' | 'achieved' | 'abandoned'
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
 // M8: state-flow kinds (todo_completed/postponed/…) have no CHECK constraint
 // in schema.sql — the column is free-form by design.
@@ -52,7 +52,7 @@ export type RowType = 'todo' | 'milestone' | 'goal' | 'preference' | 'event'
 export type HistorySubjectType = 'todo' | 'goal' | 'milestone'
 
 /** Where a memory item came from — for audit + dedup. */
-export type Source = 'rule' | 'llm' | 'tool' | 'manual'
+export type Source = 'rule' | 'llm' | 'tool' | 'manual' | 'legacy'
 
 export interface UserProfile {
   display_name?: string | null
@@ -227,9 +227,53 @@ export interface Goal {
   progress: number // 0–100
   status: GoalStatus
   milestone_id?: string | null
+  completion_criteria?: string | null
+  target_date?: string | null
+  next_review_at?: string | null
+  next_todo_id?: string | null
+  progress_note?: string | null
+  progress_source?: GoalProgressSource
   scope_key: string
+  source?: Source | null
+  session_id?: string | null
+  source_excerpt?: string | null
+  source_turn?: number | null
   created_at: number
   updated_at: number
+}
+
+export type GoalProgressSource = 'user_claimed' | 'milestone_evidence' | 'legacy' | 'none'
+export type GoalTodoRelation = 'support' | 'next'
+
+export interface GoalTodoLink {
+  goal_id: string
+  todo_id: string
+  relation: GoalTodoRelation
+  is_primary: number
+  created_at: number
+}
+
+export interface GoalMilestoneLink {
+  goal_id: string
+  milestone_id: string
+  position: number
+  created_at: number
+}
+
+export type GoalEvidenceSourceKind = TodoEvidenceSourceKind
+export type GoalEvidenceRelation = 'origin' | 'mention' | 'update' | 'progress' | 'review'
+
+export interface GoalEvidence {
+  id: string
+  goal_id: string
+  source_scope_key: string
+  session_id?: string | null
+  turn_seq?: number | null
+  source_kind: GoalEvidenceSourceKind
+  relation: GoalEvidenceRelation
+  excerpt?: string | null
+  occurred_at: number
+  source_fingerprint: string
 }
 
 export interface Preference {

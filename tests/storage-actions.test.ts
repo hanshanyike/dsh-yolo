@@ -176,7 +176,7 @@ describe('applyTodoAction', () => {
 })
 
 describe('applyGoalProgress', () => {
-  it('sets progress, writes a goal_progress event, 100 flips to achieved', () => {
+  it('sets progress, writes a goal_progress event, 100 does not infer achievement', () => {
     const g = repo.upsertGoal(db, { title: '学会 Rust', scope_key: SCOPE })
     const mid = repo.applyGoalProgress(db, g.id, 40, '所有权过半')
     expect(mid?.progress).toBe(40)
@@ -184,7 +184,7 @@ describe('applyGoalProgress', () => {
     expect(lastEvent()?.kind).toBe('goal_progress')
     expect(lastEvent()?.summary).toContain('40%')
     const end = repo.applyGoalProgress(db, g.id, 100)
-    expect(end?.status).toBe('achieved')
+    expect(end?.status).toBe('active')
     expect(end?.progress).toBe(100)
   })
 
@@ -235,7 +235,7 @@ describe('fuzzy title finders', () => {
 
   it('findGoalByTitle only matches active goals', () => {
     const g = repo.upsertGoal(db, { title: '完成论文', scope_key: SCOPE })
-    repo.setGoalProgress(db, g.id, 100) // -> achieved
+    repo.applyGoalAbandon(db, g.id)
     expect(repo.findGoalByTitle(db, SCOPE, '完成论文')).toBeUndefined()
   })
 
