@@ -4,11 +4,18 @@
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.5.0-beta.3] — 2026-09-01
+
+### Added
+
+- 新增目标管理闭环：目标可关联多个支持事项和里程碑，并记录完成标准、目标日期、当前下一步、下次回顾和最近进展。
+- 计划 → 目标页面现在展示目标推进上下文，并支持推进目标、暂停、恢复、达成和放弃；目标推进进入独立讨论，不打扰普通工作会话。
+- 长期结果的自动识别增加“待确认 / 进行中”准入，模糊愿望不会直接成为主动跟进目标。
 
 ### Changed
 
 - “更多”菜单中的按日期批量入口改名为“按日期删除事项”，更准确地说明它只负责按截止日期或创建日期批量取消、删除事项。
+- 目标进度不再因为达到 100% 自动宣布达成；只有用户明确确认后才进入“已达成”。事项完成后只会清除目标的下一步引用。
 
 ### Fixed
 
@@ -251,7 +258,8 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
-[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.5.0-beta.2...HEAD
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.5.0-beta.3...HEAD
+[0.5.0-beta.3]: https://github.com/hanshanyike/dsh-yolo/compare/v0.5.0-beta.2...v0.5.0-beta.3
 [0.5.0-beta.2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.5.0-beta.1...v0.5.0-beta.2
 [0.5.0-beta.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc5...v0.5.0-beta.1
 [0.4.0-rc5]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc4...v0.4.0-rc5
