@@ -39,6 +39,7 @@
 | `api/actions-consolidate.spec.ts` · P35 | 合并两条待办：保留方继承字段、被并方退场、审计保留；最近变化是否展示只按产品白名单 | W3 / HIST-01 |
 | `api/actions-consolidate.spec.ts` · P34 | 非法动作 400 且落 `action_denied` 审计——拒绝绝不静默，UI 不把内部审计伪装成用户进展 | W12 / W16 |
 | `api/actions-range.spec.ts` | 日期闭区间批量取消只处理开放规范事项；永久删除要求强确认并清除所有状态的事项与直接关联数据 | W3 / W12 / W13 / W15 |
+| `api/goal-management.spec.ts` | 目标关联多个支持事项、明确下一步、完成事项后不自动达成、目标回顾和 SQLite 事件一致 | GOAL-01 / GOAL-02 / W8 / W12 / W16 |
 
 ### ui 套件 · 浏览器端到端测试
 
@@ -61,6 +62,7 @@
 | `ui/capture-composition.spec.ts` | 中文输入法组合态 Enter 不误提交，组合结束后只新增一次真实事项 | W4 |
 | `ui/settings-card.spec.ts` | 提醒与简报设置可保存并在刷新后回读；设置不泄漏内部实现入口 | W14 |
 | `ui/data-management.spec.ts` | “更多 → 按日期删除事项”进入日期范围预览；批量取消、强确认永久删除、区间外隔离和单条永久删除 | W3 / W12 / W13 / W15 |
+| `ui/goal-management.spec.ts` | 目标卡展示结果、完成标准和目标日期；推进目标打开独立讨论；暂停/恢复状态可见 | W5 / W7 / W12 / W15 |
 
 ### 事项身份与多会话关联验收矩阵（TI）
 

@@ -185,6 +185,23 @@ export function applyExtractionResult(
         source_excerpt: source.excerpt,
         source_turn: source.excerpt ? source.turn : null,
       })
+      const linkedMilestoneId = milestoneId(goal.milestone_title)
+      if (linkedMilestoneId) {
+        const existed = yolo.listGoalMilestoneLinks(cwd, stored.id).some((link) => link.milestone_id === linkedMilestoneId)
+        const link = yolo.linkGoalMilestone(cwd, stored.id, linkedMilestoneId)
+        if (!existed) {
+          yolo.addEvent(cwd, {
+            kind: 'goal_linked',
+            summary: `目标关联里程碑`,
+            detail: JSON.stringify(link),
+            session_id: source.sessionId,
+            source: null,
+            subject_type: 'goal', subject_id: stored.id, subject_title: stored.title,
+            related_subject_type: 'milestone', related_subject_id: linkedMilestoneId,
+            change: { relation: { before: null, after: 'milestone' } },
+          })
+        }
+      }
       if (status === 'active' && stored.status === 'candidate') {
         const activated = yolo.setGoalStatus(cwd, stored.id, 'active')
         if (activated) {

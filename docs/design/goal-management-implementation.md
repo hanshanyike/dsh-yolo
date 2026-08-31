@@ -1,8 +1,8 @@
 # 目标管理实现架构设计
 
-> 状态：架构设计稿，供研发实现前评审
+> 状态：架构设计与实现记录；已完成研发评审，代码已按本稿的最小闭环落地
 >
-> 本文只描述如何在当前 dsh-yolo 架构内实现 [目标管理产品设计](goal-management.md)。它不把产品设计中的未来能力提前当成当前事实，也不引入第二份计划存储。当前代码仍以 `goals`、`milestones`、`todos` 和 `events` 为事实，本文的新增字段、关系表、DTO 和 action 是后续实现契约。
+> 本文只描述如何在当前 dsh-yolo 架构内实现 [目标管理产品设计](goal-management.md)。它不引入第二份计划存储。当前代码以 `goals`、`milestones`、`todos` 和 `events` 为事实，新增字段、关系表、DTO 和 action 已完成实现；文末保留未纳入本轮的后续能力。
 
 ## 0. 设计结论
 
@@ -40,11 +40,11 @@
 | client shell | `YoloPanel`、`KanbanView`、`ForegroundContext`、`ChatPane` | 在现有计划 surface 和单前景模型中增加目标详情/推进 |
 | 提取链 | `agent/pre-step` → `turn/end`/idle → LLM → `applyExtractionResult` | 保留 direct-human 边界，只收紧目标候选和关系准入 |
 
-### 1.2 当前问题必须被实现覆盖
+### 1.2 本轮已覆盖的原有问题
 
-现有目标卡在 `KanbanView.tsx` 中只展示标题、进度、里程碑点和“放弃”，`YoloGoalRow` 也只投影这些字段。`goals.milestone_id` 只能表达一个里程碑，不能表达目标直接关联多个事项。现有 `setGoalProgress` 在进度达到 100 时自动把目标设为 `achieved`，这与“目标达成必须由用户确认”冲突，必须在迁移实现中改变。
+原有目标卡只展示标题、进度、里程碑点和“放弃”，`YoloGoalRow` 也只投影这些字段；本轮已补充目标上下文、关系投影和生命周期动作。旧的 `setGoalProgress` 在进度达到 100 时自动把目标设为 `achieved`，本轮已改为必须显式达成。
 
-现有提取结果允许新目标携带一个 `milestone_title`，但不会表达目标—事项多对多支持关系；`apply-extraction.ts` 也会直接调用 storage façade。实现时必须保留提取的 direct-human 观察边界，并把已接受结果交给 application command，而不是新增一条旁路写入。
+现有提取结果携带的 `milestone_title` 已同步到规范化目标—里程碑关系；目标—事项多对多支持关系由 application action 管理。`apply-extraction.ts` 继续保留 direct-human 观察边界，并把已接受结果交给统一写入路径，不新增旁路事实源。
 
 ## 2. 领域关系与不变量
 
@@ -430,7 +430,7 @@ dashboard contract 递增到下一版本时，新增字段全部保持向后兼�
 
 ### 8.1 本轮应实现
 
-这是可以直接进入研发的最小闭环：
+以下最小闭环已经进入研发实现：
 
 1. 目标可以直接关联多个事项，并在详情中看到支持事项；
 2. 里程碑保持独立阶段事项语义，不实现第一阶段子事项容器；
@@ -511,7 +511,7 @@ dashboard contract 递增到下一版本时，新增字段全部保持向后兼�
 
 ## 10. 分阶段提交计划和风险
 
-每个阶段是一个可独立验证、可单独提交的范围；实现时按仓库约定合入本地 `develop`，但本设计阶段不执行提交或推送。
+每个阶段是一个可独立验证、可单独提交的范围；本轮实现已按仓库约定分阶段提交并合入本地 `develop`，后续变更仍须遵循同一门禁。
 
 | 阶段 | 代码范围 / 交付 | 主要风险 | 进入下一阶段的门禁 |
 |---|---|---|---|

@@ -357,7 +357,9 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
       attention,
       source: goalSource(g, sessions, owner),
       updated_at: g.updated_at,
-      milestone_title: g.milestone_id ? msTitle.get(g.milestone_id) ?? null : null,
+      // Prefer the normalized many-to-many relation; keep the legacy column as
+      // a read fallback while older stores finish migrating.
+      milestone_title: currentMilestone?.title ?? (g.milestone_id ? msTitle.get(g.milestone_id) ?? null : null),
       ws: owner,
     }
   })

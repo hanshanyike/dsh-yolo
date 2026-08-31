@@ -764,6 +764,22 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
     expect(yolo.listEvents(cwd)[0]).toMatchObject({ kind: 'goal_created', subject_type: 'goal' })
   })
 
+  it('links and unlinks a goal milestone through the shared action path', () => {
+    const milestone = yolo.addMilestone(cwd, { title: '灰度验证通过', source: 'manual' })
+    const created = applyYoloAction(yolo, cwd, {
+      action: 'create', kind: 'goal', title: '完成产品发布', milestone_id: milestone.id,
+    })
+    expect(created).toMatchObject({ ok: true })
+    if (!created.ok) throw new Error(created.error)
+    const goalId = String(created.item.id)
+    expect(yolo.listGoalMilestones(cwd, goalId).map((row) => row.id)).toEqual([milestone.id])
+
+    expect(applyYoloAction(yolo, cwd, {
+      action: 'unlink', kind: 'goal', id: goalId, milestone_id: milestone.id,
+    })).toMatchObject({ ok: true, item: { goal_id: goalId, milestone_id: milestone.id, unlinked: true } })
+    expect(yolo.listGoalMilestones(cwd, goalId)).toEqual([])
+  })
+
   it('rejects an unknown milestone title instead of silently unlinking the todo', () => {
     const milestone = yolo.addMilestone(cwd, { title: '产品组验收', source: 'llm' })
     const { todo } = yolo.addTodo(cwd, {

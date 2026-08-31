@@ -48,7 +48,7 @@ YOLO 常驻线程和卡片锚定线程属于助手自己的交互表面。它们
 | `yolo_query` | `view`、`status?`、`limit?` | 查询当前工作区的 timeline、todos、goals、milestones 或 preferences |
 | `yolo_action` | `action`、`kind`、条目 `id?`/`title?` 及动作参数 | 把提醒回复或计划更新交给 `applyYoloAction`；与看板 HTTP 动作复用领域状态迁移和事件审计 |
 
-`yolo_action` 的 todo 状态动作包括 `complete`、`start`、`cancel`、`postpone`、`remind_again`、`reopen`，也支持把重复 todo 显式 `consolidate` 到保留项；R3 合并必须携带界面预览后产生的 `CONFIRM_CONSOLIDATE` 确认，并通过 `undo_consolidate` 撤销。goal 支持 `set_progress`，milestone 支持 `set_status`。工具声明没有把共享动作分发器的所有看板维护能力都暴露成专用参数，新增动作时应同时核对 `tools.ts` 与 `src/shared/actions.ts`。
+`yolo_action` 的 todo 状态动作包括 `complete`、`start`、`cancel`、`postpone`、`remind_again`、`reopen`，也支持把重复 todo 显式 `consolidate` 到保留项；R3 合并必须携带界面预览后产生的 `CONFIRM_CONSOLIDATE` 确认，并通过 `undo_consolidate` 撤销。goal 还支持 `create`、`update`、`link`/`unlink`、`set_next`/`clear_next`、`review`、`activate`、`pause`、`resume`、`achieve`、`abandon` 和 `set_progress`，milestone 支持 `set_status`。工具声明没有把共享动作分发器的所有看板维护能力都暴露成专用参数，新增动作时应同时核对 `tools.ts` 与 `src/shared/actions.ts`。
 
 `memory_write` 是直接模型工具入口，不经过 `src/extract/` 的 `shouldDropExtracted` 写质量门。它主要依靠工具描述约束用途，存储层仍会执行各领域对象自己的 upsert 规则。
 
@@ -259,7 +259,7 @@ prompt 装配
 7. 预算是字符数近似，不是 UTF-8 字节数或精确 token 数。
 8. 语义预热是异步的，首个 prompt 装配可能早于缓存就绪，这是以不阻塞主链路换取的明确取舍。
 9. 当前作用域由最近真实工作 session 的 cwd 决定；记忆模块不会跨所有已知工作区做一次聚合召回。
-10. 达到 100% 的 goal 会变为 achieved，但存储层目前没有在该转换中移除对应 FTS 行，因此仍可能被搜索或动态召回。
+10. goal 的进度达到 100% 不会自动变为 achieved；只有显式 `achieve` action 才结束目标。已达成目标会按既有状态规则退出普通 FTS 召回。
 
 ## 十五、相关测试
 

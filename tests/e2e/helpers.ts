@@ -210,12 +210,24 @@ export async function authorNotification(
  */
 export function createFixtures(api: Api) {
   const todoIds: string[] = []
+  const goalIds: string[] = []
   const notifications: Array<{ id: string; scope_cwd?: string }> = []
   return {
     /** Create a todo through the real endpoint and track it. */
     async todo(title: string, opts: { due?: string } = {}): Promise<Record<string, any>> {
       const item = await createTodo(api, title, opts)
       todoIds.push(String(item.id))
+      return item
+    },
+    /** Create and track a goal through the real endpoint. */
+    async goal(title: string, opts: { completionCriteria?: string; targetDate?: string } = {}): Promise<Record<string, any>> {
+      const result = await api.action({
+        action: 'create', kind: 'goal', title,
+        completion_criteria: opts.completionCriteria,
+        target_date: opts.targetDate,
+      })
+      const item = result.item as Record<string, any>
+      goalIds.push(String(item.id))
       return item
     },
     /** Author a notification card through the real endpoint and track it. */
@@ -252,6 +264,9 @@ export function createFixtures(api: Api) {
       }
       for (const id of [...todoIds].reverse()) {
         await api.action({ action: 'cancel', kind: 'todo', id }).catch(() => {})
+      }
+      for (const id of [...goalIds].reverse()) {
+        await api.action({ action: 'abandon', kind: 'goal', id }).catch(() => {})
       }
     },
   }

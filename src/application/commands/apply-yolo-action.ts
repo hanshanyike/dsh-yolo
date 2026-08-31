@@ -352,6 +352,16 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
       subject_type: 'goal', subject_id: goal.id, subject_title: goal.title,
       change: { status: { before: null, after: goal.status } },
     })
+    if (r.milestone_id) {
+      const link = yolo.linkGoalMilestone(cwd, goal.id, r.milestone_id, r.position ?? 0)
+      yolo.addEvent(cwd, {
+        kind: 'goal_linked', summary: `目标关联里程碑`, detail: JSON.stringify(link),
+        session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+        subject_type: 'goal', subject_id: goal.id, subject_title: goal.title,
+        related_subject_type: 'milestone', related_subject_id: r.milestone_id,
+        change: { relation: { before: null, after: 'milestone' } },
+      })
+    }
     return { ok: true, item: goal as unknown as Record<string, unknown> }
   }
 
@@ -533,9 +543,9 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
   }
 
   if (kind === 'goal' && (action === 'link' || action === 'unlink')) {
-    if (!ref.id || !r.todo_id) return deny(yolo, cwd, r, `${action} requires goal id and todo_id`, 400)
+    if (!ref.id || (!r.todo_id && !r.milestone_id)) return deny(yolo, cwd, r, `${action} requires goal id and todo_id or milestone_id`, 400)
     try {
-      if (action === 'link') {
+      if (r.todo_id && action === 'link') {
         const link = yolo.linkGoalTodo(cwd, ref.id, r.todo_id, {
           relation: r.relation ?? 'support',
           is_primary: r.is_primary === true,
@@ -548,15 +558,42 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
         })
         return { ok: true, item: link as unknown as Record<string, unknown> }
       }
-      const removed = yolo.unlinkGoalTodo(cwd, ref.id, r.todo_id)
-      if (!removed) return deny(yolo, cwd, r, 'goal relation not found', 404, 'goal_relation_not_found')
-      yolo.addEvent(cwd, {
-        kind: 'goal_unlinked', summary: `目标已解除事项关联`, detail: r.todo_id,
-        session_id: sessionId ?? null, source: sessionId ? null : 'manual',
-        subject_type: 'goal', subject_id: ref.id, related_subject_type: 'todo', related_subject_id: r.todo_id,
-        change: { relation: { before: 'support', after: null } },
-      })
-      return { ok: true, item: { goal_id: ref.id, todo_id: r.todo_id, unlinked: true } }
+      if (r.todo_id) {
+        const removed = yolo.unlinkGoalTodo(cwd, ref.id, r.todo_id)
+        if (!removed) return deny(yolo, cwd, r, 'goal relation not found', 404, 'goal_relation_not_found')
+        yolo.addEvent(cwd, {
+          kind: 'goal_unlinked', summary: `目标已解除事项关联`, detail: r.todo_id,
+          session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+          subject_type: 'goal', subject_id: ref.id, related_subject_type: 'todo', related_subject_id: r.todo_id,
+          change: { relation: { before: 'support', after: null } },
+        })
+        return { ok: true, item: { goal_id: ref.id, todo_id: r.todo_id, unlinked: true } }
+      }
+      if (action === 'link' && r.milestone_id) {
+        const existed = yolo.listGoalMilestoneLinks(cwd, ref.id).some((link) => link.milestone_id === r.milestone_id)
+        const link = yolo.linkGoalMilestone(cwd, ref.id, r.milestone_id, r.position ?? 0)
+        if (!existed) {
+          yolo.addEvent(cwd, {
+            kind: 'goal_linked', summary: `目标关联里程碑`, detail: JSON.stringify(link),
+            session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+            subject_type: 'goal', subject_id: ref.id, related_subject_type: 'milestone', related_subject_id: r.milestone_id,
+            change: { relation: { before: null, after: 'milestone' } },
+          })
+        }
+        return { ok: true, item: link as unknown as Record<string, unknown> }
+      }
+      if (r.milestone_id) {
+        const removed = yolo.unlinkGoalMilestone(cwd, ref.id, r.milestone_id)
+        if (!removed) return deny(yolo, cwd, r, 'goal relation not found', 404, 'goal_relation_not_found')
+        yolo.addEvent(cwd, {
+          kind: 'goal_unlinked', summary: `目标已解除里程碑关联`, detail: r.milestone_id,
+          session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+          subject_type: 'goal', subject_id: ref.id, related_subject_type: 'milestone', related_subject_id: r.milestone_id,
+          change: { relation: { before: 'milestone', after: null } },
+        })
+        return { ok: true, item: { goal_id: ref.id, milestone_id: r.milestone_id, unlinked: true } }
+      }
+      return deny(yolo, cwd, r, 'goal relation not found', 404, 'goal_relation_not_found')
     } catch (error) {
       return deny(yolo, cwd, r, error instanceof Error ? error.message : String(error), 409, 'goal_relation_conflict')
     }

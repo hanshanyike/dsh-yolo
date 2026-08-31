@@ -197,6 +197,7 @@ describe('merge: milestone linking', () => {
     const ms = yolo.listMilestones(cwd)[0]
     expect(yolo.listTodos(cwd)[0].milestone_id).toBe(ms.id)
     expect(yolo.listGoals(cwd)[0].milestone_id).toBe(ms.id)
+    expect(yolo.listGoalMilestones(cwd, yolo.listGoals(cwd)[0].id).map((row) => row.id)).toEqual([ms.id])
   })
 
   it('links to a milestone extracted in the same turn (order: milestones first)', async () => {
