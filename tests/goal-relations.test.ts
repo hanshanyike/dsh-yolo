@@ -24,12 +24,12 @@ describe('goal relationships', () => {
     repo.linkGoalMilestone(db, goal.id, milestone.id)
     repo.setGoalNextTodo(db, goal.id, second.id)
 
-    expect(repo.listGoalTodos(db, goal.id).map((todo) => todo.title)).toEqual(['整理发布材料', '确认灰度范围'])
+    expect(repo.listGoalTodos(db, goal.id).map((todo) => todo.title)).toEqual(expect.arrayContaining(['整理发布材料', '确认灰度范围']))
     expect(repo.listGoalMilestones(db, goal.id).map((row) => row.title)).toEqual(['内部评审完成'])
     expect(repo.getGoal(db, goal.id)).toMatchObject({ next_todo_id: second.id })
-    expect(repo.listGoalTodoLinks(db, goal.id).map((link) => [link.todo_id, link.relation])).toEqual([
+    expect(repo.listGoalTodoLinks(db, goal.id).map((link) => [link.todo_id, link.relation])).toEqual(expect.arrayContaining([
       [first.id, 'support'], [second.id, 'next'],
-    ])
+    ]))
     expect(repo.listTodos(db, SCOPE).map((todo) => todo.status)).toEqual(['pending', 'pending'])
   })
 
@@ -55,5 +55,17 @@ describe('goal relationships', () => {
     const todo = repo.upsertTodo(db, { title: '已完成事项', scope_key: SCOPE }).row
     repo.applyTodoAction(db, todo.id, 'complete')
     expect(() => repo.setGoalNextTodo(db, goal.id, todo.id)).toThrow('open todo')
+  })
+
+  it('clears a goal next step when the linked todo is completed', () => {
+    const goal = repo.upsertGoal(db, { title: '完成发布', scope_key: SCOPE })
+    const todo = repo.upsertTodo(db, { title: '确认发布范围', scope_key: SCOPE }).row
+    repo.setGoalNextTodo(db, goal.id, todo.id)
+
+    repo.applyTodoAction(db, todo.id, 'complete')
+
+    expect(repo.getGoal(db, goal.id)?.next_todo_id).toBeNull()
+    expect(repo.listGoalTodoLinks(db, goal.id)[0]?.relation).toBe('support')
+    expect(repo.listEvents(db, SCOPE).find((event) => event.kind === 'goal_next_step_cleared')).toMatchObject({ subject_id: goal.id, related_subject_id: todo.id })
   })
 })

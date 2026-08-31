@@ -633,6 +633,29 @@ function syncTodoFts(db: DB, id: string, title: string, detail: string | null): 
   db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('todo', id, title, detail ?? '')
 }
 
+function clearGoalNextForTodo(db: DB, todoId: string, occurredAt: number, sessionId: string | null, source: Source | null): void {
+  const goals = db.prepare(
+    'SELECT g.id, g.title, g.scope_key FROM goals g WHERE g.next_todo_id = ?',
+  ).all(todoId) as Array<{ id: string; title: string; scope_key: string }>
+  if (goals.length === 0) return
+  db.prepare("UPDATE goal_todos SET relation = 'support' WHERE todo_id = ? AND relation = 'next'").run(todoId)
+  db.prepare('UPDATE goals SET next_todo_id = NULL, updated_at = ? WHERE next_todo_id = ?').run(occurredAt, todoId)
+  for (const goal of goals) {
+    addEvent(db, {
+      kind: 'goal_next_step_cleared',
+      summary: `目标「${goal.title}」的下一步已结束`,
+      detail: `事项 ${todoId} 已完成或取消`,
+      scope_key: goal.scope_key,
+      occurred_at: occurredAt,
+      session_id: sessionId,
+      source,
+      subject_type: 'goal', subject_id: goal.id, subject_title: goal.title,
+      related_subject_type: 'todo', related_subject_id: todoId,
+      change: { next_todo_id: { before: todoId, after: null } },
+    })
+  }
+}
+
 // ---------- goals ----------
 
 export function upsertGoal(
@@ -1488,6 +1511,7 @@ export function applyTodoAction(
       break
     case 'complete':
       setTodoStatus(db, id, 'done')
+      clearGoalNextForTodo(db, id, ts, session_id, source)
       // v0.3.2 feedback: a completed commitment is a "good" signal (P/B1)
       db.prepare('UPDATE todos SET good_count = COALESCE(good_count,0) + 1, updated_at = ?, completed_at = ? WHERE id = ?').run(ts, ts, id)
       addEvent(db, {
@@ -1515,6 +1539,7 @@ export function applyTodoAction(
       break
     case 'cancel':
       setTodoStatus(db, id, 'cancelled')
+      clearGoalNextForTodo(db, id, ts, session_id, source)
       // v0.3.2 feedback: a cancelled commitment is a "stale" signal — it was
       // tracked but did not materialize (P/B1)
       db.prepare('UPDATE todos SET stale_count = COALESCE(stale_count,0) + 1, updated_at = ? WHERE id = ?').run(ts, id)
