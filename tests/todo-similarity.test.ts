@@ -5,6 +5,10 @@ describe('todo merge suggestion similarity', () => {
   it('normalizes common title paraphrases used by manual todos', () => {
     expect(canonicalTodoTitle('提醒我把最终版 PPT 发给开发组'))
       .toBe('把最终版 演示稿 给研发')
+    expect(canonicalTodoTitle('user: 提醒我把最终版 PPT 发给开发组'))
+      .toBe('把最终版 演示稿 给研发')
+    expect(canonicalTodoTitle('user: 明天上午9点提醒我把最终版 PPT 发给开发组'))
+      .toBe('把最终版 演示稿 给研发')
     expect(compareTodoTitles('把演示稿发给研发', '提醒我把演示稿发送给研发组'))
       .toMatchObject({ score: 1 })
   })

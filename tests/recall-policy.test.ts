@@ -253,7 +253,7 @@ describe('recallTodoIdentityCandidates (R1 shadow resolver)', () => {
 
   it('adds protected semantic-title fallback candidates only when R3 asks for them', () => {
     const { row } = repo.upsertTodo(db, { title: '演示稿发给研发组', scope_key: SCOPE })
-    const query = '提醒我把最终版 PPT 发送给开发团队'
+    const query = 'user: 明天上午9点提醒我把最终版 PPT 发送给开发团队'
     expect(recallTodoIdentityCandidates(db, query)).toEqual([])
     expect(recallTodoIdentityCandidates(db, query, 12, true)).toEqual([
       expect.objectContaining({ id: row.id, match_source: 'similarity' }),

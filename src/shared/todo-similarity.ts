@@ -6,18 +6,23 @@ export interface TodoSimilarity {
 }
 
 const OCCURRENCE_MARKERS = /(?:下次|再做一次|再次|每(?:天|周|月|年)|第二次|新一轮|下一轮)/u
+const LEADING_REMINDER_ENVELOPE = /^(?:(?:今天|明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天])(?:上午|下午|晚上|早上|中午)?(?:\s*\d{1,2}(?:点(?:\d{1,2}分?)?|\s+\d{2}))?\s*)?(?:请|提醒我|记得|我要|我得|需要)\s*/u
 
 /** Lightweight fallback for manually-created todos. Model-derived semantic
  * suggestions come from the shadow resolver; this scorer only covers strong
  * lexical paraphrases and deliberately rejects occurrence mismatches. */
 export function canonicalTodoTitle(title: string): string {
   return normalizeTitle(title)
+    // Real host turns are rendered as `user: ...` before resolver recall.
+    // Strip transport-role labels so the user's actual todo wording, rather
+    // than the conversation envelope, participates in similarity scoring.
+    .replace(/^(?:user|human|用户)\s+/u, '')
     .replace(/\b(?:powerpoint|ppt)\b/gu, '演示稿')
     .replace(/(?:幻灯片|演示文稿)/gu, '演示稿')
     .replace(/(?:开发团队|开发小组|开发组|研发团队|研发小组|研发组|开发人员)/gu, '研发')
     .replace(/(?:发送给|发给|同步给|交给)/gu, '给')
     .replace(/(?:访谈记录|采访纪要)/gu, '访谈纪要')
-    .replace(/^(?:请|提醒我|记得|我要|我得|需要)\s*/u, '')
+    .replace(LEADING_REMINDER_ENVELOPE, '')
     .replace(/\s+/gu, ' ')
     .trim()
 }
