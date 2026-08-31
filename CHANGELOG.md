@@ -4,6 +4,8 @@
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [Unreleased]
+
 ## [0.5.0-beta.3] — 2026-09-01
 
 ### Added
