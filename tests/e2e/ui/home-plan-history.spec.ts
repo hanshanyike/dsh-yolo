@@ -165,6 +165,22 @@ test('历史支持按时间和按事项查看同一条变化事实', async ({ pa
   await expect(completedRow.locator('.history-event').filter({ hasText: completedTitle })).toHaveCount(2)
 })
 
+test('历史接口为空时按时间和按事项都显示可操作提示，不泄漏 JSON 解析错误', async ({ page }) => {
+  await page.route('**/yolo/history?**', async (route) => {
+    await route.fulfill({ status: 404, body: '' })
+  })
+
+  await openYoloPanel(page)
+  await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^历史/ }).click()
+  const history = page.getByRole('tablist', { name: '历史范围' })
+  await expect(page.getByRole('alert')).toContainText('历史服务尚未加载，请重启 dsh 后重试。')
+  await expect(page.getByRole('alert')).not.toContainText('JSON')
+
+  await history.getByRole('tab', { name: '按事项', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('历史服务尚未加载，请重启 dsh 后重试。')
+  await expect(page.getByRole('alert')).not.toContainText('Unexpected end')
+})
+
 test('首页在五项压力下只突出一个主项，其余默认收束并保持可达', async ({ page }) => {
   const items = await Promise.all([
     fx.todo(uid('确认客户演示材料已经发出'), { due: yesterdayStr() }),

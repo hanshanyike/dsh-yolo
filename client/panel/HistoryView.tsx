@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { YoloDashboardData, YoloItemSource, YoloTodoRow } from '../../src/contracts/dashboard.ts'
 import type {
-  YoloHistoryData,
   YoloHistoryEvent,
   YoloHistoryItem,
   YoloHistoryStatusFilter,
 } from '../../src/contracts/history.ts'
 import type { HistoryChangeValue } from '../../src/contracts/history.ts'
 import { IcChevron, IcPin } from '../design/icons.tsx'
+import { fetchHistory } from './history-api.ts'
 import { postYoloAction } from './v2/api.ts'
 
 export type HistoryMode = 'timeline' | 'items'
@@ -82,13 +82,6 @@ function historyUrl(
   if (query.trim()) params.set('q', query.trim())
   if (cursor) params.set('cursor', cursor)
   return `/yolo/history?${params.toString()}`
-}
-
-async function fetchHistory(url: string): Promise<YoloHistoryData> {
-  const response = await fetch(url, { headers: { accept: 'application/json' }, cache: 'no-store' })
-  const body = await response.json() as YoloHistoryData & { error?: string }
-  if (!response.ok) throw new Error(body.error ?? `历史加载失败（${response.status}）`)
-  return body
 }
 
 function EventRows({

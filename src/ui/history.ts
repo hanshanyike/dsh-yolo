@@ -16,11 +16,15 @@ function send(
   status: number,
   body: unknown,
 ): void {
+  // Serialize before committing response headers. If an unexpected value is
+  // not JSON-safe, the outer request handler can still return a complete JSON
+  // error instead of leaving the browser with an empty, half-written body.
+  const payload = JSON.stringify(body)
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-cache',
   })
-  res.end(JSON.stringify(body))
+  res.end(payload)
 }
 
 function decodeCursor(value: string | null): HistoryCursorData | undefined {

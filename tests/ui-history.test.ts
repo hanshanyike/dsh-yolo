@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type Yolo from '../src/storage/index.ts'
 import type { Goal, HistorySubjectStats, Milestone, TimelineEvent, Todo } from '../src/storage/types.ts'
-import { buildHistoryData } from '../src/ui/history.ts'
+import { buildHistoryData, registerHistoryEndpoint } from '../src/ui/history.ts'
 
 const WS_A = 'D:\\work\\alpha'
 const WS_B = 'D:\\work\\beta'
@@ -117,5 +117,31 @@ describe('history projection', () => {
     expect(partial.events.map((row) => row.id)).toEqual(['a-new', 'a-old', 'legacy'])
     expect(partial.partial).toBe(true)
     expect(partial.workspaceErrors).toEqual(['beta: locked'])
+  })
+
+  it('returns a complete JSON error before committing headers when projection serialization fails', () => {
+    const yolo = {
+      ...fakeYolo(),
+      listEventsUntil: () => [event('not-json-safe', 400, { detail: 1n as never })],
+    } as unknown as Yolo
+    let handler: ((req: unknown, res: unknown) => void) | undefined
+    registerHistoryEndpoint({
+      webServer: {
+        register: (options: { handler: (req: unknown, res: unknown) => void }) => { handler = options.handler },
+      } as never,
+    }, yolo, () => WS_A)
+
+    const statuses: number[] = []
+    const bodies: string[] = []
+    handler?.({ method: 'GET', url: '/yolo/history?view=timeline' }, {
+      writeHead: (status: number) => {
+        if (statuses.length > 0) throw new Error('headers already sent')
+        statuses.push(status)
+      },
+      end: (body?: string) => { bodies.push(body ?? '') },
+    })
+
+    expect(statuses).toEqual([400])
+    expect(JSON.parse(bodies[0] ?? '')).toMatchObject({ code: 'history_request_failed' })
   })
 })

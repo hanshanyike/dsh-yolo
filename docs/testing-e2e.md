@@ -60,7 +60,7 @@
 | `ui/dashboard-trust.spec.ts` · `api/dashboard-scope.spec.ts` · `tests/dashboard-aggregate.test.ts` | UI 中 partial 只提示一次且动作固定原 `scope_cwd`；API 验证真实 owner/未知 scope recovery；同 id 双 scope 与 all-fail recovery 由确定性聚合单测验证 | W13 / WS-01～03 |
 | `ui/capture-composition.spec.ts` | 中文输入法组合态 Enter 不误提交，组合结束后只新增一次真实事项 | W4 |
 | `ui/settings-card.spec.ts` | 提醒与简报设置可保存并在刷新后回读；设置不泄漏内部实现入口 | W14 |
-| `ui/data-management.spec.ts` | 更多菜单进入日期范围预览；批量取消、强确认永久删除、区间外隔离和单条永久删除 | W3 / W12 / W13 / W15 |
+| `ui/data-management.spec.ts` | “更多 → 按日期处理事项”进入日期范围预览；批量取消、强确认永久删除、区间外隔离和单条永久删除 | W3 / W12 / W13 / W15 |
 
 ### 事项身份与多会话关联验收矩阵（TI）
 

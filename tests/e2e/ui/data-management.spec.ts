@@ -20,7 +20,7 @@ test.afterEach(async () => { await fx.dispose() })
 
 async function openDataManager(page: import('@playwright/test').Page): Promise<import('@playwright/test').Locator> {
   await page.getByRole('button', { name: '更多看板操作' }).click()
-  await page.getByRole('menuitem', { name: '事项数据管理' }).click()
+  await page.getByRole('menuitem', { name: '按日期处理事项' }).click()
   const dialog = page.getByRole('dialog', { name: '按日期处理事项' })
   await expect(dialog).toBeVisible()
   return dialog
@@ -46,7 +46,7 @@ test('W3/W12/W13/W15: 日期范围先预览，批量取消后可永久删除', a
   expect(dashboard.todos.find((row: Record<string, any>) => row.id === first.id)?.status).toBe('cancelled')
   expect(dashboard.todos.find((row: Record<string, any>) => row.id === second.id)?.status).toBe('cancelled')
   expect(dashboard.todos.find((row: Record<string, any>) => row.id === outside.id)?.status).toBe('pending')
-  await dialog.getByRole('button', { name: '关闭数据管理' }).click()
+  await dialog.getByRole('button', { name: '关闭按日期处理事项' }).click()
   await expect(page.getByRole('button', { name: '更多看板操作' })).toBeFocused()
 
   await page.setViewportSize({ width: 400, height: 800 })

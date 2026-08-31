@@ -151,10 +151,10 @@ export function DataManagementDialog({ data, onClose, onRefresh }: DataManagemen
       >
         <header>
           <div>
-            <span className="eyebrow">数据管理</span>
+            <span className="eyebrow">批量处理</span>
             <h2 id="data-manager-title">按日期处理事项</h2>
           </div>
-          <button type="button" disabled={busy} onClick={onClose} aria-label="关闭数据管理">关闭</button>
+          <button type="button" disabled={busy} onClick={onClose} aria-label="关闭按日期处理事项">关闭</button>
         </header>
 
         <div className="data-manager-body">
@@ -162,7 +162,7 @@ export function DataManagementDialog({ data, onClose, onRefresh }: DataManagemen
             <legend>处理方式</legend>
             <label className={action === 'bulk_cancel' ? 'on' : undefined}>
               <input type="radio" name="range-action" checked={action === 'bulk_cancel'} onChange={() => { setAction('bulk_cancel'); setResult(null) }} />
-              <span><b>取消事项</b><small>移到“已取消”，保留审计，可逐条重新打开</small></span>
+              <span><b>取消事项</b><small>移到“已取消”，保留变化记录，可逐条重新打开</small></span>
             </label>
             <label className={action === 'bulk_delete' ? 'on danger' : 'danger'}>
               <input type="radio" name="range-action" checked={action === 'bulk_delete'} onChange={() => { setAction('bulk_delete'); setResult(null) }} />
