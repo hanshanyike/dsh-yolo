@@ -128,6 +128,27 @@ test('一级信息架构只有首页、计划、历史，计划提供四个明�
   await expect(page.getByRole('listitem', { name: `任务：${upcomingTitle}` })).toBeVisible()
 })
 
+test('计划中的进行中事项只在圆形控件内显示半圆状态', async ({ page }) => {
+  const title = uid('继续推进客户回访安排')
+  const todo = await fx.todo(title, { due: todayStr() })
+  await api.action({ action: 'start', kind: 'todo', id: todo.id })
+  await isolateDashboardToTodos(page, new Set([String(todo.id)]))
+
+  await openYoloPanel(page)
+  await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^计划/ }).click()
+  await page.getByRole('tablist', { name: '计划范围' }).getByRole('tab', { name: '今天', exact: true }).click()
+  const row = page.getByRole('listitem', { name: `任务：${title}` })
+  await expect(row).toHaveClass(/inprog/u)
+  const control = row.locator('.ctl')
+  await expect(control).toHaveCSS('position', 'relative')
+  const pseudo = await control.evaluate((element) => {
+    const style = getComputedStyle(element, '::after')
+    return { position: style.position, height: style.height, width: style.width }
+  })
+  expect(pseudo.position).toBe('absolute')
+  expect(Number.parseFloat(pseudo.height)).toBeLessThan(Number.parseFloat(pseudo.width))
+})
+
 test('已有工作区的安静首页不拿无日期积压填充，也不退回首次使用空状态', async ({ page }) => {
   const backlogTitle = uid('整理以后可能采用的访谈方法')
   const backlog = await fx.todo(backlogTitle)
@@ -152,10 +173,19 @@ test('历史支持按时间和按事项查看同一条变化事实', async ({ pa
   await expect(history.getByRole('tab', { name: '按时间', exact: true })).toHaveAttribute('aria-selected', 'true')
   await expect(history.getByRole('tab', { name: '按事项', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '时间线', exact: true })).toBeVisible()
+  const historyDate = page.locator('[aria-label="历史日期"]')
+  await expect(historyDate).toHaveValue(todayStr())
+  await expect(page.getByRole('button', { name: '全部时间', exact: true })).toBeVisible()
   await expect(page.locator('.history-event').filter({
     has: page.locator('.history-event__kind', { hasText: '完成' }),
     hasText: completedTitle,
   })).toBeVisible()
+
+  await historyDate.fill(yesterdayStr())
+  await expect(historyDate).toHaveValue(yesterdayStr())
+  await expect(page.getByRole('button', { name: '今天', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '今天', exact: true }).click()
+  await expect(historyDate).toHaveValue(todayStr())
 
   await history.getByRole('tab', { name: '按事项', exact: true }).click()
   await page.getByRole('group', { name: '历史事项状态' }).getByRole('button', { name: '已完成', exact: true }).click()

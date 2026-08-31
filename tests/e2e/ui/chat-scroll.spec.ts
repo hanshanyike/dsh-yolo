@@ -75,6 +75,10 @@ test('W5/W7/W10: assistant chat 长历史在 split/focus 各自 owner 跟随最�
   // preserve an input the user is actively using.
   await input.focus()
   await expect(input).toBeFocused()
+  await input.fill('第一行消息\n第二行消息')
+  await expect.poll(() => input.evaluate((element) => element.tagName)).toBe('TEXTAREA')
+  await expect.poll(() => input.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(36)
+  await input.fill('')
   await scrollToTop(splitOwner)
   await expect(input).toBeFocused()
   const splitPoll = page.waitForResponse('**/yolo/session/messages**')

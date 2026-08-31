@@ -23,5 +23,7 @@ describe('chat scroll policy', () => {
     expect(YOLO_CSS).toMatch(/\.p-body\s*\{[^}]*overflow-y:\s*auto/u)
     expect(YOLO_CSS).toMatch(/\.dock-msgs\s*\{[^}]*overflow-y:\s*auto/u)
     expect(YOLO_CSS).toContain('.chat-newest')
+    expect(YOLO_CSS).toMatch(/\.dock-input input, \.yolo-scope \.dock-input textarea[^}]*max-height:\s*120px/u)
+    expect(YOLO_CSS).toMatch(/\.capture--foot \.cap-input[^}]*max-height:\s*160px/u)
   })
 })

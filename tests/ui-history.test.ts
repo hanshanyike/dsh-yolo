@@ -40,8 +40,8 @@ function fakeYolo(failures = new Set<string>()): Yolo {
     [WS_A]: [{ subject_type: 'todo', subject_id: 'todo-a', change_count: 2, last_changed_at: 400 }],
     [WS_B]: [{ subject_type: 'todo', subject_id: 'todo-b', change_count: 1, last_changed_at: 300 }],
   }
-  const visible = (cwd: string, openedAt: number, limit: number, kinds: readonly string[]) => (events[cwd] ?? [])
-    .filter((row) => row.occurred_at <= openedAt && kinds.includes(row.kind))
+  const visible = (cwd: string, openedAt: number, limit: number, kinds: readonly string[], fromAt?: number, toAt?: number) => (events[cwd] ?? [])
+    .filter((row) => row.occurred_at <= openedAt && (fromAt === undefined || row.occurred_at >= fromAt) && (toAt === undefined || row.occurred_at < toAt) && kinds.includes(row.kind))
     .sort((left, right) => right.occurred_at - left.occurred_at)
     .slice(0, limit)
   return {
@@ -52,12 +52,27 @@ function fakeYolo(failures = new Set<string>()): Yolo {
     },
     listSessionSummaries: () => [],
     listEventsUntil: visible,
-    listEventsForSubject: (cwd: string, type: string, id: string, openedAt: number, limit: number, kinds: readonly string[]) =>
-      visible(cwd, openedAt, limit, kinds).filter((row) => row.subject_type === type && row.subject_id === id),
-    listEventSubjectStats: (cwd: string) => stats[cwd] ?? [],
-    listLatestEventsBySubject: (cwd: string, openedAt: number, kinds: readonly string[]) => {
+    listEventsForSubject: (cwd: string, type: string, id: string, openedAt: number, limit: number, kinds: readonly string[], fromAt?: number, toAt?: number) =>
+      visible(cwd, openedAt, limit, kinds, fromAt, toAt).filter((row) => row.subject_type === type && row.subject_id === id),
+    listEventSubjectStats: (cwd: string, openedAt: number, kinds: readonly string[], fromAt?: number, toAt?: number) => {
+      if (fromAt === undefined && toAt === undefined) return stats[cwd] ?? []
+      const grouped = new Map<string, HistorySubjectStats>()
+      for (const row of visible(cwd, openedAt, 100, kinds, fromAt, toAt)) {
+        if (!row.subject_type || !row.subject_id) continue
+        const key = `${row.subject_type}:${row.subject_id}`
+        const current = grouped.get(key)
+        grouped.set(key, {
+          subject_type: row.subject_type,
+          subject_id: row.subject_id,
+          change_count: (current?.change_count ?? 0) + 1,
+          last_changed_at: Math.max(current?.last_changed_at ?? 0, row.occurred_at),
+        })
+      }
+      return [...grouped.values()]
+    },
+    listLatestEventsBySubject: (cwd: string, openedAt: number, kinds: readonly string[], fromAt?: number, toAt?: number) => {
       const seen = new Set<string>()
-      return visible(cwd, openedAt, 100, kinds).filter((row) => {
+      return visible(cwd, openedAt, 100, kinds, fromAt, toAt).filter((row) => {
         const key = `${row.subject_type}:${row.subject_id}`
         if (!row.subject_id || seen.has(key)) return false
         seen.add(key)
@@ -102,6 +117,19 @@ describe('history projection', () => {
       view: 'items', cursor: { openedAt: 450, offset: 0 }, limit: 10, status: 'ended',
     })
     expect(ended.items.map((row) => row.id)).toEqual(['todo-b'])
+  })
+
+  it('applies a selected local-day range before timeline pagination and item grouping', () => {
+    const data = buildHistoryData(fakeYolo(), WS_A, {
+      view: 'timeline', cursor: { openedAt: 450, offset: 0 }, limit: 10, fromAt: 200, toAt: 401,
+    })
+    expect(data.events.map((row) => row.id)).toEqual(['a-new', 'b-mid'])
+
+    const items = buildHistoryData(fakeYolo(), WS_A, {
+      view: 'items', cursor: { openedAt: 450, offset: 0 }, limit: 10, fromAt: 200, toAt: 401,
+    })
+    expect(items.items.map((row) => row.id)).toEqual(['todo-a', 'todo-b'])
+    expect(items.items[0]).toMatchObject({ change_count: 1, last_changed_at: 400, latest_summary: '变化 a-new' })
   })
 
   it('loads one subject in its owning workspace and reports partial aggregate reads', () => {

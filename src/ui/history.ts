@@ -43,6 +43,19 @@ function requestUrl(req: unknown): URL {
   return new URL(raw, 'http://localhost')
 }
 
+function localDayBounds(day: string): { fromAt: number; toAt: number } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(day)) return null
+  const start = new Date(`${day}T00:00:00`)
+  const [year, month, date] = day.split('-').map(Number)
+  if (!Number.isFinite(start.getTime())
+    || start.getFullYear() !== year
+    || start.getMonth() + 1 !== month
+    || start.getDate() !== date) return null
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  return { fromAt: start.getTime(), toAt: end.getTime() }
+}
+
 /** Thin HTTP adapter for the application-owned product history projection. */
 export function registerHistoryEndpoint(ctx: { webServer?: WebServerLike }, yolo: Yolo, cwd: () => string): void {
   ctx.webServer?.register({
@@ -73,6 +86,12 @@ export function registerHistoryEndpoint(ctx: { webServer?: WebServerLike }, yolo
         send(res, 400, { error: 'invalid status', code: 'invalid_status' })
         return
       }
+      const dayParam = url.searchParams.get('day')
+      const dayBounds = dayParam === null ? undefined : localDayBounds(dayParam)
+      if (dayParam !== null && !dayBounds) {
+        send(res, 400, { error: 'invalid day', code: 'invalid_day' })
+        return
+      }
       try {
         const subjectTypeParam = url.searchParams.get('subject_type')
         const subjectType = subjectTypeParam && ['todo', 'goal', 'milestone'].includes(subjectTypeParam)
@@ -88,6 +107,8 @@ export function registerHistoryEndpoint(ctx: { webServer?: WebServerLike }, yolo
           subjectType,
           subjectId: url.searchParams.get('subject_id') ?? undefined,
           subjectCwd: url.searchParams.get('scope_cwd') ?? undefined,
+          fromAt: dayBounds?.fromAt,
+          toAt: dayBounds?.toAt,
         }))
       } catch (error) {
         send(res, 400, { error: error instanceof Error ? error.message : String(error), code: 'history_request_failed' })

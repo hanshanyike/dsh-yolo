@@ -7,7 +7,7 @@ export type HistorySection = 'timeline' | 'items'
 export type BoardRoute =
   | { page: 'home' }
   | { page: 'plan'; section: PlanSection }
-  | { page: 'history'; section: HistorySection; day?: string }
+  | { page: 'history'; section: HistorySection; day?: string | null }
 
 export interface PanelItemRef {
   id: string

@@ -93,12 +93,14 @@ function buildWorkspaceItems(
   stats: readonly HistorySubjectStats[],
   latest: readonly TimelineEvent[],
   activeMergeSourceIds: ReadonlySet<string>,
+  visibleSubjects?: ReadonlySet<string>,
 ): YoloHistoryItem[] {
   const statMap = new Map(stats.map((row) => [statsKey(row.subject_type, row.subject_id), row]))
   const latestMap = new Map(latest
     .filter((row) => row.subject_type && row.subject_id)
     .map((row) => [statsKey(row.subject_type!, row.subject_id!), row]))
   const ws = { slug: scopeKey, label, cwd }
+  const include = (type: HistorySubjectType, id: string): boolean => !visibleSubjects || visibleSubjects.has(statsKey(type, id))
   const common = (type: HistorySubjectType, id: string, title: string, status: string, updatedAt: number): Omit<YoloHistoryItem, 'record_status' | 'merged_into_id'> => {
     const stat = statMap.get(statsKey(type, id))
     const recent = latestMap.get(statsKey(type, id))
@@ -112,14 +114,14 @@ function buildWorkspaceItems(
     }
   }
   return [
-    ...todos.filter((row) => row.record_status !== 'rejected').map((row) => ({
+    ...todos.filter((row) => row.record_status !== 'rejected' && include('todo', row.id)).map((row) => ({
       ...common('todo', row.id, row.title, row.status, row.updated_at),
       record_status: row.record_status ?? 'canonical',
       merged_into_id: row.merged_into_id ?? null,
       merge_undo_available: activeMergeSourceIds.has(row.id),
     })),
-    ...goals.map((row) => common('goal', row.id, row.title, row.status, row.updated_at)),
-    ...milestones.map((row) => common('milestone', row.id, row.title, row.status, row.updated_at)),
+    ...goals.filter((row) => include('goal', row.id)).map((row) => common('goal', row.id, row.title, row.status, row.updated_at)),
+    ...milestones.filter((row) => include('milestone', row.id)).map((row) => common('milestone', row.id, row.title, row.status, row.updated_at)),
   ]
 }
 
@@ -136,6 +138,8 @@ export function buildHistoryData(
     subjectType?: HistorySubjectType
     subjectId?: string
     subjectCwd?: string
+    fromAt?: number
+    toAt?: number
   } = {},
 ): YoloHistoryData {
   const view = options.view ?? 'timeline'
@@ -164,18 +168,21 @@ export function buildHistoryData(
         const label = labels.get(workspaceIdentity(meta.cwd)) ?? workspaceLabel(meta.cwd, meta.scopeKey)
         const sessions = new Map(yolo.listSessionSummaries(meta.cwd).map((row) => [row.session_id, row.summary]))
         if (view === 'timeline') {
-          events.push(...yolo.listEventsUntil(meta.cwd, openedAt, fetchLimit, VISIBLE_KINDS)
+          events.push(...yolo.listEventsUntil(meta.cwd, openedAt, fetchLimit, VISIBLE_KINDS, options.fromAt, options.toAt)
             .map((event) => eventItem(event, meta.cwd, meta.scopeKey, label, sessions)))
           return
         }
         if (view === 'subject') {
           if (!options.subjectType || !options.subjectId) throw new Error('subject_type and subject_id are required')
-          events.push(...yolo.listEventsForSubject(meta.cwd, options.subjectType, options.subjectId, openedAt, fetchLimit, VISIBLE_KINDS)
+          events.push(...yolo.listEventsForSubject(meta.cwd, options.subjectType, options.subjectId, openedAt, fetchLimit, VISIBLE_KINDS, options.fromAt, options.toAt)
             .map((event) => eventItem(event, meta.cwd, meta.scopeKey, label, sessions)))
           return
         }
-        const stats = yolo.listEventSubjectStats(meta.cwd, openedAt, VISIBLE_KINDS)
-        const latest = yolo.listLatestEventsBySubject(meta.cwd, openedAt, VISIBLE_KINDS)
+        const stats = yolo.listEventSubjectStats(meta.cwd, openedAt, VISIBLE_KINDS, options.fromAt, options.toAt)
+        const latest = yolo.listLatestEventsBySubject(meta.cwd, openedAt, VISIBLE_KINDS, options.fromAt, options.toAt)
+        const visibleSubjects = options.fromAt !== undefined || options.toAt !== undefined
+          ? new Set(stats.map((row) => statsKey(row.subject_type, row.subject_id)))
+          : undefined
         const todoRecords = yolo.listTodoRecords(meta.cwd)
         const activeMergeSourceIds = new Set(todoRecords
           .filter((row) => row.record_status === 'merged' && yolo.findActiveTodoMerge?.(meta.cwd, row.id))
@@ -183,6 +190,7 @@ export function buildHistoryData(
         items.push(...buildWorkspaceItems(
           meta.cwd, meta.scopeKey, label,
           todoRecords, yolo.listGoals(meta.cwd), yolo.listMilestones(meta.cwd), stats, latest, activeMergeSourceIds,
+          visibleSubjects,
         ))
       })
     } catch (error) {

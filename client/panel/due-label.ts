@@ -15,7 +15,9 @@ function addLocalDays(day: string, amount: number): string {
 
 /** User-facing due label. Persisted ISO stays in <time dateTime>, never in text. */
 export function formatDueLabel(value: string | null | undefined, now = new Date()): string {
-  if (!value) return '不限期'
+  // Keep the persisted null distinct from a user-edited date, but use the
+  // product's default visible date so the row does not look unbounded.
+  if (!value) return '今天'
   const parsed = parseDueAt(value)
   if (!parsed) return '截止时间待确认'
 

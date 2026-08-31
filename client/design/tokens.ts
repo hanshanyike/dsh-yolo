@@ -193,7 +193,7 @@ export const YOLO_CSS = `
 /* capture-first command bar (below tabs, above the scroll face) */
 .yolo-scope .capture { flex: none; display: flex; align-items: center; padding: 12px 16px 10px; background: var(--y-bg); }
 .yolo-scope .capture--top { gap: 8px; border-bottom: 1px solid var(--y-line); }
-.yolo-scope .capture--foot { border-top: 1px solid var(--y-line); padding: 10px 16px; }
+.yolo-scope .capture--foot { align-items: flex-end; border-top: 1px solid var(--y-line); padding: 10px 16px; }
 .yolo-scope .capture-in { display: flex; align-items: center; gap: 9px; height: 44px; padding: 0 12px 0 14px; flex: 1; min-width: 0; background: var(--y-surface); border: 1.5px solid var(--y-line-strong); border-radius: var(--y-r-md); transition: border-color var(--y-dur-2), box-shadow var(--y-dur-2); }
 .yolo-scope .capture-in.focus { border-color: var(--y-accent); box-shadow: 0 0 0 3px var(--y-accent-soft); }
 .yolo-scope .capture-in svg { color: var(--y-text-3); flex: none; }
@@ -207,7 +207,7 @@ export const YOLO_CSS = `
 .yolo-scope .capture-submit:hover:not(:disabled) { background: color-mix(in srgb, var(--y-focus) 18%, var(--y-surface)); border-color: var(--y-focus); }
 .yolo-scope .capture-submit:disabled { opacity: .45; cursor: default; }
 /* full-chat footer keeps a boxed input */
-.yolo-scope .capture--foot .cap-input { height: 36px; padding: 0 12px; background: var(--y-surface-2); border: 1px solid transparent; border-radius: var(--y-r-md); transition: all var(--y-dur-2); }
+.yolo-scope .capture--foot .cap-input { min-height: 36px; max-height: 160px; height: auto; padding: 7px 12px; background: var(--y-surface-2); border: 1px solid transparent; border-radius: var(--y-r-md); line-height: 20px; resize: none; overflow-y: auto; transition: all var(--y-dur-2); }
 .yolo-scope .capture--foot .cap-input::placeholder { color: var(--y-text-3); }
 .yolo-scope .capture--foot .cap-input:focus { background: var(--y-bg); border-color: var(--y-line-strong); box-shadow: 0 0 0 3px var(--y-accent-soft); }
 
@@ -306,7 +306,7 @@ export const YOLO_CSS = `
 .yolo-scope .ctl:hover { border-color: var(--y-accent); box-shadow: 0 0 0 3px var(--y-accent-soft); }
 .yolo-scope .row.overdue .ctl { border-color: var(--y-danger); }
 /* in-progress: a solid amber half-disc (no gradient) — the 关注/进行中 point */
-.yolo-scope .row.inprog .ctl { border-color: var(--y-accent); overflow: hidden; }
+.yolo-scope .row.inprog .ctl { position: relative; border-color: var(--y-accent); overflow: hidden; }
 .yolo-scope .row.inprog .ctl::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: var(--y-accent); }
 .yolo-scope .ctl.done { background: var(--y-ok); border-color: var(--y-ok); color: var(--y-bg); }
 .yolo-scope .row-main { flex: 1; min-width: 0; }
@@ -401,9 +401,16 @@ export const YOLO_CSS = `
 /* History is one fact stream with two projections: chronological and by subject. */
 .yolo-scope .history-view { width: 100%; min-width: 0; padding-bottom: 48px; color: var(--y-text-1); }
 .yolo-scope .history-view__header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 8px 0 14px; border-bottom: 1px solid var(--y-line); }
+.yolo-scope .history-view__header > div:first-child { min-width: 0; }
 .yolo-scope .history-view__header h2 { margin: 0; font-size: 20px; line-height: 1.35; }
 .yolo-scope .history-view__header p { margin: 4px 0 0; color: var(--y-text-2); font-size: 13px; }
-.yolo-scope .history-view__header input { width: min(240px, 42%); min-height: 36px; padding: 0 10px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface); color: var(--y-text-1); font: inherit; }
+.yolo-scope .history-view__filters { display: flex; align-items: flex-end; justify-content: flex-end; gap: 7px; min-width: 0; flex-wrap: wrap; }
+.yolo-scope .history-view__filters label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; color: var(--y-text-3); font-size: 12px; white-space: nowrap; }
+.yolo-scope .history-view__filters input { min-height: 36px; padding: 0 10px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface); color: var(--y-text-1); font: inherit; }
+.yolo-scope .history-view__filters input[type="date"] { width: 145px; }
+.yolo-scope .history-view__filters input[type="search"] { width: min(190px, 22vw); }
+.yolo-scope .history-time-toggle { min-height: 36px; padding: 0 10px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface); color: var(--y-text-2); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.yolo-scope .history-time-toggle:hover { background: var(--y-surface-2); color: var(--y-text-1); }
 .yolo-scope .history-status { padding: 12px 0 4px; }
 .yolo-scope .history-partial,
 .yolo-scope .history-error { margin: 12px 0 0; padding: 9px 11px; border: 1px solid var(--y-line-strong); border-left: 3px solid var(--y-focus); border-radius: var(--y-r-sm); background: var(--y-surface-2); color: var(--y-text-2); font-size: 13px; }
@@ -461,7 +468,10 @@ export const YOLO_CSS = `
 
 @media (max-width: 700px) {
   .yolo-scope .history-view__header { align-items: stretch; flex-direction: column; }
-  .yolo-scope .history-view__header input { width: 100%; }
+  .yolo-scope .history-view__filters { align-items: stretch; justify-content: stretch; }
+  .yolo-scope .history-view__filters label { flex: 1; }
+  .yolo-scope .history-view__filters input[type="date"], .yolo-scope .history-view__filters input[type="search"] { width: 100%; }
+  .yolo-scope .history-time-toggle { flex: none; }
   .yolo-scope .history-item__main { grid-template-columns: minmax(0, 1fr); gap: 7px; }
   .yolo-scope .history-item__actions { justify-content: flex-start; }
   .yolo-scope .history-event { grid-template-columns: 42px minmax(0, 1fr); gap: 8px; }
@@ -511,10 +521,10 @@ export const YOLO_CSS = `
 .yolo-scope .dact .tico { display: grid; place-items: center; }
 .yolo-scope .dact .tico svg { width: 11px; height: 11px; }
 .yolo-scope .dock-msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 14px; }
-.yolo-scope .dock-input { flex: none; display: flex; align-items: center; padding: 10px 12px; border-top: 1px solid var(--y-line); }
-.yolo-scope .dock-input input { flex: 1; height: 36px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--y-r-md); background: var(--y-surface-2); color: var(--y-text-1); font-size: 13.5px; outline: none; transition: all var(--y-dur-2); }
-.yolo-scope .dock-input input::placeholder { color: var(--y-text-3); }
-.yolo-scope .dock-input input:focus { background: var(--y-bg); border-color: var(--y-line-strong); box-shadow: 0 0 0 3px var(--y-accent-soft); }
+.yolo-scope .dock-input { flex: none; display: flex; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--y-line); }
+.yolo-scope .dock-input input, .yolo-scope .dock-input textarea { flex: 1; min-height: 36px; max-height: 120px; height: auto; padding: 7px 12px; border: 1px solid transparent; border-radius: var(--y-r-md); background: var(--y-surface-2); color: var(--y-text-1); font-size: 13.5px; line-height: 20px; outline: none; resize: none; overflow-y: auto; transition: all var(--y-dur-2); }
+.yolo-scope .dock-input input::placeholder, .yolo-scope .dock-input textarea::placeholder { color: var(--y-text-3); }
+.yolo-scope .dock-input input:focus, .yolo-scope .dock-input textarea:focus { background: var(--y-bg); border-color: var(--y-line-strong); box-shadow: 0 0 0 3px var(--y-accent-soft); }
 
 /* full-screen chat anchor strip */
 .yolo-scope .fs-anchor { margin: 14px 0 0; padding: 6px 10px; border-left: 2px solid var(--y-accent); font-size: 11px; color: var(--y-text-2); }

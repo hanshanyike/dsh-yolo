@@ -47,6 +47,7 @@ import {
 import { useDashboardController } from './controllers/use-dashboard-controller.ts'
 import { useNotificationNavigation } from './controllers/use-notification-navigation.ts'
 import { useItemDetailController } from './controllers/use-item-detail-controller.ts'
+import { localDateStr } from '../../src/shared/text.ts'
 
 export { dashboardSignature } from './controllers/use-dashboard-controller.ts'
 
@@ -172,7 +173,7 @@ export function YoloPanel({
       ? { page: 'home' }
       : page === 'plan'
         ? { page: 'plan', section: 'today' }
-        : { page: 'history', section: 'timeline' })
+        : { page: 'history', section: 'timeline', day: localDateStr() })
   }, [setRoute])
 
   const focusChatOpener = useCallback((returnFocusId = navigation.returnFocusId, todoId = chatReturnTodoIdRef.current): void => {
@@ -445,12 +446,21 @@ export function YoloPanel({
     : navigation.route.page === 'plan'
       ? `plan-${navigation.route.section}`
       : navigation.route.section === 'timeline' ? 'history-timeline' : 'history-items'
+  const historyDay = navigation.route.page === 'history'
+    ? navigation.route.day === null ? null : navigation.route.day ?? localDateStr()
+    : localDateStr()
+  const historyRouteDay = navigation.route.page === 'history' ? navigation.route.day : undefined
 
   const setSurface = useCallback((next: BoardSurfaceKey): void => {
     if (next === 'home') setRoute({ page: 'home' })
     else if (next.startsWith('plan-')) setRoute({ page: 'plan', section: next.slice(5) as 'today' | 'upcoming' | 'goals' | 'all' })
-    else setRoute({ page: 'history', section: next === 'history-items' ? 'items' : 'timeline' })
-  }, [setRoute])
+    else setRoute({ page: 'history', section: next === 'history-items' ? 'items' : 'timeline', day: navigation.route.page === 'history' ? navigation.route.day : localDateStr() })
+  }, [navigation.route, setRoute])
+
+  const setHistoryDay = useCallback((day: string | null): void => {
+    if (navigation.route.page !== 'history') return
+    setRoute({ ...navigation.route, day })
+  }, [navigation.route, setRoute])
 
   useEffect(() => {
     if (!state.data || !('item' in navigation.foreground) || navigation.foreground.item.entity !== 'todo') return
@@ -535,6 +545,8 @@ export function YoloPanel({
             filter={filter}
             patchFilter={patchFilter}
             surface={surface}
+            historyDay={historyDay}
+            onHistoryDayChange={setHistoryDay}
             onSurfaceChange={setSurface}
             onOpenChat={openAnchoredChat}
             onOpenItemDetail={openItemDetail}
@@ -768,7 +780,7 @@ export function YoloPanel({
           <>
             <PageTabs page={navigation.route.page} counts={countState.counts} partial={countState.partial} onChange={setPage} />
             {navigation.route.page === 'plan' ? <PlanTabs section={navigation.route.section} onChange={(section) => { setRoute({ page: 'plan', section }) }} /> : null}
-            {navigation.route.page === 'history' ? <HistoryTabs section={navigation.route.section} onChange={(section) => { setRoute({ page: 'history', section }) }} /> : null}
+            {navigation.route.page === 'history' ? <HistoryTabs section={navigation.route.section} onChange={(section) => { setRoute({ page: 'history', section, day: historyRouteDay }) }} /> : null}
             {listTools}
           </>
         ) : null}

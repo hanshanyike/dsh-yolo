@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { connectApi, createFixtures, todayStr, uid, type Api } from '../helpers.ts'
+import { connectApi, createFixtures, todayStr, uid, yesterdayStr, type Api } from '../helpers.ts'
 
 let api: Api
 let fx: ReturnType<typeof createFixtures>
@@ -50,4 +50,19 @@ test('HIST-04: 按事项保持改名前后的稳定身份并在终态筛选中�
   expect(detail.events.map((row: Record<string, any>) => row.kind)).toEqual(['todo_completed', 'todo_updated', 'todo_created'])
   expect(detail.events.find((row: Record<string, any>) => row.kind === 'todo_updated')?.change.title)
     .toEqual({ before: original, after: renamed })
+})
+
+test('HIST-05: day 参数按本地自然日限制时间线和按事项结果', async () => {
+  const title = uid('确认今天的客户回访安排')
+  const item = await fx.todo(title, { due: todayStr() })
+  await api.action({ action: 'complete', kind: 'todo', id: item.id })
+
+  const timeline = await api.history({ view: 'timeline', day: todayStr(), limit: 20 })
+  expect(timeline.events.some((row: Record<string, any>) => row.subject?.id === item.id)).toBe(true)
+
+  const items = await api.history({ view: 'items', day: todayStr(), limit: 20 })
+  expect(items.items.find((row: Record<string, any>) => row.id === item.id)).toMatchObject({ title, status: 'done' })
+
+  const yesterday = await api.history({ view: 'timeline', day: yesterdayStr(), limit: 20 })
+  expect(yesterday.events.some((row: Record<string, any>) => row.subject?.id === item.id)).toBe(false)
 })

@@ -102,7 +102,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey, onDashboa
   const anchorRef = useRef<ChatAnchor | null>(anchor)
   const sentWithContext = useRef(false)
   const scrollOwnerRef = useRef<HTMLDivElement | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const inputEngagedRef = useRef(false)
   const restoreInputFocusRef = useRef(false)
   const nearBottomRef = useRef(true)
@@ -384,10 +384,20 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey, onDashboa
     }
   }, [anchoredScopeCwd, conversationKey, draft, load, state, threadKey])
 
+  const resizeInput = useCallback((element: HTMLTextAreaElement): void => {
+    element.style.height = 'auto'
+    element.style.height = `${Math.min(element.scrollHeight, variant === 'side' ? 120 : 160)}px`
+  }, [variant])
+
+  useLayoutEffect(() => {
+    if (inputRef.current) resizeInput(inputRef.current)
+  }, [draft, resizeInput])
+
   const input = (
-    <input
+    <textarea
       ref={inputRef}
       className={variant === 'full' ? 'cap-input' : undefined}
+      rows={1}
       value={draft}
       placeholder={anchor ? `就「${anchor.title}」追问…` : '和 YOLO 说…（Enter 发送）'}
       autoFocus
@@ -403,6 +413,7 @@ export function ChatPane({ anchor = null, variant = 'full', threadKey, onDashboa
       onChange={(e) => {
         setDraftState(e.target.value)
         chatConversationController.setDraft(conversationKey, e.target.value)
+        resizeInput(e.currentTarget)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) void send()

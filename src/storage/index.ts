@@ -523,21 +523,21 @@ export default class Yolo extends Service {
     const h = this.resolve(cwd)
     return repo.listEventsBetween(h.db, h.scopeKey, fromMs, toMs)
   }
-  listEventsUntil(cwd: string, openedAt: number, limit: number, kinds: readonly string[]): TimelineEvent[] {
+  listEventsUntil(cwd: string, openedAt: number, limit: number, kinds: readonly string[], fromAt?: number, toAt?: number): TimelineEvent[] {
     const h = this.resolve(cwd)
-    return repo.listEventsUntil(h.db, h.scopeKey, openedAt, limit, kinds)
+    return repo.listEventsUntil(h.db, h.scopeKey, openedAt, limit, kinds, fromAt, toAt)
   }
-  listEventsForSubject(cwd: string, subjectType: HistorySubjectType, subjectId: string, openedAt: number, limit: number, kinds: readonly string[]): TimelineEvent[] {
+  listEventsForSubject(cwd: string, subjectType: HistorySubjectType, subjectId: string, openedAt: number, limit: number, kinds: readonly string[], fromAt?: number, toAt?: number): TimelineEvent[] {
     const h = this.resolve(cwd)
-    return repo.listEventsForSubject(h.db, h.scopeKey, subjectType, subjectId, openedAt, limit, kinds)
+    return repo.listEventsForSubject(h.db, h.scopeKey, subjectType, subjectId, openedAt, limit, kinds, fromAt, toAt)
   }
-  listEventSubjectStats(cwd: string, openedAt: number, kinds: readonly string[]): HistorySubjectStats[] {
+  listEventSubjectStats(cwd: string, openedAt: number, kinds: readonly string[], fromAt?: number, toAt?: number): HistorySubjectStats[] {
     const h = this.resolve(cwd)
-    return repo.listEventSubjectStats(h.db, h.scopeKey, openedAt, kinds)
+    return repo.listEventSubjectStats(h.db, h.scopeKey, openedAt, kinds, fromAt, toAt)
   }
-  listLatestEventsBySubject(cwd: string, openedAt: number, kinds: readonly string[]): TimelineEvent[] {
+  listLatestEventsBySubject(cwd: string, openedAt: number, kinds: readonly string[], fromAt?: number, toAt?: number): TimelineEvent[] {
     const h = this.resolve(cwd)
-    return repo.listLatestEventsBySubject(h.db, h.scopeKey, openedAt, kinds)
+    return repo.listLatestEventsBySubject(h.db, h.scopeKey, openedAt, kinds, fromAt, toAt)
   }
 
   // ---- session summaries (v0.3.0 C) ----

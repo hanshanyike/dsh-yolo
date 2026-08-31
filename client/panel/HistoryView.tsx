@@ -14,6 +14,9 @@ export type HistoryMode = 'timeline' | 'items'
 
 interface HistoryViewProps {
   mode: HistoryMode
+  /** null means all time; a date means one local calendar day. */
+  day: string | null
+  onDayChange: (day: string | null) => void
   dashboard: YoloDashboardData
   refreshDashboard: () => Promise<void>
   onOpenItemDetail?: (todo: YoloTodoRow) => void
@@ -76,10 +79,12 @@ function historyUrl(
   mode: HistoryMode,
   status: YoloHistoryStatusFilter,
   query: string,
+  day: string | null,
   cursor?: string,
 ): string {
   const params = new URLSearchParams({ view: mode, status })
   if (query.trim()) params.set('q', query.trim())
+  if (day) params.set('day', day)
   if (cursor) params.set('cursor', cursor)
   return `/yolo/history?${params.toString()}`
 }
@@ -128,8 +133,9 @@ function EventRows({
   )
 }
 
-function SubjectHistory({ item, onOpenChangeSource }: {
+function SubjectHistory({ item, day, onOpenChangeSource }: {
   item: YoloHistoryItem
+  day: string | null
   onOpenChangeSource?: HistoryViewProps['onOpenChangeSource']
 }): JSX.Element {
   const [events, setEvents] = useState<YoloHistoryEvent[]>([])
@@ -143,6 +149,7 @@ function SubjectHistory({ item, onOpenChangeSource }: {
     const params = new URLSearchParams({
       view: 'subject', subject_type: item.type, subject_id: item.id, scope_cwd: item.scope_cwd,
     })
+    if (day) params.set('day', day)
     if (cursor) params.set('cursor', cursor)
     try {
       const data = await fetchHistory(`/yolo/history?${params.toString()}`)
@@ -153,7 +160,7 @@ function SubjectHistory({ item, onOpenChangeSource }: {
     } finally {
       setLoading(false)
     }
-  }, [item.id, item.scope_cwd, item.type])
+  }, [day, item.id, item.scope_cwd, item.type])
 
   useEffect(() => { void load() }, [load])
 
@@ -171,6 +178,7 @@ function SubjectHistory({ item, onOpenChangeSource }: {
 
 function ItemRow({
   item,
+  day,
   dashboard,
   refreshDashboard,
   onOpenItemDetail,
@@ -178,6 +186,7 @@ function ItemRow({
   onChanged,
 }: {
   item: YoloHistoryItem
+  day: string | null
   dashboard: YoloDashboardData
   refreshDashboard: () => Promise<void>
   onOpenItemDetail?: HistoryViewProps['onOpenItemDetail']
@@ -245,12 +254,13 @@ function ItemRow({
         </div>
       </div>
       {error ? <p className="history-inline-state is-error" role="alert">{error}</p> : null}
-      {expanded ? <SubjectHistory item={item} onOpenChangeSource={onOpenChangeSource} /> : null}
+      {expanded ? <SubjectHistory item={item} day={day} onOpenChangeSource={onOpenChangeSource} /> : null}
     </li>
   )
 }
 
-export function HistoryView({ mode, dashboard, refreshDashboard, onOpenItemDetail, onOpenChangeSource }: HistoryViewProps): JSX.Element {
+export function HistoryView({ mode, day, onDayChange, dashboard, refreshDashboard, onOpenItemDetail, onOpenChangeSource }: HistoryViewProps): JSX.Element {
+  const today = localDay(Date.now())
   const [status, setStatus] = useState<YoloHistoryStatusFilter>('all')
   const [queryInput, setQueryInput] = useState('')
   const [query, setQuery] = useState('')
@@ -273,7 +283,7 @@ export function HistoryView({ mode, dashboard, refreshDashboard, onOpenItemDetai
     else setLoading(true)
     setError(null)
     try {
-      const data = await fetchHistory(historyUrl(mode, mode === 'items' ? status : 'all', mode === 'items' ? query : '', cursor))
+      const data = await fetchHistory(historyUrl(mode, mode === 'items' ? status : 'all', mode === 'items' ? query : '', day, cursor))
       setEvents((current) => cursor ? [...current, ...data.events] : data.events)
       setItems((current) => cursor ? [...current, ...data.items] : data.items)
       setNextCursor(data.nextCursor)
@@ -285,7 +295,7 @@ export function HistoryView({ mode, dashboard, refreshDashboard, onOpenItemDetai
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [mode, query, status])
+  }, [day, mode, query, status])
 
   useEffect(() => { void load() }, [load, reload])
 
@@ -304,7 +314,13 @@ export function HistoryView({ mode, dashboard, refreshDashboard, onOpenItemDetai
     <section className="history-view" aria-label={mode === 'timeline' ? '按时间查看历史' : '按事项查看历史'}>
       <header className="history-view__header">
         <div><h2>{mode === 'timeline' ? '时间线' : '事项变化'}</h2><p>{mode === 'timeline' ? '按发生时间回顾用户可理解的变化。' : '查看每件事情如何走到当前状态。'}</p></div>
-        {mode === 'items' ? <input type="search" value={queryInput} onChange={(event) => { setQueryInput(event.target.value) }} aria-label="搜索历史事项" placeholder="搜索事项…" /> : null}
+        <div className="history-view__filters">
+          <label><span>时间</span><input type="date" value={day ?? ''} onChange={(event) => { onDayChange(event.target.value || null) }} aria-label="历史日期" /></label>
+          <button type="button" className="history-time-toggle" onClick={() => { onDayChange(day === null || day !== today ? today : null) }}>
+            {day === null ? '只看今天' : day === today ? '全部时间' : '今天'}
+          </button>
+          {mode === 'items' ? <input type="search" value={queryInput} onChange={(event) => { setQueryInput(event.target.value) }} aria-label="搜索历史事项" placeholder="搜索事项…" /> : null}
+        </div>
       </header>
       {mode === 'items' ? (
         <div className="caps history-status" role="group" aria-label="历史事项状态">
@@ -331,6 +347,7 @@ export function HistoryView({ mode, dashboard, refreshDashboard, onOpenItemDetai
           {items.map((item) => <ItemRow
             key={`${item.scope_cwd}\u0000${item.type}\u0000${item.id}`}
             item={item}
+            day={day}
             dashboard={dashboard}
             refreshDashboard={refreshDashboard}
             onOpenItemDetail={onOpenItemDetail}

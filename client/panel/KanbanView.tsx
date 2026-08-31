@@ -42,6 +42,9 @@ export interface KanbanViewProps {
   surface: BoardSurfaceKey
   /** Switch product page section (e.g. quick-add lands on Home). */
   onSurfaceChange: (surface: BoardSurfaceKey) => void
+  /** History defaults to today's local day; null means all time. */
+  historyDay: string | null
+  onHistoryDayChange: (day: string | null) => void
   /** Open the side chat anchored to a card (聊一聊). */
   onOpenChat: (anchor: ChatAnchor) => void
   /** Open a source preview in the shell's single foreground context. */
@@ -106,7 +109,7 @@ function dotPos(target: string | null | undefined): number {
   return Math.max(4, Math.min(96, 50 + (diff / 90) * 46))
 }
 
-export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail }: KanbanViewProps): JSX.Element {
+export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, historyDay, onHistoryDayChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail }: KanbanViewProps): JSX.Element {
   const [editor, setEditor] = useState<EditorDraft | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState<{ kind: 'goal' | 'milestone'; id: string; title: string } | null>(null)
@@ -367,6 +370,8 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
           {(surface === 'history-timeline' || surface === 'history-items') && (
             <HistoryView
               mode={surface === 'history-timeline' ? 'timeline' : 'items'}
+              day={historyDay}
+              onDayChange={onHistoryDayChange}
               dashboard={data}
               refreshDashboard={refresh}
               onOpenItemDetail={onOpenItemDetail}

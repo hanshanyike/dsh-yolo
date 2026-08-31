@@ -4,6 +4,11 @@ import { formatDueLabel } from '../client/panel/due-label.ts'
 describe('formatDueLabel', () => {
   const now = new Date(2026, 7, 25, 10, 30)
 
+  it('shows today when extraction did not provide a date', () => {
+    expect(formatDueLabel(null, now)).toBe('今天')
+    expect(formatDueLabel(undefined, now)).toBe('今天')
+  })
+
   it('keeps date-only values local and human readable', () => {
     expect(formatDueLabel('2026-08-25', now)).toBe('今天')
     expect(formatDueLabel('2026-08-26', now)).toBe('明天')

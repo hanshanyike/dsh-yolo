@@ -846,13 +846,25 @@ export function listEventsUntil(
   openedAt: number,
   limit: number,
   kinds: readonly string[],
+  fromAt?: number,
+  toAt?: number,
 ): TimelineEvent[] {
   const clause = eventKindClause(kinds)
+  const bounds = ['scope_key = ?', 'occurred_at <= ?']
+  const params: Array<string | number> = [scopeKey, openedAt]
+  if (fromAt !== undefined) {
+    bounds.push('occurred_at >= ?')
+    params.push(fromAt)
+  }
+  if (toAt !== undefined) {
+    bounds.push('occurred_at < ?')
+    params.push(toAt)
+  }
   return (db.prepare(
     `SELECT * FROM events
-     WHERE scope_key = ? AND occurred_at <= ? AND ${clause.sql}
+     WHERE ${bounds.join(' AND ')} AND ${clause.sql}
      ORDER BY occurred_at DESC, rowid DESC LIMIT ?`,
-  ).all(scopeKey, openedAt, ...clause.params, limit) as StoredTimelineEvent[]).map(timelineEvent)
+  ).all(...params, ...clause.params, limit) as StoredTimelineEvent[]).map(timelineEvent)
 }
 
 export function listEventsForSubject(
@@ -863,14 +875,25 @@ export function listEventsForSubject(
   openedAt: number,
   limit: number,
   kinds: readonly string[],
+  fromAt?: number,
+  toAt?: number,
 ): TimelineEvent[] {
   const clause = eventKindClause(kinds)
+  const bounds = ['scope_key = ?', 'subject_type = ?', 'subject_id = ?', 'occurred_at <= ?']
+  const params: Array<string | number> = [scopeKey, subjectType, subjectId, openedAt]
+  if (fromAt !== undefined) {
+    bounds.push('occurred_at >= ?')
+    params.push(fromAt)
+  }
+  if (toAt !== undefined) {
+    bounds.push('occurred_at < ?')
+    params.push(toAt)
+  }
   return (db.prepare(
     `SELECT * FROM events
-     WHERE scope_key = ? AND subject_type = ? AND subject_id = ?
-       AND occurred_at <= ? AND ${clause.sql}
+     WHERE ${bounds.join(' AND ')} AND ${clause.sql}
      ORDER BY occurred_at DESC, rowid DESC LIMIT ?`,
-  ).all(scopeKey, subjectType, subjectId, openedAt, ...clause.params, limit) as StoredTimelineEvent[]).map(timelineEvent)
+  ).all(...params, ...clause.params, limit) as StoredTimelineEvent[]).map(timelineEvent)
 }
 
 export function listEventSubjectStats(
@@ -878,15 +901,26 @@ export function listEventSubjectStats(
   scopeKey: string,
   openedAt: number,
   kinds: readonly string[],
+  fromAt?: number,
+  toAt?: number,
 ): HistorySubjectStats[] {
   const clause = eventKindClause(kinds)
+  const bounds = ['scope_key = ?', 'subject_type IS NOT NULL', 'subject_id IS NOT NULL', 'occurred_at <= ?']
+  const params: Array<string | number> = [scopeKey, openedAt]
+  if (fromAt !== undefined) {
+    bounds.push('occurred_at >= ?')
+    params.push(fromAt)
+  }
+  if (toAt !== undefined) {
+    bounds.push('occurred_at < ?')
+    params.push(toAt)
+  }
   return db.prepare(
     `SELECT subject_type, subject_id, COUNT(*) AS change_count, MAX(occurred_at) AS last_changed_at
      FROM events
-     WHERE scope_key = ? AND subject_type IS NOT NULL AND subject_id IS NOT NULL
-       AND occurred_at <= ? AND ${clause.sql}
+     WHERE ${bounds.join(' AND ')} AND ${clause.sql}
      GROUP BY subject_type, subject_id`,
-  ).all(scopeKey, openedAt, ...clause.params) as HistorySubjectStats[]
+  ).all(...params, ...clause.params) as HistorySubjectStats[]
 }
 
 export function listLatestEventsBySubject(
@@ -894,8 +928,20 @@ export function listLatestEventsBySubject(
   scopeKey: string,
   openedAt: number,
   kinds: readonly string[],
+  fromAt?: number,
+  toAt?: number,
 ): TimelineEvent[] {
   const clause = eventKindClause(kinds)
+  const bounds = ['scope_key = ?', 'subject_type IS NOT NULL', 'subject_id IS NOT NULL', 'occurred_at <= ?']
+  const params: Array<string | number> = [scopeKey, openedAt]
+  if (fromAt !== undefined) {
+    bounds.push('occurred_at >= ?')
+    params.push(fromAt)
+  }
+  if (toAt !== undefined) {
+    bounds.push('occurred_at < ?')
+    params.push(toAt)
+  }
   return (db.prepare(
     `WITH ranked AS (
        SELECT events.*,
@@ -903,12 +949,11 @@ export function listLatestEventsBySubject(
            PARTITION BY subject_type, subject_id
            ORDER BY occurred_at DESC, rowid DESC
          ) AS subject_rank
-       FROM events
-       WHERE scope_key = ? AND subject_type IS NOT NULL AND subject_id IS NOT NULL
-         AND occurred_at <= ? AND ${clause.sql}
-     )
-     SELECT * FROM ranked WHERE subject_rank = 1`,
-  ).all(scopeKey, openedAt, ...clause.params) as Array<StoredTimelineEvent & { subject_rank: number }>).map((row) => {
+        FROM events
+        WHERE ${bounds.join(' AND ')} AND ${clause.sql}
+      )
+      SELECT * FROM ranked WHERE subject_rank = 1`,
+   ).all(...params, ...clause.params) as Array<StoredTimelineEvent & { subject_rank: number }>).map((row) => {
     const { subject_rank: _rank, ...event } = row
     return timelineEvent(event)
   })

@@ -52,7 +52,7 @@ const TODO_STATUS_LABEL: Record<string, string> = {
 }
 
 function mergeOutcome(target: YoloTodoRowV2, source: YoloTodoRowV2): string {
-  const due = target.due_at ?? source.due_at ?? '无截止时间'
+  const due = target.due_at ?? source.due_at ?? '今天'
   const priority = target.priority ?? source.priority ?? '普通'
   return `状态：${TODO_STATUS_LABEL[target.status] ?? target.status}；截止：${due}；优先级：${priority}`
 }
@@ -225,7 +225,7 @@ export function TaskActionPanel({
             return (
               <article key={suggestion.key}>
                 <strong>{other.title}</strong>
-                <small>{TODO_STATUS_LABEL[other.status] ?? other.status}{other.due_at ? ` · 截止 ${other.due_at}` : ' · 无截止时间'}</small>
+                <small>{TODO_STATUS_LABEL[other.status] ?? other.status}{other.due_at ? ` · 截止 ${other.due_at}` : ' · 今天'}</small>
                 {suggestion.reason ? <p className="v2-merge-reason">{suggestion.reason}</p> : null}
                 {suggestion.confidence !== undefined ? <small>推荐置信度 {Math.round(suggestion.confidence * 100)}%</small> : null}
                 {!previewing ? (
