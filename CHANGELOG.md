@@ -4,6 +4,8 @@
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [Unreleased]
+
 ## [0.5.0-beta.2] — 2026-08-31
 
 ### Added
@@ -246,6 +248,7 @@
 - 提供待办、目标、里程碑、跟进规则和事件记录。
 - 提供工作区与 Git 分支隔离、全文搜索和 Markdown 快照。
 
+[Unreleased]: https://github.com/hanshanyike/dsh-yolo/compare/v0.5.0-beta.2...HEAD
 [0.5.0-beta.2]: https://github.com/hanshanyike/dsh-yolo/compare/v0.5.0-beta.1...v0.5.0-beta.2
 [0.5.0-beta.1]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc5...v0.5.0-beta.1
 [0.4.0-rc5]: https://github.com/hanshanyike/dsh-yolo/compare/v0.4.0-rc4...v0.4.0-rc5
