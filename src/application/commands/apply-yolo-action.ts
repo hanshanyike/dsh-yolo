@@ -7,7 +7,7 @@
 // M9 P34: every denial also leaves an action_denied audit event.
 
 import type Yolo from '../../storage/index.ts'
-import type { MilestoneStatus, Priority, TimelineEvent, Todo, TodoAction } from '../../domain/types.ts'
+import type { GoalStatus, MilestoneStatus, Priority, TimelineEvent, Todo, TodoAction } from '../../domain/types.ts'
 import { createHash } from 'node:crypto'
 import { localDateStr } from '../../shared/text.ts'
 import { todoEvidenceFingerprint } from '../../shared/todo-identity.ts'
@@ -19,6 +19,7 @@ import type {
   YoloActionRequest,
   YoloLearningReceipt,
 } from '../../contracts/actions.ts'
+import type { HistoryChangeSet } from '../../contracts/history.ts'
 import type { TodoIdentityFeedbackReason } from '../../domain/types.ts'
 import type { ScopeRef } from '../../domain/scope.ts'
 export type {
@@ -33,6 +34,7 @@ const PRIORITIES: readonly Priority[] = ['low', 'medium', 'high', 'urgent']
 
 const TODO_ACTIONS: readonly TodoAction[] = ['complete', 'start', 'cancel', 'postpone', 'remind_again', 'reopen']
 const MILESTONE_STATUSES: readonly MilestoneStatus[] = ['planned', 'active', 'done', 'abandoned']
+const GOAL_STATUSES: readonly GoalStatus[] = ['candidate', 'active', 'paused', 'achieved', 'abandoned']
 
 function toPriority(v: unknown): Priority | null | undefined {
   if (v === null || v === '') return null
@@ -460,6 +462,135 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
       : deny(yolo, cwd, r, 'goal not found', 404)
   }
 
+  if (kind === 'goal' && ['activate', 'pause', 'resume', 'achieve'].includes(action)) {
+    if (!ref.id) return deny(yolo, cwd, r, `${action} requires kind=goal and id`, 400)
+    const status: GoalStatus = action === 'achieve' ? 'achieved' : action === 'pause' ? 'paused' : 'active'
+    const before = yolo.getGoal(cwd, ref.id)
+    if (!before) return deny(yolo, cwd, r, 'goal not found', 404)
+    const g = yolo.setGoalStatus(cwd, ref.id, status)
+    if (!g) return deny(yolo, cwd, r, 'goal not found', 404)
+    if (before.status !== g.status) {
+      yolo.addEvent(cwd, {
+        kind: 'goal_status',
+        summary: `目标「${g.title}」${status === 'achieved' ? '已达成' : status === 'paused' ? '已暂停' : '已恢复进行'}`,
+        session_id: sessionId ?? null,
+        source: sessionId ? null : 'manual',
+        subject_type: 'goal', subject_id: g.id, subject_title: g.title,
+        change: { status: { before: before.status, after: g.status } },
+      })
+    }
+    return { ok: true, item: g as unknown as Record<string, unknown> }
+  }
+
+  if (kind === 'goal' && action === 'update') {
+    if (!ref.id) return deny(yolo, cwd, r, 'goal update requires id', 400)
+    const patch: Parameters<Yolo['updateGoal']>[2] = {}
+    if (typeof r.title === 'string' && r.title.trim()) patch.title = r.title.trim()
+    if (r.detail !== undefined) patch.description = typeof r.detail === 'string' && r.detail.trim() ? r.detail.trim() : null
+    if (r.completion_criteria !== undefined) patch.completion_criteria = r.completion_criteria?.trim() || null
+    if (r.target_date !== undefined) patch.target_date = r.target_date?.trim() || null
+    if (r.next_review_at !== undefined) patch.next_review_at = r.next_review_at?.trim() || null
+    if (Object.keys(patch).length === 0) return deny(yolo, cwd, r, 'goal update requires a goal field', 400)
+    const before = yolo.getGoal(cwd, ref.id)
+    const g = yolo.updateGoal(cwd, ref.id, patch)
+    if (!g) return deny(yolo, cwd, r, 'goal not found', 404)
+    yolo.addEvent(cwd, {
+      kind: 'goal_updated', summary: `目标「${g.title}」已更新`, detail: JSON.stringify(patch),
+      session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+      subject_type: 'goal', subject_id: g.id, subject_title: before?.title ?? g.title,
+      change: Object.fromEntries(Object.entries(patch).map(([key, after]) => [key, {
+        before: (before as unknown as Record<string, unknown> | undefined)?.[key] ?? null,
+        after,
+      }])) as HistoryChangeSet,
+    })
+    return { ok: true, item: g as unknown as Record<string, unknown> }
+  }
+
+  if (kind === 'goal' && (action === 'link' || action === 'unlink')) {
+    if (!ref.id || !r.todo_id) return deny(yolo, cwd, r, `${action} requires goal id and todo_id`, 400)
+    try {
+      if (action === 'link') {
+        const link = yolo.linkGoalTodo(cwd, ref.id, r.todo_id, {
+          relation: r.relation ?? 'support',
+          is_primary: r.is_primary === true,
+        })
+        yolo.addEvent(cwd, {
+          kind: 'goal_linked', summary: `目标关联事项`, detail: JSON.stringify(link),
+          session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+          subject_type: 'goal', subject_id: ref.id, related_subject_type: 'todo', related_subject_id: r.todo_id,
+          change: { relation: { before: null, after: link.relation } },
+        })
+        return { ok: true, item: link as unknown as Record<string, unknown> }
+      }
+      const removed = yolo.unlinkGoalTodo(cwd, ref.id, r.todo_id)
+      if (!removed) return deny(yolo, cwd, r, 'goal relation not found', 404, 'goal_relation_not_found')
+      yolo.addEvent(cwd, {
+        kind: 'goal_unlinked', summary: `目标已解除事项关联`, detail: r.todo_id,
+        session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+        subject_type: 'goal', subject_id: ref.id, related_subject_type: 'todo', related_subject_id: r.todo_id,
+        change: { relation: { before: 'support', after: null } },
+      })
+      return { ok: true, item: { goal_id: ref.id, todo_id: r.todo_id, unlinked: true } }
+    } catch (error) {
+      return deny(yolo, cwd, r, error instanceof Error ? error.message : String(error), 409, 'goal_relation_conflict')
+    }
+  }
+
+  if (kind === 'goal' && (action === 'set_next' || action === 'clear_next')) {
+    if (!ref.id) return deny(yolo, cwd, r, `${action} requires goal id`, 400)
+    try {
+      const g = action === 'set_next'
+        ? (r.todo_id ? yolo.setGoalNextTodo(cwd, ref.id, r.todo_id) : null)
+        : yolo.clearGoalNextTodo(cwd, ref.id)
+      if (!g) return deny(yolo, cwd, r, action === 'set_next' ? 'set_next requires todo_id' : 'goal not found', action === 'set_next' ? 400 : 404)
+      yolo.addEvent(cwd, {
+        kind: action === 'set_next' ? 'goal_next_step_set' : 'goal_next_step_cleared', summary: action === 'set_next' ? `目标「${g.title}」已设置下一步` : `目标「${g.title}」已清除下一步`,
+        detail: g.next_todo_id ?? null, session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+        subject_type: 'goal', subject_id: g.id, subject_title: g.title,
+        change: { next_todo_id: { before: null, after: g.next_todo_id ?? null } },
+      })
+      return { ok: true, item: g as unknown as Record<string, unknown> }
+    } catch (error) {
+      return deny(yolo, cwd, r, error instanceof Error ? error.message : String(error), 400, 'next_todo_invalid')
+    }
+  }
+
+  if (kind === 'goal' && action === 'review') {
+    if (!ref.id) return deny(yolo, cwd, r, 'review requires goal id', 400)
+    const before = yolo.getGoal(cwd, ref.id)
+    if (!before) return deny(yolo, cwd, r, 'goal not found', 404)
+    try {
+      if (r.completion_criteria !== undefined || r.target_date !== undefined || r.next_review_at !== undefined || r.detail !== undefined) {
+        yolo.updateGoal(cwd, ref.id, {
+          ...(r.completion_criteria !== undefined ? { completion_criteria: r.completion_criteria?.trim() || null } : {}),
+          ...(r.target_date !== undefined ? { target_date: r.target_date?.trim() || null } : {}),
+          ...(r.next_review_at !== undefined ? { next_review_at: r.next_review_at?.trim() || null } : {}),
+          ...(r.detail !== undefined ? { description: r.detail?.trim() || null } : {}),
+        })
+      }
+      if (typeof r.progress === 'number' && Number.isFinite(r.progress)) yolo.applyGoalProgress(cwd, { id: ref.id }, r.progress, r.note, sessionId)
+      if (r.next_todo_id !== undefined) {
+        if (r.next_todo_id === null) yolo.clearGoalNextTodo(cwd, ref.id)
+        else yolo.setGoalNextTodo(cwd, ref.id, r.next_todo_id)
+      }
+      if (r.status !== undefined) {
+        if (!GOAL_STATUSES.includes(r.status as GoalStatus)) throw new Error('invalid goal status')
+        yolo.setGoalStatus(cwd, ref.id, r.status as GoalStatus)
+      }
+      const g = yolo.getGoal(cwd, ref.id)
+      if (!g) return deny(yolo, cwd, r, 'goal not found', 404)
+      yolo.addEvent(cwd, {
+        kind: 'goal_reviewed', summary: `已回顾目标「${g.title}」`, detail: r.note ?? null,
+        session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+        subject_type: 'goal', subject_id: g.id, subject_title: g.title,
+        change: { status: { before: before.status, after: g.status }, next_todo_id: { before: before.next_todo_id ?? null, after: g.next_todo_id ?? null } },
+      })
+      return { ok: true, item: g as unknown as Record<string, unknown> }
+    } catch (error) {
+      return deny(yolo, cwd, r, error instanceof Error ? error.message : String(error), 400, 'goal_review_invalid')
+    }
+  }
+
   if (action === 'set_progress') {
     if (kind !== 'goal' || typeof r.progress !== 'number' || !Number.isFinite(r.progress)) {
       return deny(yolo, cwd, r, 'set_progress requires kind=goal and progress', 400)
@@ -597,6 +728,15 @@ export function hashYoloActionRequest(r: YoloActionRequest): string {
     detail: r.detail ?? null,
     priority: r.priority ?? null,
     milestone_title: r.milestone_title ?? null,
+    todo_id: r.todo_id ?? null,
+    milestone_id: r.milestone_id ?? null,
+    next_todo_id: r.next_todo_id ?? null,
+    relation: r.relation ?? null,
+    completion_criteria: r.completion_criteria ?? null,
+    target_date: r.target_date ?? null,
+    next_review_at: r.next_review_at ?? null,
+    position: r.position ?? null,
+    is_primary: r.is_primary ?? null,
     into_id: r.into_id ?? null,
     into_title: r.into_title ?? null,
     merge_id: r.merge_id ?? null,

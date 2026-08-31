@@ -729,6 +729,30 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
     expect(yolo.search(cwd, '新的时间窗口').map((row) => row.row_id)).toContain(todo.id)
   })
 
+  it('manages a goal through the shared action path without inferring achievement', () => {
+    const goal = yolo.addGoal(cwd, { title: '完成产品发布', completion_criteria: '生产环境稳定运行' })
+    const first = yolo.addTodo(cwd, { title: '整理发布材料', source: 'manual' }).todo
+    const second = yolo.addTodo(cwd, { title: '确认灰度范围', source: 'manual' }).todo
+
+    expect(applyYoloAction(yolo, cwd, { action: 'link', kind: 'goal', id: goal.id, todo_id: first.id })).toMatchObject({ ok: true })
+    expect(applyYoloAction(yolo, cwd, { action: 'link', kind: 'goal', id: goal.id, todo_id: second.id })).toMatchObject({ ok: true })
+    expect(applyYoloAction(yolo, cwd, { action: 'set_next', kind: 'goal', id: goal.id, todo_id: first.id })).toMatchObject({
+      ok: true, item: { next_todo_id: first.id },
+    })
+    expect(applyYoloAction(yolo, cwd, {
+      action: 'review', kind: 'goal', id: goal.id, progress: 100,
+      note: '发布材料已经整理完成', next_todo_id: second.id, next_review_at: '2026-09-15T10:00:00+08:00',
+    })).toMatchObject({ ok: true, item: { progress: 100, status: 'active', next_todo_id: second.id } })
+
+    expect(applyYoloAction(yolo, cwd, { action: 'pause', kind: 'goal', id: goal.id })).toMatchObject({ ok: true, item: { status: 'paused' } })
+    expect(applyYoloAction(yolo, cwd, { action: 'resume', kind: 'goal', id: goal.id })).toMatchObject({ ok: true, item: { status: 'active' } })
+    expect(applyYoloAction(yolo, cwd, { action: 'achieve', kind: 'goal', id: goal.id })).toMatchObject({ ok: true, item: { status: 'achieved' } })
+
+    const eventKinds = new Set(yolo.listEvents(cwd).map((event) => event.kind))
+    expect([...eventKinds]).toEqual(expect.arrayContaining(['goal_linked', 'goal_next_step_set', 'goal_progress', 'goal_reviewed', 'goal_status']))
+    expect(yolo.listGoalTodos(cwd, goal.id).map((todo) => todo.id)).toEqual([first.id, second.id])
+  })
+
   it('rejects an unknown milestone title instead of silently unlinking the todo', () => {
     const milestone = yolo.addMilestone(cwd, { title: '产品组验收', source: 'llm' })
     const { todo } = yolo.addTodo(cwd, {

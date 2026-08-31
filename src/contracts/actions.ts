@@ -14,6 +14,9 @@ export interface YoloActionRequest {
   milestone_title?: string | null
   /** Goal management fields; optional to preserve older action payloads. */
   todo_id?: string
+  milestone_id?: string
+  position?: number
+  is_primary?: boolean
   next_todo_id?: string | null
   relation?: 'support' | 'next'
   completion_criteria?: string | null
