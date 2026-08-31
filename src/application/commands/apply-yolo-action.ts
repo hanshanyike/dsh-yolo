@@ -329,6 +329,32 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
     return { ok: true, item: todo as unknown as Record<string, unknown> }
   }
 
+  if (action === 'create' && kind === 'goal') {
+    const title = typeof r.title === 'string' ? r.title.trim() : ''
+    if (!title) return deny(yolo, cwd, r, 'goal create requires title', 400)
+    const requestedStatus = r.status === undefined ? 'active' : r.status
+    if (!GOAL_STATUSES.includes(requestedStatus as GoalStatus)) {
+      return deny(yolo, cwd, r, 'invalid goal status', 400, 'invalid_goal_status')
+    }
+    const goal = yolo.addGoal(cwd, {
+      title,
+      description: r.detail?.trim() || null,
+      status: requestedStatus as GoalStatus,
+      completion_criteria: r.completion_criteria?.trim() || null,
+      target_date: r.target_date?.trim() || null,
+      next_review_at: r.next_review_at?.trim() || null,
+      source: sessionId ? 'llm' : 'manual',
+      session_id: sessionId ?? null,
+    })
+    yolo.addEvent(cwd, {
+      kind: 'goal_created', summary: `＋ 记录新目标「${goal.title}」`, detail: goal.completion_criteria ?? null,
+      session_id: sessionId ?? null, source: sessionId ? null : 'manual',
+      subject_type: 'goal', subject_id: goal.id, subject_title: goal.title,
+      change: { status: { before: null, after: goal.status } },
+    })
+    return { ok: true, item: goal as unknown as Record<string, unknown> }
+  }
+
   // ---- date-range todo maintenance ----
   if (action === 'bulk_cancel' || action === 'bulk_delete') {
     if (kind !== 'todo') return deny(yolo, cwd, r, `${action} requires kind=todo`, 400)

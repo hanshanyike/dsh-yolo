@@ -753,6 +753,17 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
     expect(yolo.listGoalTodos(cwd, goal.id).map((todo) => todo.id)).toEqual([first.id, second.id])
   })
 
+  it('creates a goal through the shared action path with completion criteria', () => {
+    const result = applyYoloAction(yolo, cwd, {
+      action: 'create', kind: 'goal', title: '完成年度研究计划',
+      completion_criteria: '形成可复用的研究结论', target_date: '2026-12-31',
+    })
+    expect(result).toMatchObject({ ok: true, item: {
+      title: '完成年度研究计划', status: 'active', completion_criteria: '形成可复用的研究结论', target_date: '2026-12-31',
+    } })
+    expect(yolo.listEvents(cwd)[0]).toMatchObject({ kind: 'goal_created', subject_type: 'goal' })
+  })
+
   it('rejects an unknown milestone title instead of silently unlinking the todo', () => {
     const milestone = yolo.addMilestone(cwd, { title: '产品组验收', source: 'llm' })
     const { todo } = yolo.addTodo(cwd, {
