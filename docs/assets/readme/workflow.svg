@@ -18,7 +18,9 @@
   <g filter="url(#shadow)">
     <g transform="translate(50 55)">
       <rect width="220" height="190" rx="24" fill="#FFFFFF" stroke="#E4E4EF"/>
-      <image href="../../logo.svg" x="78" y="28" width="64" height="64" preserveAspectRatio="xMidYMid meet"/>
+      <rect x="78" y="28" width="64" height="64" rx="20" fill="#EDF3FE"/>
+      <path d="M94 47h25a8 8 0 0 1 8 8v9a8 8 0 0 1-8 8h-9l-8 7v-7h-8a8 8 0 0 1-8-8v-9a8 8 0 0 1 8-8Z" fill="none" stroke="#4176E6" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M102 57h16M102 65h10" stroke="#4176E6" stroke-width="5" stroke-linecap="round"/>
       <text x="110" y="124" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" font-weight="700" fill="#171724">对话</text>
       <text x="110" y="153" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" fill="#6B6B7B">Conversation</text>
     </g>

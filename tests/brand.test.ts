@@ -35,4 +35,11 @@ describe('YOLO brand mark', () => {
 
     expect(preview).toContain('href="../../logo.svg"')
   })
+
+  it('keeps the workflow conversation icon inline for GitHub SVG rendering', () => {
+    const workflow = readFileSync(new URL('../docs/assets/readme/workflow.svg', import.meta.url), 'utf8')
+
+    expect(workflow).not.toContain('<image')
+    expect(workflow).toContain('M94 47h25a8 8 0 0 1 8 8v9')
+  })
 })
