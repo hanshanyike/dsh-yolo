@@ -47,7 +47,7 @@ how to do it. It can:
 - **Provide one place to review and act** through Home for current attention,
   Plans for organized commitments, and History grouped either by time or by item.
 - **Distinguish cancellation from deletion**: cancelled items keep their change history and
-  remain reopenable, while “Process items by date” can preview bulk cancellation or
+  remain reopenable, while “Delete items by date” can preview bulk cancellation or
   permanently delete items and their directly linked data after strong confirmation.
 - **Keep notification deliveries traceable** with an unread badge and a paginated
   notification record; viewing a delivery never changes the underlying item state.

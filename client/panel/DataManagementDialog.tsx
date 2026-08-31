@@ -151,10 +151,10 @@ export function DataManagementDialog({ data, onClose, onRefresh }: DataManagemen
       >
         <header>
           <div>
-            <span className="eyebrow">批量处理</span>
-            <h2 id="data-manager-title">按日期处理事项</h2>
+            <span className="eyebrow">删除事项</span>
+            <h2 id="data-manager-title">按日期删除事项</h2>
           </div>
-          <button type="button" disabled={busy} onClick={onClose} aria-label="关闭按日期处理事项">关闭</button>
+          <button type="button" disabled={busy} onClick={onClose} aria-label="关闭按日期删除事项">关闭</button>
         </header>
 
         <div className="data-manager-body">

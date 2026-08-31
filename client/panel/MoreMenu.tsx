@@ -98,7 +98,7 @@ export function MoreMenu({ loading, theme, onOpenFilters, onOpenDataManagement, 
           </button>
           <span className="more-separator" role="separator" />
           <button type="button" role="menuitem" className="danger" onClick={() => { run(onOpenDataManagement, false) }}>
-            <IcTrash size={15} /><span>按日期处理事项</span>
+            <IcTrash size={15} /><span>按日期删除事项</span>
           </button>
         </div>
       )}
