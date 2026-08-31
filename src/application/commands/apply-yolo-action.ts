@@ -400,6 +400,22 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
     }
   }
 
+  if (action === 'dismiss_merge_suggestion') {
+    if (kind !== 'todo' || typeof r.id !== 'string' || !r.id || typeof r.into_id !== 'string' || !r.into_id) {
+      return deny(yolo, cwd, r, 'dismiss_merge_suggestion requires two todo ids', 400, 'invalid_merge_suggestion_feedback')
+    }
+    const feedback = yolo.dismissTodoMergeSuggestion(cwd, r.id, r.into_id, r.note)
+    return feedback
+      ? {
+          ok: true,
+          item: feedback as unknown as Record<string, unknown>,
+          learning_receipt: {
+            type: 'feedback_count', summary: '已隐藏这组重复事项建议', scope: 'item', reversible: false,
+          },
+        }
+      : deny(yolo, cwd, r, 'merge suggestion pair not found', 404, 'merge_suggestion_not_found')
+  }
+
   if (!ref.id && !ref.title) return deny(yolo, cwd, r, 'pass id or title', 400)
 
   if (action === 'delete') {

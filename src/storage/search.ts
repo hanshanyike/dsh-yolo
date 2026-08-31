@@ -5,6 +5,7 @@
 // CJK recall for queries >= 3 chars; 2-char queries use the LIKE fallback.
 
 import type { DB } from './db.ts'
+import { compareTodoTitles } from '../shared/todo-similarity.ts'
 import type { RowType, SearchHit, Todo, TodoIdentityCandidate } from './types.ts'
 
 /** Recall queries come from raw user messages; cap them so a pasted blob
@@ -186,7 +187,7 @@ function canonicalAliases(db: DB, canonicalId: string): string[] {
  * todo records without changing the ordinary memory-recall index. Historical
  * aliases are folded onto their canonical stable id before the model sees them.
  */
-export function recallTodoIdentityCandidates(db: DB, query: string, topK = 12): TodoIdentityCandidate[] {
+export function recallTodoIdentityCandidates(db: DB, query: string, topK = 12, allowSimilarity = false): TodoIdentityCandidate[] {
   // The extractor folds late steering into the same turn; the newest text is
   // the authoritative correction. Search the newest message lines first,
   // then the bounded whole tail so multi-intent turns still recall earlier
@@ -235,6 +236,30 @@ export function recallTodoIdentityCandidates(db: DB, query: string, topK = 12): 
       aliases: canonicalAliases(db, canonical.id).filter((title) => title !== canonical.title),
       rank: hit.rank,
     })
+  }
+  if (allowSimilarity && grouped.size < topK) {
+    const recent = db.prepare(
+      `SELECT id,title,status,due_at,record_status,merged_into_id FROM todos
+       WHERE record_status <> 'rejected' ORDER BY updated_at DESC,id ASC LIMIT 200`,
+    ).all() as Todo[]
+    for (const record of recent) {
+      const best = queryParts.reduce<{ score: number } | null>((current, part) => {
+        const similarity = compareTodoTitles(part, record.title)
+        return similarity && (!current || similarity.score > current.score) ? similarity : current
+      }, null)
+      if (!best) continue
+      const canonical = canonicalTodo(db, record)
+      if (!canonical || grouped.has(canonical.id)) continue
+      grouped.set(canonical.id, {
+        id: canonical.id,
+        title: canonical.title,
+        status: canonical.status,
+        due_at: canonical.due_at,
+        aliases: canonicalAliases(db, canonical.id).filter((title) => title !== canonical.title),
+        rank: 100 + (1 - best.score),
+        match_source: 'similarity',
+      })
+    }
   }
   return [...grouped.values()]
     .sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))

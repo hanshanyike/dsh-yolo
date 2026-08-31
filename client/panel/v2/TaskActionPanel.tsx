@@ -34,6 +34,7 @@ export interface TaskActionPanelProps {
   onOpenPreferences?: () => void
   onRejectIdentity?: (receipt: TodoIdentityReceipt, reason: TodoIdentityFeedbackReason) => void
   onConsolidate?: (sourceId: string, targetId: string) => void
+  onDismissMergeSuggestion?: (leftId: string, rightId: string) => void
   /** Focus presentation is modal; a wide dock remains non-modal. */
   modal?: boolean
 }
@@ -41,6 +42,9 @@ export interface TaskActionPanelProps {
 export interface TodoMergeSuggestion {
   key: string
   other: YoloTodoRowV2
+  confidence?: number
+  reason?: string
+  source?: 'resolver' | 'exact' | 'similarity'
 }
 
 const TODO_STATUS_LABEL: Record<string, string> = {
@@ -76,6 +80,7 @@ export function TaskActionPanel({
   onOpenPreferences,
   onRejectIdentity,
   onConsolidate,
+  onDismissMergeSuggestion,
   modal = true,
 }: TaskActionPanelProps): JSX.Element {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -221,8 +226,15 @@ export function TaskActionPanel({
               <article key={suggestion.key}>
                 <strong>{other.title}</strong>
                 <small>{TODO_STATUS_LABEL[other.status] ?? other.status}{other.due_at ? ` · 截止 ${other.due_at}` : ' · 无截止时间'}</small>
+                {suggestion.reason ? <p className="v2-merge-reason">{suggestion.reason}</p> : null}
+                {suggestion.confidence !== undefined ? <small>推荐置信度 {Math.round(suggestion.confidence * 100)}%</small> : null}
                 {!previewing ? (
-                  <button type="button" disabled={busy} onClick={() => { setMergePreviewOpen(suggestion.key) }}>预览合并</button>
+                  <div role="group" aria-label={`处理与“${other.title}”的重复建议`}>
+                    <button type="button" disabled={busy} onClick={() => { setMergePreviewOpen(suggestion.key) }}>预览合并</button>
+                    {onDismissMergeSuggestion ? (
+                      <button type="button" disabled={busy} onClick={() => { onDismissMergeSuggestion(item.id, other.id) }}>不是重复事项</button>
+                    ) : null}
+                  </div>
                 ) : (
                   <div className="v2-merge-preview">
                     {statusConflict ? <p className="v2-merge-warning">两项状态不同。你选择保留的事项决定合并后的业务状态。</p> : null}

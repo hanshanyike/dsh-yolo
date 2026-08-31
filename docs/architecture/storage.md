@@ -60,6 +60,8 @@ catalog 写入失败不会关闭已经可用的 workspace DB，但会记录警�
 - `todo_merge_log` 保存 R3 显式合并的两侧快照和迁移关系 ID。合并迁移未处理通知与待投递提醒，来源
   evidence 仍保持在原记录并由 canonical identity 聚合；撤销追加新事件，不改写旧合并事件。若保留项后来
   被编辑，撤销只恢复事项关系并保留后来编辑。
+- R3 候选按 resolver 日志、规范化同义标题和受保护的模糊相似度合并排序；`todo_merge_suggestion_feedback`
+  只追加“不是重复事项”候选对，不改写 todo 或 resolver observation，并在后续投影中持久抑制该 pair。
 - `pending_reminders` 只为旧库兼容保留，当前不向普通工作 session 回放。
 - FTS 是可重建索引，不是独立事实源；identity resolver 的模型输出不能直接执行写入。R2a 的独立、
   默认关闭策略只允许受控稳定 ID LINK/due_at UPDATE，并把计划与实际结果写入

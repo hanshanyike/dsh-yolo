@@ -153,7 +153,7 @@ function mergeMeta(db: DB): void {
 }
 
 function normalizeCanonicalRows(db: DB, scopeKey: string, cwd: string): void {
-  for (const table of ['milestones', 'todos', 'goals', 'preferences', 'preference_history', 'events', 'session_summaries', 'pending_reminders', 'recall_log', 'todo_merge_log']) {
+  for (const table of ['milestones', 'todos', 'goals', 'preferences', 'preference_history', 'events', 'session_summaries', 'pending_reminders', 'recall_log', 'todo_merge_log', 'todo_merge_suggestion_feedback']) {
     db.prepare(`UPDATE ${table} SET scope_key = ? WHERE scope_key <> ?`).run(scopeKey, scopeKey)
   }
   db.prepare('UPDATE notifications SET scope_key = ?, scope_cwd = ? WHERE scope_key <> ? OR scope_cwd IS NULL OR scope_cwd <> ?')
@@ -424,6 +424,20 @@ function importAttached(db: DB, scopeKey: string, cwd: string, source: string, w
       } catch {
         warnings.push(`${source}: active todo merge conflict ${String(row.id)}; kept canonical relation`)
       }
+    }
+  }
+  if (legacyHasTable(db, 'todo_merge_suggestion_feedback')) {
+    const feedbackRows = db.prepare(`SELECT * FROM ${LEGACY_ALIAS}.todo_merge_suggestion_feedback ORDER BY created_at ASC`).all() as
+      Array<Record<string, unknown>>
+    for (const row of feedbackRows) {
+      const left = todoMap.get(String(row.a_id))
+      const right = todoMap.get(String(row.b_id))
+      if (!left || !right || left === right) continue
+      const [a, b] = left < right ? [left, right] : [right, left]
+      db.prepare(
+        `INSERT OR IGNORE INTO todo_merge_suggestion_feedback(pair_key,scope_key,a_id,b_id,verdict,reason,created_at)
+         VALUES(?,?,?,?,?,?,?)`,
+      ).run(`${a}:${b}`, scopeKey, a, b, 'not_duplicate', row.reason as SQLInputValue, row.created_at as SQLInputValue)
     }
   }
   db.prepare(

@@ -90,7 +90,7 @@ export function SettingsCard({ scope }: SettingsCardProps): JSX.Element {
           <input type="checkbox" checked={draft.todoIdentityR3Enabled} aria-describedby="todo-identity-r3-help" onChange={(event) => patch('todoIdentityR3Enabled', event.target.checked)} />
           <span>重复事项合并建议 <strong style={{ fontSize: 11, fontWeight: 700, color: 'var(--foreground-secondary, #666)' }}>实验性</strong> <span style={hintStyle}>{defaultHint(defaults.extraction?.todoIdentityR3Enabled)}</span></span>
         </label>
-        <p id="todo-identity-r3-help" style={{ margin: 0, ...hintStyle }}>开启后，看板会提示规范化标题相同的可能重复事项。系统只提供预览；必须由你选择保留哪一项并确认，绝不会自动合并。</p>
+        <p id="todo-identity-r3-help" style={{ margin: 0, ...hintStyle }}>开启后，看板会结合模型语义判断和受保护的标题相似度提示可能重复事项，并展示推荐理由与置信度。系统只提供预览；必须由你选择保留哪一项并确认，绝不会自动合并。</p>
         {draft.todoIdentityR3Enabled ? <p style={{ margin: 0, padding: '8px 10px', borderLeft: '2px solid var(--accent, #6366f1)', background: 'color-mix(in srgb, var(--accent, #6366f1) 7%, transparent)', ...hintStyle }}>保存后开始显示合并建议。完成、取消等终态会在确认前明确展示，由你决定最终保留状态。</p> : null}
       </fieldset>
       <fieldset style={sectionStyle}>

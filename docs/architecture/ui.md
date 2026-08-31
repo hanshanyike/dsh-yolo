@@ -27,7 +27,8 @@
 
 `POST /yolo/actions` 与模型工具复用 `application/commands/apply-yolo-action.ts`。HTTP 不直接调用 repository 裸 mutation，也不重新实现 idempotency、evidence 或 attention trust binding。
 
-R3 开启时，dashboard 只投影同工作区的确定性重复候选。事项详情先展示两侧状态和字段结果，用户选择保留项后
+R3 开启时，dashboard 只投影同工作区的 resolver 语义候选和高相似确定性候选，并携带推荐理由与置信度。
+用户可先标记“不是重复事项”抑制同一 pair；进入预览后，事项详情展示两侧状态和字段结果，用户选择保留项后
 才发送带 `CONFIRM_CONSOLIDATE` 的动作；合并后可从即时回执或历史事项发送 `undo_consolidate`。关闭开关时
 候选数组为空，后台不执行自动合并。
 

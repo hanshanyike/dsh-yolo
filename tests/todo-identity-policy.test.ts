@@ -83,6 +83,12 @@ describe('R2a todo identity application policy', () => {
     }, [prediction()], [OPEN], true)).toMatchObject({ mode: 'blocked', reason: 'link_conflicts_with_extracted_update' })
   })
 
+  it('never lets the R3 similarity fallback authorize an R2a automatic write', () => {
+    expect(planTodoIdentityApplication(EMPTY, [prediction()], [{ ...OPEN, match_source: 'similarity' }], true)).toMatchObject({
+      mode: 'blocked', reason: 'candidate_recall_not_r2_safe', candidate_id: OPEN.id,
+    })
+  })
+
   it('blocks status, priority and field-bearing LINK decisions in R2a', () => {
     expect(planTodoIdentityApplication(EMPTY, [prediction({ decision: 'UPDATE' })], [OPEN], true)).toMatchObject({
       mode: 'blocked', reason: 'update_shape_missing',

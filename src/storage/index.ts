@@ -669,8 +669,8 @@ export default class Yolo extends Service {
     return ftsRecallSearch(h.db, query, topK, kinds)
   }
   /** Resolver-only candidate recall across open, terminal and merged records. */
-  recallTodoIdentityCandidates(cwd: string, query: string, topK = 12): TodoIdentityCandidate[] {
-    return recallTodoIdentityCandidates(this.resolve(cwd).db, query, topK)
+  recallTodoIdentityCandidates(cwd: string, query: string, topK = 12, allowSimilarity = false): TodoIdentityCandidate[] {
+    return recallTodoIdentityCandidates(this.resolve(cwd).db, query, topK, allowSimilarity)
   }
 
   // ---- extraction log ----
@@ -759,6 +759,10 @@ export default class Yolo extends Service {
   listDuplicateTodos(cwd: string): DuplicateTodoPair[] {
     const h = this.resolve(cwd)
     return repo.listDuplicateTodos(h.db, h.scopeKey)
+  }
+  dismissTodoMergeSuggestion(cwd: string, leftId: string, rightId: string, reason?: string | null) {
+    const h = this.resolve(cwd)
+    return repo.dismissTodoMergeSuggestion(h.db, h.scopeKey, leftId, rightId, reason)
   }
 
   // ---- pending reminders ----

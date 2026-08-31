@@ -1,6 +1,6 @@
 // v0.3.0 memory-health tests — buildMemoryHealth aggregates recall/extraction
-// quality + duplicate-todo candidates, and listDuplicateTodos finds open-todo
-// near-duplicates (normalized-title collision) within a scope.
+// quality + duplicate-todo candidates. R3 combines semantic resolver evidence,
+// protected fuzzy matching and explicit user suppression within one scope.
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { openDb, type DB } from '../src/storage/db.ts'
@@ -63,6 +63,7 @@ describe('listDuplicateTodos (repo)', () => {
     expect(pairs[0].b).toBe('b')
     expect(pairs[0].aTitle).toBe('提醒我-周三交周报')
     expect(pairs[0].bTitle).toBe('提醒我 周三交周报')
+    expect(pairs[0]).toMatchObject({ source: 'exact', confidence: 1 })
   })
 
   it('includes terminal/open conflicts for confirmation and ignores different titles', () => {
@@ -73,8 +74,41 @@ describe('listDuplicateTodos (repo)', () => {
       .run('done', '只做 一次', 'done', SCOPE, now + 1, now + 1)
     repo.upsertTodo(db, { title: '另一个任务', scope_key: SCOPE, source: 'manual' })
     expect(repo.listDuplicateTodos(db, SCOPE)).toEqual([
-      { scopeKey: SCOPE, a: 'open', b: 'done', aTitle: '只做-一次', bTitle: '只做 一次' },
+      expect.objectContaining({ scopeKey: SCOPE, a: 'open', b: 'done', source: 'exact', confidence: 1 }),
     ])
+  })
+
+  it('projects model semantic evidence with its confidence/reason and permanently suppresses rejected pairs', () => {
+    const candidate = repo.upsertTodo(db, { title: '把演示稿发给研发', scope_key: SCOPE, source: 'manual' }).row
+    const created = repo.upsertTodo(db, { title: '将最终版 PPT 同步到开发团队', scope_key: SCOPE, source: 'llm' }).row
+    repo.addTodoEvidence(db, {
+      todo_id: created.id, source_scope_key: SCOPE, session_id: 'semantic-session', turn_seq: 2,
+      source_kind: 'human', relation: 'origin', excerpt: '最终版 PPT 也要同步给开发团队',
+      occurred_at: Date.now(), source_fingerprint: 'semantic-origin',
+    })
+    repo.logTodoResolution(db, {
+      scope_key: SCOPE, session_id: 'semantic-session', turn_seq: 2, operation_id: 'semantic-operation',
+      input_fingerprint: 'semantic-input', input_excerpt: '最终版 PPT 也要同步给开发团队', resolver_version: 'shadow-v2',
+      model_provider: 'provider', model_name: 'model', status: 'ok',
+      candidates_json: JSON.stringify([{ id: candidate.id, title: candidate.title, status: candidate.status }]),
+      resolutions_json: JSON.stringify([{
+        decision: 'LINK', candidate_ids: [candidate.id], confidence: 0.84,
+        reason: '交付物和接收团队一致，只是换了说法。',
+      }]),
+    })
+
+    expect(repo.listDuplicateTodos(db, SCOPE)).toEqual([
+      expect.objectContaining({
+        a: candidate.id, b: created.id, source: 'resolver', confidence: 0.84,
+        reason: expect.stringContaining('交付物和接收团队一致'),
+      }),
+    ])
+    const feedback = repo.dismissTodoMergeSuggestion(db, SCOPE, candidate.id, created.id, '这是两个不同版本')
+    expect(feedback).toMatchObject({ verdict: 'not_duplicate', reason: '这是两个不同版本' })
+    expect(repo.listDuplicateTodos(db, SCOPE)).toEqual([])
+    expect(repo.listEvents(db, SCOPE)[0]).toMatchObject({ kind: 'todo_merge_suggestion_dismissed' })
+    expect(repo.dismissTodoMergeSuggestion(db, SCOPE, created.id, candidate.id)).toEqual(feedback)
+    expect(repo.listEvents(db, SCOPE)).toHaveLength(1)
   })
 })
 

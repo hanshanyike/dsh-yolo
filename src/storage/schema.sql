@@ -287,6 +287,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_todo_merge_active_source
   ON todo_merge_log(source_id) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_todo_merge_scope_time ON todo_merge_log(scope_key, created_at DESC);
 
+-- User feedback that suppresses one deterministic/model-derived duplicate
+-- suggestion pair. It does not alter either todo or any resolver observation.
+CREATE TABLE IF NOT EXISTS todo_merge_suggestion_feedback (
+  pair_key  TEXT PRIMARY KEY,
+  scope_key TEXT NOT NULL,
+  a_id      TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  b_id      TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  verdict   TEXT NOT NULL CHECK (verdict = 'not_duplicate'),
+  reason    TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_merge_suggestion_feedback_scope
+  ON todo_merge_suggestion_feedback(scope_key, created_at DESC);
+
 -- pending reminders queued while no active session (replayed on agent/session-start)
 CREATE TABLE IF NOT EXISTS pending_reminders (
   id           TEXT PRIMARY KEY,     -- ULID

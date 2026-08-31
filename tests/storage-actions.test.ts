@@ -679,6 +679,24 @@ describe('applyYoloAction (M9 P34/P35: denied audit + consolidate dispatch)', ()
     expect(yolo.listTodoRecords(cwd).find((todo) => todo.id === source.id)?.record_status).toBe('canonical')
   })
 
+  it('records not-duplicate feedback and suppresses the same R3 suggestion pair', () => {
+    const { todo: first } = yolo.addTodo(cwd, { title: '整理客户访谈纪要并发给产品组', source: 'manual' })
+    const { todo: second } = yolo.addTodo(cwd, { title: '把客户访谈纪要发送给产品组', source: 'manual' })
+    expect(yolo.listDuplicateTodos(cwd)).toHaveLength(1)
+
+    const dismissed = applyYoloAction(yolo, cwd, {
+      action: 'dismiss_merge_suggestion', kind: 'todo', id: first.id, into_id: second.id,
+      note: '属于两个不同客户批次',
+    })
+    expect(dismissed).toMatchObject({
+      ok: true,
+      item: { verdict: 'not_duplicate', reason: '属于两个不同客户批次' },
+      learning_receipt: { summary: '已隐藏这组重复事项建议' },
+    })
+    expect(yolo.listDuplicateTodos(cwd)).toEqual([])
+    expect(yolo.listEvents(cwd)[0]).toMatchObject({ kind: 'todo_merge_suggestion_dismissed' })
+  })
+
   it('consolidate on a non-todo kind is denied', () => {
     const denied = applyYoloAction(yolo, cwd, { action: 'consolidate', kind: 'goal', id: 'g1', into_id: 'g2' })
     expect(denied.ok).toBe(false)

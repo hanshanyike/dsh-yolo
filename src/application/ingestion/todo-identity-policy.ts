@@ -76,6 +76,9 @@ export function planTodoIdentityApplication(
   const candidateId = prediction.candidate_ids[0]
   const candidate = candidates.find((row) => row.id === candidateId)
   if (!candidate) return plan('blocked', 'candidate_not_in_snapshot', prediction)
+  if (candidate.match_source === 'similarity') {
+    return plan('blocked', 'candidate_recall_not_r2_safe', prediction, candidateId)
+  }
   if (!OPEN_STATUSES.has(candidate.status)) {
     return plan('blocked', 'candidate_not_open', prediction, candidateId)
   }

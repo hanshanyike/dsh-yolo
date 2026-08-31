@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { normalizeTitle as normalize } from '../shared/text.ts'
 import { compareDueAt, isDueAtReached, parseDueAt } from '../shared/due.ts'
 import { todoEvidenceFingerprint } from '../shared/todo-identity.ts'
+import { canonicalTodoTitle, compareTodoTitles } from '../shared/todo-similarity.ts'
 import { selectTodosInRange, type TodoRangeAction, type TodoRangeSelector } from '../shared/todo-range.ts'
 import type { DB } from './db.ts'
 import type {
@@ -41,7 +42,7 @@ import type {
   TodoResolutionLog,
   TodoIdentityFeedback,
   TodoIdentityFeedbackReason,
-  TodoIdentityReceipt, TodoMergeRecord,
+  TodoIdentityReceipt, TodoMergeRecord, TodoMergeSuggestionFeedback, TodoResolutionPrediction,
 } from './types.ts'
 
 const now = () => Date.now()
@@ -1978,31 +1979,167 @@ export function countEventKindSince(db: DB, kind: string, sinceMs: number): numb
   return row?.n ?? 0
 }
 
-/** R3 near-duplicate candidate pairs within a scope, by normalized title.
- * Terminal rows are included because their business status must be presented
- * during confirmation rather than silently excluding a possible duplicate. */
-export function listDuplicateTodos(db: DB, scopeKey: string): DuplicateTodoPair[] {
-  const rows = db
-    .prepare("SELECT id, title FROM todos WHERE scope_key = ? AND record_status = 'canonical' ORDER BY created_at ASC")
-    .all(scopeKey) as Array<{ id: string; title: string }>
-  const byNorm = new Map<string, Array<{ id: string; title: string }>>()
-  for (const r of rows) {
-    const n = normalize(r.title)
-    if (!n) continue
-    const arr = byNorm.get(n) ?? []
-    arr.push(r)
-    byNorm.set(n, arr)
+export function todoMergeSuggestionPairKey(leftId: string, rightId: string): string {
+  return leftId < rightId ? `${leftId}:${rightId}` : `${rightId}:${leftId}`
+}
+
+function parseResolverPredictions(value: string): TodoResolutionPrediction[] {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? parsed.filter((item): item is TodoResolutionPrediction => Boolean(item && typeof item === 'object')) : []
+  } catch {
+    return []
   }
-  const pairs: DuplicateTodoPair[] = []
-  for (const group of byNorm.values()) {
-    if (group.length < 2) continue
+}
+
+/** R3 combines three candidate sources without performing a write:
+ * 1) model semantic LINK/UPDATE observations whose turn later produced a
+ *    distinct origin todo; 2) canonical-title equality; 3) protected fuzzy
+ *    title similarity for manual rows. User-dismissed pairs stay suppressed. */
+export function listDuplicateTodos(db: DB, scopeKey: string): DuplicateTodoPair[] {
+  const rows = db.prepare(
+    `SELECT id,title,created_at FROM (
+       SELECT id,title,created_at,updated_at FROM todos
+       WHERE scope_key=? AND record_status='canonical'
+       ORDER BY updated_at DESC,id DESC LIMIT 200
+     ) recent ORDER BY created_at ASC,id ASC`,
+  ).all(scopeKey) as Array<{ id: string; title: string; created_at: number }>
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  const dismissed = new Set((db.prepare(
+    "SELECT pair_key FROM todo_merge_suggestion_feedback WHERE scope_key=? AND verdict='not_duplicate'",
+  ).all(scopeKey) as Array<{ pair_key: string }>).map((row) => row.pair_key))
+  const candidates = new Map<string, DuplicateTodoPair>()
+  const sourceRank = { exact: 3, resolver: 2, similarity: 1 } as const
+  const add = (left: typeof rows[number], right: typeof rows[number], suggestion: Pick<DuplicateTodoPair, 'confidence' | 'reason' | 'source'>): void => {
+    if (left.id === right.id) return
+    const key = todoMergeSuggestionPairKey(left.id, right.id)
+    if (dismissed.has(key)) return
+    const existing = candidates.get(key)
+    const incomingRank = suggestion.source ? sourceRank[suggestion.source] : 0
+    const existingRank = existing?.source ? sourceRank[existing.source] : 0
+    if (existing && (existing.confidence ?? 0) > (suggestion.confidence ?? 0) && existingRank >= incomingRank) return
+    candidates.set(key, {
+      scopeKey,
+      a: left.id,
+      b: right.id,
+      aTitle: left.title,
+      bTitle: right.title,
+      ...suggestion,
+    })
+  }
+
+  const byCanonical = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const canonical = canonicalTodoTitle(row.title)
+    if (!canonical) continue
+    const group = byCanonical.get(canonical) ?? []
+    group.push(row)
+    byCanonical.set(canonical, group)
+  }
+  for (const group of byCanonical.values()) {
     const keeper = group[0]
-    for (let i = 1; i < group.length; i++) {
-      const dup = group[i]
-      pairs.push({ scopeKey, a: keeper.id, b: dup.id, aTitle: keeper.title, bTitle: dup.title })
+    for (const duplicate of group.slice(1)) {
+      add(keeper, duplicate, {
+        source: 'exact', confidence: 1,
+        reason: '两个标题只有大小写、标点、空格或常见同义表达的差异。',
+      })
     }
   }
-  return pairs
+
+  for (let leftIndex = 0; leftIndex < rows.length; leftIndex++) {
+    for (let rightIndex = leftIndex + 1; rightIndex < rows.length; rightIndex++) {
+      const left = rows[leftIndex]!
+      const right = rows[rightIndex]!
+      if (canonicalTodoTitle(left.title) === canonicalTodoTitle(right.title)) continue
+      const similarity = compareTodoTitles(left.title, right.title)
+      if (similarity) add(left, right, { source: 'similarity', confidence: similarity.score, reason: similarity.reason })
+    }
+  }
+
+  const resolverRows = db.prepare(
+    `SELECT session_id,turn_seq,resolutions_json FROM todo_resolution_log
+     WHERE scope_key=? AND status='ok' ORDER BY created_at DESC,id DESC LIMIT 200`,
+  ).all(scopeKey) as Array<{ session_id: string; turn_seq: number; resolutions_json: string }>
+  const origins = db.prepare(
+    `SELECT DISTINCT evidence.todo_id FROM todo_evidence evidence
+     JOIN todos ON todos.id=evidence.todo_id
+     WHERE evidence.session_id=? AND evidence.turn_seq=? AND evidence.relation='origin'
+       AND todos.scope_key=? AND todos.record_status='canonical'`,
+  )
+  for (const observation of resolverRows) {
+    const predictions = parseResolverPredictions(observation.resolutions_json)
+      .filter((prediction) => (prediction.decision === 'LINK' || prediction.decision === 'UPDATE')
+        && (prediction.confidence ?? 0) >= 0.6 && prediction.candidate_ids.length > 0)
+    if (predictions.length !== 1) continue
+    const createdIds = (origins.all(observation.session_id, observation.turn_seq, scopeKey) as Array<{ todo_id: string }>)
+      .map((row) => row.todo_id)
+    if (createdIds.length !== 1) continue
+    const created = byId.get(createdIds[0]!)
+    if (!created) continue
+    for (const candidateId of predictions[0]!.candidate_ids.slice(0, 3)) {
+      const candidate = byId.get(candidateId)
+      if (!candidate) continue
+      add(candidate, created, {
+        source: 'resolver',
+        confidence: predictions[0]!.confidence ?? undefined,
+        reason: predictions[0]!.reason
+          ? `模型判断两条记录可能指向同一事项：${predictions[0]!.reason}`
+          : '模型判断两条记录可能指向同一事项。',
+      })
+    }
+  }
+
+  return [...candidates.values()]
+    .sort((left, right) => (right.confidence ?? 0) - (left.confidence ?? 0)
+      || sourceRank[right.source ?? 'similarity'] - sourceRank[left.source ?? 'similarity']
+      || left.a.localeCompare(right.a) || left.b.localeCompare(right.b))
+    .slice(0, 30)
+}
+
+export function dismissTodoMergeSuggestion(
+  db: DB,
+  scopeKey: string,
+  leftId: string,
+  rightId: string,
+  reason?: string | null,
+): TodoMergeSuggestionFeedback | null {
+  const left = db.prepare("SELECT id,title FROM todos WHERE id=? AND scope_key=? AND record_status='canonical'").get(leftId, scopeKey) as
+    | { id: string; title: string }
+    | undefined
+  const right = db.prepare("SELECT id,title FROM todos WHERE id=? AND scope_key=? AND record_status='canonical'").get(rightId, scopeKey) as
+    | { id: string; title: string }
+    | undefined
+  if (!left || !right || left.id === right.id) return null
+  const [a, b] = left.id < right.id ? [left, right] : [right, left]
+  const pairKey = todoMergeSuggestionPairKey(a.id, b.id)
+  const existing = db.prepare('SELECT * FROM todo_merge_suggestion_feedback WHERE pair_key=?').get(pairKey) as
+    | TodoMergeSuggestionFeedback
+    | undefined
+  if (existing) return existing
+  const feedback: TodoMergeSuggestionFeedback = {
+    pair_key: pairKey,
+    scope_key: scopeKey,
+    a_id: a.id,
+    b_id: b.id,
+    verdict: 'not_duplicate',
+    reason: reason?.trim().slice(0, 300) || null,
+    created_at: now(),
+  }
+  db.prepare(
+    `INSERT INTO todo_merge_suggestion_feedback(pair_key,scope_key,a_id,b_id,verdict,reason,created_at)
+     VALUES(?,?,?,?,?,?,?)
+     ON CONFLICT(pair_key) DO NOTHING`,
+  ).run(feedback.pair_key, feedback.scope_key, feedback.a_id, feedback.b_id, feedback.verdict, feedback.reason, feedback.created_at)
+  addEvent(db, {
+    kind: 'todo_merge_suggestion_dismissed',
+    summary: `不是重复事项：「${left.title}」与「${right.title}」`,
+    detail: feedback.reason,
+    scope_key: scopeKey,
+    source: 'manual',
+    subject_type: 'todo', subject_id: left.id, subject_title: left.title,
+    related_subject_type: 'todo', related_subject_id: right.id, related_subject_title: right.title,
+  })
+  return db.prepare('SELECT * FROM todo_merge_suggestion_feedback WHERE pair_key=?').get(feedback.pair_key) as TodoMergeSuggestionFeedback
 }
 /** Semantic-recall rows of a status since a timestamp (health hit-rate feed). */
 export function countRecallStatusSince(db: DB, status: string, sinceMs: number): number {

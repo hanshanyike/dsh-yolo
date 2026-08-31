@@ -29,7 +29,8 @@ export function buildTodoCandidateContext(candidates: readonly TodoIdentityCandi
   return candidates.map((candidate) => {
     const due = candidate.due_at ? ` due=${candidate.due_at}` : ''
     const aliases = candidate.aliases.length ? ` aliases=${JSON.stringify(candidate.aliases)}` : ''
-    return `- id=${candidate.id} status=${candidate.status}${due} title=${JSON.stringify(candidate.title)}${aliases}`
+    const match = candidate.match_source ? ` match=${candidate.match_source}` : ''
+    return `- id=${candidate.id} status=${candidate.status}${due}${match} title=${JSON.stringify(candidate.title)}${aliases}`
   }).join('\n')
 }
 

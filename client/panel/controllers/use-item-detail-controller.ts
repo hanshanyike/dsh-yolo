@@ -49,6 +49,7 @@ export function useItemDetailController({
   undoReceipt: () => void
   rejectIdentity: (receipt: TodoIdentityReceipt, reason: TodoIdentityFeedbackReason) => void
   consolidate: (sourceId: string, targetId: string) => void
+  dismissMergeSuggestion: (leftId: string, rightId: string) => void
 } {
   const [draft, setDraft] = useState<TaskEditDraft | null>(null)
   const [busy, setBusy] = useState(false)
@@ -211,6 +212,14 @@ export function useItemDetailController({
     })
   }, [foreground, run])
 
+  const dismissMergeSuggestion = useCallback((leftId: string, rightId: string): void => {
+    if (foreground.kind !== 'item_detail' || leftId === rightId) return
+    void run({
+      action: 'dismiss_merge_suggestion', kind: 'todo', id: leftId, into_id: rightId,
+      scope_cwd: foreground.item.scopeCwd,
+    })
+  }, [foreground, run])
+
   return {
     todo,
     draft,
@@ -231,5 +240,6 @@ export function useItemDetailController({
     undoReceipt,
     rejectIdentity,
     consolidate,
+    dismissMergeSuggestion,
   }
 }

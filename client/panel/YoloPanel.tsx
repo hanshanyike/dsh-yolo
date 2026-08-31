@@ -473,7 +473,13 @@ export function YoloPanel({
       if (!otherId) return []
       const other = state.data!.todos.find((todo) => todo.id === otherId
         && (todo.scope_cwd ?? todo.ws?.cwd ?? state.data!.cwd) === scopeCwd)
-      return other ? [{ key: `${scopeCwd}:${pair.a}:${pair.b}`, other }] : []
+      return other ? [{
+        key: `${scopeCwd}:${pair.a}:${pair.b}`,
+        other,
+        confidence: pair.confidence,
+        reason: pair.reason,
+        source: pair.source,
+      }] : []
     })
   }, [foregroundTodo, state.data])
 
@@ -670,6 +676,7 @@ export function YoloPanel({
               onUndoReceipt={detail.undo ? detail.undoReceipt : undefined}
               onRejectIdentity={detail.rejectIdentity}
               onConsolidate={detail.consolidate}
+              onDismissMergeSuggestion={detail.dismissMergeSuggestion}
             />
           </>
         )

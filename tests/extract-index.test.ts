@@ -32,6 +32,7 @@ interface SettingsStub {
       minTurnChars?: number
       maxRunsPerDay?: number
       todoIdentityR2Enabled?: boolean
+      todoIdentityR3Enabled?: boolean
     }
   } | undefined
 }
@@ -453,6 +454,44 @@ describe('extract apply: LLM semantic extraction (only path)', () => {
     expect(JSON.parse(log.resolutions_json)).toEqual([
       expect.objectContaining({ decision: 'UPDATE', candidate_ids: [todo.id] }),
     ])
+  })
+
+  it('R3 turns a model semantic LINK observation into an explainable merge suggestion without auto-merging', async () => {
+    const { todo: existing } = yolo.addTodo(cwd, { title: '演示稿发给研发组', source: 'manual' })
+    const llmJson = JSON.stringify({
+      todos: [{ title: '把最终版 PPT 发送给开发团队' }],
+      milestones: [], goals: [], preferences: [], events: [], updates: [],
+    })
+    const resolverText = JSON.stringify({ resolutions: [{
+      decision: 'LINK', candidate_ids: [existing.id], confidence: 0.84,
+      reason: '交付物和接收团队一致，只是使用了 PPT 和开发团队的说法。',
+    }] })
+    const { ctx, handlers } = makeCtx(yolo, llmJson, {
+      get: () => ({ extraction: { todoIdentityR3Enabled: true } }),
+    }, resolverText)
+    apply(ctx as never)
+    const session = sessionLike('s-r3-semantic-suggestion', cwd)
+    const agent = { id: session.id, session }
+    const message = {
+      id: 'r3-semantic-human', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: '提醒我把最终版 PPT 发送给开发团队' }],
+    }
+    await handlers.get('agent/pre-step')!(
+      { agent, messages: [message], turn: 5, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [message] }),
+    )
+    await handlers.get('agent/turn-stopping')!({ agent, turn: 5 })
+
+    expect(yolo.listTodos(cwd)).toHaveLength(2)
+    expect(yolo.listDuplicateTodos(cwd)).toEqual([
+      expect.objectContaining({
+        a: existing.id, source: 'resolver', confidence: 0.84,
+        reason: expect.stringContaining('交付物和接收团队一致'),
+      }),
+    ])
+    expect(JSON.parse(yolo.listTodoResolutions(cwd)[0].application_json ?? 'null')).toMatchObject({
+      status: 'fallback', plan: { reason: 'policy_disabled' },
+    })
   })
 
   it('R2a links one high-confidence mention to an open stable id without creating a duplicate', async () => {

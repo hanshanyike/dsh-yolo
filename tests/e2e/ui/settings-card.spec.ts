@@ -36,6 +36,7 @@ test('YOLO 设置可保存并在刷新后回读，且关闭提醒进入真实运
   await expect(card.getByRole('textbox', { name: /^提取模型/ })).toBeVisible()
   await expect(identity).toBeVisible()
   await expect(mergeSuggestions).toBeVisible()
+  await expect(card.getByText(/结合模型语义判断和受保护的标题相似度/)).toBeVisible()
   await expect(card.getByText(/仅在模型置信度至少为 0.98 且只有一个开放候选时/)).toBeVisible()
   await expect(card.getByRole('textbox', { name: /^扫描间隔（秒）/ })).toBeVisible()
   await expect(card.getByRole('checkbox', { name: /启用安静时段/ })).toBeVisible()

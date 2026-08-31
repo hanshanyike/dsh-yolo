@@ -81,6 +81,11 @@ canonical id，再把稳定 id、业务状态、截止时间和历史别名交�
 `LINK / UPDATE / REOPEN / NEW_OCCURRENCE / CREATE / ATTACH_STEP / ASK / NOOP` 先作为 observation 进入
 `todo_resolution_log`，模型的 confidence 不能自行授权写入。
 
+R3 开启时，候选快照额外允许受保护的标题相似度 fallback，以便把 “PPT / 演示稿”“开发团队 / 研发组”
+等高重合改写交给 resolver 做语义判断。fallback 候选带 `match_source=similarity`；即使 resolver 返回 0.98，
+R2a 也必须以 `candidate_recall_not_r2_safe` 阻断自动写入。若该 turn 随后形成一条独立 origin todo，R3 从
+同 session/turn 的 resolver LINK/UPDATE 日志投影语义合并候选、中文理由和置信度，不再要求两个标题相同。
+
 R2a 的确定性 application policy 版本为 `r2a-v1`，配置 `extraction.todoIdentityR2Enabled` 默认 `false`。
 只有显式开启后，单一 resolver 结果、单一开放 canonical 候选、置信度至少 `0.98` 且抽取形状无歧义时，
 才允许 `LINK` 追加 mention evidence，或让只含明确 `due_at` 的 `UPDATE` 按稳定 ID 进入既有 postpone 领域动作。
@@ -108,7 +113,7 @@ cross_session、same_name_distinct、terminal、step 等层统计 false-link 与
 - `extraction.maxRunsPerDay`：每日运行次数上限，默认 300。
 - `extraction.todoIdentityR2Enabled`：R2a 实验开关，默认关闭；助手看板设置可显式保存该值。
 - `extraction.todoIdentityR3Enabled`：R3 重复事项合并建议开关，默认关闭；只控制看板候选投影，合并仍需
-  用户预览、选择保留项并提交 `CONFIRM_CONSOLIDATE`。
+  用户预览、选择保留项并提交 `CONFIRM_CONSOLIDATE`；它可以扩大 resolver 的观察候选，但不能扩大 R2a 写入授权。
 - 模型流量使用宿主允许的 `purpose: 'session-title'`；该联合类型没有自定义 purpose。
 - 每个通过现有抽取闸门的 turn 在主抽取解析后运行一次 resolver；它沿用同一 provider/model
   路由，但独立记录 token 和耗时。每日上限仍按主抽取 turn 计数，不把第二次调用误算成第二个 turn。

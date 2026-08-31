@@ -41,6 +41,7 @@ export type EventKind =
   | 'action_denied'
     | 'todo_consolidated'
     | 'todo_consolidation_undone'
+    | 'todo_merge_suggestion_dismissed'
     | 'todo_identity_corrected'
 /** Domain action applicable to a todo (M8 Organizer). reopen = undo of complete (5.4). */
 export type TodoAction = 'start' | 'complete' | 'cancel' | 'postpone' | 'remind_again' | 'reopen'
@@ -127,6 +128,9 @@ export interface TodoIdentityCandidate {
   aliases: string[]
   /** Search rank retained for deterministic ordering and offline evaluation. */
   rank: number
+  /** Similarity fallback candidates are valid resolver evidence but cannot by
+   * themselves authorize the narrower R2a automatic-write policy. */
+  match_source?: 'similarity'
 }
 
 /** Provider-neutral resolver prediction. A prediction is evidence for the
@@ -396,4 +400,18 @@ export interface DuplicateTodoPair {
   b: string
   aTitle: string
   bTitle: string
+  /** Recommendation evidence only; never merge authorization. */
+  confidence?: number
+  reason?: string
+  source?: 'resolver' | 'exact' | 'similarity'
+}
+
+export interface TodoMergeSuggestionFeedback {
+  pair_key: string
+  scope_key: string
+  a_id: string
+  b_id: string
+  verdict: 'not_duplicate'
+  reason?: string | null
+  created_at: number
 }

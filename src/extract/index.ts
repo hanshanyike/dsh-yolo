@@ -58,6 +58,7 @@ interface SettingsLike {
       minTurnChars?: number
       maxRunsPerDay?: number
       todoIdentityR2Enabled?: boolean
+      todoIdentityR3Enabled?: boolean
     }
   } | undefined
 }
@@ -261,6 +262,8 @@ export function apply(ctx: Context): void {
         for (const candidate of yctx.yolo.recallTodoIdentityCandidates(
           cwdOf(payload.agent.session),
           humanMessagesToText(human),
+          12,
+          settings?.get(YOLO_NS)?.extraction?.todoIdentityR3Enabled === true,
         )) {
           // Late human steering may introduce another todo. Add new ids but
           // never replace the first pre-tool snapshot of an existing id.
@@ -356,7 +359,9 @@ export function apply(ctx: Context): void {
           // Snapshot resolver candidates before the legacy extraction write.
           // Otherwise a newly-created todo from this same turn would appear as
           // its own prior candidate and invalidate the shadow observation.
-          const todoCandidates = (preStepTodoCandidates ?? yctx.yolo.recallTodoIdentityCandidates(cwd, turnText)).filter((candidate) =>
+          const todoCandidates = (preStepTodoCandidates ?? yctx.yolo.recallTodoIdentityCandidates(
+            cwd, turnText, 12, config?.todoIdentityR3Enabled === true,
+          )).filter((candidate) =>
             !yctx.yolo.listTodoEvidence(cwd, candidate.id).some((evidence) =>
               evidence.session_id === session.id
               && evidence.turn_seq === turn

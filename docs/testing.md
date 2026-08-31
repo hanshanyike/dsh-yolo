@@ -100,6 +100,8 @@ UI 套件使用 Playwright 驱动真实 Edge，验证看板打开、捕获、筛
   自动改期仅在当前值仍等于 receipt 的 `due_after` 时恢复 `due_before`，后续人工编辑必须得到 conflict 保护。
 - R3 合并必须先预览并显式确认；一开一终态/两终态由用户选择保留项。未处理通知、待投递提醒和来源关系
   随 canonical identity 迁移；撤销恢复原关系，且不得覆盖合并后产生的用户编辑或改写旧审计事件。
+- R3 语义候选必须保留 resolver 理由/置信度，标题相似 fallback 不得取得 R2a 写权限；“不是重复事项”反馈
+  必须跨刷新抑制同一 pair，而不删除事项、证据或原始 resolver 日志。
 - 每个聚合事项显式携带并保留自己的 `scope_cwd`；未知 scope 被拒绝。
 - 工作区身份只取 canonical cwd；同一 cwd 的非 Git/main/feature 状态和 Windows 等价路径不得重复注册或拆库。
 - 顶层“和助手聊聊”每次显式打开都是新的 ephemeral thread 且不显示 resident 历史；事项讨论按事项 episode 复用，旧请求或轮询结果不能覆盖新对话。
