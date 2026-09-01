@@ -54,7 +54,7 @@ YOLO 会理解对话里的计划信息，而不是要求你使用固定关键词
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0-beta.2
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0-beta.3
 npx @deepseek-ai/dsh web
 ```
 
@@ -77,7 +77,7 @@ npx @deepseek-ai/dsh web --no-open
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.5.0-beta.2
+git checkout v0.5.0-beta.3
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
