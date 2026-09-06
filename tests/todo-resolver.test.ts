@@ -56,4 +56,11 @@ describe('todo identity shadow resolver', () => {
     }])
     expect(() => parseTodoResolverJson('{"todos":[]}', new Set())).toThrow(/wrong-schema/)
   })
+
+  it('accepts a string-encoded confidence instead of dropping it to null', () => {
+    const parsed = parseTodoResolverJson(JSON.stringify({ resolutions: [{
+      decision: 'LINK', candidate_ids: ['todo-1'], confidence: '0.9', reason: '同一事项',
+    }] }), new Set(['todo-1']))
+    expect(parsed[0]).toMatchObject({ decision: 'LINK', confidence: 0.9 })
+  })
 })

@@ -208,6 +208,20 @@ describe('todo action v2 receipts', () => {
     expect(cancelled).toMatchObject({ ok: true, learning_receipt: { type: 'feedback_count', reversible: false } })
   })
 
+  it('rejects a malformed due_at instead of persisting raw text', () => {
+    const todo = yolo.addTodo(cwd, { title: '确认下周评审时间' }).todo
+
+    const badPostpone = applyYoloAction(yolo, cwd, { action: 'postpone', kind: 'todo', id: todo.id, due_at: '明天' })
+    expect(badPostpone).toMatchObject({ ok: false, httpStatus: 400 })
+    expect(yolo.findTodo(cwd, { id: todo.id })?.due_at ?? null).toBeNull()
+
+    const badQuickAdd = applyYoloAction(yolo, cwd, { action: 'quick_add', kind: 'todo', title: '随手记', due_at: '不是日期' })
+    expect(badQuickAdd).toMatchObject({ ok: false, httpStatus: 400 })
+
+    const badUpdate = applyYoloAction(yolo, cwd, { action: 'update', kind: 'todo', id: todo.id, due_at: 'not-a-date' })
+    expect(badUpdate).toMatchObject({ ok: false, httpStatus: 400 })
+  })
+
   it('bulk-cancels only open todos in the inclusive due-date range', () => {
     const inRange = yolo.addTodo(cwd, { title: '向客户发送确认邮件', due_at: '2026-08-29' }).todo
     const done = yolo.addTodo(cwd, { title: '归档已经签署的合同', due_at: '2026-08-29' }).todo

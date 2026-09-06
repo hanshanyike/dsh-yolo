@@ -19,6 +19,7 @@ function mockYolo(overrides: Partial<Record<keyof Yolo, unknown>> = {}) {
     listEventsBetween: vi.fn(() => []),
     getBriefStamp: vi.fn(() => ''),
     setBriefStamp: vi.fn(),
+    runWorkspaceTransaction: vi.fn((_cwd: string, execute: () => unknown) => execute()),
     ...overrides,
   } as unknown as Yolo
 }
@@ -278,6 +279,12 @@ describe('inQuietWindow (v0.3.2 quiet-hours gate)', () => {
     expect(inQuietWindow('03:00', '22:00', '08:00')).toBe(true)
     expect(inQuietWindow('09:00', '22:00', '08:00')).toBe(false)
   })
+
+  it('normalizes unpadded clock values before comparing', () => {
+    expect(inQuietWindow('9:30', '8:00', '18:00')).toBe(true)
+    expect(inQuietWindow('9:30', '10:00', '18:00')).toBe(false)
+    expect(inQuietWindow('23:30', '22:00', '8:00')).toBe(true)
+  })
 })
 
 describe('runReminderTick quiet-hours hold (v0.3.2)', () => {
@@ -332,12 +339,12 @@ describe('runReminderTick quiet-hours hold (v0.3.2)', () => {
 
     const result = runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 0, now: () => now })
 
-    expect(result.notified).toBe(2)
+    expect(result.notified).toBe(3)
     expect((yolo.setTodoReminded as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[1]))
-      .toEqual(['local-past', 'z-past'])
+      .toEqual(['local-past', 'z-past', 'date-today'])
   })
 
-  it('keeps quick-add date-only todos quiet across ticks, then fires exactly once at day end', () => {
+  it('fires a date-only todo from the start of its due day, exactly once', () => {
     const row = {
       id: 'quick', title: '把演示稿发给研发', due_at: '2026-08-25', status: 'pending', scope_key: 's',
       last_reminded_at: null as number | null,
@@ -349,10 +356,12 @@ describe('runReminderTick quiet-hours hold (v0.3.2)', () => {
       }),
     })
 
+    // Not yet due before its day starts.
+    expect(runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 0, now: () => new Date(2026, 7, 24, 23, 59, 59, 999) }).notified).toBe(0)
+    // Due from the start of the due day, not its final second.
+    expect(runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 0, now: () => new Date(2026, 7, 25, 0, 0, 0, 0) }).notified).toBe(1)
+    // Already stamped, so it fires exactly once.
     expect(runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 0, now: () => new Date(2026, 7, 25, 12) }).notified).toBe(0)
-    expect(runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 0, now: () => new Date(2026, 7, 25, 23, 59, 59, 998) }).notified).toBe(0)
-    expect(runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 0, now: () => new Date(2026, 7, 25, 23, 59, 59, 999) }).notified).toBe(1)
-    expect(runReminderTick({ yolo, cwd: () => '/tmp', aheadMs: 0, now: () => new Date(2026, 7, 26, 0, 5) }).notified).toBe(0)
     expect(yolo.addNotification).toHaveBeenCalledTimes(1)
     expect(yolo.setTodoReminded).toHaveBeenCalledTimes(1)
   })

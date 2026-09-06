@@ -12,13 +12,16 @@ import { localDateStr } from '../src/shared/text.ts'
 const NOW = new Date(2026, 7, 25, 10, 0, 0, 0)
 
 describe('shared due semantics', () => {
-  it('treats a date-only value as the end of its local calendar day', () => {
+  it('treats a date-only value as the end of its day for overdue, but reminds from day start', () => {
     const today = localDateStr(NOW)
     const parsed = parseDueAt(today)
     expect(parsed).toMatchObject({ kind: 'date', localDate: today })
     expect(new Date(parsed!.timestamp)).toEqual(new Date(2026, 7, 25, 23, 59, 59, 999))
-    expect(isDueAtReached(today, new Date(2026, 7, 25, 23, 59, 59, 998))).toBe(false)
-    expect(isDueAtReached(today, new Date(2026, 7, 25, 23, 59, 59, 999))).toBe(true)
+    // The reminder is actionable from the start of the due day, not its last
+    // second: a "今天到期" commitment should fire in the morning.
+    expect(isDueAtReached(today, new Date(2026, 7, 25, 0, 0, 0, 0))).toBe(true)
+    expect(isDueAtReached(today, new Date(2026, 7, 24, 23, 59, 59, 999))).toBe(false)
+    // Overdue stays end-of-day: still not overdue during the day itself.
     expect(isTodoOverdue(today, 'pending', new Date(2026, 7, 25, 23, 59, 59, 999))).toBe(false)
     expect(isTodoOverdue(today, 'pending', new Date(2026, 7, 26, 0, 0, 0, 0))).toBe(true)
   })

@@ -39,13 +39,23 @@ export interface TickResult {
   notified: number
 }
 
+/** Normalize an "H:MM"/"HH:MM" clock string to padded "HH:mm" so string
+ * comparison in `inQuietWindow` is safe even for a hand-edited settings value. */
+function padHm(value: string): string {
+  const [hour, minute] = value.split(':').map((part) => part.padStart(2, '0'))
+  return `${hour}:${minute}`
+}
+
 /** True when a "HH:MM" clock time is inside a quiet window that may wrap
  *  midnight (e.g. 22:00–08:00). Used to defer reminders outside the user's
  *  active hours — the "绝不打扰" red line, engineering it in. */
 export function inQuietWindow(hm: string, start: string, end: string): boolean {
   if (!start || !end || start === end) return false
-  if (start <= end) return hm >= start && hm < end // same-day, e.g. 12:00–14:00
-  return hm >= start || hm < end // wraps midnight, e.g. 22:00–08:00
+  const now = padHm(hm)
+  const from = padHm(start)
+  const to = padHm(end)
+  if (from <= to) return now >= from && now < to // same-day, e.g. 12:00–14:00
+  return now >= from || now < to // wraps midnight, e.g. 22:00–08:00
 }
 
 /** Quiet-hours config consumed by a reminder pass. */
@@ -82,25 +92,30 @@ export function runReminderTick(deps: {
   for (const t of due) {
     if (hold) continue
     const text = reminderText(t.title, t.due_at)
-    deps.yolo.addNotification(cwd, {
-      kind: 'reminder',
-      title: `⏰ ${t.title}`,
-      body: t.due_at ? `到期 ${t.due_at}` : null,
-      todo_id: t.id,
-      scope_cwd: cwd,
-    })
-    deps.yolo.addEvent(cwd, {
-      kind: 'reminder_fired',
-      summary: `⏰ 提醒「${t.title}」`,
-      detail: t.due_at ? `到期 ${t.due_at}` : null,
-      source: 'tool',
+    // Write the card, the audit event and the reminded stamp in one
+    // transaction so a partial failure cannot leave a fired-but-unmarked todo
+    // (which would re-fire on the next tick and duplicate the card).
+    deps.yolo.runWorkspaceTransaction(cwd, () => {
+      deps.yolo.addNotification(cwd, {
+        kind: 'reminder',
+        title: `⏰ ${t.title}`,
+        body: t.due_at ? `到期 ${t.due_at}` : null,
+        todo_id: t.id,
+        scope_cwd: cwd,
+      })
+      deps.yolo.addEvent(cwd, {
+        kind: 'reminder_fired',
+        summary: `⏰ 提醒「${t.title}」`,
+        detail: t.due_at ? `到期 ${t.due_at}` : null,
+        source: 'tool',
+      })
+      deps.yolo.setTodoReminded(cwd, t.id)
     })
     if (deps.deliver) {
       void deps
         .deliver(cwd, text)
         .catch(() => {}) // the card is the guaranteed surface; chat delivery is best effort
     }
-    deps.yolo.setTodoReminded(cwd, t.id)
     notified++
   }
   return { notified }
@@ -272,8 +287,9 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
 
   // Briefs are product-level aggregates. Running once per workspace creates
   // duplicate morning/evening cards because the dashboard merges all stores.
+  let briefInFlight = false
   const briefTick = (): void => {
-    if (!deps.briefs) return
+    if (!deps.briefs || briefInFlight) return
     const targets = targetsOf(deps)
     const tracked = deps.cwd()
     // Before the first work session, `cwd()` falls back to the host process
@@ -285,6 +301,10 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
         ? target.cwd.toLowerCase() === tracked.toLowerCase()
         : target.cwd === tracked
     ))?.cwd ?? targets[0]!.cwd
+    // The once-per-day stamp is written only after the awaited LLM polish in
+    // runBriefTick; an in-flight flag stops the next 30s tick from re-entering
+    // and emitting a second card while that slow polish is still running.
+    briefInFlight = true
     void runBriefTick({
       yolo: deps.yolo,
       cwd: () => owner,
@@ -294,6 +314,8 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
       provider: deps.briefs.provider,
     }).catch((e: unknown) => {
       ctx.logger?.warn?.('[yolo-brief] tick failed (%s): %s', owner, e instanceof Error ? e.message : String(e))
+    }).finally(() => {
+      briefInFlight = false
     })
   }
 

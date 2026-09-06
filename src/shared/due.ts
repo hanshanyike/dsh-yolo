@@ -76,10 +76,22 @@ export function dueAtLocalDate(value: string | null | undefined): string | undef
   return parseDueAt(value)?.localDate
 }
 
-/** True when the due instant is at or inside the optional lead window. */
+/** Local start-of-day instant for a validated "YYYY-MM-DD" string. */
+function startOfLocalDay(localDate: string): number {
+  const [year, month, day] = localDate.split('-').map(Number)
+  return new Date(year!, month! - 1, day!).getTime()
+}
+
+/** True when a todo is eligible for a reminder at-or-inside the lead window.
+ * A date-only due ("周五前") becomes actionable at the START of its local day
+ * so the scheduler reminds in the morning rather than the deadline's last
+ * second; datetimes keep their exact instant. Overdue/sorting still use
+ * `dueAtTimestamp`, which keeps the end-of-day deadline for date-only values. */
 export function isDueAtReached(value: string | null | undefined, now = new Date(), aheadMs = 0): boolean {
-  const timestamp = dueAtTimestamp(value)
-  return timestamp !== undefined && timestamp <= now.getTime() + Math.max(0, aheadMs)
+  const parsed = parseDueAt(value)
+  if (!parsed) return false
+  const instant = parsed.kind === 'date' ? startOfLocalDay(parsed.localDate) : parsed.timestamp
+  return instant <= now.getTime() + Math.max(0, aheadMs)
 }
 
 /** Overdue is strict: an open todo becomes overdue only after its due instant. */

@@ -28,6 +28,7 @@ function mockYolo(todos: Todo[]) {
     lastSnapshotDate: vi.fn(() => undefined),
     writeSnapshot: vi.fn(() => '/tmp/snap.md'),
     setSnapshotDate: vi.fn(),
+    runWorkspaceTransaction: vi.fn((_cwd: string, execute: () => unknown) => execute()),
   } as unknown as Yolo
 }
 
@@ -68,7 +69,7 @@ describe('runReminderTick', () => {
     expect(yolo.setTodoReminded).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps date-only today out while an earlier exact datetime is due', () => {
+  it('reminds both a date-only today and an earlier timed todo in deadline order', () => {
     const yolo = mockYolo([
       todo('quick', '快速记录', '2026-08-25'),
       todo('exact', '上午截止', '2026-08-25T09:59:59'),
@@ -79,9 +80,10 @@ describe('runReminderTick', () => {
       aheadMs: 0,
       now: () => new Date(2026, 7, 25, 10),
     })
-    expect(result.notified).toBe(1)
+    expect(result.notified).toBe(2)
     expect(yolo.listTodos).toHaveBeenCalledWith('/tmp')
-    expect(yolo.setTodoReminded).toHaveBeenCalledWith('/tmp', 'exact')
+    expect((yolo.setTodoReminded as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[1]))
+      .toEqual(['exact', 'quick'])
   })
 })
 

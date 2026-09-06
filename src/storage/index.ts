@@ -552,7 +552,7 @@ export default class Yolo extends Service {
   // ---- preferences ----
   addPreference(cwd: string, data: { key: string; value: string; session_id?: string | null }): Preference {
     const h = this.resolve(cwd)
-    return repo.upsertPreference(h.db, { ...data, scope_key: h.scopeKey })
+    return withTransaction(h.db, () => repo.upsertPreference(h.db, { ...data, scope_key: h.scopeKey }))
   }
   listPreferences(cwd: string): Preference[] {
     const h = this.resolve(cwd)

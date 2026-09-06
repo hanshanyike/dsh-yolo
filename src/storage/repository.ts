@@ -790,7 +790,9 @@ export function updateGoal(db: DB, id: string, patch: UpdateGoalInput): Goal | n
   const values = entries.map((key) => key === 'title' ? String(patch[key]).trim() : patch[key])
   if (entries.includes('title') && !values[entries.indexOf('title')]) return current
   db.prepare(`UPDATE goals SET ${assignments}, updated_at = ? WHERE id = ?`).run(...values, now(), id)
-  if (entries.includes('title')) {
+  // description is the FTS `body`; both it and title are searchable, so resync
+  // when either changed (a description-only edit must not leave a stale body).
+  if (entries.includes('title') || entries.includes('description')) {
     const updated = getGoal(db, id)!
     db.prepare("DELETE FROM yolo_fts WHERE row_type = 'goal' AND row_id = ?").run(id)
     db.prepare('INSERT INTO yolo_fts(row_type, row_id, title, body) VALUES(?, ?, ?, ?)').run('goal', id, updated.title, updated.description ?? '')
@@ -1572,6 +1574,7 @@ export function applyTodoAction(
       break
     }
     case 'remind_again':
+      if (t.last_reminded_at === null) return t
       db.prepare('UPDATE todos SET last_reminded_at = NULL, updated_at = ? WHERE id = ?').run(ts, id)
       addEvent(db, {
         kind: 'todo_remind_again', summary: `再次提醒：「${t.title}」`, scope_key: t.scope_key, occurred_at: ts, session_id, source,
@@ -1831,7 +1834,13 @@ export function applyTodoUpdate(
   const ms = patch.milestone_id !== undefined ? patch.milestone_id : t.milestone_id
   const ts = now()
   db.prepare('UPDATE todos SET title = ?, detail = ?, due_at = ?, priority = ?, milestone_id = ?, updated_at = ? WHERE id = ?').run(title, detail, due, pri, ms, ts, id)
-  syncTodoFts(db, id, title, detail ?? null)
+  // Terminal todos stay out of ordinary recall; an inline edit of a
+  // done/cancelled todo must not re-insert its FTS row.
+  if (t.status === 'pending' || t.status === 'in_progress') {
+    syncTodoFts(db, id, title, detail ?? null)
+  } else {
+    db.prepare("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id = ?").run(id)
+  }
   const changes: string[] = []
   const change: NonNullable<TimelineEvent['change']> = {}
   if (title !== t.title) { changes.push(`标题「${t.title}」→「${title}」`); change.title = { before: t.title, after: title } }
@@ -1845,7 +1854,7 @@ export function applyTodoUpdate(
     scope_key: t.scope_key,
     occurred_at: ts,
     session_id: sessionId ?? null,
-    source: 'manual',
+    source: sessionId ? null : 'manual',
     subject_type: 'todo',
     subject_id: id,
     subject_title: t.title,
@@ -1912,7 +1921,7 @@ export function applyMilestoneRename(db: DB, id: string, title: string, sessionI
     summary: `里程碑改名「${m.title}」→「${t}」`,
     scope_key: m.scope_key,
     session_id: sessionId ?? null,
-    source: 'manual',
+    source: sessionId ? null : 'manual',
     subject_type: 'milestone',
     subject_id: id,
     subject_title: m.title,
@@ -1935,7 +1944,7 @@ export function applyGoalRename(db: DB, id: string, title: string, sessionId?: s
     summary: `目标改名「${g.title}」→「${t}」`,
     scope_key: g.scope_key,
     session_id: sessionId ?? null,
-    source: 'manual',
+    source: sessionId ? null : 'manual',
     subject_type: 'goal',
     subject_id: id,
     subject_title: g.title,
@@ -1957,7 +1966,7 @@ export function applyGoalAbandon(db: DB, id: string, sessionId?: string | null):
     summary: `目标「${g.title}」已放弃`,
     scope_key: g.scope_key,
     session_id: sessionId ?? null,
-    source: 'manual',
+    source: sessionId ? null : 'manual',
     subject_type: 'goal',
     subject_id: id,
     subject_title: g.title,

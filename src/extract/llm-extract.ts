@@ -31,6 +31,8 @@ export const EMPTY_EXTRACTION: ExtractionResult = {
   updates: [],
 }
 
+const TODO_STATUS_VALUES = new Set(['pending', 'in_progress', 'done', 'cancelled'])
+
 /** Accept date-only deadlines and timezone-qualified ISO-8601 instants. */
 function validDueAt(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -132,7 +134,7 @@ export function validateExtraction(raw: Partial<ExtractionResult> | null | undef
       result.updates.push({
         kind: u.kind,
         match_title: u.match_title,
-        status: typeof u.status === 'string' ? u.status : null,
+        status: typeof u.status === 'string' && TODO_STATUS_VALUES.has(u.status) ? u.status : null,
         progress: typeof u.progress === 'number' ? Math.round(u.progress) : null,
         due_at: validDueAt(u.due_at),
         note: typeof u.note === 'string' ? u.note : null,
@@ -195,7 +197,7 @@ export async function llmExtract(opts: LlmExtractOptions): Promise<ExtractionRes
   const text = contentBlocksToText(blocks).trim()
   observe?.({ rawText: text, finish, usage: assembler.usage })
   if (finish.kind === 'error' || finish.kind === 'aborted') {
-    throw new Error(`extraction model ${finish.kind}: ${finish.failure.message}`)
+    throw new Error(`extraction model ${finish.kind}: ${finish.failure?.message ?? 'no failure detail'}`)
   }
   if (!text) throw new Error('extraction model returned no text')
   return parseExtractionJsonStrict(text)

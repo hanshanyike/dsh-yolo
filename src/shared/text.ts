@@ -42,12 +42,14 @@ export function localClockGuidance(now = new Date()): string {
   return `Current local time: ${localDateStr(now)} ${pad(now.getHours())}:${pad(now.getMinutes())} UTC${offset}; today=${localDateStr(now)}; tomorrow=${localDateStr(tomorrow)}. This clock is authoritative: resolve relative dates from it, never from conversation history or stored reminders.`
 }
 
-const DAY_MS = 86_400_000
-
-/** Local-day bounds [from, to) in epoch ms for a "YYYY-MM-DD" string (ledger, briefs). */
+/** Local-day bounds [from, to) in epoch ms for a "YYYY-MM-DD" string (ledger,
+ * briefs). Calendar arithmetic keeps DST transition days (23/25 hours) exact
+ * instead of assuming a fixed 24-hour window. */
 export function dayBounds(day: string): { from: number; to: number } {
-  const from = new Date(`${day}T00:00:00`).getTime()
-  return { from, to: from + DAY_MS }
+  const [year, month, date] = day.split('-').map(Number)
+  const from = new Date(year!, month! - 1, date!).getTime()
+  const to = new Date(year!, month! - 1, date! + 1).getTime()
+  return { from, to }
 }
 
 /** Local-time "HH:mm" of a Date — brief trigger comparison. */

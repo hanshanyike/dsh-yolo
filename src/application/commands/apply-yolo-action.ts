@@ -10,6 +10,7 @@ import type Yolo from '../../storage/index.ts'
 import type { GoalStatus, MilestoneStatus, Priority, TimelineEvent, Todo, TodoAction } from '../../domain/types.ts'
 import { createHash } from 'node:crypto'
 import { localDateStr } from '../../shared/text.ts'
+import { parseDueAt } from '../../shared/due.ts'
 import { todoEvidenceFingerprint } from '../../shared/todo-identity.ts'
 import { buildDashboardData } from '../read-models/dashboard.ts'
 import { validateTodoRange, type TodoRangeField, type TodoRangeSelector } from '../../shared/todo-range.ts'
@@ -303,7 +304,11 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
     if (kind !== 'todo' || !ref.title) {
       return deny(yolo, cwd, r, 'quick_add requires kind=todo and title', 400)
     }
-    const due = typeof r.due_at === 'string' && r.due_at ? r.due_at : localDateStr()
+    const rawDue = typeof r.due_at === 'string' && r.due_at.trim() ? r.due_at.trim() : undefined
+    if (rawDue !== undefined && !parseDueAt(rawDue)) {
+      return deny(yolo, cwd, r, 'quick_add due_at must be an absolute date (YYYY-MM-DD)', 400)
+    }
+    const due = rawDue ?? localDateStr()
     const { todo, created } = yolo.addTodo(cwd, {
       title: ref.title,
       due_at: due,
@@ -681,7 +686,15 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
     const patch: { title?: string; detail?: string | null; due_at?: string | null; priority?: Priority | null; milestone_id?: string | null } = {}
     if (typeof r.title === 'string' && r.title.trim()) patch.title = r.title.trim()
     if (r.detail !== undefined) patch.detail = typeof r.detail === 'string' && r.detail.trim() ? r.detail.trim() : null
-    if (r.due_at !== undefined) patch.due_at = typeof r.due_at === 'string' && r.due_at ? r.due_at : null
+    if (r.due_at !== undefined) {
+      if (r.due_at === null || r.due_at === '') {
+        patch.due_at = null
+      } else if (typeof r.due_at === 'string' && parseDueAt(r.due_at)) {
+        patch.due_at = r.due_at
+      } else {
+        return deny(yolo, cwd, r, 'due_at must be an absolute date (YYYY-MM-DD) or empty', 400)
+      }
+    }
     if (r.priority !== undefined) {
       const priority = toPriority(r.priority)
       if (priority === undefined) {
@@ -761,7 +774,7 @@ function applyYoloActionOnce(yolo: Yolo, cwd: string, r: YoloActionRequest): Yol
   if (kind !== 'todo' || !TODO_ACTIONS.includes(action as TodoAction)) {
     return deny(yolo, cwd, r, `unsupported action "${action}" for kind "${kind}"`, 400)
   }
-  if (action === 'postpone' && typeof r.due_at !== 'string') {
+  if (action === 'postpone' && (typeof r.due_at !== 'string' || !parseDueAt(r.due_at))) {
     return deny(yolo, cwd, r, 'postpone requires due_at (absolute date YYYY-MM-DD)', 400)
   }
   // UI "delete" is the audited soft-delete (TE-6: todo_cancelled event)

@@ -103,6 +103,14 @@ describe('validateExtraction: updates array', () => {
     expect(r.updates).toHaveLength(1)
     expect(r.updates[0].match_title).toBe('ok')
   })
+
+  it('drops a non-canonical status so it cannot silently mis-apply', () => {
+    const r = validateExtraction(
+      { updates: [{ kind: 'todo', match_title: '写周报', status: 'completed' }] } as never,
+    )
+    expect(r.updates).toHaveLength(1)
+    expect(r.updates[0].status).toBeNull()
+  })
 })
 
 describe('merge: state updates land on known items', () => {

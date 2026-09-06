@@ -170,6 +170,15 @@ describe('applyTodoAction', () => {
     expect(lastEvent()?.kind).toBe('todo_remind_again')
   })
 
+  it('remind_again is idempotent: no duplicate event when the stamp is already cleared', () => {
+    const { row: t } = repo.upsertTodo(db, { title: '尚未提醒的任务', due_at: '2026-08-01', scope_key: SCOPE })
+    repo.setTodoReminded(db, t.id, 1000)
+    repo.applyTodoAction(db, t.id, 'remind_again')
+    expect(repo.listEvents(db, SCOPE).filter((event) => event.kind === 'todo_remind_again')).toHaveLength(1)
+    repo.applyTodoAction(db, t.id, 'remind_again') // stamp already null -> no-op
+    expect(repo.listEvents(db, SCOPE).filter((event) => event.kind === 'todo_remind_again')).toHaveLength(1)
+  })
+
   it('returns null for an unknown id', () => {
     expect(repo.applyTodoAction(db, 'nope', 'complete')).toBeNull()
   })
@@ -433,6 +442,33 @@ describe('applyTodoConsolidate', () => {
     expect(unknownSource).toEqual({ ok: false, kind: 'not-found', error: 'source todo not found' })
     const unknownTarget = repo.applyTodoConsolidate(db, { id: target.id }, { title: '不存在的任务' }, null, SCOPE)
     expect(unknownTarget).toEqual({ ok: false, kind: 'not-found', error: 'target todo not found' })
+  })
+})
+
+describe('inline edit search projection', () => {
+  it('keeps an open todo searchable and attributes the session instead of "manual"', () => {
+    const { row: t } = repo.upsertTodo(db, { title: '确认北辰合同', scope_key: SCOPE })
+    repo.applyTodoUpdate(db, t.id, { detail: '法务复核后再发' }, 'session-edit')
+    expect(ftsSearch(db, '法务复核', 5, ['todo'])).toHaveLength(1)
+    expect(repo.listEvents(db, SCOPE)[0]).toMatchObject({
+      kind: 'todo_updated', source: null, session_id: 'session-edit',
+    })
+  })
+
+  it('does not resurrect a terminal todo into FTS through an inline edit', () => {
+    const { row: t } = repo.upsertTodo(db, { title: '已经完成的任务', scope_key: SCOPE })
+    repo.setTodoStatus(db, t.id, 'done')
+    expect(ftsSearch(db, '已经完成', 5, ['todo'])).toHaveLength(0)
+    repo.applyTodoUpdate(db, t.id, { title: '已经完成的任务（改名）' })
+    expect(ftsSearch(db, '已经完成', 5, ['todo'])).toHaveLength(0)
+  })
+
+  it('resyncs a goal FTS row when only its description changes', () => {
+    const g = repo.upsertGoal(db, { title: '发布插件', description: '初版说明', scope_key: SCOPE })
+    expect(ftsSearch(db, '初版说明', 5, ['goal'])).toHaveLength(1)
+    repo.updateGoal(db, g.id, { description: '改版后的说明' })
+    expect(ftsSearch(db, '初版说明', 5, ['goal'])).toHaveLength(0)
+    expect(ftsSearch(db, '改版后', 5, ['goal'])).toHaveLength(1)
   })
 })
 

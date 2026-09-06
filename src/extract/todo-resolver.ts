@@ -106,9 +106,11 @@ export function parseTodoResolverJson(text: string, allowedIds: ReadonlySet<stri
     const candidateIds = Array.isArray(value.candidate_ids)
       ? [...new Set(value.candidate_ids.filter((id): id is string => typeof id === 'string' && allowedIds.has(id)))].slice(0, 5)
       : []
-    const confidence = typeof value.confidence === 'number' && Number.isFinite(value.confidence)
-      ? Math.max(0, Math.min(1, value.confidence))
-      : null
+    const confidence = (() => {
+      const raw = value.confidence
+      const number = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : Number.NaN
+      return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : null
+    })()
     result.push({
       decision: value.decision as TodoResolutionDecision,
       candidate_ids: candidateIds,
@@ -150,7 +152,7 @@ export async function llmResolveTodoIdentity(opts: {
   const text = contentBlocksToText(assembler.blocks()).trim()
   observe?.({ rawText: text, finish, usage: assembler.usage })
   if (finish.kind === 'error' || finish.kind === 'aborted') {
-    throw new Error(`todo resolver ${finish.kind}: ${finish.failure.message}`)
+    throw new Error(`todo resolver ${finish.kind}: ${finish.failure?.message ?? 'no failure detail'}`)
   }
   if (!text) throw new Error('todo resolver returned no text')
   return parseTodoResolverJson(text, new Set(candidates.map((candidate) => candidate.id)))

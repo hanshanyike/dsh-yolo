@@ -386,8 +386,11 @@ describe('todos', () => {
     repo.upsertTodo(db, { title: 'z past', due_at: new Date(cutoff.getTime() - 2 * 3_600_000).toISOString(), scope_key: SCOPE })
     repo.upsertTodo(db, { title: 'offset future', due_at: new Date(cutoff.getTime() + 1_000).toISOString(), scope_key: SCOPE })
 
+    // A date-only due becomes due from the start of its day (reminder trumps
+    // 23:59:59), so "date today" is included and ordered by its end-of-day
+    // deadline after the two timed instants.
     expect(repo.listDueTodos(db, SCOPE, cutoff).map((todo) => todo.title))
-      .toEqual(['z past', 'local past'])
+      .toEqual(['z past', 'local past', 'date today'])
   })
 })
 
