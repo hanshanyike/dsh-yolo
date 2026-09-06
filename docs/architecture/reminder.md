@@ -20,12 +20,14 @@ snapshot cadence use case 位于 `src/application/maintenance/snapshots.ts`；re
 scheduler tick
   → durable catalog 的 ready workspaces
   → 每个 workspace 独立读取到期事项
-  → due 纯规则 + quiet window
-  → 单 workspace 写 notification/event/reminded stamp
+  → due 纯规则（纯日期当天 00:00 起进入窗口，精确 datetime 按时刻）+ quiet window
+  → 单 workspace 在单事务内原子写 notification/event/reminded stamp
   → ctx.yolo.conversations 中同一 resident session 最佳努力 followup
 ```
 
-跨 workspace 不是一个事务；单 workspace 失败不应撤销其他 workspace 的记录。投递失败也不能撤销已经提交的通知和审计。
+跨 workspace 不是一个事务；单 workspace 失败不应撤销其他 workspace 的记录。单 workspace 内
+`notification`/`event`/`reminded stamp` 三者在同一事务内原子提交，避免半途失败留下“已投递但未盖戳”
+的事项（下次 tick 会重复提醒）。投递失败也不能撤销已经提交的通知和审计。
 
 ## Runtime owner
 
@@ -43,5 +45,6 @@ scheduler tick
 
 1. 只向 YOLO resident thread 投递，绝不注入普通工作 session 或 anchored item discussion。
 2. quiet window 内不能提前写 reminded stamp。
-3. catalog/workspace partial failure 必须可观察。
-4. snapshot 是可删除重建的 maintenance projection，不是 reminder current state。
+3. 纯日期（`YYYY-MM-DD`）在当天 `00:00` 起进入提醒窗口；逾期判断仍以当日结束为界（当天不逾期、次日才逾期），`aheadMin` 可让纯日期提前到前一晚触发。
+4. catalog/workspace partial failure 必须可观察。
+5. snapshot 是可删除重建的 maintenance projection，不是 reminder current state。
