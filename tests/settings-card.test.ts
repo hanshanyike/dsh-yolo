@@ -96,6 +96,47 @@ describe('YOLO settings card model', () => {
     expect(validateSettingsDraft(draft).map((issue) => issue.field)).toContain('todoIdentityR2MinConfidence')
   })
 
+  it('renders the default threshold for a legacy settings doc missing the field', () => {
+    const legacy = Config(undefined)
+    const extraction = { ...legacy.extraction } as Partial<YoloSettings['extraction']>
+    delete extraction.todoIdentityR2MinConfidence
+    expect(settingsDraftFrom({ ...legacy, extraction } as YoloSettings).todoIdentityR2MinConfidence).toBe('0.85')
+  })
+
+  it('accepts a host read-back whose section keys are schema-reordered', async () => {
+    function sortKeysDeep(value: unknown): unknown {
+      if (Array.isArray(value)) return value.map(sortKeysDeep)
+      if (value !== null && typeof value === 'object') {
+        const record = value as Record<string, unknown>
+        return Object.fromEntries(Object.keys(record).sort().map((key) => [key, sortKeysDeep(record[key])]))
+      }
+      return value
+    }
+    const legacy = Config(undefined)
+    const extraction = { ...legacy.extraction } as Partial<YoloSettings['extraction']>
+    delete extraction.todoIdentityR2MinConfidence
+    let stored = { ...legacy, extraction } as YoloSettings
+    const scope = {
+      getSnapshot: () => ({
+        status: 'ready' as const,
+        value: sortKeysDeep(stored) as YoloSettings,
+        base: Config(undefined),
+        user: {},
+        revision: 1,
+        writable: true,
+        mode: 'host' as const,
+      }),
+      subscribe: vi.fn(() => () => {}),
+      set: vi.fn(async (field: string, next: unknown) => {
+        stored = { ...stored, [field]: sortKeysDeep(next) } as YoloSettings
+      }),
+      unset: vi.fn(async () => {}),
+    }
+    const draft = settingsDraftFrom({ ...legacy, extraction } as YoloSettings)
+    draft.todoIdentityR2Enabled = true
+    await expect(saveSettingsDraft(scope as never, { ...legacy, extraction } as YoloSettings, draft)).resolves.toEqual({ ok: true })
+  })
+
   it('rejects invalid values before persistence', async () => {
     const current = Config(undefined)
     const scope = writableScope(current)

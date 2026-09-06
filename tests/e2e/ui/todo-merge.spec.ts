@@ -19,7 +19,7 @@ async function openSettings(page: Page): Promise<Locator> {
   await dismissHostSetupDialogs(page)
   await page.getByRole('button', { name: '设置' }).click()
   const dialog = page.getByRole('dialog', { name: '设置' })
-  await dialog.getByRole('button', { name: '插件' }).click()
+  await dialog.getByRole('button', { name: '插件', exact: true }).click()
   const card = dialog.locator('.yolo-settings-card')
   await expect(card).toBeVisible()
   return card

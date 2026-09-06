@@ -12,7 +12,7 @@ async function openYoloSettings(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: '设置' }).click()
   const dialog = page.getByRole('dialog', { name: '设置' })
   await expect(dialog).toBeVisible()
-  await dialog.getByRole('button', { name: '插件' }).click()
+  await dialog.getByRole('button', { name: '插件', exact: true }).click()
   const card = dialog.locator('.yolo-settings-card')
   await expect(card.getByRole('heading', { name: 'YOLO — 管理工作与生活的助手' })).toBeVisible()
   await expect(card.getByLabel(`发布版本 ${packageVersion}`)).toHaveText(`v${packageVersion}`)

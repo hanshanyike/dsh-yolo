@@ -40,7 +40,10 @@ export function settingsDraftFrom(value: YoloSettings): YoloSettingsDraft {
     extractionEnabled: value.extraction.enableLLM,
     extractionModel: value.extraction.model,
     todoIdentityR2Enabled: value.extraction.todoIdentityR2Enabled,
-    todoIdentityR2MinConfidence: String(value.extraction.todoIdentityR2MinConfidence),
+    // This field was added after earlier settings were persisted, so a
+    // pre-existing document omits it; fall back to the schema default rather
+    // than rendering "undefined" (which broke client-side validation).
+    todoIdentityR2MinConfidence: String(value.extraction.todoIdentityR2MinConfidence ?? 0.85),
     todoIdentityR3Enabled: value.extraction.todoIdentityR3Enabled,
     reminderEnabled: value.reminder.enabled,
     checkIntervalSec: String(value.reminder.checkIntervalSec),
@@ -124,8 +127,22 @@ export function settingsFromDraft(current: YoloSettings, draft: YoloSettingsDraf
   }
 }
 
+/** Fold a value into a canonical form so JSON comparison is key-order
+ * independent. The host re-normalizes a section through schemastery (schema
+ * key order), while `settingsFromDraft` builds the next section by spreading
+ * the current value and appending new fields — a naive `JSON.stringify`
+ * comparison would report a false mismatch on a newly added field. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical)
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return Object.fromEntries(Object.keys(record).sort().map((key) => [key, canonical(record[key])]))
+  }
+  return value
+}
+
 function equal(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b)
+  return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b))
 }
 
 export function changedSettingsSections(
