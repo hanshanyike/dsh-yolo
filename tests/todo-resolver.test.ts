@@ -27,9 +27,16 @@ describe('todo identity shadow resolver', () => {
     }
     expect(prompt).toContain('OBSERVATION ONLY')
     expect(prompt).toContain('MUST NOT be treated as authorization')
-    expect(prompt).toContain('Use 0.98 or above only for LINK/UPDATE')
+    expect(prompt).toContain('Use 0.85 or above only for LINK/UPDATE')
+    expect(prompt).toContain('Use at most 0.80 for any residual ambiguity')
     expect(prompt).toContain('"继续", "接着" and "还在处理" alone are LINK')
     expect(prompt).toContain('"还得处理一下" is ASK, not REOPEN')
+  })
+
+  it('re-anchors the confidence band to the configured threshold', () => {
+    const prompt = buildTodoResolverPrompt(new Date(2026, 7, 30, 9, 0, 0), 0.7)
+    expect(prompt).toContain('Use 0.70 or above only for LINK/UPDATE')
+    expect(prompt).toContain('Use at most 0.65 for any residual ambiguity')
   })
 
   it('drops invented ids, clamps confidence and rejects the wrong schema', () => {

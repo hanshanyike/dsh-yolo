@@ -18,6 +18,10 @@ export interface YoloConfig {
     /** Experimental R2a stable-id LINK/due-date UPDATE policy. Default off
      * until a labeled model-prediction report satisfies the safety gate. */
     todoIdentityR2Enabled: boolean
+    /** Minimum resolver confidence before R2a may authorize the narrow
+     * same-workspace LINK / explicit due-date UPDATE. Default 0.85; lower
+     * values authorize more cases, so keep it well above the ambiguity band. */
+    todoIdentityR2MinConfidence: number
     /** Experimental R3 duplicate suggestions. Suggestions require a preview
      * and explicit confirmation; this switch never authorizes auto-merge. */
     todoIdentityR3Enabled: boolean

@@ -22,6 +22,7 @@ describe('YOLO runtime Config schema', () => {
     expect(c.extraction.enableLLM).toBe(true)
     expect(c.extraction.model).toBe('deepseek-chat')
     expect(c.extraction.todoIdentityR2Enabled).toBe(false)
+    expect(c.extraction.todoIdentityR2MinConfidence).toBe(0.85)
     expect(c.extraction.todoIdentityR3Enabled).toBe(false)
     expect(c.reminder.enabled).toBe(true)
     expect(c.storage.scope).toBe('workspace')
@@ -41,6 +42,7 @@ describe('YOLO runtime Config schema', () => {
 
   it('rejects out-of-range numbers', () => {
     expect(() => Config({ extraction: { minIntervalSec: 1 } } as never)).toThrow(/minIntervalSec/)
+    expect(() => Config({ extraction: { todoIdentityR2MinConfidence: 1.2 } } as never)).toThrow(/todoIdentityR2MinConfidence/)
     expect(() => Config({ recall: { topK: 99 } } as never)).toThrow(/topK/)
   })
 

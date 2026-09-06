@@ -7,6 +7,7 @@ export interface YoloSettingsDraft {
   extractionEnabled: boolean
   extractionModel: string
   todoIdentityR2Enabled: boolean
+  todoIdentityR2MinConfidence: string
   todoIdentityR3Enabled: boolean
   reminderEnabled: boolean
   checkIntervalSec: string
@@ -39,6 +40,7 @@ export function settingsDraftFrom(value: YoloSettings): YoloSettingsDraft {
     extractionEnabled: value.extraction.enableLLM,
     extractionModel: value.extraction.model,
     todoIdentityR2Enabled: value.extraction.todoIdentityR2Enabled,
+    todoIdentityR2MinConfidence: String(value.extraction.todoIdentityR2MinConfidence),
     todoIdentityR3Enabled: value.extraction.todoIdentityR3Enabled,
     reminderEnabled: value.reminder.enabled,
     checkIntervalSec: String(value.reminder.checkIntervalSec),
@@ -60,13 +62,22 @@ function wholeNumber(value: string): number | undefined {
   return Number.isSafeInteger(parsed) ? parsed : undefined
 }
 
+function decimalNumber(value: string): number | undefined {
+  const trimmed = value.trim().replace(',', '.')
+  if (!/^\d+(?:\.\d+)?$/u.test(trimmed)) return undefined
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 export function validateSettingsDraft(draft: YoloSettingsDraft): SettingsValidationIssue[] {
   const issues: SettingsValidationIssue[] = []
   const interval = wholeNumber(draft.checkIntervalSec)
   const ahead = wholeNumber(draft.aheadMin)
+  const confidence = decimalNumber(draft.todoIdentityR2MinConfidence)
   if (!draft.extractionModel.trim()) issues.push({ field: 'extractionModel', message: '提取模型不能为空。' })
   if (interval === undefined || interval < 10) issues.push({ field: 'checkIntervalSec', message: '扫描间隔必须是至少 10 秒的整数。' })
   if (ahead === undefined) issues.push({ field: 'aheadMin', message: '提前量必须是 0 或更大的整数分钟。' })
+  if (confidence === undefined || confidence < 0 || confidence > 1) issues.push({ field: 'todoIdentityR2MinConfidence', message: '关联置信度阈值必须是 0 到 1 之间的数字。' })
   for (const [field, label] of [
     ['quietStart', '安静时段开始'],
     ['quietEnd', '安静时段结束'],
@@ -87,6 +98,7 @@ export function settingsFromDraft(current: YoloSettings, draft: YoloSettingsDraf
       enableLLM: draft.extractionEnabled,
       model: draft.extractionModel.trim(),
       todoIdentityR2Enabled: draft.todoIdentityR2Enabled,
+      todoIdentityR2MinConfidence: Number(draft.todoIdentityR2MinConfidence),
       todoIdentityR3Enabled: draft.todoIdentityR3Enabled,
     },
     reminder: {

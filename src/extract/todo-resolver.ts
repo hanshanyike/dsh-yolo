@@ -1,6 +1,7 @@
 import { BlockAssembler, type FinishReason, type LlmRuntime, type Message, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { TodoIdentityCandidate, TodoResolutionDecision, TodoResolutionPrediction } from '../domain/types.ts'
 import { contentBlocksToText, localDateStr } from '../shared/text.ts'
+import { TODO_IDENTITY_MIN_CONFIDENCE } from '../application/ingestion/todo-identity-policy.ts'
 
 export const TODO_RESOLVER_VERSION = 'shadow-v2'
 
@@ -34,7 +35,18 @@ export function buildTodoCandidateContext(candidates: readonly TodoIdentityCandi
   }).join('\n')
 }
 
-export function buildTodoResolverPrompt(now: Date): string {
+/** Format a confidence threshold for the prompt body without floating-point
+ * noise; e.g. 0.85 -> "0.85", 0.8 -> "0.80". */
+function formatConfidence(value: number): string {
+  return value.toFixed(2)
+}
+
+export function buildTodoResolverPrompt(now: Date, minConfidence = TODO_IDENTITY_MIN_CONFIDENCE): string {
+  // Keep a safety band around the application threshold: the model should
+  // reserve the threshold or above for fully certain LINK/UPDATE, and stay
+  // strictly below it whenever any residual ambiguity exists.
+  const floor = formatConfidence(minConfidence)
+  const ceiling = formatConfidence(Math.max(0, minConfidence - 0.05))
   return `You are a shadow identity resolver for a managing assistant. Classify each management-relevant todo mention in the user's finished turn against the supplied candidate todos.
 
 This is OBSERVATION ONLY. Your output is logged for evaluation and MUST NOT be treated as authorization to mutate, merge, reopen, or create anything.
@@ -62,7 +74,7 @@ Rules:
 - A completed/cancelled candidate needs an explicit correction such as "其实还没完成" or "之前标错了" for REOPEN, or an explicit recurrence for NEW_OCCURRENCE. Vague wording such as "还得处理一下" is ASK, not REOPEN.
 - Different workspaces are outside this candidate set and must not be inferred.
 - Emit one row per distinct todo mention. If the turn contains no todo mention, return {"resolutions":[]}.
-- confidence measures identity and decision certainty, not how important the task is. Use 0.98 or above only for LINK/UPDATE when exactly one open candidate matches every available distinguishing fact, no plausible competitor exists, and the decision follows the rules above. Use at most 0.95 for any residual ambiguity or non-authorized decision. Keep reason concise and in the user's language.`
+- confidence measures identity and decision certainty, not how important the task is. Use ${floor} or above only for LINK/UPDATE when exactly one open candidate matches every available distinguishing fact, no plausible competitor exists, and the decision follows the rules above. Use at most ${ceiling} for any residual ambiguity or non-authorized decision. Keep reason concise and in the user's language.`
 }
 
 function jsonCandidates(text: string): string[] {
@@ -116,15 +128,16 @@ export async function llmResolveTodoIdentity(opts: {
   candidates: readonly TodoIdentityCandidate[]
   signal?: AbortSignal
   now?: Date
+  minConfidence?: number
   observe?: (observation: TodoResolverObservation) => void
 }): Promise<ShadowTodoResolution[]> {
-  const { llm, provider, model, turnText, candidates, signal, now = new Date(), observe } = opts
+  const { llm, provider, model, turnText, candidates, signal, now = new Date(), minConfidence, observe } = opts
   if (!turnText.trim()) return []
   const content = `Candidate todos:\n${buildTodoCandidateContext(candidates)}\n\n--- Conversation turn ---\n${turnText}`
   const stream = llm.stream({
     provider,
     model,
-    system: buildTodoResolverPrompt(now),
+    system: buildTodoResolverPrompt(now, minConfidence),
     messages: [{ role: 'user', content: [{ type: 'text', text: content }] }] as Message[],
     temperature: 0,
     maxTokens: 1024,

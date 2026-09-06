@@ -58,6 +58,7 @@ interface SettingsLike {
       minTurnChars?: number
       maxRunsPerDay?: number
       todoIdentityR2Enabled?: boolean
+      todoIdentityR2MinConfidence?: number
       todoIdentityR3Enabled?: boolean
     }
   } | undefined
@@ -383,6 +384,7 @@ export function apply(ctx: Context): void {
           })
           const hasContent = result.todos.length > 0 || result.milestones.length > 0 || result.goals.length > 0 || result.updates.length > 0
           const resolverStarted = Date.now()
+          const minConfidence = config?.todoIdentityR2MinConfidence
           let resolverObservation: TodoResolverObservation | undefined
           let resolutions: ShadowTodoResolution[] = []
           let resolverError: unknown
@@ -395,6 +397,7 @@ export function apply(ctx: Context): void {
               candidates: todoCandidates,
               signal: controller.signal,
               now: new Date(acceptedAt ?? started),
+              minConfidence,
               observe: (value) => { resolverObservation = value },
             })
           } catch (error) {
@@ -402,7 +405,7 @@ export function apply(ctx: Context): void {
           }
           const todoIdentityPlan = resolverError
             ? undefined
-            : planTodoIdentityApplication(result, resolutions, todoCandidates, config?.todoIdentityR2Enabled === true)
+            : planTodoIdentityApplication(result, resolutions, todoCandidates, config?.todoIdentityR2Enabled === true, minConfidence)
           const scope = yctx.yolo.scopeRefForCwd(cwd)
           let todoIdentityOutcome: TodoIdentityApplicationOutcome | undefined
           const persisted = yctx.yolo.runIdempotentScopeAction(scope, operationId, requestHash, (scopedCwd) => {

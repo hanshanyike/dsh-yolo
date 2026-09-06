@@ -84,7 +84,8 @@ export function SettingsCard({ scope }: SettingsCardProps): JSX.Element {
           <input type="checkbox" checked={draft.todoIdentityR2Enabled} aria-describedby="todo-identity-r2-help" onChange={(event) => patch('todoIdentityR2Enabled', event.target.checked)} />
           <span>高置信事项自动关联 <strong style={{ fontSize: 11, fontWeight: 700, color: 'var(--foreground-secondary, #666)' }}>实验性</strong> <span style={hintStyle}>{defaultHint(defaults.extraction?.todoIdentityR2Enabled)}</span></span>
         </label>
-        <p id="todo-identity-r2-help" style={{ margin: 0, ...hintStyle }}>开启后，仅在模型置信度至少为 0.98 且只有一个开放候选时，将后续提及关联到原事项，或按稳定 ID 修改明确的截止时间。不会自动重开、合并、修改状态或处理多候选。</p>
+        <p id="todo-identity-r2-help" style={{ margin: 0, ...hintStyle }}>开启后，仅在模型置信度至少达到下方阈值且只有一个开放候选时，将后续提及关联到原事项，或按稳定 ID 修改明确的截止时间。不会自动重开、合并、修改状态或处理多候选。</p>
+        <label style={labelStyle}>关联置信度阈值<input style={inputStyle} inputMode="decimal" value={draft.todoIdentityR2MinConfidence} onChange={(event) => patch('todoIdentityR2MinConfidence', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'todoIdentityR2MinConfidence')} /><span style={hintStyle}>0 到 1 之间的数字；越低越容易自动关联，也越需要留意误关联。{defaultHint(defaults.extraction?.todoIdentityR2MinConfidence)}</span></label>
         {draft.todoIdentityR2Enabled ? <p style={{ margin: 0, padding: '8px 10px', borderLeft: '2px solid var(--accent, #6366f1)', background: 'color-mix(in srgb, var(--accent, #6366f1) 7%, transparent)', ...hintStyle }}>保存即确认启用实验能力。关联结果仍受确定性安全门限制；遇到歧义时不会修改事项。</p> : null}
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
           <input type="checkbox" checked={draft.todoIdentityR3Enabled} aria-describedby="todo-identity-r3-help" onChange={(event) => patch('todoIdentityR3Enabled', event.target.checked)} />

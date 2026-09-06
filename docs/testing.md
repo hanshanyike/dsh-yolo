@@ -90,7 +90,7 @@ UI 套件使用 Playwright 驱动真实 Edge，验证看板打开、捕获、筛
   prediction 的样本只能验证 schema 与策略边界，不能授权打开 `todoIdentityR2Enabled`。
 - 模型回放必须由官方 dsh 宿主内的 `ctx.llm` 使用当前 profile 路由执行；输入 gold 不得原地改写，输出不得
   包含 credential 或原始模型文本。报告必须锁定 provider/model/resolver/as-of，并同时给出分层、置信度、
-  false-link、missed-link、高置信误授权和安全覆盖；准入的 false-link=0 只针对达到 0.98 的自动候选，
+  false-link、missed-link、高置信误授权和安全覆盖；准入的 false-link=0 只针对达到阈值（默认 0.85）的自动候选，
   低置信错误仍在总体质量指标中报告但不能假装成运行时放权。当前对抗式 handcrafted corpus 通过后可支撑
   默认关闭的实验入口；独立真实对话不作为近期重复建设的硬门槛。用户反馈误关联/漏关联，或模型、prompt、
   阈值、授权范围实质变化时，必须从脱敏 shadow 日志扩充评测集并重新过门；默认开启仍需结合累计观察另行评审。

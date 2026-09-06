@@ -122,4 +122,16 @@ describe('R2a todo identity application policy', () => {
       mode: 'fallback', reason: 'policy_disabled',
     })
   })
+
+  it('applies a configurable confidence threshold instead of the hard-coded default', () => {
+    // A lower configured threshold (0.75) authorizes a 0.80 LINK that the
+    // default 0.85 would reject.
+    expect(planTodoIdentityApplication(EMPTY, [prediction({ confidence: 0.80 })], [OPEN], true, 0.75)).toMatchObject({
+      mode: 'authorized', decision: 'LINK', candidate_id: OPEN.id,
+    })
+    // A higher configured threshold rejects a 0.85 prediction.
+    expect(planTodoIdentityApplication(EMPTY, [prediction({ confidence: 0.85 })], [OPEN], true, 0.9)).toMatchObject({
+      mode: 'blocked', reason: 'confidence_below_threshold',
+    })
+  })
 })

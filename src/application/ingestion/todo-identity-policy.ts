@@ -6,7 +6,11 @@ import type {
 } from '../../domain/types.ts'
 
 export const TODO_IDENTITY_POLICY_VERSION = 'r2a-v1'
-export const TODO_IDENTITY_MIN_CONFIDENCE = 0.98
+
+/** Default minimum resolver confidence for the narrow R2a LINK / explicit
+ * due-date UPDATE authorization. The effective threshold is configurable via
+ * `extraction.todoIdentityR2MinConfidence`; this is only the fallback value. */
+export const TODO_IDENTITY_MIN_CONFIDENCE = 0.85
 
 export type TodoIdentityPolicyMode = 'fallback' | 'create' | 'authorized' | 'blocked'
 
@@ -49,6 +53,7 @@ export function planTodoIdentityApplication(
   predictions: readonly TodoResolutionPrediction[],
   candidates: readonly TodoIdentityCandidate[],
   enabled = false,
+  minConfidence = TODO_IDENTITY_MIN_CONFIDENCE,
 ): TodoIdentityApplicationPlan {
   if (!enabled) return plan('fallback', 'policy_disabled')
   if (predictions.length === 0) return plan('fallback', 'resolver_empty')
@@ -67,7 +72,7 @@ export function planTodoIdentityApplication(
   if (prediction.decision !== 'LINK' && prediction.decision !== 'UPDATE') {
     return plan('blocked', `decision_not_authorized:${prediction.decision}`, prediction)
   }
-  if ((prediction.confidence ?? 0) < TODO_IDENTITY_MIN_CONFIDENCE) {
+  if ((prediction.confidence ?? 0) < minConfidence) {
     return plan('blocked', 'confidence_below_threshold', prediction)
   }
   if (prediction.candidate_ids.length !== 1) {

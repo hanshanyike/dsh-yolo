@@ -11,7 +11,8 @@ const GATE = Object.freeze({
   minimumExactRate: 0.8,
   maximumMissedLinkRate: 0.15,
   minimumSafeCoverage: 0.5,
-  minimumConfidence: 0.98,
+  // Runtime authorization default (extraction.todoIdentityR2MinConfidence).
+  minimumConfidence: 0.85,
 })
 
 function usage(exitCode = 1) {

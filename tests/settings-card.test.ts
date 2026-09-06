@@ -81,6 +81,21 @@ describe('YOLO settings card model', () => {
     expect(scope.getSnapshot().value?.extraction.todoIdentityR3Enabled).toBe(true)
   })
 
+  it('stages and persists the R2a confidence threshold with decimal validation', async () => {
+    const current = Config(undefined)
+    const scope = writableScope(current)
+    const draft = settingsDraftFrom(current)
+    expect(draft.todoIdentityR2MinConfidence).toBe('0.85')
+
+    draft.todoIdentityR2MinConfidence = '0.75'
+    await expect(saveSettingsDraft(scope, current, draft)).resolves.toEqual({ ok: true })
+    expect(scope.set).toHaveBeenCalledWith('extraction', expect.objectContaining({ todoIdentityR2MinConfidence: 0.75 }))
+    expect(scope.getSnapshot().value?.extraction.todoIdentityR2MinConfidence).toBe(0.75)
+
+    draft.todoIdentityR2MinConfidence = '1.5'
+    expect(validateSettingsDraft(draft).map((issue) => issue.field)).toContain('todoIdentityR2MinConfidence')
+  })
+
   it('rejects invalid values before persistence', async () => {
     const current = Config(undefined)
     const scope = writableScope(current)
