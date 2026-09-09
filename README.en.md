@@ -69,6 +69,10 @@ acknowledgements, generic knowledge, and unrelated personal profiling.
 
 ## Quick Start
 
+YOLO requires a **dsh 0.1.2-rc.1 or newer** host; older hosts cannot load this
+version's browser panel (check with `npx @deepseek-ai/dsh --version`, and
+upgrade via `npm install -g @deepseek-ai/dsh@latest` if needed).
+
 Install [Node.js](https://nodejs.org/) 22 LTS (22.19 or newer within the 22.x
 line) or Node.js 24, and make sure `pnpm` is available. If needed, run
 `corepack enable` first. Then run:

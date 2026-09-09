@@ -2,7 +2,9 @@
 // Registered on ctx.tools via dsh's defineTool DSL (M1; host-verified at M2/M3).
 
 import type { Context } from '@deepseek-ai/cordis'
-import { defineTool, type JsonValue } from '@deepseek-ai/dsh-tools'
+import { defineTool } from '@deepseek-ai/dsh-tools'
+// dsh 0.1.2 moved JsonValue off dsh-tools onto dsh-util-values (upgrade card R-11).
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type Yolo from '../storage/index.ts'
 import type { MilestoneStatus, Priority, RowType, TodoStatus, GoalStatus } from '../domain/types.ts'
 import { applyYoloActionInScope } from '../application/commands/apply-yolo-action.ts'

@@ -6,6 +6,24 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 适配 dsh `0.1.2-rc.1`：跟随上游移除 `@deepseek-ai/dsh-client-runtime`（客户端类型改由
+  `@deepseek-ai/dsh-api-session-controller/client`、`@deepseek-ai/dsh-client-ui-settings/client` 等
+  所属域包提供），设置命名空间改为编译期字面量（上游 `settingsNamespace()` 已删除），
+  `installSettingsSection` 迁移为 SettingsProvider 的 `installSection` 方法；
+  开发依赖与类型全部对齐 `0.1.2-rc.1`。**现在要求宿主为 dsh ≥ 0.1.2-rc.1**
+  （README 与使用指南已注明安装与升级方式）。
+
+### Fixed
+
+- e2e runner 在非默认端口下没有把宿主地址传给用例，可能误连其它正在运行的宿主；
+  现在 runner 显式导出 `YOLO_E2E_HOST`，并捕获 dsh 0.1.2 的 `dsh web:` 启动令牌 URL
+  （`YOLO_E2E_BOOT_URL`）供浏览器用例完成认证，完整宿主输出记录到 `output/e2e-host.log`。
+- e2e runner 支持 `DSH_HOME` / `YOLO_E2E_WORKSPACE` 隔离的严格干净模式：
+  从隔离 profile 拉起宿主、默认工作区指向临时目录、夹具清扫只触碰隔离目录，
+  真实工作区数据不再干扰看板类用例（详见 docs/testing-e2e.md）。
+
 ## [0.5.0-beta.3] — 2026-09-01
 
 ### Added

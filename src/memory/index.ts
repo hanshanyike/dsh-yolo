@@ -6,7 +6,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { contentBlocksToText } from '../shared/text.ts'
 import { sessionCwd, sessionId } from '../shared/session.ts'
 import { isYoloSessionId } from '../runtime/session-identity.ts'
@@ -26,7 +25,8 @@ import {
 export const name = 'yolo-memory'
 export const inject = ['yolo', 'tools', 'systemPrompt', 'llm', 'settings'] as const
 
-const YOLO_NS = settingsNamespace('yolo')
+/** dsh 0.1.2 removed `settingsNamespace()` — namespaces are compile-time literals now. */
+const YOLO_NS = 'yolo'
 
 type SettingsLike = { get?(ns: unknown): { semantic?: Partial<SemanticConfig> } | undefined }
 

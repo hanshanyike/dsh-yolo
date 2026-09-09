@@ -41,7 +41,7 @@ YOLO 对外仍是五个宿主插件加一个浏览器 bundle：storage、memory�
 
 - package root、browser export 和五个 host subpath exports；
 - storage default export 和全部插件的 `name/inject/apply`；
-- `settingsNamespace('yolo')` 与完整默认配置；
+- 字面量设置命名空间 `'yolo'`（dsh 0.1.2 起命名空间在编译期校验，运行时 helper 已删除）与完整默认配置；
 - host ESM/client CJS build entry、ModuleLoader wrapper、process shim 与 `schema.sql` 资产。
 
 ## 构建与宿主约束

@@ -291,9 +291,23 @@ node scripts/e2e.mjs --no-host       # 复用已在跑的宿主（绝不碰它�
 node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
 ```
 
-环境变量：`YOLO_E2E_PORT`(默认 3080) · `YOLO_E2E_HOST` ·
+环境变量：`YOLO_E2E_PORT`(默认 3080) · `YOLO_E2E_HOST`(不设时由 runner 按端口导出) ·
 `YOLO_E2E_PROBE_MS`(健康探测预算，默认 15000) ·
-`YOLO_E2E_REPORT=<path>`(额外产出机器可读 JSON 报告)。
+`YOLO_E2E_REPORT=<path>`(额外产出机器可读 JSON 报告) ·
+`DSH_HOME` / `YOLO_E2E_WORKSPACE`(严格干净模式，见下) ·
+`YOLO_E2E_BOOT_URL`(--no-host 复用 dsh ≥ 0.1.2 宿主时手动传入)。
+
+> dsh ≥ 0.1.2 的 web 根路径需要启动令牌认证（升级卡 DSH-0.1.2-A1-08/A1-19）。
+> runner 拉起宿主时会捕获 `dsh web: <url>?token=…` 输出并导出为 `YOLO_E2E_BOOT_URL`，
+> 浏览器用例通过 `ensureHostAuth`（tests/e2e/helpers.ts）先兑换 HttpOnly Cookie 再导航；
+> 完整宿主输出落在 `output/e2e-host.log`。`--no-host` 复用宿主时需手动传 `YOLO_E2E_BOOT_URL`，
+> 否则浏览器用例会停在认证墙。
+>
+> **严格干净模式**：设 `DSH_HOME=<全新目录>` + `YOLO_E2E_WORKSPACE=<临时工作区>` 后，
+> runner 从隔离 profile 拉起宿主（先用官方 CLI 一次性
+> `DSH_HOME=<同一目录> dsh plugin --profile web add .`），宿主默认工作区指向临时目录，
+> 夹具清扫只触碰隔离目录，真实数据（含其它工作区的真实看板行）不参与看板聚合。
+> 依赖真实看板排名的用例（如 TA-4）必须在此模式下运行才可判定。
 
 > 已知 runner 缺陷：`node scripts/e2e.mjs --spec panel-flow` 目前错误映射到
 > `tests/e2e/panel-flow.spec.ts`，会报 `No tests found`；修复 `scripts/e2e.mjs` 的

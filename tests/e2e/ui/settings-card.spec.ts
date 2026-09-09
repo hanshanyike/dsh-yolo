@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { test, expect, type Page, type Locator } from '@playwright/test'
-import { dismissHostSetupDialogs } from '../helpers.ts'
+import { dismissHostSetupDialogs, ensureHostAuth } from '../helpers.ts'
 
 const packageVersion = (JSON.parse(
   readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'),
 ) as { version: string }).version
 
 async function openYoloSettings(page: Page): Promise<Locator> {
+  await ensureHostAuth(page)
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await dismissHostSetupDialogs(page)
   await page.getByRole('button', { name: '设置' }).click()

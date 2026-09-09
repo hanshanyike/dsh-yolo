@@ -93,8 +93,46 @@ export async function dismissHostSetupDialogs(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Redeem the dsh 0.1.2+ web auth cookie for this browser context.
+ *
+ * Since dsh 0.1.2-alpha.1 the web root is token-authenticated (upgrade cards
+ * DSH-0.1.2-A1-08 / A1-19): the host prints `dsh web: <url>?token=...` at boot,
+ * the e2e runner captures it and exports YOLO_E2E_BOOT_URL, and the browser
+ * must visit that URL once — the 303 back to `/` sets the HttpOnly cookie that
+ * every later navigation reuses. Contexts are fresh per test, so this is cheap
+ * and idempotent. On a pre-0.1.2 host (no boot URL exported) it is a no-op.
+ */
+export async function ensureHostAuth(page: Page): Promise<void> {
+  const bootUrl = process.env.YOLO_E2E_BOOT_URL
+  if (!bootUrl) return
+  // Fail fast on a runner/spec host mismatch: the token cookie is bound to the
+  // boot URL's authority, so redeeming against a different origin would leave
+  // every navigation on the auth wall (observed when a port override made the
+  // suite drive a foreign host while the runner probed its own port).
+  const bootOrigin = new URL(bootUrl).origin
+  if (bootOrigin !== new URL(HOST).origin) {
+    throw new Error(`YOLO_E2E_BOOT_URL origin ${bootOrigin} does not match the suite host ${HOST} — point YOLO_E2E_HOST at the host that printed the token URL`)
+  }
+  const rootStatus = await page.request
+    .get(`${HOST}/`, { maxRedirects: 0 })
+    .then((r) => r.status())
+    .catch(() => 0)
+  if (rootStatus >= 200 && rootStatus < 300) return
+  // 401 (or 303-armed) root: redeem the bootstrap token — following the 303
+  // stores the auth cookie in this context's shared cookie jar.
+  const redeem = await page.request.get(bootUrl).catch((error: unknown) => {
+    throw new Error(`failed to redeem the host boot token URL (${String(bootUrl).replace(/([?&]token=)[^&\s]+/i, '$1<redacted>')}): ${error instanceof Error ? error.message : String(error)}`)
+  })
+  if (redeem.status() >= 400) {
+    throw new Error(`boot token redemption answered ${redeem.status()} — is YOLO_E2E_BOOT_URL from the same host process as ${HOST}?`)
+  }
+}
+
 /** Open the sidebar YOLO panel and wait for the board body to render. */
 export async function openYoloPanel(page: Page, opts: { refreshOnSlow?: boolean } = {}): Promise<void> {
+  // dsh 0.1.2+ roots need the token-cookie exchange before the first navigation.
+  await ensureHostAuth(page)
   // domcontentloaded (not 'load'): the SPA may keep a long-lived resource open,
   // so waiting for full 'load' has budgeted out (60s) in this suite.
   await page.goto('/', { waitUntil: 'domcontentloaded' })

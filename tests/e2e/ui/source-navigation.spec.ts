@@ -21,7 +21,10 @@ type OpenSessionMode = 'unavailable' | 'throw' | 'success'
  * keeps YoloPanel and its state machine real while making the host outcome
  * deterministic for negative and recovery navigation cases. */
 async function mockOpenSession(page: import('@playwright/test').Page, mode: OpenSessionMode): Promise<void> {
-  await page.route('**/plugins/dsh-plugin-yolo/client.js*', async (route) => {
+  // dsh 0.1.2 serves plugin bundles through revision-bearing combo routes
+  // (`/plugins/??dsh-plugin-yolo/client.js&rev=…`, upgrade card DSH-0.1.2-A1-19)
+  // while 0.1.1 used the flat `/plugins/dsh-plugin-yolo/client.js` — match both.
+  await page.route(/\/plugins\/.*dsh-plugin-yolo\/client\.js/, async (route) => {
     const response = await route.fetch()
     const source = await response.text()
     const bridge = /openSession:\s*\(sessionId\)\s*=>\s*\{\s*ctx\.sessions\.open\(sessionId\);\s*\},/u

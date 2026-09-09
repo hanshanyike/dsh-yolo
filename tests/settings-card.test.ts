@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { inject } from '../client/index.ts'
 import { changedSettingsSections, saveSettingsDraft, settingsDraftFrom, settingsFromDraft, validateSettingsDraft, type YoloSettings } from '../client/settings/model.ts'
 import { resolveReminderRuntime } from '../src/reminder/scheduler.ts'
@@ -13,6 +13,9 @@ function writableScope(initial: YoloSettings, accept = true): SettingsScope<Yolo
   return {
     getSnapshot: snapshot,
     subscribe: vi.fn(() => () => {}),
+    // dsh 0.1.2 added the atomic `mutate` op to the SettingsScope face; the card
+    // uses field `set`, so the double only needs to typecheck.
+    mutate: vi.fn(() => Promise.resolve()),
     set: vi.fn(async (field: string, next: unknown) => {
       if (accept) value = { ...value, [field]: next }
     }),

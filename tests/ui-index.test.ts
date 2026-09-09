@@ -18,10 +18,12 @@ function makeCtx(yolo: Yolo) {
     get: vi.fn(() => undefined),
     webServer: { register: vi.fn() },
     logger: { info: vi.fn(), warn: vi.fn() },
-    // cordis dependency injection used by installSettingsSection
+    // cordis dependency injection used by the settings installSection call
+    // (dsh 0.1.2 moved the old installSettingsSection helper onto the provider)
     inject: (_deps: string[], cb: (sctx: unknown) => void) => {
       cb({
         settings: {
+          installSection: vi.fn(),
           register: vi.fn(() => ({
             dispose: () => {},
             watch: () => () => {},

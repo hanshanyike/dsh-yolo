@@ -9,7 +9,8 @@
 // `.enabled` access (fixes "Cannot read properties of undefined").
 
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection } from '@deepseek-ai/dsh-settings'
+// Type-only: pulls the `settings` Context augmentation (SettingsProvider methods).
+import type {} from '@deepseek-ai/dsh-settings'
 import type Yolo from '../storage/index.ts'
 import { Config, YOLO_NS as YOLO_SETTINGS_NS, type Config as ConfigSchema } from '../runtime/config.ts'
 import { registerActionsEndpoint } from './actions.ts'
@@ -38,14 +39,19 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   const entry = Config((config ?? {}) as ConfigSchema) as ConfigSchema
   let configSource = (): ConfigSchema => entry
 
-  installSettingsSection(ctx, YOLO_NS, Config, entry, {
-    // Settings owns the live source after registration. Keep the normalized
-    // loader entry as a defensive fallback while the service is starting or
-    // when a lightweight test/memory provider has no accepted document yet.
-    setSource: (current) => { configSource = () => current() ?? entry },
-    onChange: () => {
-      // Consumers read configSource lazily; no restart callback is needed here.
-    },
+  // dsh 0.1.2 moved installSettingsSection onto the SettingsProvider as
+  // `installSection(owner, ...)`; the wait-for-service + fallback semantics are
+  // preserved by injecting `settings` before calling it.
+  ctx.inject(['settings'], (sctx) => {
+    sctx.settings.installSection(ctx, YOLO_NS, Config, entry, {
+      // Settings owns the live source after registration. Keep the normalized
+      // loader entry as a defensive fallback while the service is starting or
+      // when a lightweight test/memory provider has no accepted document yet.
+      setSource: (current) => { configSource = () => current() ?? entry },
+      onChange: () => {
+        // Consumers read configSource lazily; no restart callback is needed here.
+      },
+    })
   })
 
   // ---- panel data + chat channel ----

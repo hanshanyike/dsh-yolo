@@ -4,7 +4,6 @@
 // session-start replay into whatever session started next is gone — TB-1).
 
 import type { Context } from '@deepseek-ai/cordis'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { createUserMessage, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type Yolo from '../storage/index.ts'
 import { startReminderScheduler, resolveReminderRuntime } from './scheduler.ts'
@@ -30,8 +29,9 @@ interface SettingsLike {
   } | undefined
 }
 
-/** Storage snapshot cadence the user can pick in Settings. */
-export const YOLO_NS = settingsNamespace('yolo')
+/** Storage snapshot cadence the user can pick in Settings.
+ * dsh 0.1.2 removed `settingsNamespace()` — namespaces are compile-time literals now. */
+export const YOLO_NS = 'yolo'
 
 export function apply(ctx: Context): void {
   const yctx = ctx as ReminderCtx

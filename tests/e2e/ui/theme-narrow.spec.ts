@@ -4,11 +4,12 @@
 // variable before the panel mounts, then asserts the resolved data-y-theme.
 
 import { test, expect, type Page } from '@playwright/test'
-import { dismissHostSetupDialogs } from '../helpers.ts'
+import { dismissHostSetupDialogs, ensureHostAuth } from '../helpers.ts'
 
 /** Set the host --background variable, load the app, then open the panel. */
 async function openPanelUnderBackground(page: Page, background: string, viewport: { width: number; height: number } = { width: 1440, height: 900 }): Promise<void> {
   await page.setViewportSize(viewport)
+  await ensureHostAuth(page)
   await page.goto('/')
   await dismissHostSetupDialogs(page)
   await page.evaluate((bg) => {

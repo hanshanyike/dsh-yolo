@@ -36,7 +36,7 @@
 // it automatically while the DB is guaranteed closed (host not yet started).
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readlinkSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -46,13 +46,21 @@ import { resolveE2ESelection } from './e2e-selection.mjs'
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const HOST = join(ROOT, 'host', 'deepseek-harness')
 const HOST_REPO = 'https://github.com/deepseek-ai/deepseek-harness.git'
-const PROFILE_DIR = join(homedir(), '.dsh', 'profiles')
+// dsh reads profiles under $DSH_HOME/profiles; honoring DSH_HOME here lets the
+// runner drive an ISOLATED home (strict-clean mode) without touching the
+// user's real profile. Unset → exactly the legacy ~/.dsh behavior.
+const DSH_HOME = resolve(process.env.DSH_HOME ?? join(homedir(), '.dsh'))
+const PROFILE_DIR = join(DSH_HOME, 'profiles')
 const LINK_DIR = join(PROFILE_DIR, 'node_modules')
 const LINK = join(LINK_DIR, 'dsh-plugin-yolo')
 const PROFILE_WEB = join(PROFILE_DIR, 'web')
 const PATCH = join(ROOT, 'cordis.dev.local.yml')
 const PORT = Number(process.env.YOLO_E2E_PORT ?? process.env.PORT ?? 3080)
 const BASE = `http://127.0.0.1:${PORT}`
+// The specs read YOLO_E2E_HOST (playwright.config + tests/e2e/helpers) — without
+// this export a non-default YOLO_E2E_PORT would silently drive a DIFFERENT host
+// (e.g. the user's live 3080 instance) while this runner probes its own port.
+process.env.YOLO_E2E_HOST ??= BASE
 const PROBE_TIMEOUT_MS = Number(process.env.YOLO_E2E_PROBE_MS ?? 15_000)
 
 const win = process.platform === 'win32'
@@ -70,6 +78,12 @@ const SPEC = argValue('spec')
 const SUITE = (argValue('suite') ?? '').toLowerCase() // api | ui | (empty = all)
 const skipHost = argv.includes('--no-host')
 const noClean = argv.includes('--no-clean')
+
+// The host process cwd becomes its default workspace; a temp dir keeps real
+// workspace rows out of the aggregated dashboard (strict-clean UI runs).
+// (Defined after argv parsing — argValue reads the CLI args.)
+const WORKSPACE = resolve(argValue('workspace') ?? process.env.YOLO_E2E_WORKSPACE ?? ROOT)
+mkdirSync(WORKSPACE, { recursive: true })
 
 function childEnv() {
   const raw = process.env.NODE_OPTIONS ?? ''
@@ -119,7 +133,10 @@ function run(cmd, argsList, opts = {}) {
  * fixtures ([E2E] prefix) are touched; real user rows stay untouched.
  */
 function sweepE2EFixtures() {
-  const dirs = [join(ROOT, '.dsh', 'yolo'), join(homedir(), '.dsh', 'yolo')]
+  // Standard lane: the repo checkout store + the user-home fallback store.
+  // Strict-clean lane (DSH_HOME/YOLO_E2E_WORKSPACE): the isolated home and
+  // temp workspace ONLY — the user's real stores are never touched.
+  const dirs = [...new Set([join(WORKSPACE, '.dsh', 'yolo'), join(DSH_HOME, 'yolo')])]
   let total = 0
   let errors = 0
   for (const dir of dirs) {
@@ -245,7 +262,7 @@ async function bringUpHost() {
     step(4, `start installed dsh web on :${PORT}`)
     cmd = 'dsh'
     argsList = ['web', '--no-open', '--port', String(PORT)]
-    cwd = ROOT
+    cwd = WORKSPACE
   } else {
     console.log('[e2e] no global dsh CLI — falling back to the host-checkout path')
     step(3, 'host checkout')
@@ -308,21 +325,66 @@ async function bringUpHost() {
     cwd = HOST
   }
 
+  // dsh 0.1.2 web roots are token-authenticated (upgrade card DSH-0.1.2-A1-08):
+  // the host prints `dsh web: <url>?token=...` on stdout and the browser must
+  // visit that URL once to redeem the HttpOnly auth cookie. The runner captures
+  // it here and hands it to Playwright via YOLO_E2E_BOOT_URL (A1-19). For a
+  // reused host (--no-host), pass YOLO_E2E_BOOT_URL manually.
   const child = spawn(cmd, argsList, {
-    cwd, env: childEnv(), stdio: 'ignore', shell: win, detached: !win,
+    cwd, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'], shell: win, detached: !win,
   })
+  const hostLog = join(ROOT, 'output', 'e2e-host.log')
+  mkdirSync(join(ROOT, 'output'), { recursive: true })
+  try { rmSync(hostLog, { force: true }) } catch { /* best effort */ }
+  let bootUrl = null
+  const findBootUrl = (text) => {
+    if (bootUrl) return bootUrl
+    const m = text.match(/dsh web:\s*(\S+)/)
+    return m ? m[1] : null
+  }
+  const tee = (chunk) => {
+    const text = String(chunk)
+    bootUrl = findBootUrl(text)
+    try { appendFileSync(hostLog, text) } catch { /* diagnostics only */ }
+  }
+  child.stdout?.on('data', tee)
+  child.stderr?.on('data', tee)
   const deadline = Date.now() + 120_000
+  // The `dsh web:` line can flush to the piped stdout slightly AFTER the
+  // dashboard endpoint starts answering — once the host is up, grace-poll the
+  // captured log for the token URL before continuing (dsh 0.1.2 A1-19).
+  let upSince = 0
+  const rescan = () => {
+    if (bootUrl) return
+    try { bootUrl = findBootUrl(readFileSync(hostLog, 'utf8')) } catch { /* log not written yet */ }
+  }
   while (Date.now() < deadline) {
-    if (hostUp()) return child
+    rescan()
+    if (hostUp()) {
+      if (!upSince) upSince = Date.now()
+      if (bootUrl || Date.now() - upSince > 10_000) break
+    } else {
+      upSince = 0
+    }
     if (child.exitCode !== null || child.signalCode !== null) {
-      console.error('[e2e] host process exited during bring-up (stdio was suppressed; re-run the same command manually to see why)')
+      console.error('[e2e] host process exited during bring-up (see output/e2e-host.log for the captured output)')
       process.exit(1)
     }
-    await sleep(1000)
+    await sleep(500)
   }
-  console.error(`[e2e] host did not become ready on ${BASE}`)
-  killTree(child)
-  process.exit(1)
+  if (!hostUp()) {
+    console.error(`[e2e] host did not become ready on ${BASE} (see output/e2e-host.log)`)
+    killTree(child)
+    process.exit(1)
+  }
+  rescan()
+  if (bootUrl) {
+    process.env.YOLO_E2E_BOOT_URL = bootUrl
+    console.log(`[e2e] boot token URL captured: ${bootUrl.replace(/([?&]token=)[^&\s]+/i, '$1<redacted>')}`)
+  } else {
+    console.warn('[e2e] WARN: no `dsh web:` token URL found in host output — the UI suite will 401 on a dsh 0.1.2+ host (see output/e2e-host.log)')
+  }
+  return child
 }
 
 /** Map --suite/--spec to Playwright path filters.

@@ -2,7 +2,6 @@
 // contracts; this adapter owns schemastery validation/defaults and the dsh
 // settings namespace join key.
 
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { YoloConfig } from '../contracts/config.ts'
 
@@ -59,5 +58,6 @@ export const Config: z<Config> = z.object({
   }),
 })
 
-/** Host settings service key; must remain settingsNamespace('yolo'). */
-export const YOLO_NS = settingsNamespace('yolo')
+/** Host settings service key; must remain the literal 'yolo' (dsh 0.1.2 validates
+ * namespaces at compile time — `settingsNamespace()` was removed in 0.1.2-alpha.2). */
+export const YOLO_NS = 'yolo'

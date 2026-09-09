@@ -50,6 +50,10 @@ YOLO 会理解对话里的计划信息，而不是要求你使用固定关键词
 
 ## 快速开始
 
+YOLO 需要运行在 **dsh 0.1.2-rc.1 或更新版本**的宿主上；更旧的宿主无法加载本版的
+浏览器面板（用 `npx @deepseek-ai/dsh --version` 确认，必要时
+`npm install -g @deepseek-ai/dsh@latest` 升级）。
+
 安装 [Node.js](https://nodejs.org/) 22 LTS（至少 22.19）或 Node.js 24，并确保 `pnpm` 命令可用。
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 

@@ -9,7 +9,6 @@
 // All handlers are failure-isolated: they never throw into the agent loop.
 
 import type { Context } from '@deepseek-ai/cordis'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { LlmRuntime, Message, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -41,7 +40,8 @@ import {
 export const name = 'yolo-extract'
 export const inject = ['yolo', 'llm', 'sessions', 'settings'] as const
 
-export const YOLO_NS = settingsNamespace('yolo')
+/** dsh 0.1.2 removed `settingsNamespace()` — namespaces are compile-time literals now. */
+export const YOLO_NS = 'yolo'
 
 interface YoloCtx extends Context {
   yolo: Yolo

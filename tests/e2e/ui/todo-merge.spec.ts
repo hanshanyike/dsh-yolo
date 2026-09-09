@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import {
-  connectApi, createFixtures, dismissHostSetupDialogs, openYoloPanel, revealHomeItems,
+  connectApi, createFixtures, dismissHostSetupDialogs, ensureHostAuth, openYoloPanel, revealHomeItems,
   todayStr, waitForDashboard, withWorkspaceDatabase, type Api,
   type WorkspaceOwnedRow,
 } from '../helpers.ts'
@@ -15,6 +15,7 @@ test.beforeEach(() => { fx = createFixtures(api) })
 test.afterEach(async () => { await fx.dispose() })
 
 async function openSettings(page: Page): Promise<Locator> {
+  await ensureHostAuth(page)
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await dismissHostSetupDialogs(page)
   await page.getByRole('button', { name: '设置' }).click()

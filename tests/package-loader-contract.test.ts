@@ -65,7 +65,9 @@ describe('package and Cordis loader contract', () => {
     ])
     expect(manifest.dsh?.bundle?.patch).toBe('./cordis.patch.yml')
     expect(manifest.dsh?.client).toEqual({
-      inject: ['@deepseek-ai/dsh-client-runtime'],
+      // dsh 0.1.2 removed @deepseek-ai/dsh-client-runtime; the client half
+      // consumes only host-mounted services, so the assembly inject list is empty.
+      inject: [],
       platform: 'web',
     })
   })

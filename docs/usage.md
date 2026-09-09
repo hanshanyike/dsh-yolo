@@ -5,6 +5,10 @@ YOLO 会把对话中需要继续跟进的事项整理成计划，并在到期时
 
 ## 一、安装与启动
 
+YOLO 需要运行在 **dsh 0.1.2-rc.1 或更新版本**的宿主上；更旧的宿主无法加载本版的浏览器面板。
+可以先运行 `npx @deepseek-ai/dsh --version` 确认版本，必要时用
+`npm install -g @deepseek-ai/dsh@latest` 升级 dsh。
+
 安装 [Node.js](https://nodejs.org/) 22 LTS（至少 22.19）或 Node.js 24，并确保 `pnpm` 命令可用。
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 

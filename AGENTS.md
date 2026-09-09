@@ -72,7 +72,7 @@ pnpm build              # 产物到 dist/（host 从 dist 加载插件）
 node scripts/clean-test-data.mjs   # 手动清理 [E2E] 测试夹具（e2e runner 拉起宿主前会自动做）
 npx @deepseek-ai/dsh plugin --profile web add .   # 一次性：把插件链接进 dsh web profile
 pnpm dsh web --no-open --port 4080    # 启动宿主（标准 dsh；`web` 已隐含 --profile web，默认端口 3080，本机被占故用 4080）
-node scripts/e2e.mjs                 # E2E：拉起/复用宿主后跑全套（当前 66 用例，约 5 分钟）
+node scripts/e2e.mjs                 # E2E：拉起/复用宿主后跑全套（当前 86 用例，约 7 分钟；dsh ≥ 0.1.2 时 runner 自动捕获启动令牌 URL）
 node scripts/e2e.mjs --suite api     # 仅 api 套件（HTTP 接口测试，无浏览器，秒级反馈；改 src/** 后首选）
 node scripts/e2e.mjs --suite ui      # 仅 ui 套件（浏览器端到端测试）
 node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/<spec>.spec.ts）
@@ -84,6 +84,9 @@ node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/
 > 开发时用 `--port 4080`（3080 被本机宿主占用），默认端口 3080。
 > **[E2E] 夹具清理已自动化**：runner 拉起自己的宿主前会 DB 级清扫 `[E2E]` 行；
 > 只有复用已有宿主（`--no-host`）时才需要手动跑 `clean-test-data.mjs`。
+> **dsh ≥ 0.1.2 注意**：web 根路径需要启动令牌认证，runner 会捕获 `dsh web:` 输出并
+> 导出 `YOLO_E2E_BOOT_URL`（宿主完整输出在 `output/e2e-host.log`）；依赖看板排名的用例
+> 需用 `DSH_HOME` + `YOLO_E2E_WORKSPACE` 严格干净模式（见 docs/testing-e2e.md）。
 > E2E 场景矩阵、套件划分、慢因根因记录见 **docs/testing-e2e.md**。
 
 ## 记忆 / 提醒 / 看板的核心机制
@@ -112,7 +115,7 @@ node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/
 - **单测**：`tests/**/*.test.ts`，`pnpm test:run`。用内存 SQLite 等隔离手段，**不依赖 host**。
 - **E2E**：`tests/e2e/{api,ui}/*.spec.ts`，Playwright + **真实宿主**，按测试分层拆成
   **api（HTTP 接口测试，无浏览器）/ ui（真实 Edge 浏览器端到端）** 两个套件。
-  运行 `node scripts/e2e.mjs`（全套 ~1 分钟）；`--suite api|ui` 选套件、`--spec <名>` 选单个用例文件。
+  运行 `node scripts/e2e.mjs`（全套约 5–7 分钟）；`--suite api|ui` 选套件、`--spec <名>` 选单个用例文件。
   - 通过 HTTP 接口 + 真实浏览器驱动；夹具统一带 `[E2E]` 唯一前缀，经 `createFixtures` 按 id 在 afterEach 精准清理（幂等）。
   - 配置见 `playwright.config.ts`（缺省 `msedge`、中文、`workers:1`）。
   - 场景矩阵 / 根因记录 / agent 手册：**docs/testing-e2e.md**。

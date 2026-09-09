@@ -3,9 +3,17 @@
 // global, cross-session surface, so the dashboard lives in the sidebar
 // (session-independent), not inside every conversation.
 
-// Type-only: the client Context — its `sessions` service (contract ISessions)
-// is what backs the ledger's session jumps, unlike the bare cordis Context.
-import type { ClientContext, ISessions, SessionId, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+// Type-only imports. dsh 0.1.2 removed @deepseek-ai/dsh-client-runtime; its
+// client symbols migrated by domain (upgrade card DSH-0.1.2-A1-25):
+//   ClientContext -> cordis Context · ISessions -> dsh-api-session-controller/client
+//   SessionId -> dsh-session/types · SettingsScope -> dsh-client-ui-settings/client
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: pulls the `slots` Context augmentation (client-ui-renderer provides it
+// since the 0.1.2 client-runtime unbundling).
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the ui-sidebar SlotMap merge (sidebar.footer.action).
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 // Type-only: pulls the ui-settings-plugins SlotMap merge (settings.plugin.item).

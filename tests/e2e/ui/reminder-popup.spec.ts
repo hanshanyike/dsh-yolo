@@ -2,7 +2,7 @@
 // 点击回到看板；看板已打开时直接刷新通知区而不叠加弹窗。
 
 import { test, expect } from '@playwright/test'
-import { connectApi, createFixtures, dismissHostSetupDialogs, openYoloPanel, todayStr, uid, type Api } from '../helpers.ts'
+import { connectApi, createFixtures, dismissHostSetupDialogs, ensureHostAuth, openYoloPanel, todayStr, uid, type Api } from '../helpers.ts'
 
 let api: Api
 let fx: ReturnType<typeof createFixtures>
@@ -23,6 +23,7 @@ test('新提醒弹出十秒、可暂停关闭并点击回到看板', async ({ pa
   await fx.notification(historical)
 
   const baselineResponse = page.waitForResponse((response) => response.url().includes('/yolo/badge') && response.ok())
+  await ensureHostAuth(page)
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await dismissHostSetupDialogs(page)
   await expect(page.locator("button[title^='YOLO ·']").first()).toBeVisible({ timeout: 30_000 })
@@ -67,6 +68,7 @@ test('精确到期事项由真实调度器驱动右下角提示与侧栏角标',
   test.setTimeout(120_000)
 
   const baselineResponse = page.waitForResponse((response) => response.url().includes('/yolo/badge') && response.ok())
+  await ensureHostAuth(page)
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await dismissHostSetupDialogs(page)
   await expect(page.locator("button[title^='YOLO ·']").first()).toBeVisible({ timeout: 30_000 })
