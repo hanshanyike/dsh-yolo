@@ -5,15 +5,15 @@ YOLO 会把对话中需要继续跟进的事项整理成计划，并在到期时
 
 ## 一、安装与启动
 
-YOLO 需要运行在 **dsh 0.1.2-rc.1 或更新版本**的宿主上；更旧的宿主无法加载本版的浏览器面板。
-可以先运行 `npx @deepseek-ai/dsh --version` 确认版本，必要时用
+YOLO 需要运行在 **dsh 0.1.5-rc.1 或更新版本**的宿主上；更旧的宿主无法加载本版的浏览器面板，
+插件设置页也不会出现这一版的配置卡。可以先运行 `npx @deepseek-ai/dsh --version` 确认版本，必要时用
 `npm install -g @deepseek-ai/dsh@latest` 升级 dsh。
 
 安装 [Node.js](https://nodejs.org/) 22 LTS（至少 22.19）或 Node.js 24，并确保 `pnpm` 命令可用。
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0-beta.3
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0-rc.1
 npx @deepseek-ai/dsh web
 ```
 
@@ -23,7 +23,7 @@ npx @deepseek-ai/dsh web
 也可以从固定的 GitHub 标签安装：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.5.0-beta.3
+npx @deepseek-ai/dsh plugin --profile web add github:hanshanyike/dsh-yolo#v0.5.0-rc.1
 npx @deepseek-ai/dsh web
 ```
 
@@ -36,7 +36,7 @@ GitHub 安装会在本机完成构建。如果安装过程要求批准构建脚�
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.5.0-beta.3
+git checkout v0.5.0-rc.1
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build

@@ -12,6 +12,7 @@
 
 [![GitHub Stars](https://img.shields.io/github/stars/hanshanyike/dsh-yolo?style=flat-square&logo=github&label=Stars&color=4176E6)](https://github.com/hanshanyike/dsh-yolo/stargazers)
 [![npm Release](https://img.shields.io/npm/v/dsh-plugin-yolo/rc?style=flat-square&logo=npm&label=Release&color=CB3837)](https://www.npmjs.com/package/dsh-plugin-yolo)
+[![npm Downloads](https://img.shields.io/npm/dm/dsh-plugin-yolo?style=flat-square&logo=npm&label=Downloads&color=CB3837)](https://www.npmjs.com/package/dsh-plugin-yolo)
 [![License](https://img.shields.io/github/license/hanshanyike/dsh-yolo?style=flat-square&label=License&color=4176E6)](LICENSE)
 
 </div>
@@ -69,8 +70,9 @@ acknowledgements, generic knowledge, and unrelated personal profiling.
 
 ## Quick Start
 
-YOLO requires a **dsh 0.1.2-rc.1 or newer** host; older hosts cannot load this
-version's browser panel (check with `npx @deepseek-ai/dsh --version`, and
+YOLO requires a **dsh 0.1.5-rc.1 or newer** host; older hosts cannot load this
+version's browser panel, and the Plugins settings page does not render this
+version's configuration card (check with `npx @deepseek-ai/dsh --version`, and
 upgrade via `npm install -g @deepseek-ai/dsh@latest` if needed).
 
 Install [Node.js](https://nodejs.org/) 22 LTS (22.19 or newer within the 22.x
@@ -78,7 +80,7 @@ line) or Node.js 24, and make sure `pnpm` is available. If needed, run
 `corepack enable` first. Then run:
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0-beta.3
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0-rc.1
 npx @deepseek-ai/dsh web
 ```
 
@@ -98,7 +100,7 @@ To install the current release candidate directly from source:
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.5.0-beta.3
+git checkout v0.5.0-rc.1
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import {
-  connectApi, createFixtures, dismissHostSetupDialogs, ensureHostAuth, openYoloPanel, revealHomeItems,
+  connectApi, createFixtures, openYoloPanel, openYoloPluginCard, revealHomeItems,
   todayStr, waitForDashboard, withWorkspaceDatabase, type Api,
   type WorkspaceOwnedRow,
 } from '../helpers.ts'
@@ -14,16 +14,17 @@ test.afterAll(async () => { await api.close() })
 test.beforeEach(() => { fx = createFixtures(api) })
 test.afterEach(async () => { await fx.dispose() })
 
+/** Open Settings → Plugins with the YOLO card expanded (the shipped cards start collapsed). */
 async function openSettings(page: Page): Promise<Locator> {
-  await ensureHostAuth(page)
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await dismissHostSetupDialogs(page)
-  await page.getByRole('button', { name: '设置' }).click()
-  const dialog = page.getByRole('dialog', { name: '设置' })
-  await dialog.getByRole('button', { name: '插件', exact: true }).click()
-  const card = dialog.locator('.yolo-settings-card')
+  const card = await openYoloPluginCard(page)
   await expect(card).toBeVisible()
   return card
+}
+
+/** Save the staged edits and wait for the card to collapse on an accepted write. */
+async function saveCard(card: Locator): Promise<void> {
+  await card.getByRole('button', { name: '保存' }).click()
+  await expect(card.locator('.yolo-card__header')).toHaveAttribute('aria-expanded', 'false')
 }
 
 const SEMANTIC_REASON = '交付物都是最终演示材料，接收方“研发”和“开发团队”一致。'
@@ -86,18 +87,18 @@ test('R3-UI: 开关启用建议，状态冲突先预览选择，确认合并后�
   let enabled = false
   try {
     let card = await openSettings(page)
-    const toggle = card.getByRole('checkbox', { name: /重复事项合并建议/ })
+    let toggle = card.getByRole('switch', { name: '重复事项合并建议' })
     if (await toggle.isChecked()) {
       await toggle.setChecked(false)
-      await card.getByRole('button', { name: '保存设置' }).click()
-      await expect(card.getByRole('status')).toContainText('设置已保存')
+      await saveCard(card)
     }
     const remaining = (await api.dashboard()).health.duplicateTodos as Array<{ a: string; b: string }>
     expect(remaining.some((pair) => new Set([pair.a, pair.b]).has(openRow.id)
       && new Set([pair.a, pair.b]).has(doneId))).toBe(false)
+    card = await openSettings(page)
+    toggle = card.getByRole('switch', { name: '重复事项合并建议' })
     await toggle.setChecked(true)
-    await card.getByRole('button', { name: '保存设置' }).click()
-    await expect(card.getByRole('status')).toContainText('设置已保存')
+    await saveCard(card)
     enabled = true
     await waitForDashboard(api, (data) => data.health?.duplicateTodos?.some((pair: Record<string, unknown>) => (
       pair.a === openRow.id && pair.b === doneId
@@ -143,9 +144,8 @@ test('R3-UI: 开关启用建议，状态冲突先预览选择，确认合并后�
     if (enabled) {
       await page.setViewportSize({ width: 1440, height: 900 })
       const card = await openSettings(page)
-      await card.getByRole('checkbox', { name: /重复事项合并建议/ }).setChecked(false)
-      await card.getByRole('button', { name: '保存设置' }).click()
-      await expect(card.getByRole('status')).toContainText('设置已保存')
+      await card.getByRole('switch', { name: '重复事项合并建议' }).setChecked(false)
+      await saveCard(card)
     }
     for (const id of [doneId, openRow.id]) {
       await api.action({
@@ -161,10 +161,9 @@ test('R3-UI: 用户标记不是重复事项后，同一语义候选对不再出�
   let enabled = false
   try {
     const card = await openSettings(page)
-    const toggle = card.getByRole('checkbox', { name: /重复事项合并建议/ })
+    const toggle = card.getByRole('switch', { name: '重复事项合并建议' })
     await toggle.setChecked(true)
-    await card.getByRole('button', { name: '保存设置' }).click()
-    await expect(card.getByRole('status')).toContainText('设置已保存')
+    await saveCard(card)
     enabled = true
 
     await openYoloPanel(page)
@@ -187,8 +186,8 @@ test('R3-UI: 用户标记不是重复事项后，同一语义候选对不再出�
   } finally {
     if (enabled) {
       const card = await openSettings(page)
-      await card.getByRole('checkbox', { name: /重复事项合并建议/ }).setChecked(false)
-      await card.getByRole('button', { name: '保存设置' }).click()
+      await card.getByRole('switch', { name: '重复事项合并建议' }).setChecked(false)
+      await saveCard(card)
     }
     for (const id of [doneId, openRow.id]) {
       await api.action({

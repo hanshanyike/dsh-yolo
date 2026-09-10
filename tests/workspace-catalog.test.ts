@@ -93,6 +93,41 @@ describe('WorkspaceCatalog', () => {
     catalog.close()
   })
 
+  // The catalog is polled every reminder tick, and its status bookkeeping is a
+  // WRITE. Rewriting unchanged rows made the scheduler's read path the thing
+  // contending for the database lock — and a failure there used to escape the
+  // interval callback and take the host down.
+  it('does not write while listing rows whose stored status already matches', () => {
+    const cwd = join(root, 'workspace-a')
+    const scopeKey = createWorkspaceStore(cwd)
+    const catalog = new WorkspaceCatalog(catalogPath)
+    const registered = catalog.register(cwd, scopeKey, 100)
+    setWorkspaceMarkers(cwd, scopeKey, registered.workspaceId)
+
+    // A second connection observes the writes the catalog makes on its own file.
+    const probe = new DatabaseSync(catalogPath)
+    try {
+      probe.exec('CREATE TABLE write_probe(n INTEGER)')
+      probe.exec('CREATE TRIGGER probe_after_update AFTER UPDATE ON workspaces BEGIN INSERT INTO write_probe(n) VALUES(1); END')
+      const writes = (): number => (probe.prepare('SELECT COUNT(*) AS n FROM write_probe').get() as { n: number }).n
+
+      expect(catalog.list()).toEqual([expect.objectContaining({ status: 'ready' })])
+      expect(catalog.list()).toEqual([expect.objectContaining({ status: 'ready' })])
+      expect(writes()).toBe(0)
+
+      // A stored status that no longer matches IS rewritten — once, not on every poll.
+      probe.prepare("UPDATE workspaces SET last_error='stale'").run()
+      probe.exec('DELETE FROM write_probe') // that stimulus is the probe's own write
+      expect(catalog.list()).toEqual([expect.objectContaining({ status: 'ready' })])
+      expect(writes()).toBe(1)
+      catalog.list()
+      expect(writes()).toBe(1)
+    } finally {
+      probe.close()
+      catalog.close()
+    }
+  })
+
   it('quarantines a corrupt catalog and starts with a fresh empty database', () => {
     mkdirSync(dirname(catalogPath), { recursive: true })
     writeFileSync(catalogPath, 'this is not sqlite')

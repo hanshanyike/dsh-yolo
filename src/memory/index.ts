@@ -103,6 +103,11 @@ export function apply(ctx: Context): void {
     // semantic-recall budget or pollute the tracked user message).
     if (isYoloSessionId(sessionId(session))) return
     if (event.type !== 'user/message') return
+    // Only direct human input: a user-ROLE message is not necessarily human.
+    // dsh 0.1.5's model-selection seam appends a durable `[model changed: …]`
+    // notice with `source.kind === 'plugin'`, and recalling on it would burn the
+    // semantic budget and pollute the dedup key with a machine line.
+    if ((event.data as { source?: { kind?: string } }).source?.kind !== 'user') return
     const text = contentBlocksToText((event.data as { content?: readonly unknown[] }).content)
     if (!text) return
     recallDedup.onUserMessage(sessionId(session) ?? '', text)

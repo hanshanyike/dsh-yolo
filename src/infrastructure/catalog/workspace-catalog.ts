@@ -54,6 +54,10 @@ export class WorkspaceCatalog {
     try {
       db = new DatabaseSync(path)
       db.exec('PRAGMA journal_mode = WAL')
+      // Two hosts can legitimately serve the same DSH home (a dev host on one
+      // port, an e2e host on another). Wait for a concurrent writer instead of
+      // failing the statement outright with SQLITE_BUSY.
+      db.exec('PRAGMA busy_timeout = 5000')
       db.exec(`
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS workspaces(
@@ -93,6 +97,7 @@ export class WorkspaceCatalog {
       const fresh = new DatabaseSync(path)
       fresh.exec(`
         PRAGMA journal_mode = WAL;
+        PRAGMA busy_timeout = 5000;
         CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE workspaces(
           workspace_id TEXT PRIMARY KEY,
@@ -133,14 +138,37 @@ export class WorkspaceCatalog {
       .all() as unknown as WorkspaceRow[]
     return rows.map((row) => {
       const result = this.validate(row)
-      if (result.status === 'ready') {
-        this.db.prepare('UPDATE workspaces SET last_error=NULL, unavailable_since=NULL WHERE workspace_id=?').run(row.workspace_id)
-      } else {
-        this.db.prepare(`UPDATE workspaces SET last_error=?, unavailable_since=COALESCE(unavailable_since, ?) WHERE workspace_id=?`)
-          .run(result.reason ?? result.status, Date.now(), row.workspace_id)
-      }
+      this.recordStatus(row, result)
       return result
     })
+  }
+
+  /**
+   * Best-effort status bookkeeping behind a READ.
+   *
+   * Two properties matter here. First, a read must not write when nothing
+   * changed: the catalog is polled by the reminder scheduler, and rewriting a
+   * row on every poll is write traffic that buys nothing while making this
+   * read-path the thing that contends for the database lock. Second, when a
+   * write IS warranted and another process holds the lock, the failure must not
+   * propagate — the caller asked to read the catalog and already has its rows;
+   * losing a status annotation is not worth failing a background tick over.
+   */
+  private recordStatus(row: WorkspaceRow, result: WorkspaceCatalogRecord): void {
+    const reason = result.status === 'ready' ? null : result.reason ?? result.status
+    if (reason === null) {
+      if (row.last_error === null && row.unavailable_since === null) return
+    } else if (row.last_error === reason) return
+    try {
+      if (reason === null) {
+        this.db.prepare('UPDATE workspaces SET last_error=NULL, unavailable_since=NULL WHERE workspace_id=?').run(row.workspace_id)
+      } else {
+        this.db.prepare('UPDATE workspaces SET last_error=?, unavailable_since=COALESCE(unavailable_since, ?) WHERE workspace_id=?')
+          .run(reason, Date.now(), row.workspace_id)
+      }
+    } catch {
+      // Locked or read-only catalog: the row we already read stands.
+    }
   }
 
   private validate(row: WorkspaceRow): WorkspaceCatalogRecord {

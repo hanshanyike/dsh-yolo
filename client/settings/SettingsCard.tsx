@@ -1,134 +1,197 @@
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+/**
+ * The YOLO plugin-configuration card.
+ *
+ * dsh 0.1.5's Plugins settings section dispatches `settings.plugin.item` by
+ * settings namespace, and each card owns its own chrome. This card reproduces
+ * the chrome the shipped cards render — the same header button, unsaved tag,
+ * chevron disclosure, read-only notice, and discard/save footer, with the same
+ * declarations and primitives (Tag, Switch, chevron icon) — so YOLO's card is
+ * indistinguishable from the shell / agent-loop / web-search cards instead of
+ * being the one card with its own look.
+ */
+import { useEffect, useRef, useState } from 'react'
+import { IconChevronDownOutline14, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { CardFieldState, CardShell } from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import packageJson from '../../package.json' with { type: 'json' }
-import { YoloLogo } from '../YoloLogo.tsx'
-import { saveSettingsDraft, settingsDraftFrom, validateSettingsDraft, type YoloSettings, type YoloSettingsDraft } from './model.ts'
+import { YOLO_CARD_NS, type YoloCardLocaleKey } from './card-locale.ts'
+import type { SwitchFieldState, YoloCardActions } from './card-form.ts'
+import { YOLO_FIELD_COPY, YOLO_FIELD_GROUPS, YOLO_FIELD_SPECS, type YoloFieldSpec } from './model.ts'
 
-interface SettingsCardProps { scope: SettingsScope<YoloSettings> }
-
-const sectionStyle = { border: '1px solid var(--border, rgba(127, 127, 127, .25))', borderRadius: 10, padding: 14, display: 'grid', gap: 12 } as const
-const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 } as const
-const labelStyle = { display: 'grid', gap: 5, fontSize: 13 } as const
-const hintStyle = { color: 'var(--foreground-secondary, #666)', fontSize: 12 } as const
-const inputStyle = { minWidth: 0, padding: '7px 9px', color: 'inherit', background: 'var(--background, transparent)', border: '1px solid var(--border, rgba(127, 127, 127, .35))', borderRadius: 7 } as const
 const PACKAGE_VERSION = packageJson.version
 
-function baseSettings(snapshot: SettingsScopeSnapshot<YoloSettings>): Partial<YoloSettings> {
-  return snapshot.base && typeof snapshot.base === 'object' ? snapshot.base as Partial<YoloSettings> : {}
+/** What the card renders. */
+export interface YoloCardState extends CardShell {
+  /** One entry per value field, keyed by dotted path. */
+  fields: Record<string, CardFieldState>
+  /** One entry per switch field, keyed by dotted path. */
+  switches: Record<string, SwitchFieldState>
 }
 
-function defaultHint(value: unknown): string {
-  if (typeof value === 'boolean') return `默认：${value ? '开启' : '关闭'}`
-  return value == null ? '' : `默认：${String(value)}`
-}
-
-export function SettingsCard({ scope }: SettingsCardProps): JSX.Element {
-  const snapshot = useSyncExternalStore(
-    (listener) => scope.subscribe(listener),
-    () => scope.getSnapshot(),
-    () => scope.getSnapshot(),
-  )
-  const current = snapshot.value
-  const [draft, setDraft] = useState<YoloSettingsDraft | undefined>(() => current ? settingsDraftFrom(current) : undefined)
-  const [dirty, setDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; text: string }>()
-
-  useEffect(() => {
-    if (current && !dirty && !saving) setDraft(settingsDraftFrom(current))
-  }, [current, dirty, saving])
-
-  const issues = useMemo(() => draft ? validateSettingsDraft(draft) : [], [draft])
-  const defaults = baseSettings(snapshot)
-  const patch = <K extends keyof YoloSettingsDraft>(field: K, value: YoloSettingsDraft[K]): void => {
-    setDraft((previous) => previous ? { ...previous, [field]: value } : previous)
-    setDirty(true)
-    setFeedback(undefined)
+/** The registration-side face the card's slot entry injects. */
+export interface YoloCardFace extends YoloCardActions {
+  hooks: {
+    /** Card snapshot bound by the renderer as useYoloCard. */
+    yoloCard: SnapshotStore<YoloCardState>
   }
-  const save = async (): Promise<void> => {
-    if (!draft || !current || saving) return
-    setSaving(true)
-    setFeedback(undefined)
-    const result = await saveSettingsDraft(scope, current, draft)
-    setSaving(false)
-    if (!result.ok) {
-      setFeedback({ kind: 'error', text: result.error ?? '保存失败，请重试。' })
+}
+
+/** Props the renderer binds for the YOLO card. */
+export type YoloSettingsCardProps =
+  PropsRuntime<'settings.plugin.item'> & PropsLocale<typeof YOLO_CARD_NS> & InjectFace<YoloCardFace>
+
+const SPECS = new Map(YOLO_FIELD_SPECS.map((spec) => [spec.field, spec]))
+
+function specOf(field: string): YoloFieldSpec {
+  const spec = SPECS.get(field)
+  if (spec === undefined) throw new Error(`yolo card renders unknown field ${field}`)
+  return spec
+}
+
+/**
+ * Copy keys of a field's label and hint. The table is total by contract: a
+ * missing entry must fail loudly rather than fall back to the dotted path
+ * segment, which would render `model` on screen where a label belongs.
+ */
+function copyOf(field: string): { caption: YoloCardLocaleKey; hint: YoloCardLocaleKey } {
+  const copy = YOLO_FIELD_COPY[field]
+  if (copy === undefined) throw new Error(`yolo card has no copy for field ${field}`)
+  return copy
+}
+
+function controlId(field: string): string {
+  return `plugin-config-yolo-${field.replace(/\./gu, '-')}`
+}
+
+/**
+ * Render the YOLO plugin card.
+ * @param props - locale copy, the card snapshot, and its form actions.
+ * @returns the card, or nothing while the namespace is unserved.
+ */
+export function YoloSettingsCard(props: YoloSettingsCardProps): JSX.Element | null {
+  const { t, useYoloCard } = props
+  const state = useYoloCard((snapshot) => snapshot)
+  const [open, setOpen] = useState(false)
+  const saveStarted = useRef(false)
+
+  // A successful save collapses the card, exactly like the shipped cards; a
+  // failed one keeps it open with its drafts.
+  useEffect(() => {
+    if (state.saving) {
+      saveStarted.current = true
       return
     }
-    const accepted = scope.getSnapshot().value
-    if (accepted) setDraft(settingsDraftFrom(accepted))
-    setDirty(false)
-    setFeedback({ kind: 'success', text: '设置已保存。除扫描间隔外，新设置会在下一次运行时读取。' })
+    if (!saveStarted.current) return
+    saveStarted.current = false
+    if (!state.dirty && !state.failed) setOpen(false)
+  }, [state.dirty, state.failed, state.saving])
+
+  if (!state.available) return null
+
+  const title = t('title')
+  const disabled = !state.writable || state.saving
+
+  const renderValue = (field: string, experimental: boolean | undefined): JSX.Element => {
+    const fieldState = state.fields[field] ?? { text: '', overridden: false, invalid: false }
+    const spec = specOf(field)
+    const id = controlId(field)
+    const { caption, hint } = copyOf(field)
+    const label = t(caption)
+    const invalidKey = spec.control === 'value' ? spec.invalidKey : undefined
+    return (
+      <div className="yolo-card__field" key={field}>
+        <div className="yolo-card__head">
+          <label className="yolo-card__label" htmlFor={id}>{label}</label>
+          {experimental === true ? <Tag tone="quiet">{t('experimental')}</Tag> : null}
+          {fieldState.overridden ? (
+            <span className="yolo-card__badges">
+              <Tag tone="neutral">{t('overridden')}</Tag>
+              <button type="button" className="yolo-card__reset" disabled={disabled} onClick={() => { props.resetField(field) }}>{t('reset')}</button>
+            </span>
+          ) : null}
+        </div>
+        <input
+          id={id}
+          className={fieldState.invalid ? 'yolo-card__input is-invalid' : 'yolo-card__input'}
+          type="text"
+          {...(spec.control === 'value' && spec.inputMode !== undefined ? { inputMode: spec.inputMode } : {})}
+          {...(fieldState.invalid ? { 'aria-invalid': true } : {})}
+          value={fieldState.text}
+          disabled={disabled}
+          onChange={(event) => { props.edit(field, event.target.value) }}
+        />
+        <p className={fieldState.invalid ? 'yolo-card__invalid' : 'yolo-card__hint'}>
+          {fieldState.invalid && invalidKey !== undefined ? t(invalidKey) : t(hint)}
+        </p>
+      </div>
+    )
   }
 
-  if (snapshot.status === 'unavailable') return <div className="yolo-settings-card" style={{ padding: '14px 0' }}><h3 style={{ margin: 0 }}>YOLO 设置暂不可用</h3><p role="alert" style={hintStyle}>当前连接无法读取宿主持久化设置。请在本机 dsh 设置页重试。</p></div>
-  if (snapshot.status === 'loading' || !draft || !current) return <div className="yolo-settings-card" style={{ padding: '14px 0' }} aria-busy="true">正在读取 YOLO 设置…</div>
+  const renderSwitch = (field: string, experimental: boolean | undefined): JSX.Element => {
+    const switchState = state.switches[field] ?? { value: false, overridden: false }
+    const { caption, hint } = copyOf(field)
+    const label = t(caption)
+    return (
+      <div className="yolo-card__toggle" key={field}>
+        <div className="yolo-card__toggle-row">
+          <span className="yolo-card__toggle-label">
+            <span>{label}</span>
+            {experimental === true ? <Tag tone="quiet">{t('experimental')}</Tag> : null}
+          </span>
+          {switchState.overridden ? (
+            <span className="yolo-card__badges">
+              <Tag tone="neutral">{t('overridden')}</Tag>
+              <button type="button" className="yolo-card__reset" disabled={disabled} onClick={() => { props.resetField(field) }}>{t('reset')}</button>
+            </span>
+          ) : null}
+          <Switch
+            checked={switchState.value}
+            label={label}
+            disabled={disabled}
+            onChange={(next) => { props.setSwitch(field, next) }}
+          />
+        </div>
+        <p className="yolo-card__hint">{t(hint)}</p>
+      </div>
+    )
+  }
 
   return (
-    <form className="yolo-settings-card" style={{ padding: '12px 0', display: 'grid', gap: 14 }} onSubmit={(event) => { event.preventDefault(); void save() }}>
-      <header>
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <h3 style={{ margin: '0 0 6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}><YoloLogo size={20} />YOLO — 管理工作与生活的助手</h3>
-          <span aria-label={`发布版本 ${PACKAGE_VERSION}`} style={{ marginBottom: 6, padding: '2px 7px', border: '1px solid var(--border, rgba(127, 127, 127, .35))', borderRadius: 999, color: 'var(--foreground-secondary, #666)', fontSize: 11, fontWeight: 700, letterSpacing: '.04em' }}>v{PACKAGE_VERSION}</span>
+    <li className={open ? 'yolo-settings-card yolo-card is-open' : 'yolo-settings-card yolo-card'}>
+      <button
+        type="button"
+        className="yolo-card__header"
+        aria-expanded={open}
+        aria-label={`${t(open ? 'collapse' : 'expand')}: ${title}`}
+        onClick={() => { setOpen(!open) }}
+      >
+        <span className="yolo-card__head-text">
+          <span className="yolo-card__name">{title}</span>
+          <span className="yolo-card__description">{t('description')}</span>
+        </span>
+        {state.dirty ? <Tag tone="neutral" className="yolo-card__pending">{t('unsaved')}</Tag> : null}
+        <IconChevronDownOutline14 className={open ? 'yolo-card__chevron is-open' : 'yolo-card__chevron'} />
+      </button>
+      {open ? (
+        <div className="yolo-card__body">
+          {!state.writable ? <p className="yolo-card__read-only" role="status">{t('readOnly')}</p> : null}
+          <p className="yolo-card__meta">{t('meta', { version: PACKAGE_VERSION })}</p>
+          {YOLO_FIELD_GROUPS.map((group) => (
+            <div className="yolo-card__group" key={group.titleKey}>
+              <h4 className="yolo-card__group-title">{t(group.titleKey)}</h4>
+              {group.rows.map((row) => (specOf(row.field).control === 'switch'
+                ? renderSwitch(row.field, row.experimental)
+                : renderValue(row.field, row.experimental)))}
+            </div>
+          ))}
+          <div className="yolo-card__footer">
+            {state.failed ? <p className="yolo-card__failed" role="status">{t('saveFailed')}</p> : null}
+            <button type="button" className="yolo-card__discard" disabled={!state.dirty || state.saving} onClick={props.discard}>{t('discard')}</button>
+            <button type="button" className="yolo-card__save" disabled={!state.dirty || state.invalid || state.saving} onClick={props.save}>{t(state.saving ? 'saving' : 'save')}</button>
+          </div>
         </div>
-        <p style={{ margin: 0, ...hintStyle }}>配置对话提取、低打扰提醒、早晚报与本地快照。当前值由宿主保存，刷新后仍会保留。</p>
-      </header>
-      <fieldset style={sectionStyle}>
-        <legend>LLM 提取</legend>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={draft.extractionEnabled} onChange={(event) => patch('extractionEnabled', event.target.checked)} />启用 LLM 提取 <span style={hintStyle}>{defaultHint(defaults.extraction?.enableLLM)}</span></label>
-        <label style={labelStyle}>提取模型<input style={inputStyle} value={draft.extractionModel} onChange={(event) => patch('extractionModel', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'extractionModel')} /><span style={hintStyle}>{defaultHint(defaults.extraction?.model)}</span></label>
-      </fieldset>
-      <fieldset style={sectionStyle}>
-        <legend>实验能力</legend>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          <input type="checkbox" checked={draft.todoIdentityR2Enabled} aria-describedby="todo-identity-r2-help" onChange={(event) => patch('todoIdentityR2Enabled', event.target.checked)} />
-          <span>高置信事项自动关联 <strong style={{ fontSize: 11, fontWeight: 700, color: 'var(--foreground-secondary, #666)' }}>实验性</strong> <span style={hintStyle}>{defaultHint(defaults.extraction?.todoIdentityR2Enabled)}</span></span>
-        </label>
-        <p id="todo-identity-r2-help" style={{ margin: 0, ...hintStyle }}>开启后，仅在模型置信度至少达到下方阈值且只有一个开放候选时，将后续提及关联到原事项，或按稳定 ID 修改明确的截止时间。不会自动重开、合并、修改状态或处理多候选。</p>
-        <label style={labelStyle}>关联置信度阈值<input style={inputStyle} inputMode="decimal" value={draft.todoIdentityR2MinConfidence} onChange={(event) => patch('todoIdentityR2MinConfidence', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'todoIdentityR2MinConfidence')} /><span style={hintStyle}>0 到 1 之间的数字；越低越容易自动关联，也越需要留意误关联。{defaultHint(defaults.extraction?.todoIdentityR2MinConfidence)}</span></label>
-        {draft.todoIdentityR2Enabled ? <p style={{ margin: 0, padding: '8px 10px', borderLeft: '2px solid var(--accent, #6366f1)', background: 'color-mix(in srgb, var(--accent, #6366f1) 7%, transparent)', ...hintStyle }}>保存即确认启用实验能力。关联结果仍受确定性安全门限制；遇到歧义时不会修改事项。</p> : null}
-        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          <input type="checkbox" checked={draft.todoIdentityR3Enabled} aria-describedby="todo-identity-r3-help" onChange={(event) => patch('todoIdentityR3Enabled', event.target.checked)} />
-          <span>重复事项合并建议 <strong style={{ fontSize: 11, fontWeight: 700, color: 'var(--foreground-secondary, #666)' }}>实验性</strong> <span style={hintStyle}>{defaultHint(defaults.extraction?.todoIdentityR3Enabled)}</span></span>
-        </label>
-        <p id="todo-identity-r3-help" style={{ margin: 0, ...hintStyle }}>开启后，看板会结合模型语义判断和受保护的标题相似度提示可能重复事项，并展示推荐理由与置信度。系统只提供预览；必须由你选择保留哪一项并确认，绝不会自动合并。</p>
-        {draft.todoIdentityR3Enabled ? <p style={{ margin: 0, padding: '8px 10px', borderLeft: '2px solid var(--accent, #6366f1)', background: 'color-mix(in srgb, var(--accent, #6366f1) 7%, transparent)', ...hintStyle }}>保存后开始显示合并建议。完成、取消等终态会在确认前明确展示，由你决定最终保留状态。</p> : null}
-      </fieldset>
-      <fieldset style={sectionStyle}>
-        <legend>到期提醒</legend>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={draft.reminderEnabled} onChange={(event) => patch('reminderEnabled', event.target.checked)} />启用到期提醒 <span style={hintStyle}>{defaultHint(defaults.reminder?.enabled)}</span></label>
-        <div style={gridStyle}>
-          <label style={labelStyle}>扫描间隔（秒）<input style={inputStyle} inputMode="numeric" value={draft.checkIntervalSec} onChange={(event) => patch('checkIntervalSec', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'checkIntervalSec')} /><span style={hintStyle}>至少 10 秒；重启宿主后生效。{defaultHint(defaults.reminder?.checkIntervalSec)}</span></label>
-          <label style={labelStyle}>提前提醒（分钟）<input style={inputStyle} inputMode="numeric" value={draft.aheadMin} onChange={(event) => patch('aheadMin', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'aheadMin')} /><span style={hintStyle}>0 表示到点提醒。{defaultHint(defaults.reminder?.aheadMin)}</span></label>
-        </div>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={draft.quietHoursEnabled} onChange={(event) => patch('quietHoursEnabled', event.target.checked)} />启用安静时段 <span style={hintStyle}>{defaultHint(defaults.reminder?.quietHoursEnabled)}</span></label>
-        <div style={gridStyle}>
-          <label style={labelStyle}>安静时段开始<input type="time" style={inputStyle} value={draft.quietStart} onChange={(event) => patch('quietStart', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'quietStart')} /><span style={hintStyle}>{defaultHint(defaults.reminder?.quietStart)}</span></label>
-          <label style={labelStyle}>安静时段结束<input type="time" style={inputStyle} value={draft.quietEnd} onChange={(event) => patch('quietEnd', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'quietEnd')} /><span style={hintStyle}>{defaultHint(defaults.reminder?.quietEnd)}</span></label>
-        </div>
-      </fieldset>
-      <fieldset style={sectionStyle}>
-        <legend>早晚报</legend>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={draft.briefEnabled} onChange={(event) => patch('briefEnabled', event.target.checked)} />启用早晚报 <span style={hintStyle}>{defaultHint(defaults.brief?.enabled)}</span></label>
-        <div style={gridStyle}>
-          <label style={labelStyle}>早报时间<input type="time" style={inputStyle} value={draft.morningTime} onChange={(event) => patch('morningTime', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'morningTime')} /><span style={hintStyle}>{defaultHint(defaults.brief?.morningTime)}</span></label>
-          <label style={labelStyle}>晚报时间<input type="time" style={inputStyle} value={draft.eveningTime} onChange={(event) => patch('eveningTime', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'eveningTime')} /><span style={hintStyle}>{defaultHint(defaults.brief?.eveningTime)}</span></label>
-        </div>
-        <label style={labelStyle}>简报模型<input style={inputStyle} value={draft.briefModel} onChange={(event) => patch('briefModel', event.target.value)} aria-invalid={issues.some((issue) => issue.field === 'briefModel')} /><span style={hintStyle}>{defaultHint(defaults.brief?.model)}</span></label>
-      </fieldset>
-      <fieldset style={sectionStyle}>
-        <legend>本地快照</legend>
-        <label style={labelStyle}>快照节奏<select style={inputStyle} value={draft.snapshotInterval} onChange={(event) => patch('snapshotInterval', event.target.value as YoloSettingsDraft['snapshotInterval'])}><option value="daily">每日一次</option><option value="every_10_turns">每 10 轮工作对话</option></select><span style={hintStyle}>写入本地 Markdown 快照；YOLO 自身对话不计入轮次。{defaultHint(defaults.storage?.snapshotInterval)}</span></label>
-      </fieldset>
-      {issues.length > 0 && <p role="alert" style={{ margin: 0, color: 'var(--danger, #b42318)' }}>{issues[0]!.message}</p>}
-      {feedback && <p role={feedback.kind === 'error' ? 'alert' : 'status'} style={{ margin: 0, color: feedback.kind === 'error' ? 'var(--danger, #b42318)' : 'var(--success, #157347)' }}>{feedback.text}</p>}
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}><button type="button" disabled={!dirty || saving} onClick={() => { setDraft(settingsDraftFrom(current)); setDirty(false); setFeedback(undefined) }}>放弃修改</button><button type="submit" disabled={!snapshot.writable || !dirty || saving || issues.length > 0}>{saving ? '保存中…' : '保存设置'}</button></div>
-      {!snapshot.writable && <p role="alert" style={{ margin: 0, ...hintStyle }}>当前连接为只读模式，请在本机宿主中修改设置。</p>}
-    </form>
+      ) : null}
+    </li>
   )
-}
-
-/** Slot components receive no owner props, so bind the namespace scope here. */
-export function settingsCardFor(scope: SettingsScope<YoloSettings>): () => JSX.Element {
-  return function BoundSettingsCard(): JSX.Element { return <SettingsCard scope={scope} /> }
 }

@@ -78,6 +78,21 @@ node scripts/e2e.mjs --suite ui      # 仅 ui 套件（浏览器端到端测试�
 node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/<spec>.spec.ts）
 ```
 
+> **本机跑 E2E：一律用隔离 profile + 独立端口**。默认端口 3080 上通常正跑着你自己在用的宿主，
+> runner 会「复用」它而拿不到启动令牌（浏览器停在认证墙），更糟的是两个宿主会同时打开同一批
+> workspace SQLite 文件而互相 `database is locked`。标准做法（`DSH_HOME` / `YOLO_E2E_WORKSPACE`
+> 的目录都被 gitignore）：
+>
+> ```bash
+> # 一次性：把插件链接进隔离 profile
+> DSH_HOME=.tmp-e2e/home npx @deepseek-ai/dsh plugin --profile web add .
+> # 每次：隔离宿主 + 隔离工作区 + 空闲端口
+> DSH_HOME=.tmp-e2e/home YOLO_E2E_WORKSPACE=.tmp-e2e/workspace YOLO_E2E_PORT=4080 node scripts/e2e.mjs
+> ```
+>
+> PowerShell 用 `$env:DSH_HOME = ...` 的形式设置同样三个变量。
+> 不要对 3080 上正在服务的宿主跑 `--no-host`，也不要让 E2E 宿主指向真实工作区。
+
 > **启动与宿主保持一致**：用官方 CLI 执行 `dsh plugin --profile web add .` + `dsh web`，
 > 不要自建 `dev.mjs` / 本地 host checkout（那会因本地 checkout 的宿主凭证格式与全局不一致而要求扁平化凭证，
 > e2e runner 的 bring-up 同样遵循此约定：全局 dsh 优先）。

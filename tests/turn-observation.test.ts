@@ -145,7 +145,7 @@ describe('Yolo observation provider wiring', () => {
     })
     dispatch('session/event',
       { header: { id: 'work-1', cwd: join(root, 'alpha') } },
-      { type: 'user/message', data: { content: [{ type: 'text', text: '准备季度汇报材料' }] } },
+      { type: 'user/message', data: { content: [{ type: 'text', text: '准备季度汇报材料' }], source: { kind: 'user' } } },
     )
     dispatch('agent/turn-stopping', {
       agent: { id: 'work-1', session: { header: { id: 'work-1', cwd: join(root, 'alpha') } } },
@@ -156,16 +156,29 @@ describe('Yolo observation provider wiring', () => {
       agent: { id: 'work-1', session: { header: { id: 'work-1', cwd: join(root, 'alpha') } } },
       turn: 3,
     })
+    // dsh 0.1.5: the model-selection seam appends a durable `[model changed: …]`
+    // notice on the user ROLE with `source.kind === 'plugin'`. It must not
+    // replace the tracked user message, but it still refreshes the workspace.
+    dispatch('session/event',
+      { header: { id: 'work-1', cwd: join(root, 'beta') } },
+      {
+        type: 'user/message',
+        data: {
+          content: [{ type: 'text', text: '[model changed: the session continues with b]' }],
+          source: { kind: 'plugin', plugin: 'model-selection', form: 'notice' },
+        },
+      },
+    )
     dispatch('session/event',
       { header: { id: 'yolo-w-abc123def456', cwd: join(root, 'internal') } },
-      { type: 'user/message', data: { content: [{ type: 'text', text: '内部提醒回复' }] } },
+      { type: 'user/message', data: { content: [{ type: 'text', text: '内部提醒回复' }], source: { kind: 'user' } } },
     )
     dispatch('agent/turn-stopping', {
       agent: { id: 'yolo-w-abc123def456', session: { header: { id: 'yolo-w-abc123def456', cwd: join(root, 'internal') } } },
       turn: 1,
     })
 
-    expect(yolo.observations.latestWorkspaceCwd()).toBe(join(root, 'alpha'))
+    expect(yolo.observations.latestWorkspaceCwd()).toBe(join(root, 'beta'))
     expect(yolo.observations.latestUserText()).toBe('准备季度汇报材料')
     expect(yolo.observations.completedTurnCount()).toBe(1)
 

@@ -119,12 +119,21 @@ export default class Yolo extends Service {
       const id = payload.agent?.id
       this.observations.observeSession(id, sessionCwd(payload.agent?.session), isYoloSessionId(id))
     })
-    on?.('session/event', (session: unknown, event: { type?: string; data?: { content?: readonly unknown[] } }) => {
+    on?.('session/event', (session: unknown, event: { type?: string; data?: { content?: readonly unknown[]; source?: { kind?: string } } }) => {
       const id = sessionId(session)
       const cwd = sessionCwd(session)
       if (event.type === 'user/message') {
-        const text = contentBlocksToText(event.data?.content)
-        this.observations.observeUserMessage(id, cwd, text, isYoloSessionId(id))
+        // A user-ROLE message is not necessarily HUMAN input. dsh 0.1.5's
+        // model-selection seam appends a durable `[model changed: …]` notice
+        // with `source.kind === 'plugin'`, and tool results ride a user role
+        // too. Only direct human input may become the tracked user message; a
+        // machine-authored one still refreshes the session's workspace.
+        if (event.data?.source?.kind === 'user') {
+          const text = contentBlocksToText(event.data?.content)
+          this.observations.observeUserMessage(id, cwd, text, isYoloSessionId(id))
+        } else {
+          this.observations.observeSession(id, cwd, isYoloSessionId(id))
+        }
       } else {
         this.observations.observeSession(id, cwd, isYoloSessionId(id))
       }

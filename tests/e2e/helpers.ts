@@ -6,7 +6,7 @@
 // made). The prefix is also what the "realistic wording" sweep ignores — this
 // is machine-labelled fixture data, not a realistic user sentence.
 
-import { request, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { request, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
 import { dbFileName } from '../../src/storage/scope.ts'
@@ -170,6 +170,33 @@ export async function openYoloPanel(page: Page, opts: { refreshOnSlow?: boolean 
     await capture.waitFor({ state: 'visible', timeout: 6_000 }).catch(() => {})
   }
   await expect(capture).toBeVisible()
+}
+
+/**
+ * Open Settings → Plugins and expand the YOLO plugin-configuration card.
+ *
+ * dsh 0.1.5 renders every plugin card through the shared chrome: an `<li>` that
+ * is collapsed by default and expanded by clicking its header button. The card
+ * is located by its stable marker class so the spec does not depend on the
+ * surrounding section's hashed CSS-module names.
+ *
+ * @param page - the browser page.
+ * @returns the expanded card locator.
+ */
+export async function openYoloPluginCard(page: Page): Promise<Locator> {
+  await ensureHostAuth(page)
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await dismissHostSetupDialogs(page)
+  await page.getByRole('button', { name: '设置' }).click()
+  const dialog = page.getByRole('dialog', { name: '设置' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: '插件', exact: true }).click()
+  const card = dialog.locator('.yolo-settings-card')
+  await expect(card).toBeVisible({ timeout: 30_000 })
+  const header = card.locator('.yolo-card__header')
+  if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click()
+  await expect(header).toHaveAttribute('aria-expanded', 'true')
+  return card
 }
 
 /** Open a bare API context against the host (no browser needed for seeding). */

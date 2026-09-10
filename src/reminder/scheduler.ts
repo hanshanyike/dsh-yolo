@@ -265,8 +265,21 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
   const aheadMs = (): number => deps.aheadMs?.() ?? DEFAULTS.reminderAheadMin * 60_000
 
   const tick = (): void => {
+    // Reading the scan targets touches the workspace registry, whose read path
+    // also maintains per-row status. That I/O can fail transiently (a locked or
+    // mid-compaction catalog DB). A background timer callback must NEVER take
+    // the host down with an uncaught throw — log it and wait for the next
+    // interval, which is exactly what the per-workspace loop below does for one
+    // bad workspace.
+    let targets: ReadonlyArray<{ cwd: string }>
+    try {
+      targets = targetsOf(deps)
+    } catch (e) {
+      ctx.logger?.warn?.('[yolo-reminder] scan targets unavailable: %s', e instanceof Error ? e.message : String(e))
+      return
+    }
     // One failing workspace (corrupt/locked DB) must not block the others.
-    for (const t of targetsOf(deps)) {
+    for (const t of targets) {
       try {
         // reminder.enabled=false idles ONLY the due scan; snapshots keep their cadence
         if (deps.reminderEnabled?.() ?? true) {
@@ -290,33 +303,38 @@ export function startReminderScheduler(ctx: Context, deps: SchedulerDeps): () =>
   let briefInFlight = false
   const briefTick = (): void => {
     if (!deps.briefs || briefInFlight) return
-    const targets = targetsOf(deps)
-    const tracked = deps.cwd()
-    // Before the first work session, `cwd()` falls back to the host process
-    // directory, which need not be a registered workspace. Never open a ghost
-    // store merely to own the aggregate card: prefer the tracked workspace only
-    // when it is one of the scan targets, otherwise use the first real target.
-    const owner = targets.find((target) => (
-      process.platform === 'win32'
-        ? target.cwd.toLowerCase() === tracked.toLowerCase()
-        : target.cwd === tracked
-    ))?.cwd ?? targets[0]!.cwd
-    // The once-per-day stamp is written only after the awaited LLM polish in
-    // runBriefTick; an in-flight flag stops the next 30s tick from re-entering
-    // and emitting a second card while that slow polish is still running.
-    briefInFlight = true
-    void runBriefTick({
-      yolo: deps.yolo,
-      cwd: () => owner,
-      workspaces: targets.map((target) => target.cwd),
-      config: deps.briefs.config(),
-      llm: deps.briefs.llm,
-      provider: deps.briefs.provider,
-    }).catch((e: unknown) => {
-      ctx.logger?.warn?.('[yolo-brief] tick failed (%s): %s', owner, e instanceof Error ? e.message : String(e))
-    }).finally(() => {
-      briefInFlight = false
-    })
+    try {
+      const targets = targetsOf(deps)
+      const tracked = deps.cwd()
+      // Before the first work session, `cwd()` falls back to the host process
+      // directory, which need not be a registered workspace. Never open a ghost
+      // store merely to own the aggregate card: prefer the tracked workspace only
+      // when it is one of the scan targets, otherwise use the first real target.
+      const owner = targets.find((target) => (
+        process.platform === 'win32'
+          ? target.cwd.toLowerCase() === tracked.toLowerCase()
+          : target.cwd === tracked
+      ))?.cwd ?? targets[0]!.cwd
+      // The once-per-day stamp is written only after the awaited LLM polish in
+      // runBriefTick; an in-flight flag stops the next 30s tick from re-entering
+      // and emitting a second card while that slow polish is still running.
+      briefInFlight = true
+      void runBriefTick({
+        yolo: deps.yolo,
+        cwd: () => owner,
+        workspaces: targets.map((target) => target.cwd),
+        config: deps.briefs.config(),
+        llm: deps.briefs.llm,
+        provider: deps.briefs.provider,
+      }).catch((e: unknown) => {
+        ctx.logger?.warn?.('[yolo-brief] tick failed (%s): %s', owner, e instanceof Error ? e.message : String(e))
+      }).finally(() => {
+        briefInFlight = false
+      })
+    } catch (e) {
+      // Same rule as the reminder tick: the interval keeps running.
+      ctx.logger?.warn?.('[yolo-brief] tick could not start: %s', e instanceof Error ? e.message : String(e))
+    }
   }
 
   const timer = setInterval(tick, intervalMs)

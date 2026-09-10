@@ -12,6 +12,7 @@
 
 [![GitHub Stars](https://img.shields.io/github/stars/hanshanyike/dsh-yolo?style=flat-square&logo=github&label=Stars&color=4176E6)](https://github.com/hanshanyike/dsh-yolo/stargazers)
 [![npm Release](https://img.shields.io/npm/v/dsh-plugin-yolo/rc?style=flat-square&logo=npm&label=Release&color=CB3837)](https://www.npmjs.com/package/dsh-plugin-yolo)
+[![npm Downloads](https://img.shields.io/npm/dm/dsh-plugin-yolo?style=flat-square&logo=npm&label=Downloads&color=CB3837)](https://www.npmjs.com/package/dsh-plugin-yolo)
 [![License](https://img.shields.io/github/license/hanshanyike/dsh-yolo?style=flat-square&label=License&color=4176E6)](LICENSE)
 
 </div>
@@ -50,15 +51,15 @@ YOLO 会理解对话里的计划信息，而不是要求你使用固定关键词
 
 ## 快速开始
 
-YOLO 需要运行在 **dsh 0.1.2-rc.1 或更新版本**的宿主上；更旧的宿主无法加载本版的
-浏览器面板（用 `npx @deepseek-ai/dsh --version` 确认，必要时
+YOLO 需要运行在 **dsh 0.1.5-rc.1 或更新版本**的宿主上；更旧的宿主无法加载本版的
+浏览器面板，插件设置页也不会出现这一版的配置卡（用 `npx @deepseek-ai/dsh --version` 确认，必要时
 `npm install -g @deepseek-ai/dsh@latest` 升级）。
 
 安装 [Node.js](https://nodejs.org/) 22 LTS（至少 22.19）或 Node.js 24，并确保 `pnpm` 命令可用。
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0-beta.3
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0-rc.1
 npx @deepseek-ai/dsh web
 ```
 
@@ -81,7 +82,7 @@ npx @deepseek-ai/dsh web --no-open
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.5.0-beta.3
+git checkout v0.5.0-rc.1
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build

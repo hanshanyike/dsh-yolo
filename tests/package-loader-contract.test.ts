@@ -169,4 +169,16 @@ describe('settings and build-asset contract', () => {
     expect(manifest.scripts?.build).toContain('scripts/wrap-client.mjs')
     expect(manifest.scripts?.build).toContain('scripts/copy-assets.mjs')
   })
+
+  // The browser bundle resolves its shared modules against the shell's module
+  // table. React and the client-modules baseline must stay external: bundling a
+  // second React breaks hooks ("Invalid hook call"), and bundling the store or
+  // the UI primitives duplicates the host's component styles and store engine
+  // behind the plugin card's back.
+  it('keeps the shell-provided client modules external in the browser build', () => {
+    const clientBuild = readFileSync(resolve(ROOT, 'tsdown.client.config.ts'), 'utf8')
+    expect(clientBuild).toContain('/^react(\\/|$)/')
+    expect(clientBuild).toContain("'@deepseek-ai/dsh-client-store'")
+    expect(clientBuild).toContain("'@deepseek-ai/dsh-client-ui-primitives'")
+  })
 })

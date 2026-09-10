@@ -60,7 +60,7 @@
 | `ui/accessibility-feedback.spec.ts` | 一级 Tab 键盘、单栏 focus trap/背景 inert、双栏非 modal、返回焦点、live region 和所有控件可读名 | W2 / W5 / W14 / A11Y |
 | `ui/dashboard-trust.spec.ts` · `api/dashboard-scope.spec.ts` · `tests/dashboard-aggregate.test.ts` | UI 中 partial 只提示一次且动作固定原 `scope_cwd`；API 验证真实 owner/未知 scope recovery；同 id 双 scope 与 all-fail recovery 由确定性聚合单测验证 | W13 / WS-01～03 |
 | `ui/capture-composition.spec.ts` | 中文输入法组合态 Enter 不误提交，组合结束后只新增一次真实事项 | W4 |
-| `ui/settings-card.spec.ts` | 提醒与简报设置可保存并在刷新后回读；设置不泄漏内部实现入口 | W14 |
+| `ui/settings-card.spec.ts` | YOLO 插件配置卡与 dsh 自带卡片同构（同一 `<ul>` 下的 `<li>`、默认折叠、相同的圆角/填充/发丝线）；保存后折叠并在刷新后回读；无效草稿阻塞保存且可放弃；设置不泄漏内部实现入口 | W14 |
 | `ui/data-management.spec.ts` | “更多 → 按日期删除事项”进入日期范围预览；批量取消、强确认永久删除、区间外隔离和单条永久删除 | W3 / W12 / W13 / W15 |
 | `ui/goal-management.spec.ts` | 目标卡展示结果、完成标准和目标日期；推进目标打开独立讨论；暂停/恢复状态可见 | W5 / W7 / W12 / W15 |
 
@@ -308,6 +308,11 @@ node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
 > `DSH_HOME=<同一目录> dsh plugin --profile web add .`），宿主默认工作区指向临时目录，
 > 夹具清扫只触碰隔离目录，真实数据（含其它工作区的真实看板行）不参与看板聚合。
 > 依赖真实看板排名的用例（如 TA-4）必须在此模式下运行才可判定。
+>
+> **不要对 3080 上正在用的宿主跑 E2E**。默认端口就是 3080，runner 会判定「已有宿主」并直接复用，
+> 于是浏览器拿不到启动令牌停在认证墙（`ensureHostAuth` 无 `YOLO_E2E_BOOT_URL` 时是空操作）；
+> 更严重的是两个宿主会同时打开同一批 workspace SQLite 文件，互相 `database is locked`。
+> 本机跑 E2E 一律用隔离 profile + 空闲端口（见 `AGENTS.md` 常用命令）。
 
 > 已知 runner 缺陷：`node scripts/e2e.mjs --spec panel-flow` 目前错误映射到
 > `tests/e2e/panel-flow.spec.ts`，会报 `No tests found`；修复 `scripts/e2e.mjs` 的

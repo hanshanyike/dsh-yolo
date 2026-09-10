@@ -12,6 +12,13 @@ import { defineConfig } from 'tsdown'
 // them (official bundles require('react') the same way), so components using
 // hooks share the host's single React instance — bundling a second copy breaks
 // hooks ("Invalid hook call").
+//
+// The client module baseline (`dsh-client-modules` PLATFORM_MODULES) also seeds
+// `@deepseek-ai/dsh-client-store` and `@deepseek-ai/dsh-client-ui-primitives`.
+// The YOLO card renders the host's own atoms (Tag, Switch, chevron icon) and
+// publishes its snapshot through the host's snapshot store, so both stay
+// external and resolve against that single shared table — bundling either one
+// would duplicate the host's component styles and store engine.
 export default defineConfig({
   entry: ['client/index.ts'],
   format: 'cjs',
@@ -19,5 +26,9 @@ export default defineConfig({
   outDir: 'dist/client',
   outExtensions: () => ({ js: '.mjs' }),
   clean: false,
-  external: [/^react(\/|$)/],
+  external: [
+    /^react(\/|$)/,
+    '@deepseek-ai/dsh-client-store',
+    '@deepseek-ai/dsh-client-ui-primitives',
+  ],
 })

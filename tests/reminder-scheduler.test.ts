@@ -208,6 +208,56 @@ describe('startReminderScheduler: multi-workspace scan (v0.3.3 review fix)', () 
     expect((ctx.logger.warn as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[1] === '/ws/bad')).toBe(true)
     cleanup()
   })
+
+  // Regression: the workspace registry's read path maintains per-row status, so
+  // a concurrent writer can make it throw SQLITE_BUSY. That throw used to escape
+  // the interval callback and kill the whole host process, because reading the
+  // scan targets sat outside the per-workspace try/catch.
+  it('a failing scan-target read never escapes the reminder timer', async () => {
+    vi.useFakeTimers()
+    const ctx = mockCtx()
+    const yolo = mockYolo()
+    let reads = 0
+    const cleanup = startReminderScheduler(ctx, {
+      yolo,
+      cwd: () => '/ws/latest',
+      intervalMs: 1000,
+      workspaces: () => {
+        reads += 1
+        if (reads === 1) throw new Error('database is locked')
+        return [{ cwd: '/ws/recovered' }]
+      },
+    })
+
+    // Advancing the timer is the assertion: a throw from the interval callback
+    // surfaces here, which is exactly how the host process used to die.
+    await vi.advanceTimersByTimeAsync(1000)
+    expect((ctx.logger.warn as ReturnType<typeof vi.fn>).mock.calls.some((c) => String(c[0]).includes('scan targets'))).toBe(true)
+    expect(yolo.listTodos).not.toHaveBeenCalled()
+
+    // The interval is still armed and the next tick scans normally.
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(yolo.listTodos).toHaveBeenCalledWith('/ws/recovered')
+    cleanup()
+  })
+
+  it('a failing scan-target read never escapes the brief timer', async () => {
+    vi.useFakeTimers({ now: new Date('2026-08-25T08:00:00') })
+    const ctx = mockCtx()
+    const cleanup = startReminderScheduler(ctx, {
+      yolo: mockYolo(),
+      cwd: () => '/ws/a',
+      intervalMs: 999_999,
+      workspaces: () => { throw new Error('database is locked') },
+      briefs: {
+        config: () => ({ enabled: true, morningTime: '09:00', eveningTime: '21:00', model: 'unused' }),
+      },
+    })
+
+    await vi.advanceTimersByTimeAsync(DEFAULTS.briefCheckIntervalSec * 1000)
+    expect((ctx.logger.warn as ReturnType<typeof vi.fn>).mock.calls.some((c) => String(c[0]).includes('yolo-brief'))).toBe(true)
+    cleanup()
+  })
 })
 
 describe('startReminderScheduler: aggregate daily brief', () => {
