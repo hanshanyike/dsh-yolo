@@ -110,6 +110,23 @@ pnpm build
 [W1–W16 真机场景](testing.md#八真机端到端验证)。发布所包含的每个修复都应已经作为独立逻辑提交
 推送到 `develop`，且当前 `develop` 的 Linux、Windows 和 coverage CI 全部成功。
 
+### 1.1 同步用户可见的版本入口
+
+门禁通过后、写发布说明之前，把「用户在仓库和文档里看到的版本」一次性更新到本次发布。这一步和版本号
+必须同批完成，否则会出现「包已经发出，文档和徽章还指着上一个候选版」的分裂状态：
+
+- `README.md`、`README.en.md`、`docs/usage.md` 的安装命令使用本次固定版本
+  （`dsh-plugin-yolo@<new-version>`），源码安装使用 `git checkout <new-tag>`；
+- README 的 Release 徽章按当前是否已有稳定版二选一：
+  - **已有稳定版**（本节正式版晋级后）：使用默认的
+    `https://img.shields.io/npm/v/dsh-plugin-yolo`，它解析 `latest`；
+  - **尚无稳定版，或 `latest` 仍指向过时版本时**：必须显式写阶段 tag，例如
+    `https://img.shields.io/npm/v/dsh-plugin-yolo/rc`，不能用裸包名暗示 `latest` 就是当前候选版。
+- 改完必须**打开徽章链接确认实际渲染的版本号**，不要只改文字就当作完成。
+
+> 已发布的 tarball 内嵌发布当时的 README，因此包页（npmjs.com）上的徽章只会在下一次发布时更新；
+> 它不能靠重新发布同一个版本修正，只能计入下一次发布的范围。
+
 ### 2. 独立提交发布说明
 
 将 `CHANGELOG.md` 顶部的 `## [Unreleased]` 改为

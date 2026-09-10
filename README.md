@@ -11,7 +11,7 @@
 [English](README.en.md) · [文档中心](docs/README.md)
 
 [![GitHub Stars](https://img.shields.io/github/stars/hanshanyike/dsh-yolo?style=flat-square&logo=github&label=Stars&color=4176E6)](https://github.com/hanshanyike/dsh-yolo/stargazers)
-[![npm Release](https://img.shields.io/npm/v/dsh-plugin-yolo/rc?style=flat-square&logo=npm&label=Release&color=CB3837)](https://www.npmjs.com/package/dsh-plugin-yolo)
+[![npm Release](https://img.shields.io/npm/v/dsh-plugin-yolo?style=flat-square&logo=npm&label=Release&color=CB3837)](https://www.npmjs.com/package/dsh-plugin-yolo)
 [![npm Downloads](https://img.shields.io/npm/dm/dsh-plugin-yolo?style=flat-square&logo=npm&label=Downloads&color=CB3837)](https://www.npmjs.com/package/dsh-plugin-yolo)
 [![License](https://img.shields.io/github/license/hanshanyike/dsh-yolo?style=flat-square&label=License&color=4176E6)](LICENSE)
 
