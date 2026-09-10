@@ -1,6 +1,8 @@
 import type Yolo from '../../storage/index.ts'
 import type { Notification, Todo } from '../../domain/types.ts'
 import type {
+  YoloNotificationDismissOutcome,
+  YoloNotificationDismissRequest,
   YoloNotificationLogData,
   YoloNotificationLogItem,
   YoloNotificationSeenOutcome,
@@ -105,6 +107,20 @@ export function buildNotificationLogData(
   }
 }
 
+/** Recount the unread badge after a write; unreadable workspaces degrade to partial. */
+function recountUnseen(yolo: Yolo, metas: Array<{ cwd: string; scopeKey: string }>): { unseen: number; failures: number } {
+  let unseen = 0
+  let failures = 0
+  for (const meta of metas) {
+    try {
+      unseen += yolo.runInScope(meta.cwd, meta.scopeKey, () => yolo.countUnseenNotifications(meta.cwd))
+    } catch {
+      failures += 1
+    }
+  }
+  return { unseen, failures }
+}
+
 /** Update notification viewing state through application-owned workspace routing. */
 export function markNotificationsSeen(
   yolo: Yolo,
@@ -136,18 +152,63 @@ export function markNotificationsSeen(
     throw new Error('opened_at or notification is required')
   }
 
-  let unseen = 0
-  let countFailures = 0
-  for (const meta of metas) {
-    try {
-      unseen += yolo.runInScope(meta.cwd, meta.scopeKey, () => yolo.countUnseenNotifications(meta.cwd))
-    } catch {
-      countFailures += 1
-    }
-  }
+  const { unseen, failures: countFailures } = recountUnseen(yolo, metas)
   return {
     ok: true,
     changed,
+    unseen,
+    partial: failures > 0 || countFailures > 0,
+    revision: Date.now(),
+  }
+}
+
+/**
+ * Remove deliveries from the record through the same workspace routing as reads.
+ *
+ * Removal is the only way to keep the record from growing forever: a delivery
+ * that was already read still occupies a row, so「一键清除」and the per-row
+ * dismiss delete it outright. Dashboard count and badge are recomputed from the
+ * remaining rows, which is why this is a write into storage rather than a
+ * client-side hidden set — two browsers must agree on what is left.
+ */
+export function dismissNotifications(
+  yolo: Yolo,
+  fallbackCwd: string,
+  request: YoloNotificationDismissRequest,
+): YoloNotificationDismissOutcome {
+  const metas = metasOf(yolo, fallbackCwd)
+  const single = request.notification
+  const all = request.all === true
+  if (!single && !all) throw new Error('notification or all is required')
+  if (single && all) throw new Error('notification and all are mutually exclusive')
+
+  let removed = 0
+  let failures = 0
+
+  if (single) {
+    const meta = findKnownWorkspaceScope(single.scope_cwd, metas)
+    if (!meta) throw new Error('unknown workspace scope')
+    // A single-workspace failure is the whole operation failing, exactly like `seen`.
+    removed += yolo.runInScope(meta.cwd, meta.scopeKey, () => (
+      yolo.deleteNotification(meta.cwd, single.id) ? 1 : 0
+    ))
+  } else {
+    for (const meta of metas) {
+      try {
+        removed += yolo.runInScope(meta.cwd, meta.scopeKey, () => yolo.deleteNotifications(meta.cwd))
+      } catch {
+        failures += 1
+      }
+    }
+    if (failures === metas.length) throw new Error('no workspace notification record could be cleared')
+  }
+
+  // The badge is global across workspaces, so the recount always spans every
+  // known one — including in the single-delivery case.
+  const { unseen, failures: countFailures } = recountUnseen(yolo, metas)
+  return {
+    ok: true,
+    removed,
     unseen,
     partial: failures > 0 || countFailures > 0,
     revision: Date.now(),

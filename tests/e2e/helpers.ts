@@ -45,6 +45,8 @@ export interface Api {
   history: (params?: Record<string, string | number>) => Promise<Record<string, any>>
   /** POST /yolo/notifications/seen. */
   seen: (body: Record<string, unknown>) => Promise<Record<string, any>>
+  /** POST /yolo/notifications/dismiss (one delivery, or the whole record). */
+  dismiss: (body: Record<string, unknown>) => Promise<Record<string, any>>
   close: () => Promise<void>
 }
 
@@ -239,7 +241,13 @@ export async function connectApi(): Promise<Api> {
     if (!r.ok() || data.ok !== true) throw new Error(`seen failed: ${r.status()} ${JSON.stringify(data)}`)
     return data
   }
-  return { req, action, dashboard, notifications, history, seen, close: () => req.dispose() }
+  const dismiss = async (body: Record<string, unknown>): Promise<Record<string, any>> => {
+    const r = await retry(() => req.post('/yolo/notifications/dismiss', { data: body }))
+    const data = await r.json().catch(() => ({})) as Record<string, any>
+    if (!r.ok() || data.ok !== true) throw new Error(`dismiss failed: ${r.status()} ${JSON.stringify(data)}`)
+    return data
+  }
+  return { req, action, dashboard, notifications, history, seen, dismiss, close: () => req.dispose() }
 }
 
 /** Create a todo via the real endpoint; returns its row. */
@@ -319,11 +327,21 @@ export function createFixtures(api: Api) {
       }
     },
     trackNotification(id: string): void { notifications.push({ id }) },
-    /** Handle tracked notifications, then cancel tracked todos (reverse order). */
+    /**
+     * Remove tracked notifications, then cancel tracked todos (reverse order).
+     *
+     * Notifications are deleted rather than marked handled: a handled delivery
+     * stays in the record forever, so the isolated host's log would grow with
+     * every run. Rows created without a known scope (e.g. through the browser)
+     * still fall back to the handled path.
+     */
     async dispose(): Promise<void> {
       for (const notification of [...notifications].reverse()) {
         if (notification.scope_cwd) {
-          await api.seen({ notification: { id: notification.id, scope_cwd: notification.scope_cwd } }).catch(() => {})
+          const removed = await api.dismiss({
+            notification: { id: notification.id, scope_cwd: notification.scope_cwd },
+          }).catch(() => null)
+          if (removed) continue
         }
         await api.action({ action: 'handled', kind: 'notification', id: notification.id }).catch(() => {})
       }

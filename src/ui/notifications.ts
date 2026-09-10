@@ -1,7 +1,11 @@
 import type Yolo from '../storage/index.ts'
-import type { YoloNotificationSeenRequest } from '../shared/notifications.ts'
+import type {
+  YoloNotificationDismissRequest,
+  YoloNotificationSeenRequest,
+} from '../shared/notifications.ts'
 import {
   buildNotificationLogData,
+  dismissNotifications,
   markNotificationsSeen,
   type NotificationCursorData,
 } from '../application/read-models/notifications.ts'
@@ -123,6 +127,20 @@ export function registerNotificationsEndpoint(
             return
           }
           send(res, 200, markNotificationsSeen(yolo, cwd(), body as YoloNotificationSeenRequest))
+          return
+        }
+        if (method === 'POST' && url.pathname === '/yolo/notifications/dismiss') {
+          const readable = reqLike(req)
+          if (!readable) {
+            send(res, 400, { error: 'bad request', code: 'bad_request' })
+            return
+          }
+          const body = await readJsonBody(readable)
+          if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+            send(res, 400, { error: 'body must be a JSON object', code: 'invalid_body' })
+            return
+          }
+          send(res, 200, dismissNotifications(yolo, cwd(), body as YoloNotificationDismissRequest))
           return
         }
         send(res, 405, { error: 'method not allowed', code: 'method_not_allowed' })

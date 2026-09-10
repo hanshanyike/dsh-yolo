@@ -52,6 +52,8 @@ how to do it. It can:
   permanently delete items and their directly linked data after strong confirmation.
 - **Keep notification deliveries traceable** with an unread badge and a paginated
   notification record; viewing a delivery never changes the underlying item state.
+  The record stays yours to prune: dismiss one delivery with its `×`, or clear the
+  whole record behind a confirmation once the pile has grown.
 - **Preserve bounded source evidence** for newly extracted items, with a preview
   before navigating back to the originating host conversation when supported;
   items can retain evidence from multiple sessions, turns, and assistant actions.

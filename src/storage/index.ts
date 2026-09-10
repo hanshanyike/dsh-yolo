@@ -676,6 +676,14 @@ export default class Yolo extends Service {
     repo.markNotificationHandled(h.db, id)
     return repo.listUnhandledNotifications(h.db, h.scopeKey).length < before
   }
+  deleteNotification(cwd: string, id: string): boolean {
+    const h = this.resolve(cwd)
+    return repo.deleteNotification(h.db, h.scopeKey, id)
+  }
+  deleteNotifications(cwd: string): number {
+    const h = this.resolve(cwd)
+    return repo.deleteNotifications(h.db, h.scopeKey)
+  }
 
   // ---- dashboard-v2 attention trust + durable idempotency ----
   listAttentionFeedback(cwd: string): AttentionFeedback[] {

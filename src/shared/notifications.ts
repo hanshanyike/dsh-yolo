@@ -45,3 +45,23 @@ export interface YoloNotificationSeenOutcome {
   partial: boolean
   revision: number
 }
+
+/**
+ * Remove deliveries from the record. Exactly one of the two shapes is used:
+ * one delivery (`notification`) or the whole record in every known workspace
+ * (`all`). Reads stay the source of truth — a removed delivery disappears from
+ * the record, the badge and the dashboard projection alike.
+ */
+export interface YoloNotificationDismissRequest {
+  notification?: { id: string; scope_cwd: string }
+  all?: boolean
+}
+
+export interface YoloNotificationDismissOutcome {
+  ok: true
+  /** Rows actually removed; 0 for an already-removed id (idempotent replay). */
+  removed: number
+  unseen: number
+  partial: boolean
+  revision: number
+}

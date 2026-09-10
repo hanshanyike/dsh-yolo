@@ -29,7 +29,7 @@ Phase 5 已把高耦合 use-case state 从两个大组件迁到稳定 controller
 | `panel/kanban/` | board actions 与稳定 surface names |
 | `panel/ChatPane.tsx`、`panel/chat/` | fresh assistant/item-episode conversation UI 与请求/scroll controller |
 | `panel/HistoryView.tsx` | history read model UI |
-| `panel/NotificationLog.tsx` | cursor-paginated notification record UI |
+| `panel/NotificationLog.tsx` | cursor-paginated notification record UI（含单条 `×` 与「一键清除」） |
 | `panel/ForegroundContext.tsx` | detail/source/chat 单一前景 |
 | `panel/v2/` | 已有 Dashboard v2 展示组件与 API helper；目录名仍为 compatibility，未虚构为新数据版本 |
 | `sidebar/` | 常驻入口、badge 与 non-modal popup |

@@ -1346,6 +1346,18 @@ export function markNotificationHandled(db: DB, id: string): void {
   db.prepare('UPDATE notifications SET handled_at = ? WHERE id = ? AND handled_at IS NULL').run(now(), id)
 }
 
+/** Permanently remove one delivery; returns whether a row was actually removed. */
+export function deleteNotification(db: DB, scopeKey: string, id: string): boolean {
+  const result = db.prepare('DELETE FROM notifications WHERE scope_key = ? AND id = ?').run(scopeKey, id)
+  return Number(result.changes) > 0
+}
+
+/** Permanently remove this workspace's whole delivery record; returns the row count. */
+export function deleteNotifications(db: DB, scopeKey: string): number {
+  const result = db.prepare('DELETE FROM notifications WHERE scope_key = ?').run(scopeKey)
+  return Number(result.changes)
+}
+
 /** Clear every unhandled reminder notification attached to a todo (any handling path). */
 export function markTodoNotificationsHandled(db: DB, todoId: string): void {
   db.prepare("UPDATE notifications SET handled_at = ? WHERE todo_id = ? AND handled_at IS NULL AND kind = 'reminder'").run(now(), todoId)

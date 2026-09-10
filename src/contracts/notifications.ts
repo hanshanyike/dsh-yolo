@@ -1,4 +1,6 @@
 export type {
+  YoloNotificationDismissOutcome,
+  YoloNotificationDismissRequest,
   YoloNotificationLogData,
   YoloNotificationLogItem,
   YoloNotificationSeenOutcome,

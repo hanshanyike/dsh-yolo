@@ -48,6 +48,7 @@ UI 只渲染和保存 `contracts/config.ts` 定义的 `yolo` 设置。运行时 
 - `GET /yolo/history`
 - `GET /yolo/identity-receipts`
 - `POST /yolo/notifications/seen`
+- `POST /yolo/notifications/dismiss`
 - `POST /yolo/actions`
 - `GET /yolo/session/messages`
 - `POST /yolo/session/send`

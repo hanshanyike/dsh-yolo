@@ -260,6 +260,17 @@ export const YOLO_CSS = `
 .yolo-scope .notification-log__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 9px; margin-top: 8px; color: var(--y-text-3); font-size: 10.5px; }
 .yolo-scope .notification-log__actions { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
 .yolo-scope .notification-log__more { width: 100%; min-height: 34px; margin-top: 8px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface-2); color: var(--y-text-2); font-size: 12px; }
+/* clearing the record: one row at a time (×) or the whole pile (header confirm) */
+.yolo-scope .notification-log__confirm { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--y-line); background: color-mix(in srgb, var(--y-danger) 5%, var(--y-surface)); color: var(--y-text-2); font-size: 12px; }
+.yolo-scope .notification-log__confirm > span { flex: 1; min-width: 0; }
+.yolo-scope .notification-log__confirm .nact.danger { color: var(--y-danger); border-color: color-mix(in srgb, var(--y-danger) 45%, transparent); }
+.yolo-scope .notification-log__confirm .nact.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--y-danger) 10%, transparent); border-color: var(--y-danger); }
+.yolo-scope .notification-log__confirm .nact:disabled, .yolo-scope .notification-log__clear:disabled { opacity: .5; cursor: default; }
+.yolo-scope .notification-log__dismiss { flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: var(--y-r-sm); background: none; color: var(--y-text-3); display: grid; place-items: center; cursor: pointer; transition: background var(--y-dur-1), color var(--y-dur-1); }
+.yolo-scope .notification-log__dismiss:hover:not(:disabled) { background: var(--y-surface-2); color: var(--y-text-1); }
+.yolo-scope .notification-log__dismiss:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--y-accent-soft); color: var(--y-text-1); }
+.yolo-scope .notification-log__dismiss:disabled { opacity: .45; cursor: default; }
+.yolo-scope .notification-log__dismiss svg { width: 12px; height: 12px; }
 .yolo-scope .notification-log__empty { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--y-text-3); text-align: center; }
 .yolo-scope .notification-log__empty h3 { margin: 10px 0 4px; color: var(--y-text-1); font-size: 14px; }
 .yolo-scope .notification-log__empty p { margin: 0; font-size: 12px; }

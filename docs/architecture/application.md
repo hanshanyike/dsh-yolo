@@ -10,7 +10,7 @@
 |---|---|
 | `commands/` | `applyYoloAction`、scope routing、单 store mutation 与动作 receipt |
 | `ingestion/` | accepted extraction 的 state/evidence/event/log 组合；known-memory context |
-| `read-models/` | dashboard、history、notifications、badge 的单 workspace 投影和跨 workspace 聚合 |
+| `read-models/` | dashboard、history、notifications、badge 的单 workspace 投影和跨 workspace 聚合；通知的已读与删除状态写入 |
 | `maintenance/` | daily/turn snapshot cadence use case |
 | `conversation/` | 内部 resident delivery、顶层 fresh ephemeral chat、事项 episode 与 chat request registry |
 | `workspace-scope.ts` | compatibility cwd 到稳定 workspace scope 的解析辅助 |

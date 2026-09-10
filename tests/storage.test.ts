@@ -203,6 +203,25 @@ describe('notification popup feed', () => {
     expect(repo.countUnseenNotifications(db, SCOPE)).toBe(0)
     expect(repo.listUnhandledNotifications(db, SCOPE)).toHaveLength(2)
   })
+
+  it('deletes one delivery or the whole record without touching another scope', () => {
+    const other = 'other/default'
+    const keep = repo.addNotification(db, { kind: 'reminder', title: '把演示稿发给研发', scope_key: SCOPE })
+    const drop = repo.addNotification(db, { kind: 'brief', title: '今日简报', scope_key: SCOPE })
+    const foreign = repo.addNotification(db, { kind: 'reminder', title: '核对发布清单', scope_key: other })
+
+    // A missing id is a no-op, not an error: the client may replay a dismiss.
+    expect(repo.deleteNotification(db, SCOPE, 'missing')).toBe(false)
+    expect(repo.deleteNotification(db, SCOPE, drop.id)).toBe(true)
+    expect(repo.deleteNotification(db, SCOPE, drop.id)).toBe(false)
+    expect(repo.listNotifications(db, SCOPE).map((row) => row.id)).toEqual([keep.id])
+    expect(repo.countUnhandledNotifications(db, SCOPE)).toBe(1)
+
+    expect(repo.deleteNotifications(db, SCOPE)).toBe(1)
+    expect(repo.listNotifications(db, SCOPE)).toEqual([])
+    expect(repo.listNotifications(db, other).map((row) => row.id)).toEqual([foreign.id])
+    expect(repo.deleteNotifications(db, SCOPE)).toBe(0)
+  })
 })
 
 describe('todos', () => {

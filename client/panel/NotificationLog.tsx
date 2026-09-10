@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  YoloNotificationDismissOutcome,
   YoloNotificationLogData,
   YoloNotificationLogItem,
   YoloNotificationSeenOutcome,
@@ -71,6 +72,17 @@ async function markBaselineSeen(openedAt: number): Promise<YoloNotificationSeenO
   return await response.json() as YoloNotificationSeenOutcome
 }
 
+/** Remove one delivery, or the whole record, through the same endpoint. */
+async function postDismiss(body: { notification?: { id: string; scope_cwd: string }; all?: boolean }): Promise<YoloNotificationDismissOutcome> {
+  const response = await fetch('/yolo/notifications/dismiss', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return await response.json() as YoloNotificationDismissOutcome
+}
+
 export function NotificationLog({ targetId, refreshRequest = 0, onClose, onOpenTodo, onUnseenChange }: NotificationLogProps): JSX.Element {
   const [items, setItems] = useState<YoloNotificationLogItem[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -79,6 +91,9 @@ export function NotificationLog({ targetId, refreshRequest = 0, onClose, onOpenT
   const [error, setError] = useState<string | null>(null)
   const [partialMessage, setPartialMessage] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [pendingDismiss, setPendingDismiss] = useState<Set<string>>(new Set())
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const baselineMarkedRef = useRef<number | null>(null)
   const previousRefreshRef = useRef(0)
@@ -128,6 +143,48 @@ export function NotificationLog({ targetId, refreshRequest = 0, onClose, onOpenT
     }
   }, [onUnseenChange])
 
+  const dismissOne = useCallback(async (item: YoloNotificationLogItem): Promise<void> => {
+    const key = `${item.scope_cwd}\u0000${item.id}`
+    setPendingDismiss((current) => new Set(current).add(key))
+    setError(null)
+    try {
+      const outcome = await postDismiss({ notification: { id: item.id, scope_cwd: item.scope_cwd } })
+      setItems((current) => current.filter((row) => !(row.id === item.id && row.scope_cwd === item.scope_cwd)))
+      setExpanded((current) => {
+        if (!current.has(key)) return current
+        const next = new Set(current)
+        next.delete(key)
+        return next
+      })
+      onUnseenChange(outcome.unseen, outcome.revision)
+    } catch (dismissError) {
+      setError(`删除通知失败：${dismissError instanceof Error ? dismissError.message : String(dismissError)}`)
+    } finally {
+      setPendingDismiss((current) => {
+        const next = new Set(current)
+        next.delete(key)
+        return next
+      })
+    }
+  }, [onUnseenChange])
+
+  const clearAll = useCallback(async (): Promise<void> => {
+    setClearing(true)
+    setError(null)
+    try {
+      const outcome = await postDismiss({ all: true })
+      setItems([])
+      setNextCursor(null)
+      setExpanded(new Set())
+      setConfirmClear(false)
+      onUnseenChange(outcome.unseen, outcome.revision)
+    } catch (clearError) {
+      setError(`清除通知失败：${clearError instanceof Error ? clearError.message : String(clearError)}`)
+    } finally {
+      setClearing(false)
+    }
+  }, [onUnseenChange])
+
   useEffect(() => { void loadPage() }, [loadPage])
   useEffect(() => {
     if (refreshRequest <= 0 || refreshRequest === previousRefreshRef.current) return
@@ -152,10 +209,32 @@ export function NotificationLog({ targetId, refreshRequest = 0, onClose, onOpenT
           <p>最近到达的提醒和简报</p>
         </div>
         <button type="button" className="nact" onClick={() => { void loadPage() }}>刷新</button>
+        {items.length > 0 || confirmClear ? (
+          <button
+            type="button"
+            className="nact notification-log__clear"
+            disabled={clearing}
+            aria-expanded={confirmClear}
+            aria-controls="yolo-notification-clear-confirm"
+            onClick={() => { setConfirmClear((current) => !current) }}
+          >
+            一键清除
+          </button>
+        ) : null}
         <button type="button" className="hbtn" onClick={onClose} aria-label="关闭通知记录" title="关闭">
           <IcClose size={14} />
         </button>
       </header>
+
+      {confirmClear ? (
+        <div id="yolo-notification-clear-confirm" className="notification-log__confirm" role="alertdialog" aria-label="确认清除全部通知">
+          <span>清除全部通知？清除后无法恢复。</span>
+          <button type="button" className="nact" disabled={clearing} onClick={() => { setConfirmClear(false) }}>取消</button>
+          <button type="button" className="nact danger" disabled={clearing} aria-busy={clearing} onClick={() => { void clearAll() }}>
+            {clearing ? '正在清除…' : '确认清除'}
+          </button>
+        </div>
+      ) : null}
 
       {partialMessage ? <p className="notification-log__partial" role="status">{partialMessage}</p> : null}
       {error ? (
@@ -194,6 +273,17 @@ export function NotificationLog({ targetId, refreshRequest = 0, onClose, onOpenT
                       <span><IcBell size={12} />{kindLabel(item)}</span>
                       {!item.seen ? <b>新</b> : null}
                       <time dateTime={new Date(item.created_at).toISOString()}>{localTime(item.created_at)}</time>
+                      <button
+                        type="button"
+                        className="notification-log__dismiss"
+                        data-notification-dismiss={item.id}
+                        disabled={pendingDismiss.has(key)}
+                        aria-label={`删除通知：${title}`}
+                        title="删除这条通知"
+                        onClick={() => { void dismissOne(item) }}
+                      >
+                        <IcClose size={12} />
+                      </button>
                     </div>
                     <strong>{title}</strong>
                     {body ? <p className={isExpanded ? 'is-expanded' : ''}>{body}</p> : null}
