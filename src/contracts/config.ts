@@ -62,12 +62,6 @@ export interface YoloConfig {
     aggregateAcrossWorkspaces: boolean
     focusDefaultCount: number
   }
-  updateCheck: {
-    /** Whether the host may ask the npm registry for the published version. */
-    enabled: boolean
-    /** Hours a registry answer is reused before it is consulted again. */
-    intervalHours: number
-  }
 }
 
 /** Browser-facing name retained for settings UI readability. */

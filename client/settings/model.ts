@@ -85,7 +85,6 @@ export const YOLO_FIELD_COPY: Record<string, YoloFieldCopy> = {
   'brief.eveningTime': { caption: 'eveningTime', hint: 'eveningTimeHint' },
   'brief.model': { caption: 'briefModel', hint: 'briefModelHint' },
   'storage.snapshotInterval': { caption: 'snapshotEvery10Turns', hint: 'snapshotEvery10TurnsHint' },
-  'updateCheck.enabled': { caption: 'updateCheckEnabled', hint: 'updateCheckEnabledHint' },
 }
 
 /** One titled block of rows. */
@@ -200,7 +199,6 @@ export const YOLO_FIELD_SPECS: readonly YoloFieldSpec[] = [
   timeField('brief.eveningTime'),
   textField('brief.model'),
   enumSwitchField('storage.snapshotInterval', 'every_10_turns', 'daily'),
-  switchField('updateCheck.enabled'),
 ]
 
 /** Card layout: the groups the rows render under, in order. */
@@ -240,10 +238,6 @@ export const YOLO_FIELD_GROUPS: readonly YoloFieldGroup[] = [
   {
     titleKey: 'groupStorage',
     rows: [{ field: 'storage.snapshotInterval' }],
-  },
-  {
-    titleKey: 'groupUpdate',
-    rows: [{ field: 'updateCheck.enabled' }],
   },
 ]
 

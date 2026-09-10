@@ -134,9 +134,8 @@ YOLO stores data under `.dsh/yolo/` in each workspace and isolates it by
 workspace. Git branches in the same workspace share one plan. It keeps the working plan in a local database and
 creates readable Markdown snapshots for review and backup. Understanding a
 conversation uses the model configured in dsh, so data handling also depends on
-that model service. The only request YOLO makes on its own is a check of the
-published version on npm; turn off **Check for new versions** under
-`Settings → Plugins → YOLO → Version updates` to make the host fully offline.
+that model service. The only request YOLO makes on its own is a read of the
+published version numbers on npm; it sends no local data.
 
 ## Roadmap
 

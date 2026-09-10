@@ -75,15 +75,6 @@ describe('GET /yolo/version', () => {
     expect(logger.warn).toHaveBeenCalledWith('[yolo] version check failed: %s', 'getaddrinfo ENOTFOUND registry.npmjs.org')
   })
 
-  it('never consults the registry once the check is switched off', async () => {
-    const fetchTags = vi.fn(async () => NEWER)
-    const mounted = mount({ current: '0.5.0-rc.1', fetchTags, enabled: () => false })
-    await mounted.handle.refresh()
-    const { body } = await mounted.get()
-    expect(body).toEqual({ current: '0.5.0-rc.1' })
-    expect(fetchTags).not.toHaveBeenCalled()
-  })
-
   it('shares one in-flight read between concurrent refreshes', async () => {
     let release: ((tags: VersionTags) => void) | undefined
     const fetchTags = vi.fn(() => new Promise<VersionTags>((resolve) => { release = resolve }))

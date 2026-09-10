@@ -73,13 +73,10 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   registerIdentityReceiptsEndpoint(ctx, ctx.yolo)
   registerGoalDetailEndpoint(ctx, ctx.yolo, currentCwd)
   // Version check: the settings card renders its update notice from this cached
-  // answer. `updateCheck.enabled` (default on) is the host's single switch for
-  // YOLO's only self-initiated outbound request, and it is read per refresh so
-  // a settings edit applies without a host reload.
+  // answer. YOLO's only self-initiated outbound request — one dist-tag read,
+  // cached, and silent on failure.
   registerVersionEndpoint(ctx, {
     current: packageJson.version,
-    enabled: () => configSource().updateCheck.enabled,
-    ttlMs: () => configSource().updateCheck.intervalHours * 60 * 60 * 1000,
     logger: { warn: (format, ...args) => ctx.logger?.warn?.(format, ...args) },
   })
   // M8: in-place dashboard operations (complete/postpone/cancel + goal/milestone)

@@ -7,9 +7,10 @@
  * traffic), so the host does one small registry read, caches it, and serves the
  * cached answer at `GET /yolo/version`.
  *
- * The read is advisory in every direction: it never blocks a response, never
- * surfaces an error to the UI, and is the only request YOLO makes on its own —
- * `updateCheck.enabled` turns it off entirely for an offline host.
+ * The read is advisory in every direction: it never blocks a response and never
+ * surfaces an error to the UI. It is also the only request YOLO makes on its
+ * own, and it sends nothing: one GET of the package's dist-tag table, whose
+ * answer is a handful of version strings.
  */
 import type { VersionCheckResult, VersionTags } from '../application/read-models/version-check.ts'
 import { pickUpdate } from '../application/read-models/version-check.ts'
@@ -24,16 +25,15 @@ export const DIST_TAGS_URL = `https://registry.npmjs.org/-/package/${YOLO_PACKAG
 /** Hard bound on the registry read; a slow network must not pile up requests. */
 const FETCH_TIMEOUT_MS = 5_000
 
+/** How long a registry answer is reused. Fixed: this is not a user setting. */
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000
+
 /** A registry read: dist-tags in, nothing else. Injectable so tests own the wire. */
 export type FetchVersionTags = (signal: AbortSignal) => Promise<VersionTags>
 
 export interface VersionEndpointOptions {
   /** The version this host is running. */
   current: string
-  /** Whether the check is allowed; re-read per refresh so a settings edit applies without a reload. */
-  enabled?: () => boolean
-  /** Cached-answer lifetime in ms; re-read per refresh for the same reason. */
-  ttlMs?: () => number
   /** Test seam for the registry read. */
   fetchTags?: FetchVersionTags
   /** Test seam for the clock. */
@@ -64,7 +64,7 @@ async function defaultFetchTags(signal: AbortSignal): Promise<VersionTags> {
  * never wait on the network. A stale cache triggers a background refresh, and
  * the host warms it at startup so the answer is normally already there.
  * @param ctx - host context carrying the web server.
- * @param options - the running version, the enable switch, and the test seams.
+ * @param options - the running version and the test seams.
  * @returns the refresh/snapshot handle.
  */
 export function registerVersionEndpoint(
@@ -72,7 +72,6 @@ export function registerVersionEndpoint(
   options: VersionEndpointOptions,
 ): VersionEndpointHandle {
   const now = options.now ?? ((): number => Date.now())
-  const ttlMs = (): number => options.ttlMs?.() ?? 12 * 60 * 60 * 1000
   let result: VersionCheckResult = { current: options.current }
   let inFlight: Promise<void> | undefined
 
@@ -91,7 +90,6 @@ export function registerVersionEndpoint(
 
   const refresh = (): Promise<void> => {
     if (inFlight !== undefined) return inFlight
-    if (options.enabled !== undefined && !options.enabled()) return Promise.resolve()
     const run = read().finally(() => { inFlight = undefined })
     inFlight = run
     return run
@@ -101,7 +99,7 @@ export function registerVersionEndpoint(
     kind: 'prefix',
     path: '/yolo/version',
     handler: (_req, res) => {
-      if (result.checkedAt === undefined || now() - result.checkedAt > ttlMs()) void refresh()
+      if (result.checkedAt === undefined || now() - result.checkedAt > CACHE_TTL_MS) void refresh()
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
       res.end(JSON.stringify(result))
     },
