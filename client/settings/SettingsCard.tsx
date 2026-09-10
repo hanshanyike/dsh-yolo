@@ -190,7 +190,7 @@ export function YoloSettingsCard(props: YoloSettingsCardProps): JSX.Element | nu
           <p className="yolo-card__meta">{t('meta', { version: PACKAGE_VERSION })}</p>
           {update ? (
             <div className="yolo-card__notice" role="status">
-              <p className="yolo-card__notice-title">{t('updateDetail', { latest: update.latest, tag: update.tag, current: PACKAGE_VERSION })}</p>
+              <p className="yolo-card__notice-title">{t('updateDetail', { latest: update.latest, current: PACKAGE_VERSION })}</p>
               <p className="yolo-card__notice-hint">{t('updateHint', { latest: update.latest })}</p>
             </div>
           ) : null}

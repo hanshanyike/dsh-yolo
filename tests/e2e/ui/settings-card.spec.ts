@@ -164,7 +164,7 @@ test('YOLO 配置卡在宿主报告有新版本时给出提示（VC-01）', asyn
   await page.route('**/yolo/version', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ current: packageVersion, update: { latest, tag: 'rc' }, checkedAt: Date.now() }),
+    body: JSON.stringify({ current: packageVersion, update: { latest }, checkedAt: Date.now() }),
   }))
 
   const card = await openYoloSettings(page)
@@ -173,7 +173,7 @@ test('YOLO 配置卡在宿主报告有新版本时给出提示（VC-01）', asyn
 
   await expand(card)
   const notice = card.locator('.yolo-card__notice')
-  await expect(notice).toContainText(`发现新版本 v${latest}（rc 通道），当前运行 v${packageVersion}。`)
+  await expect(notice).toContainText(`发现新版本 v${latest}，当前运行 v${packageVersion}。`)
   await expect(notice).toContainText(`dsh-plugin-yolo@${latest}`)
 })
 

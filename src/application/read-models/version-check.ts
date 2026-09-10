@@ -5,11 +5,10 @@
  * precedence rules and the "is this actually newer?" decision are unit
  * testable without a registry. `src/ui/version.ts` owns the wire read.
  *
- * The npm registry answers `GET /-/package/<name>/dist-tags` with one version
- * per dist-tag. YOLO is published to `alpha`/`beta`/`rc` plus the stable
- * `latest`, and those tags do NOT move together (at the time of writing `rc`
- * was ahead of `latest`), so "a newer version exists" means "some tag names a
- * version that outranks the installed one", not "`latest` moved".
+ * The comparison is against the registry's `latest` dist-tag and nothing else:
+ * npm owns which published version is current, and a prerelease line is only
+ * "the current one" once it has been promoted to `latest`. Reading other tags
+ * here would second-guess that promotion.
  */
 
 /** One registry answer: dist-tag → version. */
@@ -17,17 +16,15 @@ export type VersionTags = Record<string, string>
 
 /** A published version that outranks the installed one. */
 export interface VersionUpdate {
-  /** The newer version string, as published. */
+  /** The version npm reports as `latest`. */
   latest: string
-  /** Which dist-tag carries it. */
-  tag: string
 }
 
 /** What the UI endpoint serves. */
 export interface VersionCheckResult {
   /** The version this host is running. */
   current: string
-  /** Present only when a strictly newer version is published. */
+  /** Present only when `latest` is a strictly newer version. */
   update?: VersionUpdate
   /** When the registry was last consulted successfully; absent while unknown. */
   checkedAt?: number
@@ -102,17 +99,13 @@ export function isNewer(candidate: string, current: string): boolean {
 }
 
 /**
- * Pick the highest version across every dist-tag, when it outranks `current`.
+ * Read the registry's `latest` and report it when it outranks `current`.
  * @param tags - the registry's dist-tag table.
  * @param current - the running version.
- * @returns the newer version and the tag carrying it, or undefined.
+ * @returns the newer version, or undefined when there is nothing newer.
  */
 export function pickUpdate(tags: VersionTags, current: string): VersionUpdate | undefined {
-  let best: { version: string; tag: string } | undefined
-  for (const [tag, version] of Object.entries(tags)) {
-    if (typeof version !== 'string' || parseVersion(version) === undefined) continue
-    if (best === undefined || compareVersions(version, best.version) > 0) best = { version, tag }
-  }
-  if (best === undefined || !isNewer(best.version, current)) return undefined
-  return { latest: best.version, tag: best.tag }
+  const latest = tags.latest
+  if (typeof latest !== 'string' || parseVersion(latest) === undefined) return undefined
+  return isNewer(latest, current) ? { latest } : undefined
 }

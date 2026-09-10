@@ -21,13 +21,11 @@ test('VC-01: 版本检测端点回答宿主自己的结论，且不等待网络'
   const body = await response.json() as { current?: unknown; update?: unknown; checkedAt?: unknown }
   expect(body.current).toBe(packageVersion)
 
-  // An update is optional — it depends on what npm currently publishes — but
-  // when one is reported it must be a strictly newer version with a channel.
+  // An update is optional — it depends on what npm currently publishes as
+  // `latest` — but when one is reported it must be a strictly newer version.
   if (body.update !== undefined) {
-    const update = body.update as { latest?: unknown; tag?: unknown }
+    const update = body.update as { latest?: unknown }
     expect(typeof update.latest).toBe('string')
-    expect(typeof update.tag).toBe('string')
-    expect(update.tag).not.toBe('')
     expect(compareVersions(update.latest as string, packageVersion)).toBeGreaterThan(0)
     expect(body.checkedAt).toEqual(expect.any(Number))
   }

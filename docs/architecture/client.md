@@ -72,7 +72,6 @@ YOLO 的 settings namespace 是嵌套结构（`reminder.checkIntervalSec`），�
 `src/ui/version.ts`，纯比较逻辑在 `src/application/read-models/version-check.ts`），卡片只读不比较，
 也从不直接访问 npm；结论里没有 `update` 就不渲染任何提示位（查不到与「已是最新」在 UI 上同形）。
 宿主侧查询失败只记日志，不影响任何其它功能。
-
 ## Contracts 与依赖
 
 客户端 DTO 统一从 `src/contracts/*` 导入。纯日期、筛选与 dashboard surface 规则仍可从明确的 `src/shared/*` 纯函数导入。

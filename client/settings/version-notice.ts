@@ -10,10 +10,8 @@
 
 /** A published version that outranks the running one. */
 export interface VersionUpdateNotice {
-  /** The newer version string, as published. */
+  /** The version npm reports as `latest`. */
   latest: string
-  /** Which dist-tag carries it. */
-  tag: string
 }
 
 /** Shape guard for the endpoint's answer; anything else means "no update". */
@@ -21,9 +19,9 @@ export function parseVersionUpdate(body: unknown): VersionUpdateNotice | undefin
   if (typeof body !== 'object' || body === null) return undefined
   const update = (body as { update?: unknown }).update
   if (typeof update !== 'object' || update === null) return undefined
-  const { latest, tag } = update as { latest?: unknown; tag?: unknown }
-  if (typeof latest !== 'string' || latest === '' || typeof tag !== 'string' || tag === '') return undefined
-  return { latest, tag }
+  const { latest } = update as { latest?: unknown }
+  if (typeof latest !== 'string' || latest === '') return undefined
+  return { latest }
 }
 
 /**

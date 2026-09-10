@@ -40,23 +40,25 @@ describe('semver precedence', () => {
 })
 
 describe('pickUpdate', () => {
-  it('takes the highest version across every dist-tag, not just latest', () => {
-    // The live shape of this package: the stable tag lags the rc tag.
-    const tags = { latest: '0.4.0-rc5', beta: '0.5.0-beta.3', rc: '0.5.0-rc.1', alpha: '0.2.0-alpha.1' }
-    expect(pickUpdate(tags, '0.4.0-rc5')).toEqual({ latest: '0.5.0-rc.1', tag: 'rc' })
+  it('reports the registry latest when it outranks the running version', () => {
+    expect(pickUpdate({ latest: '0.5.0-rc.2', rc: '0.5.0-rc.2' }, '0.5.0-rc.1')).toEqual({ latest: '0.5.0-rc.2' })
+    expect(pickUpdate({ latest: '0.6.0' }, '0.5.0')).toEqual({ latest: '0.6.0' })
   })
 
-  it('reports nothing when the running version is the newest published', () => {
-    expect(pickUpdate({ latest: '0.4.0-rc5', rc: '0.5.0-rc.1' }, '0.5.0-rc.1')).toBeUndefined()
+  it('reports nothing when the running version is the registry latest', () => {
+    expect(pickUpdate({ latest: '0.5.0-rc.1', rc: '0.5.0-rc.1' }, '0.5.0-rc.1')).toBeUndefined()
   })
 
-  it('prefers a release over the prerelease it supersedes', () => {
-    expect(pickUpdate({ rc: '0.5.0-rc.1', latest: '0.5.0' }, '0.5.0-rc.1')).toEqual({ latest: '0.5.0', tag: 'latest' })
-  })
-
-  it('ignores malformed and empty tag tables instead of reporting them', () => {
+  // npm owns which published version is current: a prerelease line only counts
+  // as the current one once it has been promoted to `latest`.
+  it('ignores every other dist-tag, including one that outranks latest', () => {
+    expect(pickUpdate({ latest: '0.4.0-rc5', rc: '0.5.0-rc.1', beta: '0.5.0-beta.3' }, '0.4.0-rc5')).toBeUndefined()
+    expect(pickUpdate({ rc: '0.9.0' }, '0.5.0-rc.1')).toBeUndefined()
     expect(pickUpdate({}, '0.5.0-rc.1')).toBeUndefined()
-    expect(pickUpdate({ rc: 'not-a-version' }, '0.5.0-rc.1')).toBeUndefined()
-    expect(pickUpdate({ rc: '0.9.0', junk: 'nonsense' }, '0.5.0-rc.1')).toEqual({ latest: '0.9.0', tag: 'rc' })
+  })
+
+  it('refuses a malformed latest instead of reporting it', () => {
+    expect(pickUpdate({ latest: 'not-a-version' }, '0.5.0-rc.1')).toBeUndefined()
+    expect(pickUpdate({ latest: '0.5' }, '0.5.0-rc.1')).toBeUndefined()
   })
 })
