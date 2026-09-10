@@ -70,7 +70,7 @@ YOLO 的 settings namespace 是嵌套结构（`reminder.checkIntervalSec`），�
 
 版本提醒也走这条边界：宿主在 `GET /yolo/version` 提供**缓存**的版本结论（适配层
 `src/ui/version.ts`，纯比较逻辑在 `src/application/read-models/version-check.ts`），卡片只读不比较，
-也从不直接访问 npm；结论里没有 `update` 就不渲染任何提示位（离线与「已是最新」在 UI 上同形）。
+也从不直接访问 npm；结论里没有 `update` 就不渲染任何提示位（查不到与「已是最新」在 UI 上同形）。
 宿主侧查询失败只记日志，不影响任何其它功能。
 
 ## Contracts 与依赖
