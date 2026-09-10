@@ -60,7 +60,7 @@ YOLO 需要运行在 **dsh 0.1.5-rc.1 或更新版本**的宿主上；更旧的�
 如果尚未启用 pnpm，先运行 `corepack enable`。然后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0-rc.1
+npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@0.5.0
 npx @deepseek-ai/dsh web
 ```
 
@@ -78,12 +78,12 @@ npx @deepseek-ai/dsh web --no-open
 [http://127.0.0.1:4080](http://127.0.0.1:4080)。GitHub 安装、固定版本和常见问题见
 [使用指南](docs/usage.md)。
 
-也可以直接从源码安装当前候选版：
+也可以直接从源码安装当前稳定版：
 
 ```bash
 git clone https://github.com/hanshanyike/dsh-yolo.git
 cd dsh-yolo
-git checkout v0.5.0-rc.1
+git checkout v0.5.0
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build

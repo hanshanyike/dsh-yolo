@@ -25,7 +25,7 @@
 | 每个代码模块的职责与文档 | [模块架构索引](architecture/modules.md) |
 | 宿主装配、构建与运行约束 | [运行与装配](architecture/runtime.md) |
 | 自动化测试与真机验收 | [测试体系](testing.md) · [E2E 手册](testing-e2e.md) |
-| 如何发布候选版本 | [发布流程](release.md) |
+| 如何发布版本 | [发布流程](release.md) |
 | 记忆生态调研后的落地结论 | [借鉴落地结论](research/18-adoption-verdict.md) |
 | 事项重复为何发生、后续如何治理 | [身份与去重分析](research/20-todo-identity-dedup-analysis.md) · [实施路线](roadmap-todo-identity.md) |
 
