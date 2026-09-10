@@ -39,6 +39,10 @@ const CSS = `
 .yolo-card__body{border-top:.5px solid var(--dsw-alias-border-l2);margin:0 16px;padding-bottom:8px}
 .yolo-card__read-only{color:var(--dsw-alias-label-tertiary);margin:12px 0 0;font-size:12px;line-height:1.5}
 .yolo-card__pending{flex:none}
+.yolo-card__update{flex:none}
+.yolo-card__notice{background:var(--dsw-alias-bg-layer-3);border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;margin:12px 0 2px;padding:10px 12px;display:grid;gap:4px}
+.yolo-card__notice-title{color:var(--dsw-alias-label-primary);margin:0;font-size:12px;line-height:1.5}
+.yolo-card__notice-hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}
 .yolo-card__footer{border-top:.5px solid var(--dsw-alias-border-l2);justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;display:flex}
 .yolo-card__failed{min-width:0;color:var(--dsw-alias-label-error);flex:1;margin:0;font-size:12px;line-height:1.5}
 .yolo-card__discard,.yolo-card__save{appearance:none;font:inherit;cursor:pointer;border:1px solid #0000;border-radius:8px;padding:5px 14px;font-size:13px;line-height:1.5}

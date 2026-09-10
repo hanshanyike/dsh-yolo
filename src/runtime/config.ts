@@ -56,6 +56,13 @@ export const Config: z<Config> = z.object({
     aggregateAcrossWorkspaces: z.boolean().default(false),
     focusDefaultCount: z.number().default(0).min(0).max(50),
   }),
+  updateCheck: z.object({
+    /** YOLO is local-first: the only outbound request it makes on its own is
+     * this one, and turning it off makes the host fully offline. */
+    enabled: z.boolean().default(true),
+    /** How long a registry answer is reused before it is consulted again. */
+    intervalHours: z.number().default(12).min(1).max(720),
+  }),
 })
 
 /** Host settings service key; must remain the literal 'yolo' (dsh 0.1.2 validates

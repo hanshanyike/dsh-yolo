@@ -11,6 +11,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: pulls the `settings` Context augmentation (SettingsProvider methods).
 import type {} from '@deepseek-ai/dsh-settings'
+// The published version is the comparison base for the update notice; the host
+// build inlines this JSON, so no runtime path resolution is involved.
+import packageJson from '../../package.json' with { type: 'json' }
 import type Yolo from '../storage/index.ts'
 import { Config, YOLO_NS as YOLO_SETTINGS_NS, type Config as ConfigSchema } from '../runtime/config.ts'
 import { registerActionsEndpoint } from './actions.ts'
@@ -20,6 +23,7 @@ import { registerNotificationsEndpoint } from './notifications.ts'
 import { registerHistoryEndpoint } from './history.ts'
 import { registerIdentityReceiptsEndpoint } from './identity.ts'
 import { registerGoalDetailEndpoint } from './goals.ts'
+import { registerVersionEndpoint } from './version.ts'
 import { registerSessionEndpoints, type AgentsLike } from '../application/conversation/index.ts'
 
 /** The namespace is the join key shared with the client half (settings.plugin.item). */
@@ -68,6 +72,16 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   registerHistoryEndpoint(ctx, ctx.yolo, currentCwd)
   registerIdentityReceiptsEndpoint(ctx, ctx.yolo)
   registerGoalDetailEndpoint(ctx, ctx.yolo, currentCwd)
+  // Version check: the settings card renders its update notice from this cached
+  // answer. `updateCheck.enabled` (default on) is the host's single switch for
+  // YOLO's only self-initiated outbound request, and it is read per refresh so
+  // a settings edit applies without a host reload.
+  registerVersionEndpoint(ctx, {
+    current: packageJson.version,
+    enabled: () => configSource().updateCheck.enabled,
+    ttlMs: () => configSource().updateCheck.intervalHours * 60 * 60 * 1000,
+    logger: { warn: (format, ...args) => ctx.logger?.warn?.(format, ...args) },
+  })
   // M8: in-place dashboard operations (complete/postpone/cancel + goal/milestone)
   // v0.3.0 E: + update/rename/abandon/quick_add/handled + snapshot sync
   registerActionsEndpoint(ctx, ctx.yolo, currentCwd)

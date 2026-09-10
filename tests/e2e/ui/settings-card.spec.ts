@@ -153,3 +153,41 @@ test('YOLO 配置卡拒绝无效草稿并保留草稿（W14）', async ({ page }
   await expect(interval).not.toHaveAttribute('aria-invalid', 'true')
   await expect(card.locator('.yolo-card__pending')).toHaveCount(0)
 })
+
+// The host only reports an update when npm actually publishes a newer version,
+// which is not something a test may depend on. Stubbing the host's own answer
+// keeps the rendering contract under test on the real host and in a real
+// browser: the notice must be visible WITHOUT expanding the card, and the
+// expanded card must name the version and the update command.
+test('YOLO 配置卡在宿主报告有新版本时给出提示（VC-01）', async ({ page }) => {
+  const latest = '0.5.0-rc.2'
+  await page.route('**/yolo/version', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ current: packageVersion, update: { latest, tag: 'rc' }, checkedAt: Date.now() }),
+  }))
+
+  const card = await openYoloSettings(page)
+  // Collapsed, so the header tag is the only thing that can carry the news.
+  await expect(card.locator('.yolo-card__update')).toHaveText('有新版本')
+
+  await expand(card)
+  const notice = card.locator('.yolo-card__notice')
+  await expect(notice).toContainText(`发现新版本 v${latest}（rc 通道），当前运行 v${packageVersion}。`)
+  await expect(notice).toContainText(`dsh-plugin-yolo@${latest}`)
+})
+
+// Without an update the card must not grow an empty notice strip (the host may
+// also be offline, which is the same answer).
+test('YOLO 配置卡在宿主没有更新时不留提示位（VC-01）', async ({ page }) => {
+  await page.route('**/yolo/version', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ current: packageVersion, checkedAt: Date.now() }),
+  }))
+
+  const card = await openYoloSettings(page)
+  await expect(card.locator('.yolo-card__update')).toHaveCount(0)
+  await expand(card)
+  await expect(card.locator('.yolo-card__notice')).toHaveCount(0)
+})

@@ -18,6 +18,7 @@ import packageJson from '../../package.json' with { type: 'json' }
 import { YOLO_CARD_NS, type YoloCardLocaleKey } from './card-locale.ts'
 import type { SwitchFieldState, YoloCardActions } from './card-form.ts'
 import { YOLO_FIELD_COPY, YOLO_FIELD_GROUPS, YOLO_FIELD_SPECS, type YoloFieldSpec } from './model.ts'
+import { fetchVersionUpdate, type VersionUpdateNotice } from './version-notice.ts'
 
 const PACKAGE_VERSION = packageJson.version
 
@@ -73,7 +74,16 @@ export function YoloSettingsCard(props: YoloSettingsCardProps): JSX.Element | nu
   const { t, useYoloCard } = props
   const state = useYoloCard((snapshot) => snapshot)
   const [open, setOpen] = useState(false)
+  const [update, setUpdate] = useState<VersionUpdateNotice | undefined>(undefined)
   const saveStarted = useRef(false)
+
+  // One advisory ask per mount. The host owns and caches the registry read, so
+  // this is a local request; a host that cannot answer yields no notice.
+  useEffect(() => {
+    let alive = true
+    void fetchVersionUpdate().then((found) => { if (alive) setUpdate(found) })
+    return () => { alive = false }
+  }, [])
 
   // A successful save collapses the card, exactly like the shipped cards; a
   // failed one keeps it open with its drafts.
@@ -170,6 +180,7 @@ export function YoloSettingsCard(props: YoloSettingsCardProps): JSX.Element | nu
           <span className="yolo-card__name">{title}</span>
           <span className="yolo-card__description">{t('description')}</span>
         </span>
+        {update ? <Tag tone="info" className="yolo-card__update">{t('updateTag')}</Tag> : null}
         {state.dirty ? <Tag tone="neutral" className="yolo-card__pending">{t('unsaved')}</Tag> : null}
         <IconChevronDownOutline14 className={open ? 'yolo-card__chevron is-open' : 'yolo-card__chevron'} />
       </button>
@@ -177,6 +188,12 @@ export function YoloSettingsCard(props: YoloSettingsCardProps): JSX.Element | nu
         <div className="yolo-card__body">
           {!state.writable ? <p className="yolo-card__read-only" role="status">{t('readOnly')}</p> : null}
           <p className="yolo-card__meta">{t('meta', { version: PACKAGE_VERSION })}</p>
+          {update ? (
+            <div className="yolo-card__notice" role="status">
+              <p className="yolo-card__notice-title">{t('updateDetail', { latest: update.latest, tag: update.tag, current: PACKAGE_VERSION })}</p>
+              <p className="yolo-card__notice-hint">{t('updateHint', { latest: update.latest })}</p>
+            </div>
+          ) : null}
           {YOLO_FIELD_GROUPS.map((group) => (
             <div className="yolo-card__group" key={group.titleKey}>
               <h4 className="yolo-card__group-title">{t(group.titleKey)}</h4>

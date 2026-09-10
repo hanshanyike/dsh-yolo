@@ -134,6 +134,7 @@ describe('settings and build-asset contract', () => {
         degradeAfterEmpty: 5,
       },
       ui: { aggregateAcrossWorkspaces: false, focusDefaultCount: 0 },
+      updateCheck: { enabled: true, intervalHours: 12 },
     })
   })
 

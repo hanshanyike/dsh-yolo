@@ -57,6 +57,9 @@ how to do it. It can:
   items can retain evidence from multiple sessions, turns, and assistant actions.
 - **Prevent duplicate writes** when an extraction turn, assistant tool call, or
   dashboard action is retried; merged historical records do not re-enter reminders.
+- **Notice a new release**: the plugin configuration card shows when a newer
+  version is published and gives the exact update command; the check can be
+  turned off in the same card.
 - **Connect agents (planned)** with explicit permissions, results, and verification;
   the current release does not execute external actions automatically.
 
@@ -131,7 +134,9 @@ YOLO stores data under `.dsh/yolo/` in each workspace and isolates it by
 workspace. Git branches in the same workspace share one plan. It keeps the working plan in a local database and
 creates readable Markdown snapshots for review and backup. Understanding a
 conversation uses the model configured in dsh, so data handling also depends on
-that model service.
+that model service. The only request YOLO makes on its own is a check of the
+published version on npm; turn off **Check for new versions** under
+`Settings → Plugins → YOLO → Version updates` to make the host fully offline.
 
 ## Roadmap
 

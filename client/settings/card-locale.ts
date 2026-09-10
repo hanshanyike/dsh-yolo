@@ -44,6 +44,12 @@ export type YoloCardLocaleKey =
   | 'groupReminder'
   | 'groupBrief'
   | 'groupStorage'
+  | 'groupUpdate'
+  | 'updateTag'
+  | 'updateDetail'
+  | 'updateHint'
+  | 'updateCheckEnabled'
+  | 'updateCheckEnabledHint'
   | 'extractionEnabled'
   | 'extractionEnabledHint'
   | 'extractionModel'
@@ -100,6 +106,12 @@ export const zh: Record<YoloCardLocaleKey, string> = {
   groupReminder: '到期提醒',
   groupBrief: '早晚报',
   groupStorage: '本地快照',
+  groupUpdate: '版本更新',
+  updateTag: '有新版本',
+  updateDetail: '发现新版本 v{latest}（{tag} 通道），当前运行 v{current}。',
+  updateHint: '更新：npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@{latest}',
+  updateCheckEnabled: '检查新版本',
+  updateCheckEnabledHint: '启动时向 npm 查询一次已发布版本，有新版本时在配置卡里提醒。这是 YOLO 唯一主动发起的网络请求；关闭后完全离线。',
   extractionEnabled: '启用 LLM 提取',
   extractionEnabledHint: '关闭后不再从对话中整理新的事项。',
   extractionModel: '提取模型',
@@ -157,6 +169,12 @@ export const en: Record<YoloCardLocaleKey, string> = {
   groupReminder: 'Due reminders',
   groupBrief: 'Daily briefs',
   groupStorage: 'Local snapshots',
+  groupUpdate: 'Version updates',
+  updateTag: 'Update available',
+  updateDetail: 'Version v{latest} is published on the {tag} channel; this host runs v{current}.',
+  updateHint: 'Update: npx @deepseek-ai/dsh plugin --profile web add dsh-plugin-yolo@{latest}',
+  updateCheckEnabled: 'Check for new versions',
+  updateCheckEnabledHint: 'Ask npm once at startup for the published version and show a notice in this card when a newer one exists. This is YOLO’s only self-initiated network request; turning it off makes the host fully offline.',
   extractionEnabled: 'Enable LLM extraction',
   extractionEnabledHint: 'When off, new commitments are no longer organised from conversations.',
   extractionModel: 'Extraction model',

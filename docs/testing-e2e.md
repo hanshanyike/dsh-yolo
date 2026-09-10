@@ -40,6 +40,7 @@
 | `api/actions-consolidate.spec.ts` · P34 | 非法动作 400 且落 `action_denied` 审计——拒绝绝不静默，UI 不把内部审计伪装成用户进展 | W12 / W16 |
 | `api/actions-range.spec.ts` | 日期闭区间批量取消只处理开放规范事项；永久删除要求强确认并清除所有状态的事项与直接关联数据 | W3 / W12 / W13 / W15 |
 | `api/goal-management.spec.ts` | 目标关联多个支持事项、明确下一步、完成事项后不自动达成、目标回顾和 SQLite 事件一致 | GOAL-01 / GOAL-02 / W8 / W12 / W16 |
+| `api/version-check.spec.ts` | `/yolo/version` 回答宿主自己的结论且不等待网络；报告更新时必须是严格更新的版本与非空通道 | VC-01 |
 
 ### ui 套件 · 浏览器端到端测试
 
@@ -60,7 +61,7 @@
 | `ui/accessibility-feedback.spec.ts` | 一级 Tab 键盘、单栏 focus trap/背景 inert、双栏非 modal、返回焦点、live region 和所有控件可读名 | W2 / W5 / W14 / A11Y |
 | `ui/dashboard-trust.spec.ts` · `api/dashboard-scope.spec.ts` · `tests/dashboard-aggregate.test.ts` | UI 中 partial 只提示一次且动作固定原 `scope_cwd`；API 验证真实 owner/未知 scope recovery；同 id 双 scope 与 all-fail recovery 由确定性聚合单测验证 | W13 / WS-01～03 |
 | `ui/capture-composition.spec.ts` | 中文输入法组合态 Enter 不误提交，组合结束后只新增一次真实事项 | W4 |
-| `ui/settings-card.spec.ts` | YOLO 插件配置卡与 dsh 自带卡片同构（同一 `<ul>` 下的 `<li>`、默认折叠、相同的圆角/填充/发丝线）；保存后折叠并在刷新后回读；无效草稿阻塞保存且可放弃；设置不泄漏内部实现入口 | W14 |
+| `ui/settings-card.spec.ts` | YOLO 插件配置卡与 dsh 自带卡片同构（同一 `<ul>` 下的 `<li>`、默认折叠、相同的圆角/填充/发丝线）；保存后折叠并在刷新后回读；无效草稿阻塞保存且可放弃；宿主报告更新时折叠状态就能看到「有新版本」、展开后有版本与更新命令，没有更新时不留提示位；设置不泄漏内部实现入口 | W14 / VC-01 |
 | `ui/data-management.spec.ts` | “更多 → 按日期删除事项”进入日期范围预览；批量取消、强确认永久删除、区间外隔离和单条永久删除 | W3 / W12 / W13 / W15 |
 | `ui/goal-management.spec.ts` | 目标卡展示结果、完成标准和目标日期；推进目标打开独立讨论；暂停/恢复状态可见 | W5 / W7 / W12 / W15 |
 
@@ -135,6 +136,7 @@ TI-13 的已知缺口写成保守策略已经生效。
 | HIST-04 | unit + api + ui | 按事项使用 `(scope,type,id)` 聚合；改名前后保持一项，同名不同 id 不合并；状态筛选在分页前生效，展开按需读取单事项历史，旧未关联事件只留在时间线 |
 | CHAT-01 | unit + ui + host | 顶层“和助手聊聊”每次显式打开生成新的空历史 ephemeral thread 且不读取 resident；事项 A/B 历史隔离；响应式返回/隐藏后再次打开 A 继续同一 episode，显式结束后再讨论 A 创建新 episode |
 | CHAT-02 | unit + ui | 慢回复和旧轮询不得写入当前 B；单/双栏切换、panel unmount/remount 后 POST 恰好一次，pending/draft/scroll 连续 |
+| VC-01 | unit + api + ui | 版本比较按 SemVer 优先级（预发布低于同号正式版、数字段按数值比较、非法版本不参与）；`/yolo/version` 只回答宿主缓存结论且不等待网络，更新必须是严格更新的版本与非空通道；离线/失败与「已是最新」在 UI 上同形（无提示位）；有新版本时折叠状态就能看到标题标记，展开后有版本、通道与可直接执行的更新命令；`updateCheck.enabled=false` 时宿主不发起任何 registry 请求 |
 
 #### 数据库迁移
 

@@ -61,11 +61,17 @@ dsh 0.1.5 把「插件」设置页做成一个扩展点：`settings.plugins.tab`
 | `settings/card-locale.ts` | 文案命名空间 `dsh-plugin-yolo` 与中英词典（chrome 用词与 dsh 自带卡片逐字一致） |
 | `settings/model.ts` | 可编辑字段表、dotted path 读写、字段 → 文案键的**全量**映射、分组布局 |
 | `settings/card-form.ts` | 暂存式表单：`CardShell` / `CardFieldState` / `CardActions` + 一次 fenced `mutate` 与回读校验 |
-| `settings/SettingsCard.tsx` | 卡片组件：复刻 PluginCard / ValueField 外壳，开关用宿主 `Switch` |
+| `settings/SettingsCard.tsx` | 卡片组件：复刻 PluginCard / ValueField 外壳，开关用宿主 `Switch`，并渲染版本提醒 |
+| `settings/version-notice.ts` | 向宿主 `/yolo/version` 取一次版本结论；任何失败都等价于「没有更新」 |
 | `settings/card-style.ts` | 卡片样式表（一次性注入、随 fiber 卸载移除） |
 
 YOLO 的 settings namespace 是嵌套结构（`reminder.checkIntervalSec`），所以卡片按叶子路径读写，
 而不是像自带卡片那样按顶层字段整段写入；host 的 `applyPathOp` 支持嵌套路径并会补齐中间容器。
+
+版本提醒也走这条边界：宿主在 `GET /yolo/version` 提供**缓存**的版本结论（适配层
+`src/ui/version.ts`，纯比较逻辑在 `src/application/read-models/version-check.ts`），卡片只读不比较，
+也从不直接访问 npm；结论里没有 `update` 就不渲染任何提示位（离线与「已是最新」在 UI 上同形）。
+宿主侧查询失败只记日志，不影响任何其它功能。
 
 ## Contracts 与依赖
 
