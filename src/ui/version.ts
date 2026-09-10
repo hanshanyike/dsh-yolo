@@ -2,15 +2,12 @@
  * Version-check HTTP adapter.
  *
  * The plugin's settings card shows a notice when a newer YOLO is published, and
- * this is where the answer comes from: the browser never talks to npm directly
- * (the page may be offline-locked, and the host already owns YOLO's outbound
- * traffic), so the host does one small registry read, caches it, and serves the
- * cached answer at `GET /yolo/version`.
+ * this is where the answer comes from: the browser never talks to npm directly,
+ * so the host does one small registry read (the package's dist-tag table),
+ * caches it, and serves the cached answer at `GET /yolo/version`.
  *
  * The read is advisory in every direction: it never blocks a response and never
- * surfaces an error to the UI. It is also the only request YOLO makes on its
- * own, and it sends nothing: one GET of the package's dist-tag table, whose
- * answer is a handful of version strings.
+ * surfaces an error to the UI.
  */
 import type { VersionCheckResult, VersionTags } from '../application/read-models/version-check.ts'
 import { pickUpdate } from '../application/read-models/version-check.ts'
