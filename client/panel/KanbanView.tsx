@@ -27,6 +27,14 @@ import {
   TodaySurface,
 } from './v2/index.ts'
 import { formatDueLabel } from './due-label.ts'
+import {
+  layoutMilestoneTrack,
+  milestoneAxisX,
+  milestoneLabelTop,
+  milestonePopoverTop,
+  milestoneTrackMargin,
+  type MilestoneTrackSlot,
+} from './milestone-track-layout.ts'
 import { useKanbanActions } from './kanban/use-kanban-actions.ts'
 import type { BoardSurfaceKey } from './kanban/surfaces.ts'
 
@@ -101,14 +109,6 @@ function untouchedDays(t: YoloTodoRow): number {
   return Math.floor((Date.now() - t.updated_at) / DAY_MS)
 }
 
-/** Position (0..100) of a milestone dot on its track, by target date. */
-function dotPos(target: string | null | undefined): number {
-  if (!target) return 50
-  const today = localDateStr()
-  const diff = (new Date(`${target.slice(0, 10)}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / DAY_MS
-  return Math.max(4, Math.min(96, 50 + (diff / 90) * 46))
-}
-
 export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, historyDay, onHistoryDayChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail }: KanbanViewProps): JSX.Element {
   const [editor, setEditor] = useState<EditorDraft | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -155,8 +155,15 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
     [filter, surfaces.plan.all],
   )
 
-  const activeGoals = data.goals.filter((g) => !['achieved', 'abandoned'].includes(g.status))
-  const openMilestones = data.milestones.filter((m) => m.status === 'planned' || m.status === 'active')
+  const activeGoals = useMemo(() => data.goals.filter((g) => !['achieved', 'abandoned'].includes(g.status)), [data.goals])
+  const openMilestones = useMemo(
+    () => data.milestones.filter((m) => m.status === 'planned' || m.status === 'active'),
+    [data.milestones],
+  )
+  // Collision-free slots for the shared axis: undated and same-date milestones
+  // would otherwise stack at one position (regression: overlapping dots and
+  // labels). The layout is pure, keyed by milestone id.
+  const milestoneLayout = useMemo(() => layoutMilestoneTrack(openMilestones), [openMilestones])
   const openGoalTodos = data.todos.filter((todo) => isTodoOpen(todo.status))
 
   const patch = useCallback((p: Partial<KanbanFilter>) => { patchFilter(p) }, [patchFilter])
@@ -347,13 +354,20 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
                     })
                   }}
                   onStatus={(status) => { void act(`goal-status-${g.id}-${status}`, { action: status === 'achieved' ? 'achieve' : status === 'paused' ? 'pause' : status === 'active' ? 'resume' : 'activate', kind: 'goal', id: g.id, scope_cwd: g.ws?.cwd }) }}
-                  onMsDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
+                  onMsDot={(m) => {
+                    // The popover renders inside the shared track, so a tracked
+                    // milestone opens at its laid-out slot; untracked (done)
+                    // milestones fall back to the raw axis position.
+                    const x = milestoneLayout.get(m.id)?.x ?? milestoneAxisX(m.target_date)
+                    setMsPop(msPop?.id === m.id ? null : { id: m.id, x })
+                  }}
                   msPopId={msPop?.id ?? null}
                 />
               ))}
               {openMilestones.length > 0 && (
                 <MilestoneTrack
                   milestones={openMilestones}
+                  layout={milestoneLayout}
                   renaming={renameDraft?.kind === 'milestone' ? renameDraft : null}
                   busyKey={busyKey}
                   pop={msPop}
@@ -621,7 +635,7 @@ function GoalBlock({ goal, milestones, availableTodos, renaming, renameValue, bu
   onClearNext: () => void
   onOpenDiscussion: () => void
   onStatus: (status: 'active' | 'paused' | 'achieved') => void
-  onMsDot: (m: YoloMilestoneRow, x: number) => void
+  onMsDot: (m: YoloMilestoneRow) => void
   msPopId: string | null
 }): JSX.Element {
   const pct = Math.max(0, Math.min(100, goal.progress))
@@ -659,7 +673,7 @@ function GoalBlock({ goal, milestones, availableTodos, renaming, renameValue, bu
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
             <span style={{ color: 'var(--y-text-3)' }}>阶段：</span>
             {milestones.map((m) => (
-              <button key={m.id} type="button" className={`cap${msPopId === m.id ? ' on' : ''}`} style={{ padding: '2px 7px' }} onClick={() => { onMsDot(m, dotPos(m.target_date)) }}>
+              <button key={m.id} type="button" className={`cap${msPopId === m.id ? ' on' : ''}`} style={{ padding: '2px 7px' }} onClick={() => { onMsDot(m) }}>
                 {m.title}{m.target_date ? ` · ${m.target_date.slice(5, 10)}` : ''}
               </button>
             ))}
@@ -690,8 +704,10 @@ function GoalBlock({ goal, milestones, availableTodos, renaming, renameValue, bu
 }
 
 /** Shared time axis for open milestones that no active goal carries (5.5). */
-function MilestoneTrack({ milestones, renaming, busyKey, pop, onDot, onRenameStart, onRenameChange, onRenameSave, onRenameCancel, onStatus, onPopClose }: {
+function MilestoneTrack({ milestones, layout, renaming, busyKey, pop, onDot, onRenameStart, onRenameChange, onRenameSave, onRenameCancel, onStatus, onPopClose }: {
   milestones: YoloMilestoneRow[]
+  /** Collision-free slots (x + label row) from layoutMilestoneTrack for these rows. */
+  layout: Map<string, MilestoneTrackSlot> & { maxRow: number }
   renaming: { id: string; title: string } | null
   busyKey: string | null
   pop: { id: string; x: number } | null
@@ -704,29 +720,36 @@ function MilestoneTrack({ milestones, renaming, busyKey, pop, onDot, onRenameSta
   onPopClose: () => void
 }): JSX.Element {
   const target = milestones.find((m) => m.id === pop?.id)
+  const maxRow = layout.maxRow
+  const popOpen = target !== undefined && pop !== null
   return (
     <div className="goal" style={{ borderBottom: 'none' }}>
       <div className="goal-head">
         <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--y-text-3)' }}>里程碑</span>
       </div>
-      <div className={`goal-track${target && pop ? ' has-pop' : ''}`}>
+      <div
+        className={`goal-track${popOpen ? ' has-pop' : ''}`}
+        // Reserve room for every label row the layout used (and, while a
+        // popover is open, for the popover itself below the rows).
+        style={{ marginBottom: popOpen ? milestonePopoverTop(maxRow) + 152 : milestoneTrackMargin(maxRow) }}
+      >
         {milestones.map((m) => {
-          const x = dotPos(m.target_date)
+          const slot = layout.get(m.id) ?? { x: milestoneAxisX(m.target_date), row: 0 }
           return (
             <button
               key={m.id}
               type="button"
               className={`ms-dot${m.status === 'done' ? ' done' : m.status === 'active' ? ' active' : ''}${pop?.id === m.id ? ' hl' : ''}`}
-              style={{ left: `${x}%` }}
+              style={{ left: `${slot.x}%` }}
               title={m.title}
-              onClick={() => { onDot(m, x) }}
+              onClick={() => { onDot(m, slot.x) }}
             >
-              <span className="ms-label"><b>{m.title}</b><i>{m.target_date ? m.target_date.slice(5, 10) : ''}</i></span>
+              <span className="ms-label" style={{ top: milestoneLabelTop(slot.row) }}><b>{m.title}</b><i>{m.target_date ? m.target_date.slice(5, 10) : ''}</i></span>
             </button>
           )
         })}
         {target && pop && (
-          <div className="ms-pop" role="dialog" aria-label={`编辑里程碑：${target.title}`} style={{ '--x': `${pop.x}%` } as React.CSSProperties}>
+          <div className="ms-pop" role="dialog" aria-label={`编辑里程碑：${target.title}`} style={{ '--x': `${pop.x}%`, top: milestonePopoverTop(maxRow) } as React.CSSProperties}>
             {renaming?.id === target.id ? (
               <input
                 autoFocus

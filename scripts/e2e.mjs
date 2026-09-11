@@ -165,9 +165,12 @@ function sweepE2EFixtures() {
       }
       const n =
         c("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id IN (SELECT id FROM todos WHERE title LIKE '[E2E]%')") +
+        c("DELETE FROM yolo_fts WHERE row_type = 'milestone' AND row_id IN (SELECT id FROM milestones WHERE title LIKE '[E2E]%')") +
         c("DELETE FROM attention_feedback WHERE todo_id IN (SELECT id FROM todos WHERE title LIKE '[E2E]%')") +
         c("DELETE FROM pending_reminders WHERE payload LIKE '%[E2E]%'") +
         c("DELETE FROM todos WHERE title LIKE '[E2E]%'") +
+        c("DELETE FROM goal_milestones WHERE milestone_id IN (SELECT id FROM milestones WHERE title LIKE '[E2E]%')") +
+        c("DELETE FROM milestones WHERE title LIKE '[E2E]%'") +
         c("DELETE FROM notifications WHERE title LIKE '[E2E]%'") +
         c("DELETE FROM events WHERE summary LIKE '%[E2E]%' OR detail LIKE '%[E2E]%'") +
         c("DELETE FROM session_summaries WHERE summary LIKE '%[E2E]%'") +

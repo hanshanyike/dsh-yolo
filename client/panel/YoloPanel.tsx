@@ -26,6 +26,7 @@ import { ChatPane, type ChatAnchor } from './ChatPane.tsx'
 import { KanbanView } from './KanbanView.tsx'
 import type { BoardSurfaceKey } from './kanban/surfaces.ts'
 import { NotificationLog } from './NotificationLog.tsx'
+import { fetchHostSkew, type HostSkew } from './host-skew.ts'
 import { MoreMenu } from './MoreMenu.tsx'
 import { DataManagementDialog } from './DataManagementDialog.tsx'
 import { HistoryTabs, PageTabs, PlanTabs } from './PageTabs.tsx'
@@ -91,11 +92,18 @@ export function YoloPanel({
 }: YoloPanelProps): JSX.Element {
   ensureYoloStyle()
   const [theme, setTheme] = useState<'dark' | 'light'>(() => detectYoloTheme())
+  // Host-half skew: dist/client is read fresh per page load while the host
+  // process keeps the server half it booted with, so an upgrade behind a
+  // running host serves this new bundle against an old API. Detected once
+  // per panel mount; dismissible because it is advisory, not an error.
+  const [hostSkew, setHostSkew] = useState<HostSkew | null>(null)
+  const [skewDismissed, setSkewDismissed] = useState(false)
 
   const { state, load, sweepTick, updateUnseen } = useDashboardController({
     notificationRefreshRequest,
     onUnseenChange,
   })
+  useEffect(() => { void fetchHostSkew().then(setHostSkew) }, [])
   const initial = useMemo(() => readPanelState(), [])
   const [filter, setFilter] = useState<KanbanFilter>(initial.filter)
   const [navigation, setNavigation] = useState<PanelNavigationState>(initial.navigation)
@@ -525,6 +533,14 @@ export function YoloPanel({
   // editor drafts / the undo window / fold states (v0.3.3 review fix).
   const boardColumn = (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      {hostSkew?.kind === 'stale' && !skewDismissed && (
+        <div className="skew-line" role="status">
+          <span>{hostSkew.server === null
+            ? `面板已更新到 v${hostSkew.client}，但宿主还在运行旧版本；重启宿主（dsh web）后新功能才会生效。`
+            : `面板是 v${hostSkew.client}，宿主还在运行 v${hostSkew.server}；重启宿主（dsh web）后新功能才会生效。`}</span>
+          <button type="button" className="nact" onClick={() => { setSkewDismissed(true) }}>知道了</button>
+        </div>
+      )}
       {state.error && state.data === null && (
         <div className="err-line">
           <span>看板加载失败：{state.error}</span>

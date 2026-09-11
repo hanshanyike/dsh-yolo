@@ -6,6 +6,7 @@ import type {
   YoloNotificationSeenOutcome,
 } from '../../src/contracts/notifications.ts'
 import { IcBell, IcChevron, IcClose } from '../design/icons.tsx'
+import { hostSkewHint } from './host-skew.ts'
 
 export interface NotificationLogProps {
   targetId?: string
@@ -68,7 +69,7 @@ async function markBaselineSeen(openedAt: number): Promise<YoloNotificationSeenO
     headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({ opened_at: openedAt }),
   })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  if (!response.ok) throw new Error(hostSkewHint(response.status) ?? `HTTP ${response.status}`)
   return await response.json() as YoloNotificationSeenOutcome
 }
 
@@ -79,7 +80,9 @@ async function postDismiss(body: { notification?: { id: string; scope_cwd: strin
     headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  // 405 is the stale-host signature: the running server half never registered
+  // this subpath, so the answer explains the restart instead of a bare code.
+  if (!response.ok) throw new Error(hostSkewHint(response.status) ?? `HTTP ${response.status}`)
   return await response.json() as YoloNotificationDismissOutcome
 }
 

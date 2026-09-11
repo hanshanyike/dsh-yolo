@@ -387,8 +387,8 @@ export const YOLO_CSS = `
 .yolo-scope .ms-dot.active { background: var(--y-accent); border-color: var(--y-accent); }
 .yolo-scope .ms-dot.hl { box-shadow: 0 0 0 3px var(--y-accent-soft); }
 .yolo-scope .ms-label { position: absolute; left: 0; transform: translateX(-50%); text-align: center; font-size: 11px; line-height: 14px; color: var(--y-text-3); white-space: nowrap; pointer-events: none; }
-.yolo-scope .ms-dot:nth-child(odd) .ms-label { top: 11px; }
-.yolo-scope .ms-dot:nth-child(even) .ms-label { top: 26px; }
+/* label rows are assigned by the collision-free layout (inline top), not by
+   DOM parity — parity stacked same-cluster labels on top of each other */
 .yolo-scope .ms-label b { display: block; font-weight: 550; color: var(--y-text-2); max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
 .yolo-scope .ms-label i { font-style: normal; font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; }
 .yolo-scope .ms-pop { position: absolute; top: 50px; left: clamp(94px, var(--x, 50%), calc(100% - 94px)); transform: translateX(-50%); width: 188px; background: var(--y-surface); border: 1px solid var(--y-line-strong); border-radius: var(--y-r-md); box-shadow: var(--y-e1); padding: 8px; z-index: 10; animation: yolo-row-in var(--y-dur-2) var(--y-ease-out); }
@@ -500,6 +500,9 @@ export const YOLO_CSS = `
 .yolo-scope .empty h4 { margin: 0 0 6px; font-size: 16px; font-weight: 650; color: var(--y-text-1); }
 .yolo-scope .empty p { margin: 0; font-size: 12.5px; color: var(--y-text-3); }
 .yolo-scope .err-line { display: flex; align-items: center; gap: 10px; padding: 12px 2px 0; color: var(--y-danger); font-size: 13px; }
+/* host-half skew notice — advisory (restart hint), so neutral text, not danger */
+.yolo-scope .skew-line { display: flex; align-items: center; gap: 10px; padding: 12px 2px 0; color: var(--y-text-2); font-size: 13px; }
+.yolo-scope .skew-line span { min-width: 0; }
 /* loop loader — shimmer is a persistent loading affordance, deliberately
    exempt from the ≤200ms micro-interaction rule (covered by reduced-motion) */
 .yolo-scope .skel-notif, .yolo-scope .skel-row, .yolo-scope .skel-head { background: var(--y-surface-2); border-radius: var(--y-r-sm); background-image: linear-gradient(100deg, transparent 40%, var(--y-surface-3) 50%, transparent 60%); background-size: 200% 100%; animation: yolo-shimmer 1.5s infinite; }

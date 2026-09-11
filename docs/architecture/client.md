@@ -27,6 +27,8 @@ Phase 5 已把高耦合 use-case state 从两个大组件迁到稳定 controller
 | `panel/KanbanView.tsx` | Home/Plan/History 页面内容和纯筛选呈现 |
 | `panel/controllers/` | dashboard、detail、notification use-case controllers |
 | `panel/kanban/` | board actions 与稳定 surface names |
+| `panel/host-skew.ts` | 宿主版本偏斜探测：对比 `/yolo/version` 与面板自身版本，产出「宿主落后，需重启」的判定与提示文案 |
+| `panel/milestone-track-layout.ts` | 里程碑时间轴碰撞布局：纯函数，从里程碑集合计算每个圆点的横坐标、标签行号与弹层/轨道高度 |
 | `panel/ChatPane.tsx`、`panel/chat/` | fresh assistant/item-episode conversation UI 与请求/scroll controller |
 | `panel/HistoryView.tsx` | history read model UI |
 | `panel/NotificationLog.tsx` | cursor-paginated notification record UI（含单条 `×` 与「一键清除」） |
@@ -91,6 +93,19 @@ Dependency fitness test 禁止 client 直接依赖：
 - unseen 更新绑定 server revision，旧 dashboard/旧请求不能覆盖较新 badge。
 - popup click 先标记指定 delivery seen；能解析 reminder todo 时打开该事项，否则打开 notification record。
 - route、foreground、draft、thread 和 request 不因 responsive presentation 改变。
+
+## 宿主版本偏斜与升级提示
+
+宿主进程只在启动时加载服务端代码，而浏览器每次刷新都拿最新 `dist/client`：升级插件但不重启宿主时，
+新面板会调用旧服务端上不存在的端点（表现为 405）。`panel/host-skew.ts` 在面板打开时向
+`GET /yolo/version`（适配层 `src/ui/version.ts`）取宿主自身的版本结论，与面板打包版本对比：
+
+- 宿主版本落后或端点缺失（更旧的宿主连版本端点都没有）时，`YoloPanel` 顶部渲染一条可关闭的提醒，
+  告知重启宿主（`dsh web`）后新功能才会生效；版本一致、响应异常或无法解析时一律不提示，避免误报。
+- `NotificationLog` 等直接消费 mutation 响应的地方，在收到 405 时把错误翻译为同一条重启提示，
+  而不是暴露裸 `HTTP 405`。
+
+版本结论里的 `update` 字段（npm 缓存查询）属于设置卡（见上文版本提醒），面板只用 `current`。
 
 ## 对话与前景
 
