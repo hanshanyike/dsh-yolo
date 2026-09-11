@@ -35,6 +35,7 @@ import {
   milestoneTrackMargin,
   type MilestoneTrackSlot,
 } from './milestone-track-layout.ts'
+import { milestoneOwnerKey, resolveMilestoneOwnership, sortGoalMilestones } from './milestone-ownership.ts'
 import { useKanbanActions } from './kanban/use-kanban-actions.ts'
 import type { BoardSurfaceKey } from './kanban/surfaces.ts'
 
@@ -118,11 +119,16 @@ function untouchedDays(t: YoloTodoRow): number {
   return Math.floor((Date.now() - t.updated_at) / DAY_MS)
 }
 
+/** Where an open milestone sits in the milestone editor. A goal-owned chip pins
+ *  the goal as well: a milestone shared by two goals would otherwise render two
+ *  copies of the editor. */
+type MilestonePopState = { id: string; from: 'track' | 'goals'; x: number; goalKey?: string }
+
 export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurfaceChange, historyDay, onHistoryDayChange, onOpenChat, onOpenSource, onOpenChangeSource, onOpenItemDetail }: KanbanViewProps): JSX.Element {
   const [editor, setEditor] = useState<EditorDraft | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState<{ kind: 'goal' | 'milestone'; id: string; title: string } | null>(null)
-  const [msPop, setMsPop] = useState<{ id: string; x: number } | null>(null)
+  const [msPop, setMsPop] = useState<MilestonePopState | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const actions = useKanbanActions({
     data, refresh, filter, patchFilter, onSurfaceChange, onOpenChat, onOpenSource, onOpenItemDetail,
@@ -180,14 +186,20 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
   }, [data.at, data.ledgerDay, visiblePlanAll])
 
   const activeGoals = useMemo(() => data.goals.filter((g) => !['achieved', 'abandoned'].includes(g.status)), [data.goals])
-  const openMilestones = useMemo(
-    () => data.milestones.filter((m) => m.status === 'planned' || m.status === 'active'),
-    [data.milestones],
+  // Ownership: a milestone belongs to the goals that carry it (goal_ids), so it
+  // never shows up under a goal that does not own it. The shared axis keeps only
+  // the open leftovers — milestones of goals this surface does not render.
+  const milestoneOwnership = useMemo(
+    () => resolveMilestoneOwnership(activeGoals, data.milestones),
+    [activeGoals, data.milestones],
   )
+  const otherMilestones = milestoneOwnership.unowned
+  const goalMilestones = (goal: YoloDashboardData['goals'][number]): YoloMilestoneRow[] =>
+    sortGoalMilestones(milestoneOwnership.byGoal.get(milestoneOwnerKey(goal.ws, goal.id)) ?? [])
   // Collision-free slots for the shared axis: undated and same-date milestones
   // would otherwise stack at one position (regression: overlapping dots and
   // labels). The layout is pure, keyed by milestone id.
-  const milestoneLayout = useMemo(() => layoutMilestoneTrack(openMilestones), [openMilestones])
+  const milestoneLayout = useMemo(() => layoutMilestoneTrack(otherMilestones), [otherMilestones])
   const openGoalTodos = data.todos.filter((todo) => isTodoOpen(todo.status))
 
   const patch = useCallback((p: Partial<KanbanFilter>) => { patchFilter(p) }, [patchFilter])
@@ -205,6 +217,23 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
       milestone_title: editor.milestoneTitle || '',
     })
     if (ok) setEditor(null)
+  }
+
+  // One milestone editor serves both entry points: a dot on the shared axis
+  // and a goal's own milestone chip. Rename/status take the same action path.
+  const milestoneEditor: MilestoneEditorHandlers = {
+    renaming: renameDraft?.kind === 'milestone' ? renameDraft : null,
+    busyKey,
+    onRenameStart: (m) => { setRenameDraft({ kind: 'milestone', id: m.id, title: m.title }) },
+    onRenameChange: (v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) },
+    onRenameSave: async (m) => {
+      const d = renameDraft
+      setRenameDraft(null)
+      if (d && d.title.trim() && d.title !== m.title) await act(`ms-${m.id}`, { action: 'rename', kind: 'milestone', id: m.id, title: d.title.trim(), scope_cwd: m.ws?.cwd })
+    },
+    onRenameCancel: () => { setRenameDraft(null) },
+    onStatus: (m, status) => { void act(`ms-${m.id}`, { action: 'set_status', kind: 'milestone', id: m.id, status, scope_cwd: m.ws?.cwd }) },
+    onPopClose: () => { setMsPop(null) },
   }
 
   const rowActions = (t: YoloTodoRow): { onComplete: () => void; onAct: (action: string, extra?: { due_at?: string }) => void; onEdit: () => void; onChat: () => void; onSource?: () => void } => ({
@@ -379,11 +408,14 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
           {surface === 'goals' && (
             <>
               <div className="heading"><h2>目标与里程碑</h2><span className="hint">{activeGoals.length} 个长期结果 · 下一步优先</span></div>
-              {activeGoals.map((g) => (
-                <GoalBlock
-                  key={g.id}
-                  goal={g}
-                  milestones={data.milestones.filter((m) => m.id === g.current_milestone?.id || m.title === g.milestone_title)}
+              {activeGoals.map((g) => {
+                const goalKey = milestoneOwnerKey(g.ws, g.id)
+                return (
+                  <GoalBlock
+                    key={`${g.ws?.cwd ?? ''}-${g.id}`}
+                    goal={g}
+                    milestones={goalMilestones(g)}
+                    editor={milestoneEditor}
                   availableTodos={openGoalTodos}
                   renaming={renameDraft?.kind === 'goal' && renameDraft.id === g.id}
                   renameValue={renameDraft?.kind === 'goal' && renameDraft.id === g.id ? renameDraft.title : ''}
@@ -408,37 +440,21 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
                     })
                   }}
                   onStatus={(status) => { void act(`goal-status-${g.id}-${status}`, { action: status === 'achieved' ? 'achieve' : status === 'paused' ? 'pause' : status === 'active' ? 'resume' : 'activate', kind: 'goal', id: g.id, scope_cwd: g.ws?.cwd }) }}
-                  onMsDot={(m) => {
-                    // The popover renders inside the shared track, so a tracked
-                    // milestone opens at its laid-out slot; untracked (done)
-                    // milestones fall back to the raw axis position.
-                    const x = milestoneLayout.get(m.id)?.x ?? milestoneAxisX(m.target_date)
-                    setMsPop(msPop?.id === m.id ? null : { id: m.id, x })
-                  }}
-                  msPopId={msPop?.id ?? null}
+                  onMsDot={(m) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, from: 'goals', x: 0, goalKey }) }}
+                  msPopId={msPop?.from === 'goals' && msPop.goalKey === goalKey ? msPop.id : null}
                 />
-              ))}
-              {openMilestones.length > 0 && (
+                )
+              })}
+              {otherMilestones.length > 0 && (
                 <MilestoneTrack
-                  milestones={openMilestones}
+                  milestones={otherMilestones}
                   layout={milestoneLayout}
-                  renaming={renameDraft?.kind === 'milestone' ? renameDraft : null}
-                  busyKey={busyKey}
-                  pop={msPop}
-                  onDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, x }) }}
-                  onRenameStart={(m) => { setRenameDraft({ kind: 'milestone', id: m.id, title: m.title }) }}
-                  onRenameChange={(v) => { setRenameDraft((d) => d ? { ...d, title: v } : d) }}
-                  onRenameSave={async (m) => {
-                    const d = renameDraft
-                    setRenameDraft(null)
-                    if (d && d.title.trim() && d.title !== m.title) await act(`ms-${m.id}`, { action: 'rename', kind: 'milestone', id: m.id, title: d.title.trim(), scope_cwd: m.ws?.cwd })
-                  }}
-                  onRenameCancel={() => { setRenameDraft(null) }}
-                  onStatus={(m, status) => { void act(`ms-${m.id}`, { action: 'set_status', kind: 'milestone', id: m.id, status, scope_cwd: m.ws?.cwd }) }}
-                  onPopClose={() => { setMsPop(null) }}
+                  editor={milestoneEditor}
+                  pop={msPop?.from === 'track' ? msPop : null}
+                  onDot={(m, x) => { setMsPop(msPop?.id === m.id ? null : { id: m.id, from: 'track', x }) }}
                 />
               )}
-              {activeGoals.length === 0 && openMilestones.length === 0 && (
+              {activeGoals.length === 0 && otherMilestones.length === 0 && (
                 <div className="empty">
                   <h4>暂无进行中的目标</h4>
                   <p>目标会显示当前下一步；没有下一步的目标需要补充安排或暂停。</p>
@@ -673,9 +689,10 @@ function TodoEditor({ draft, milestones, busy, confirming, onChange, onSave, onC
   )
 }
 
-function GoalBlock({ goal, milestones, availableTodos, renaming, renameValue, busy, onRenameStart, onRenameChange, onRenameSave, onRenameCancel, onAbandon, onSetNext, onClearNext, onOpenDiscussion, onStatus, onMsDot, msPopId }: {
+function GoalBlock({ goal, milestones, editor, availableTodos, renaming, renameValue, busy, onRenameStart, onRenameChange, onRenameSave, onRenameCancel, onAbandon, onSetNext, onClearNext, onOpenDiscussion, onStatus, onMsDot, msPopId }: {
   goal: YoloDashboardData['goals'][number]
   milestones: YoloMilestoneRow[]
+  editor: MilestoneEditorHandlers
   availableTodos: YoloTodoRow[]
   renaming: boolean
   renameValue: string
@@ -697,6 +714,9 @@ function GoalBlock({ goal, milestones, availableTodos, renaming, renameValue, bu
   const statusLabel = goal.status === 'candidate' ? '待确认' : goal.status === 'paused' ? '已暂停' : '进行中'
   const nextTodo = goal.next_todo
   const availableForNext = availableTodos.filter((todo) => todo.id !== nextTodo?.id)
+  // The goal owns these milestones, so its editor opens inline under the chips
+  // instead of on the shared axis (which carries only unowned milestones).
+  const popTarget = msPopId ? milestones.find((m) => m.id === msPopId) : undefined
   return (
     <div className="goal">
       <div className="goal-head">
@@ -725,14 +745,22 @@ function GoalBlock({ goal, milestones, availableTodos, renaming, renameValue, bu
         {goal.progress_note ? <div><span style={{ color: 'var(--y-text-3)' }}>最近进展：</span>{goal.progress_note}</div> : null}
         {milestones.length > 0 ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
-            <span style={{ color: 'var(--y-text-3)' }}>阶段：</span>
+            <span style={{ color: 'var(--y-text-3)' }}>里程碑：</span>
             {milestones.map((m) => (
-              <button key={m.id} type="button" className={`cap${msPopId === m.id ? ' on' : ''}`} style={{ padding: '2px 7px' }} onClick={() => { onMsDot(m) }}>
+              <button
+                key={m.id}
+                type="button"
+                className={`cap${m.status === 'active' ? ' active' : m.status === 'done' ? ' done' : ''}${msPopId === m.id ? ' on' : ''}`}
+                style={{ padding: '2px 7px' }}
+                title={m.status === 'done' ? `${m.title}（已完成）` : m.title}
+                onClick={() => { onMsDot(m) }}
+              >
                 {m.title}{m.target_date ? ` · ${m.target_date.slice(5, 10)}` : ''}
               </button>
             ))}
           </div>
         ) : null}
+        {popTarget ? <MilestonePopover milestone={popTarget} editor={editor} inline /> : null}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center', marginTop: 12 }}>
         <button type="button" className="btn btn-ghost ef-btn" style={{ fontWeight: 700 }} disabled={busy} onClick={goal.status === 'candidate' ? () => { onStatus('active') } : onOpenDiscussion}>
@@ -757,21 +785,74 @@ function GoalBlock({ goal, milestones, availableTodos, renaming, renameValue, bu
   )
 }
 
-/** Shared time axis for open milestones that no active goal carries (5.5). */
-function MilestoneTrack({ milestones, layout, renaming, busyKey, pop, onDot, onRenameStart, onRenameChange, onRenameSave, onRenameCancel, onStatus, onPopClose }: {
-  milestones: YoloMilestoneRow[]
-  /** Collision-free slots (x + label row) from layoutMilestoneTrack for these rows. */
-  layout: Map<string, MilestoneTrackSlot> & { maxRow: number }
+/** Shared editor state/handlers for one open milestone (axis dot or goal chip). */
+interface MilestoneEditorHandlers {
   renaming: { id: string; title: string } | null
   busyKey: string | null
-  pop: { id: string; x: number } | null
-  onDot: (m: YoloMilestoneRow, x: number) => void
   onRenameStart: (m: YoloMilestoneRow) => void
   onRenameChange: (v: string) => void
   onRenameSave: (m: YoloMilestoneRow) => void
   onRenameCancel: () => void
   onStatus: (m: YoloMilestoneRow, status: string) => void
   onPopClose: () => void
+}
+
+/** Rename + status editor for one milestone. `inline` renders it as a block
+ *  under a goal's own milestone chips; otherwise it is anchored to the axis. */
+function MilestonePopover({ milestone, editor, inline = false, axisX, top }: {
+  milestone: YoloMilestoneRow
+  editor: MilestoneEditorHandlers
+  inline?: boolean
+  axisX?: number
+  top?: number
+}): JSX.Element {
+  const { renaming, busyKey, onRenameStart, onRenameChange, onRenameSave, onRenameCancel, onStatus, onPopClose } = editor
+  return (
+    <div
+      className={`ms-pop${inline ? ' inline' : ''}`}
+      role="dialog"
+      aria-label={`编辑里程碑：${milestone.title}`}
+      style={inline ? undefined : { '--x': `${axisX}%`, top } as React.CSSProperties}
+    >
+      {renaming?.id === milestone.id ? (
+        <input
+          autoFocus
+          value={renaming.title}
+          onChange={(e) => { onRenameChange(e.target.value) }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) onRenameSave(milestone)
+            if (e.key === 'Escape') { e.stopPropagation(); onRenameCancel() }
+          }}
+        />
+      ) : (
+        <input
+          value={milestone.title}
+          title="点击改名"
+          onFocus={() => { onRenameStart(milestone) }}
+          onChange={() => { /* controlled rename starts on focus */ }}
+          readOnly
+        />
+      )}
+      <div className="ms-pop-row">
+        {(['planned', 'active', 'done', 'abandoned'] as const).map((st) => (
+          <button key={st} type="button" className={`ms-st${milestone.status === st ? ' on' : ''}`} disabled={busyKey === `ms-${milestone.id}`} onClick={() => { onStatus(milestone, st) }}>
+            {MS_STATUS_LABEL[st]}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="btn btn-ghost ef-btn" style={{ width: '100%', marginTop: 4 }} onClick={onPopClose}>关闭</button>
+    </div>
+  )
+}
+
+/** Shared time axis for the open milestones no rendered goal owns (5.5). */
+function MilestoneTrack({ milestones, layout, editor, pop, onDot }: {
+  milestones: YoloMilestoneRow[]
+  /** Collision-free slots (x + label row) from layoutMilestoneTrack for these rows. */
+  layout: Map<string, MilestoneTrackSlot> & { maxRow: number }
+  editor: MilestoneEditorHandlers
+  pop: { id: string; x: number } | null
+  onDot: (m: YoloMilestoneRow, x: number) => void
 }): JSX.Element {
   const target = milestones.find((m) => m.id === pop?.id)
   const maxRow = layout.maxRow
@@ -779,7 +860,8 @@ function MilestoneTrack({ milestones, layout, renaming, busyKey, pop, onDot, onR
   return (
     <div className="goal" style={{ borderBottom: 'none' }}>
       <div className="goal-head">
-        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--y-text-3)' }}>里程碑</span>
+        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--y-text-3)' }}>其他里程碑</span>
+        <span style={{ fontSize: 11, color: 'var(--y-text-3)' }}>不属于上面任何目标</span>
       </div>
       <div
         className={`goal-track${popOpen ? ' has-pop' : ''}`}
@@ -802,37 +884,9 @@ function MilestoneTrack({ milestones, layout, renaming, busyKey, pop, onDot, onR
             </button>
           )
         })}
-        {target && pop && (
-          <div className="ms-pop" role="dialog" aria-label={`编辑里程碑：${target.title}`} style={{ '--x': `${pop.x}%`, top: milestonePopoverTop(maxRow) } as React.CSSProperties}>
-            {renaming?.id === target.id ? (
-              <input
-                autoFocus
-                value={renaming.title}
-                onChange={(e) => { onRenameChange(e.target.value) }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) onRenameSave(target)
-                  if (e.key === 'Escape') { e.stopPropagation(); onRenameCancel() }
-                }}
-              />
-            ) : (
-              <input
-                value={target.title}
-                title="点击改名"
-                onFocus={() => { onRenameStart(target) }}
-                onChange={() => { /* controlled rename starts on focus */ }}
-                readOnly
-              />
-            )}
-            <div className="ms-pop-row">
-              {(['planned', 'active', 'done', 'abandoned'] as const).map((st) => (
-                <button key={st} type="button" className={`ms-st${target.status === st ? ' on' : ''}`} disabled={busyKey === `ms-${target.id}`} onClick={() => { onStatus(target, st) }}>
-                  {MS_STATUS_LABEL[st]}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="btn btn-ghost ef-btn" style={{ width: '100%', marginTop: 4 }} onClick={onPopClose}>关闭</button>
-          </div>
-        )}
+        {target && pop ? (
+          <MilestonePopover milestone={target} editor={editor} axisX={pop.x} top={milestonePopoverTop(maxRow)} />
+        ) : null}
       </div>
     </div>
   )

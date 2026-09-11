@@ -29,6 +29,7 @@ Phase 5 已把高耦合 use-case state 从两个大组件迁到稳定 controller
 | `panel/kanban/` | board actions 与稳定 surface names |
 | `panel/host-skew.ts` | 宿主版本偏斜探测：对比 `/yolo/version` 与面板自身版本，产出「宿主落后，需重启」的判定与提示文案 |
 | `panel/milestone-track-layout.ts` | 里程碑时间轴碰撞布局：纯函数，从里程碑集合计算每个圆点的横坐标、标签行号与弹层/轨道高度 |
+| `panel/milestone-ownership.ts` | 里程碑归属分组：纯函数，按 `goal_ids` 把里程碑归到承载它的目标，只把没有归属目标的开放里程碑留给共享时间轴 |
 | `panel/ChatPane.tsx`、`panel/chat/` | fresh assistant/item-episode conversation UI 与请求/scroll controller |
 | `panel/HistoryView.tsx` | history read model UI |
 | `panel/NotificationLog.tsx` | cursor-paginated notification record UI（含单条 `×` 与「一键清除」） |

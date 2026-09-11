@@ -11,7 +11,7 @@
 // read-only) and tags each row with its owning workspace.
 
 import type Yolo from '../../storage/index.ts'
-import type { Goal, Notification, TimelineEvent, Todo, TodoEvidence } from '../../domain/types.ts'
+import type { Goal, Milestone, Notification, TimelineEvent, Todo, TodoEvidence } from '../../domain/types.ts'
 import type {
   YoloDashboardData,
   YoloLedgerEntry,
@@ -310,21 +310,38 @@ export function buildDashboardData(yolo: Yolo, cwd: string, day = localDateStr()
       },
     }
   })
+  // Milestone ownership: the plan view groups milestones under the goal that
+  // carries them, so every milestone row must say which goals own it. Reading
+  // the links once per goal here keeps the previous query count while making
+  // the goal→milestone relation available on both projections.
+  const goalRecords = yolo.listGoals(cwd)
+  const goalMilestonesById = new Map<string, Milestone[]>()
+  const goalIdsByMilestone = new Map<string, string[]>()
+  for (const g of goalRecords) {
+    const list = yolo.listGoalMilestones?.(cwd, g.id) ?? []
+    goalMilestonesById.set(g.id, list)
+    for (const m of list) {
+      const owners = goalIdsByMilestone.get(m.id)
+      if (!owners) goalIdsByMilestone.set(m.id, [g.id])
+      else if (!owners.includes(g.id)) owners.push(g.id)
+    }
+  }
   const milestoneRows: YoloMilestoneRow[] = milestones.map((m) => ({
     id: m.id,
     title: m.title,
     status: m.status,
     target_date: m.target_date,
+    goal_ids: goalIdsByMilestone.get(m.id) ?? [],
     ws: owner,
   }))
   const projectedById = new Map(projectedTodos.map((todo) => [todo.id, todo]))
-  const goals: YoloGoalRow[] = yolo.listGoals(cwd).map((g) => {
+  const goals: YoloGoalRow[] = goalRecords.map((g) => {
     const links = yolo.listGoalTodoLinks?.(cwd, g.id) ?? []
     const linkedTodos = links
       .map((link) => projectedById.get(link.todo_id))
       .filter((todo): todo is YoloTodoRow => todo !== undefined)
     const nextTodo = g.next_todo_id ? projectedById.get(g.next_todo_id) ?? null : null
-    const goalMilestones = yolo.listGoalMilestones?.(cwd, g.id) ?? []
+    const goalMilestones = goalMilestonesById.get(g.id) ?? []
     const currentMilestone = goalMilestones.find((m) => m.status === 'active')
       ?? goalMilestones.find((m) => m.status === 'planned')
       ?? goalMilestones[0]

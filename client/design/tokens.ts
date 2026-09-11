@@ -233,6 +233,10 @@ export const YOLO_CSS = `
 .yolo-scope .caps { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 0 2px; }
 .yolo-scope .cap { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid var(--y-line-strong); border-radius: 999px; background: none; color: var(--y-text-2); font-size: 12px; cursor: pointer; transition: all var(--y-dur-1); white-space: nowrap; }
 .yolo-scope .cap:hover { color: var(--y-text-1); border-color: var(--y-text-3); }
+/* A goal's own milestones reuse the capsule look; status rides the colour so a
+   finished one reads as history without hiding it from the goal it belongs to. */
+.yolo-scope .cap.active { border-color: color-mix(in srgb, var(--y-accent) 40%, transparent); color: var(--y-accent-text); }
+.yolo-scope .cap.done { border-style: dashed; color: var(--y-text-3); }
 .yolo-scope .cap.on { background: var(--y-accent-soft); color: var(--y-accent-text); border-color: color-mix(in srgb, var(--y-accent) 40%, transparent); }
 .yolo-scope .cap .num { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 11px; }
 
@@ -395,6 +399,9 @@ export const YOLO_CSS = `
 .yolo-scope .ms-pop input { width: 100%; height: 30px; padding: 0 9px; margin-bottom: 6px; border: 1px solid var(--y-line-strong); border-radius: var(--y-r-sm); background: var(--y-surface-2); color: var(--y-text-1); font-size: 12px; outline: none; }
 .yolo-scope .ms-pop input:focus { border-color: var(--y-focus); }
 .yolo-scope .ms-pop-row { display: flex; gap: 4px; }
+/* Inline variant: a goal's own milestone opens under its chips instead of on
+   the shared axis, so the editor drops the axis anchoring entirely. */
+.yolo-scope .ms-pop.inline { position: static; transform: none; width: 100%; max-width: 280px; margin-top: 2px; }
 .yolo-scope .ms-st { flex: 1; height: 25px; border: none; border-radius: 4px; background: var(--y-surface-2); color: var(--y-text-2); font-size: 11px; cursor: pointer; }
 .yolo-scope .ms-st:hover { background: var(--y-surface-3); color: var(--y-text-1); }
 .yolo-scope .ms-st.on { background: var(--y-accent-soft); color: var(--y-accent-text); }

@@ -51,6 +51,20 @@ describe('goal dashboard and detail projection', () => {
     })
   })
 
+  it('tags each milestone row with the goals that own it, so the plan view can group them', () => {
+    const release = yolo.addGoal(cwd, { title: '完成 0.5.0 发布', source: 'manual' })
+    const defense = yolo.addGoal(cwd, { title: '技能选择防线', source: 'manual' })
+    const owned = yolo.addMilestone(cwd, { title: '能力真值实验', source: 'manual' })
+    const orphan = yolo.addMilestone(cwd, { title: '进行 PRD 设计', target_date: '2026-08-30', source: 'manual' })
+    yolo.linkGoalMilestone(cwd, defense.id, owned.id)
+
+    const byId = new Map(buildDashboardData(yolo, cwd, '2026-09-01').milestones.map((row) => [row.id, row]))
+    expect(byId.get(owned.id)?.goal_ids).toEqual([defense.id])
+    // No relation means no owner: the row must not inherit the goal above it.
+    expect(byId.get(orphan.id)?.goal_ids).toEqual([])
+    expect(byId.get(owned.id)?.goal_ids).not.toContain(release.id)
+  })
+
   it('detail shows linked todos and goal history without changing their lifecycle', () => {
     const goal = yolo.addGoal(cwd, { title: '完成研究计划', source: 'manual' })
     const todo = yolo.addTodo(cwd, { title: '确定研究问题', source: 'manual' }).todo

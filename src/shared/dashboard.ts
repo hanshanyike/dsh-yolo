@@ -190,6 +190,10 @@ export interface YoloMilestoneRow {
   title: string
   status: string
   target_date?: string | null
+  /** Ids of the goals that carry this milestone in its own workspace. Empty
+   *  means the milestone belongs to none: the plan view shows those on the
+   *  shared axis instead of under a goal. */
+  goal_ids?: string[]
   /** Owning workspace when aggregated across scopes (v0.3.0). */
   ws?: WorkspaceTag
 }
