@@ -824,7 +824,11 @@ function goalAndTodo(db: DB, goalId: string, todoId: string): { goal: Goal; todo
 }
 
 export function listGoalTodoLinks(db: DB, goalId: string): GoalTodoLink[] {
-  return db.prepare('SELECT * FROM goal_todos WHERE goal_id = ? ORDER BY created_at ASC, todo_id ASC').all(goalId) as GoalTodoLink[]
+  // goal_todos has no position column and created_at is millisecond-resolution,
+  // so links made in the same tick used to tie-break on the random todo_id —
+  // the "supporting todos" order came out arbitrary. rowid is the insertion
+  // order and makes the relation list deterministic.
+  return db.prepare('SELECT * FROM goal_todos WHERE goal_id = ? ORDER BY created_at ASC, rowid ASC').all(goalId) as GoalTodoLink[]
 }
 
 /** List direct supporting todos; the join keeps the relation table separate
@@ -832,7 +836,7 @@ export function listGoalTodoLinks(db: DB, goalId: string): GoalTodoLink[] {
 export function listGoalTodos(db: DB, goalId: string): Todo[] {
   return db.prepare(
     `SELECT t.* FROM todos t JOIN goal_todos gt ON gt.todo_id = t.id
-     WHERE gt.goal_id = ? ORDER BY gt.created_at ASC, t.created_at ASC, t.id ASC`,
+     WHERE gt.goal_id = ? ORDER BY gt.created_at ASC, gt.rowid ASC`,
   ).all(goalId) as Todo[]
 }
 

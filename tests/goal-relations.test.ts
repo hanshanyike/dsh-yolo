@@ -33,6 +33,25 @@ describe('goal relationships', () => {
     expect(repo.listTodos(db, SCOPE).map((todo) => todo.status)).toEqual(['pending', 'pending'])
   })
 
+  it('keeps link insertion order when the relation and todo timestamps tie', () => {
+    // Real-world case: two links made in the same millisecond, to todos created
+    // in the same millisecond. The order used to fall through to the random
+    // todo uuid (CI caught it flaking on ubuntu), so supporting todos of one
+    // goal could come back in either order. Link order is the contract.
+    const goal = repo.upsertGoal(db, { title: '完成发布', scope_key: SCOPE })
+    const first = repo.upsertTodo(db, { title: '整理发布材料', scope_key: SCOPE }).row
+    const second = repo.upsertTodo(db, { title: '确认灰度范围', scope_key: SCOPE }).row
+    repo.linkGoalTodo(db, goal.id, first.id)
+    repo.linkGoalTodo(db, goal.id, second.id)
+
+    // Force the tie the microsecond clock usually hides.
+    db.prepare('UPDATE goal_todos SET created_at = 1').run()
+    db.prepare('UPDATE todos SET created_at = 1').run()
+
+    expect(repo.listGoalTodos(db, goal.id).map((todo) => todo.id)).toEqual([first.id, second.id])
+    expect(repo.listGoalTodoLinks(db, goal.id).map((link) => link.todo_id)).toEqual([first.id, second.id])
+  })
+
   it('keeps links idempotent and unlinking a next todo does not delete the todo', () => {
     const goal = repo.upsertGoal(db, { title: '完成研究计划', scope_key: SCOPE })
     const todo = repo.upsertTodo(db, { title: '确定研究问题', scope_key: SCOPE }).row
