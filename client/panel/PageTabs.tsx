@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { IcCalendar, IcLedger, IcTarget } from '../design/icons.tsx'
+import { IcCalendar, IcFlag, IcLedger, IcTarget } from '../design/icons.tsx'
 import type { BoardPage, HistorySection, PlanSection } from './navigation.ts'
 
 export interface PageTabsProps {
@@ -12,10 +12,11 @@ export interface PageTabsProps {
 const PAGES: Array<{ key: BoardPage; label: string; icon: JSX.Element }> = [
   { key: 'home', label: '首页', icon: <IcTarget size={15} /> },
   { key: 'plan', label: '计划', icon: <IcCalendar size={15} /> },
+  { key: 'goals', label: '目标', icon: <IcFlag size={15} /> },
   { key: 'history', label: '历史', icon: <IcLedger size={15} /> },
 ]
 
-export const PAGE_KEYS: readonly BoardPage[] = ['home', 'plan', 'history']
+export const PAGE_KEYS: readonly BoardPage[] = ['home', 'plan', 'goals', 'history']
 
 export function pageKeyForKeyboard(page: BoardPage, key: string): BoardPage | null {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return null
@@ -71,8 +72,10 @@ export function PageTabs({ page, counts, partial = false, onChange }: PageTabsPr
 }
 
 export function PlanTabs({ section, onChange }: { section: PlanSection; onChange: (section: PlanSection) => void }): JSX.Element {
+  // 全部 first: it is the landing segment, so the page is never empty while
+  // open work exists. The other three are the mutually exclusive due buckets.
   return <SectionTabs label="计划范围" value={section} entries={[
-    ['today', '今天'], ['upcoming', '接下来'], ['goals', '目标'], ['all', '全部'],
+    ['all', '全部'], ['today', '今天'], ['upcoming', '接下来'], ['undated', '未排期'],
   ]} onChange={(value) => { onChange(value as PlanSection) }} />
 }
 

@@ -38,13 +38,14 @@ test('窄屏面板为紧凑态，单一对话前景进入 focus（W7）', async 
   // product's formal compact width, not merely a generic mobile breakpoint.
   await openPanelUnderBackground(page, '#ffffff', { width: 400, height: 800 })
 
-  // compact keeps the three product pages; context replaces the board in focus.
+  // compact keeps the four product pages; context replaces the board in focus.
   await expect(page.locator('.yolo-scope')).toHaveClass(/compact/)
   const pages = page.getByRole('tablist', { name: '助手页面' })
   const tabs = pages.getByRole('tab')
-  await expect(tabs).toHaveCount(3)
+  await expect(tabs).toHaveCount(4)
   await expect(pages.getByRole('tab', { name: /^首页/ })).toBeVisible()
   await expect(pages.getByRole('tab', { name: /^计划/ })).toBeVisible()
+  await expect(pages.getByRole('tab', { name: /^目标/ })).toBeVisible()
   await expect(pages.getByRole('tab', { name: /^历史/ })).toBeVisible()
   expect(await page.locator('.p-head').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   expect(await page.locator('.y-tabs').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
@@ -100,7 +101,7 @@ test('计划页提供筛选，更多菜单只承载通用操作并在 Esc 后恢
   await page.keyboard.press('Escape')
   await expect(more).toBeFocused()
 
-  await page.getByRole('tablist', { name: '计划范围' }).getByRole('tab', { name: '目标', exact: true }).click()
+  await page.getByRole('tablist', { name: '助手页面' }).getByRole('tab', { name: /^目标/ }).click()
   await expect(page.getByRole('heading', { name: '目标与里程碑' })).toBeVisible()
 })
 

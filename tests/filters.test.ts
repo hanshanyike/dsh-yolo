@@ -67,6 +67,7 @@ describe('focus buckets & pills (TE-2)', () => {
     row('today', { due_at: '2026-08-22' }),
     row('week', { due_at: '2026-08-25' }),
     row('far', { due_at: '2026-12-01' }),
+    row('undated'),
     row('stale-overdue', { due_at: '2026-08-19', stale: true }),
     row('done', { status: 'done', due_at: '2026-08-22' }),
   ]
@@ -94,13 +95,14 @@ describe('focus buckets & pills (TE-2)', () => {
     ).map((item) => item.id)).toEqual(['past-time'])
   })
 
-  it('counts pills over ALL todos; stale double-counts with its due bucket', () => {
-    expect(focusCounts(todos, TODAY)).toEqual({ overdue: 2, today: 1, week: 1, stale: 1 })
+  it('counts pills over ALL todos; stale double-counts with its due bucket and undated is its own census', () => {
+    expect(focusCounts(todos, TODAY)).toEqual({ overdue: 2, today: 1, week: 1, undated: 1, stale: 1 })
   })
 
-  it('focus pill filters to its bucket (stale = flag, not bucket)', () => {
+  it('focus pill filters to its bucket (stale and undated are flags, not buckets)', () => {
     expect(applyKanbanFilter(todos, filter({ focus: 'stale' }), TODAY).map((t) => t.id)).toEqual(['stale-overdue'])
     expect(applyKanbanFilter(todos, filter({ focus: 'overdue' }), TODAY).map((t) => t.id)).toEqual(['overdue', 'stale-overdue'])
+    expect(applyKanbanFilter(todos, filter({ focus: 'undated' }), TODAY).map((t) => t.id)).toEqual(['undated'])
   })
 })
 

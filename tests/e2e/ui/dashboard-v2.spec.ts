@@ -226,7 +226,7 @@ test('接下来事项支持长标题编辑，时间线的动作类型与摘要�
   expect(await reopened.evaluate((element) => element.scrollWidth > element.clientWidth + 1)).toBe(false)
 })
 
-test('约 340px 紧凑模式保留首页、计划、历史与完整 ARIA 状态', async ({ page }) => {
+test('约 340px 紧凑模式保留首页、计划、目标、历史与完整 ARIA 状态', async ({ page }) => {
   await page.setViewportSize({ width: 400, height: 800 })
   await openYoloPanel(page)
 
@@ -234,10 +234,11 @@ test('约 340px 紧凑模式保留首页、计划、历史与完整 ARIA 状态'
   await expect(panel).toHaveClass(/compact/)
   const pages = page.getByRole('tablist', { name: '助手页面' })
   const tabs = pages.getByRole('tab')
-  await expect(tabs).toHaveCount(3)
+  await expect(tabs).toHaveCount(4)
   const tabContracts = [
     { name: /^首页/, key: 'home' },
     { name: /^计划/, key: 'plan' },
+    { name: /^目标/, key: 'goals' },
     { name: /^历史/, key: 'history' },
   ]
   for (const contract of tabContracts) {

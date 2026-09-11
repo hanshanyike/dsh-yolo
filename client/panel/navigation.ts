@@ -1,12 +1,14 @@
 import type { YoloItemSource } from '../../src/contracts/dashboard.ts'
 
-export type BoardPage = 'home' | 'plan' | 'history'
-export type PlanSection = 'today' | 'upcoming' | 'goals' | 'all'
+export type BoardPage = 'home' | 'plan' | 'goals' | 'history'
+/** Plan segments are the open-todo partition (no goals: they are their own page). */
+export type PlanSection = 'all' | 'today' | 'upcoming' | 'undated'
 export type HistorySection = 'timeline' | 'items'
 
 export type BoardRoute =
   | { page: 'home' }
   | { page: 'plan'; section: PlanSection }
+  | { page: 'goals' }
   | { page: 'history'; section: HistorySection; day?: string | null }
 
 export interface PanelItemRef {

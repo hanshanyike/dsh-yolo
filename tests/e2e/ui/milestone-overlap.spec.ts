@@ -86,8 +86,7 @@ test('PLAN-MS-01: undated and near-date milestones never stack dots or labels', 
     seedMilestones(db, scopeKey, rows)
 
     await openYoloPanel(page)
-    await page.locator('#yolo-tab-plan').click()
-    await page.getByRole('tab', { name: '目标' }).click()
+    await page.locator('#yolo-tab-goals').click()
 
     const track = page.locator('.yolo-scope .goal-track')
     await expect(track).toBeVisible()
@@ -179,8 +178,7 @@ test('PLAN-MS-02: the collision layout still fits the 340px compact panel (W7)',
     seedMilestones(db, String(owner.ws.slug), rows)
 
     await openYoloPanel(page)
-    await page.locator('#yolo-tab-plan').click()
-    await page.getByRole('tab', { name: '目标' }).click()
+    await page.locator('#yolo-tab-goals').click()
     const track = page.locator('.yolo-scope .goal-track')
     await expect(track).toBeVisible()
     await expect(track.locator('.ms-dot')).toHaveCount(6)

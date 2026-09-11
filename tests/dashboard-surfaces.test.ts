@@ -172,7 +172,7 @@ describe('buildDashboardSurfaces home', () => {
 })
 
 describe('buildDashboardSurfaces plan', () => {
-  it('projects today/upcoming/goals/all conservatively from server facts', () => {
+  it('partitions open todos into 逾期/今天/接下来/未排期 and keeps goals separate', () => {
     const explicitOverdue = todo('overdue', { due_at: '2026-08-25', overdue: true })
     const unconfirmedPast = todo('past-without-server-fact', { due_at: '2026-08-24', overdue: false })
     const today = todo('today', { due_at: '2026-08-26T16:00:00+08:00' })
@@ -192,9 +192,18 @@ describe('buildDashboardSurfaces plan', () => {
       ],
     }))
 
-    expect(surfaces.plan.today.map((row) => row.id)).toEqual(['overdue', 'today'])
+    // A due day that already passed counts as overdue even when the payload
+    // omits the server flag: it must not be reachable only from 全部.
+    expect(surfaces.plan.today.map((row) => row.id)).toEqual(['past-without-server-fact', 'overdue', 'today'])
     expect(surfaces.plan.upcoming.map((row) => row.id)).toEqual(['future'])
+    expect(surfaces.plan.undated.map((row) => row.id)).toEqual(['undated'])
     expect(surfaces.plan.all.map((row) => row.id)).toEqual(['past-without-server-fact', 'overdue', 'today', 'future', 'undated'])
+    // The four segments are a partition of `all`.
+    expect([
+      ...surfaces.plan.today,
+      ...surfaces.plan.upcoming,
+      ...surfaces.plan.undated,
+    ].map((row) => row.id).sort()).toEqual(surfaces.plan.all.map((row) => row.id).sort())
     expect(surfaces.plan.goals.map((row) => row.id)).toEqual(['active'])
     expect(surfaces.plan.milestones.map((row) => row.id)).toEqual(['planned'])
   })

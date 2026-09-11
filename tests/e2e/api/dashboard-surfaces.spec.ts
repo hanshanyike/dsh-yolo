@@ -65,7 +65,7 @@ test('HOME-01/HOME-02: 首页按 owner 去重、最多一个首要事项，普�
   expect(surfaces.home.coverage.partial).toBe(dashboard.summary?.partial === true || (dashboard.workspaceErrors?.length ?? 0) > 0)
 })
 
-test('W2/W11: 计划严格区分今天、接下来和全部；终态只进入历史', async () => {
+test('W2/W11: 计划把开放事项划分成今天、接下来、未排期与全部；终态只进入历史', async () => {
   const today = await fx.todo(uid('今天把访谈纪要发给产品组'), { due: todayStr() })
   const upcoming = await fx.todo(uid('下周确认客户回访时间'), { due: localDateOffset(5) })
   const undated = await fx.todo(uid('整理适合下季度采用的研究方法'))
@@ -84,7 +84,16 @@ test('W2/W11: 计划严格区分今天、接下来和全部；终态只进入历
 
   expect(fixtureRows(surfaces.plan.today)).toEqual([String(today.id)])
   expect(fixtureRows(surfaces.plan.upcoming)).toEqual([String(upcoming.id)])
+  expect(fixtureRows(surfaces.plan.undated)).toEqual([String(undated.id)])
   expect(new Set(fixtureRows(surfaces.plan.all))).toEqual(new Set([String(today.id), String(upcoming.id), String(undated.id)]))
+  // The three segments partition 全部: no open row may be reachable from one
+  // list only (regression: undated rows showed 今天 in the row but were absent
+  // from both 今天 and 接下来).
+  expect(
+    [...surfaces.plan.today, ...surfaces.plan.upcoming, ...surfaces.plan.undated]
+      .map((row) => String(row.id))
+      .sort(),
+  ).toEqual(fixtureRows(surfaces.plan.all).sort())
   expect(fixtureRows(surfaces.history.completed)).toEqual([String(completed.id)])
   expect(fixtureRows(surfaces.history.cancelled)).toEqual([String(cancelled.id)])
 })

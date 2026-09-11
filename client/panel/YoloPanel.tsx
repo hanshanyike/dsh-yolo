@@ -15,7 +15,6 @@ import {
   rangeLabel,
   rangeOfPreset,
   type KanbanFilter,
-  type PresetTab,
   type RangePresetKind,
 } from '../../src/shared/filters.ts'
 import { ensureYoloStyle, detectYoloTheme } from '../design/style.ts'
@@ -44,6 +43,7 @@ import {
   type BoardRoute,
   type PanelItemRef,
   type PanelNavigationState,
+  type PlanSection,
 } from './navigation.ts'
 import { useDashboardController } from './controllers/use-dashboard-controller.ts'
 import { useNotificationNavigation } from './controllers/use-notification-navigation.ts'
@@ -73,6 +73,7 @@ export interface YoloPanelProps {
 const PAGE_LABELS: Record<BoardPage, string> = {
   home: '首页',
   plan: '计划',
+  goals: '目标',
   history: '历史',
 }
 
@@ -168,20 +169,22 @@ export function YoloPanel({
     setFilter((f) => ({ ...f, ...patch }))
   }, [])
 
+  // The route owns product navigation only. Plan sections are projections of
+  // the server snapshot (PlanSurface), so they no longer write the kanban
+  // filter's `preset` — two sources of truth for "which segment" was exactly
+  // what made 计划 open on an empty list while work sat in 全部.
   const setRoute = useCallback((route: BoardRoute): void => {
     setNavigation((current) => ({ ...current, route }))
-    if (route.page === 'plan') {
-      const preset: PresetTab = route.section === 'today' ? 'today' : 'all'
-      setFilter((current) => current.preset === preset ? current : { ...current, preset })
-    }
   }, [])
 
   const setPage = useCallback((page: BoardPage): void => {
     setRoute(page === 'home'
       ? { page: 'home' }
       : page === 'plan'
-        ? { page: 'plan', section: 'today' }
-        : { page: 'history', section: 'timeline', day: localDateStr() })
+        ? { page: 'plan', section: 'all' }
+        : page === 'goals'
+          ? { page: 'goals' }
+          : { page: 'history', section: 'timeline', day: localDateStr() })
   }, [setRoute])
 
   const focusChatOpener = useCallback((returnFocusId = navigation.returnFocusId, todoId = chatReturnTodoIdRef.current): void => {
@@ -436,7 +439,10 @@ export function YoloPanel({
     return {
       counts: {
         home: todayModel?.openItemCount ?? 0,
+        // The badge counts the landing segment, so 计划 never shows a number its
+        // first screen cannot account for.
         plan: surfaces?.plan.all.length ?? 0,
+        goals: surfaces?.plan.goals.length ?? 0,
         history: null,
       },
       partial: surfaces?.home.coverage.partial ?? false,
@@ -451,9 +457,11 @@ export function YoloPanel({
 
   const surface: BoardSurfaceKey = navigation.route.page === 'home'
     ? 'home'
-    : navigation.route.page === 'plan'
-      ? `plan-${navigation.route.section}`
-      : navigation.route.section === 'timeline' ? 'history-timeline' : 'history-items'
+    : navigation.route.page === 'goals'
+      ? 'goals'
+      : navigation.route.page === 'plan'
+        ? `plan-${navigation.route.section}`
+        : navigation.route.section === 'timeline' ? 'history-timeline' : 'history-items'
   const historyDay = navigation.route.page === 'history'
     ? navigation.route.day === null ? null : navigation.route.day ?? localDateStr()
     : localDateStr()
@@ -461,7 +469,8 @@ export function YoloPanel({
 
   const setSurface = useCallback((next: BoardSurfaceKey): void => {
     if (next === 'home') setRoute({ page: 'home' })
-    else if (next.startsWith('plan-')) setRoute({ page: 'plan', section: next.slice(5) as 'today' | 'upcoming' | 'goals' | 'all' })
+    else if (next === 'goals') setRoute({ page: 'goals' })
+    else if (next.startsWith('plan-')) setRoute({ page: 'plan', section: next.slice(5) as PlanSection })
     else setRoute({ page: 'history', section: next === 'history-items' ? 'items' : 'timeline', day: navigation.route.page === 'history' ? navigation.route.day : localDateStr() })
   }, [navigation.route, setRoute])
 
@@ -598,9 +607,9 @@ export function YoloPanel({
   )
 
   // Filters belong to the todo list context, not to the product-level header.
-  // Goals and ledger do not consume the todo filter, so the toolbar disappears
-  // on those auxiliary views instead of suggesting a false global scope.
-  const listTools = navigation.route.page === 'plan' && navigation.route.section !== 'goals' ? (
+  // Goals are their own page now, and the ledger does not consume the todo
+  // filter, so the toolbar stays on the plan page only.
+  const listTools = navigation.route.page === 'plan' ? (
     <div className="list-tools" aria-label="事项列表工具">
       {rangeActive && (
         <button type="button" className="range-chip" title="按时段筛选生效中，点击清除" onClick={() => { patchFilter({ rangeFrom: null, rangeTo: null }) }}>

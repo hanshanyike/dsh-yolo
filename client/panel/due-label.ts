@@ -15,9 +15,11 @@ function addLocalDays(day: string, amount: number): string {
 
 /** User-facing due label. Persisted ISO stays in <time dateTime>, never in text. */
 export function formatDueLabel(value: string | null | undefined, now = new Date()): string {
-  // Keep the persisted null distinct from a user-edited date, but use the
-  // product's default visible date so the row does not look unbounded.
-  if (!value) return '今天'
+  // No due day at all is a real, common state: freshly captured todos have no
+  // date until the user gives one, they never appear in 今天/接下来 and they are
+  // never reminded. Say so instead of printing 今天, which contradicted the
+  // 今天 segment (regression: rows read 今天 while 今天 showed 0 件).
+  if (!value) return '未排期'
   const parsed = parseDueAt(value)
   if (!parsed) return '截止时间待确认'
 

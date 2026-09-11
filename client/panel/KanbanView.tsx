@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData, YoloItemSource, YoloMilestoneRow, YoloTodoRow } from '../../src/contracts/dashboard.ts'
 import type { YoloHistoryEvent } from '../../src/contracts/history.ts'
 import { isTodoOpen } from '../../src/shared/dashboard.ts'
-import { buildDashboardSurfaces } from '../../src/shared/dashboard-surfaces.ts'
+import { buildDashboardSurfaces, planBucketOf, type PlanBucket } from '../../src/shared/dashboard-surfaces.ts'
 import {
   applyKanbanFilter,
   focusCounts,
@@ -76,8 +76,17 @@ const FOCUS_LABEL: Record<FocusBucket, string> = {
   overdue: '逾期',
   today: '今日',
   week: '未来7天',
+  undated: '未排期',
   stale: '滞留',
 }
+
+/** Segment headers of the 全部 list, in reading order. */
+const PLAN_GROUPS: ReadonlyArray<{ key: PlanBucket; label: string; tone: 'danger' | 'today' | '' }> = [
+  { key: 'overdue', label: '逾期', tone: 'danger' },
+  { key: 'today', label: '今天', tone: 'today' },
+  { key: 'upcoming', label: '接下来', tone: '' },
+  { key: 'undated', label: '未排期', tone: '' },
+]
 
 function dayOf(iso: string | null | undefined): string {
   return iso ? iso.slice(0, 10) : ''
@@ -154,6 +163,21 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
     () => sortForKanban(applyKanbanFilter(surfaces.plan.all, { ...filter, preset: 'all' })),
     [filter, surfaces.plan.all],
   )
+  const visiblePlanUndated = useMemo(
+    () => sortForKanban(applyKanbanFilter(surfaces.plan.undated, { ...filter, preset: 'all' })),
+    [filter, surfaces.plan.undated],
+  )
+  // 全部 is the landing segment: it renders the same partition as the segment
+  // tabs, grouped, so open work is never hidden behind an unlabelled bucket.
+  const planGroups = useMemo(() => {
+    const now = new Date(data.at)
+    return PLAN_GROUPS
+      .map((group) => ({
+        ...group,
+        rows: visiblePlanAll.filter((todo) => planBucketOf(todo, data.ledgerDay, now) === group.key),
+      }))
+      .filter((group) => group.rows.length > 0)
+  }, [data.at, data.ledgerDay, visiblePlanAll])
 
   const activeGoals = useMemo(() => data.goals.filter((g) => !['achieved', 'abandoned'].includes(g.status)), [data.goals])
   const openMilestones = useMemo(
@@ -282,12 +306,13 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
           {surface === 'plan-today' && (
             <>
               <div className="heading"><h2>今天</h2><span className="hint">{visiblePlanToday.length} 件</span></div>
+              {caps}
               {visiblePlanToday.length > 0 ? (
                 <section className="sec today" aria-label={`今天 ${visiblePlanToday.length}`}>
                   {visiblePlanToday.map((todo) => renderRow(todo))}
                 </section>
               ) : (
-                <div className="empty"><h4>今天没有待处理安排</h4><p>逾期和今天到期的事项会出现在这里。</p></div>
+                <div className="empty"><h4>今天没有待处理安排</h4><p>逾期和今天到期的事项会出现在这里；还没定日期的事在“未排期”。</p></div>
               )}
             </>
           )}
@@ -295,6 +320,7 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
           {surface === 'plan-upcoming' && (
             <>
               <div className="heading"><h2>接下来</h2><span className="hint">有明确日期的后续安排</span></div>
+              {caps}
               {visiblePlanUpcoming.length > 0 ? (
                 <section className="sec" aria-label={`接下来 ${visiblePlanUpcoming.length}`}>
                   {visiblePlanUpcoming.map((todo) => renderRow(todo))}
@@ -308,21 +334,49 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
             </>
           )}
 
+          {surface === 'plan-undated' && (
+            <>
+              <div className="heading"><h2>未排期</h2><span className="hint">{visiblePlanUndated.length} 件没有日期</span></div>
+              {caps}
+              {visiblePlanUndated.length > 0 ? (
+                <section className="sec" aria-label={`未排期 ${visiblePlanUndated.length}`}>
+                  {visiblePlanUndated.map((todo) => renderRow(todo))}
+                </section>
+              ) : (
+                <div className="empty">
+                  <h4>没有未排期事项</h4>
+                  <p>从对话里记下、还没定时间的事会留在这里；定好日期后就会进入今天或接下来。</p>
+                </div>
+              )}
+            </>
+          )}
+
           {surface === 'plan-all' && (
             <>
               <div className="heading"><h2>全部计划</h2><span className="hint">{visiblePlanAll.length} 件开放事项</span></div>
               {caps}
-              {visiblePlanAll.length > 0 ? (
-                <section className="sec" aria-label={`全部计划 ${visiblePlanAll.length}`}>
-                  {visiblePlanAll.map((todo) => renderRow(todo))}
-                </section>
+              {planGroups.length > 0 ? (
+                planGroups.map((group) => (
+                  <section
+                    key={group.key}
+                    className={`sec${group.tone ? ` ${group.tone}` : ''}`}
+                    aria-label={`${group.label} ${group.rows.length}`}
+                  >
+                    <div className="sec-head">
+                      <span className="sec-name"><span className="dot" aria-hidden="true" />{group.label}</span>
+                      <span className="sec-count">{group.rows.length}</span>
+                      <span className="sec-rule" aria-hidden="true" />
+                    </div>
+                    {group.rows.map((todo) => renderRow(todo))}
+                  </section>
+                ))
               ) : (
                 <div className="empty"><h4>没有开放事项</h4><p>你记录的计划会保留在这里。</p></div>
               )}
             </>
           )}
 
-          {surface === 'plan-goals' && (
+          {surface === 'goals' && (
             <>
               <div className="heading"><h2>目标与里程碑</h2><span className="hint">{activeGoals.length} 个长期结果 · 下一步优先</span></div>
               {activeGoals.map((g) => (

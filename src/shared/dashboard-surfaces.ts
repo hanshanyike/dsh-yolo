@@ -9,7 +9,7 @@ import type {
   WorkspaceTag,
 } from './dashboard.ts'
 import { isTodoOpen } from './dashboard.ts'
-import { compareDueAt, dueAtLocalDate } from './due.ts'
+import { compareDueAt, dueAtLocalDate, isTodoOverdue } from './due.ts'
 
 /**
  * The three product pages are pure projections of the server dashboard
@@ -47,14 +47,25 @@ export interface HomeSurface {
   recentChanges: YoloLedgerEntry[]
 }
 
+/**
+ * The plan partition of open todos. The four buckets are mutually exclusive
+ * and together cover every open todo, so no open row can hide in a bucket the
+ * page never named — the undated backlog (`undated`) is a first-class segment
+ * instead of a silent gap.
+ */
+export type PlanBucket = 'overdue' | 'today' | 'upcoming' | 'undated'
+
 export interface PlanSurface {
   coverage: DashboardSurfaceCoverage
-  /** Overdue facts supplied by the server plus rows scheduled for today. */
+  /** 逾期 + 今天到期 — the 今天 segment. */
   today: YoloTodoRow[]
-  /** Open rows scheduled after today; undated rows remain available in all. */
+  /** Open rows with a due day after today (有明确日期的后续安排). */
   upcoming: YoloTodoRow[]
+  /** Open rows with no usable due day — the freshly captured backlog. */
+  undated: YoloTodoRow[]
   goals: YoloGoalRow[]
   milestones: YoloMilestoneRow[]
+  /** Every open todo: the union of today / upcoming / undated. */
   all: YoloTodoRow[]
 }
 
@@ -169,6 +180,25 @@ function sortedTerminal(rows: readonly YoloTodoRow[]): YoloTodoRow[] {
   ))
 }
 
+/**
+ * Which plan segment one open todo belongs to. `overdue` trusts the server
+ * fact when it is present and otherwise recomputes it from the persisted due
+ * instant, so a row whose due day already passed can never fall outside all
+ * four segments (it used to be reachable only from 全部).
+ */
+export function planBucketOf(
+  row: Pick<YoloTodoRow, 'due_at' | 'status' | 'overdue'>,
+  today: string,
+  now: Date = new Date(),
+): PlanBucket {
+  if (row.overdue ?? isTodoOverdue(row.due_at, row.status, now)) return 'overdue'
+  const dueDay = dueAtLocalDate(row.due_at)
+  if (!dueDay) return 'undated'
+  if (dueDay < today) return 'overdue'
+  if (dueDay === today) return 'today'
+  return 'upcoming'
+}
+
 function visibleChanges(snapshot: YoloDashboardData): YoloLedgerEntry[] {
   return dedupeRows(
     snapshot.ledger.filter(isUserVisibleChange),
@@ -221,11 +251,16 @@ export function buildDashboardSurfaces(
     }
   }
 
-  const planToday = openTodos.filter((row) => row.overdue === true || dueAtLocalDate(row.due_at) === snapshot.ledgerDay)
-  const planUpcoming = openTodos.filter((row) => {
-    const dueDay = dueAtLocalDate(row.due_at)
-    return dueDay !== undefined && dueDay > snapshot.ledgerDay
+  // One partition, one predicate: the segments the page renders and the rows
+  // the 今天 segment carries can never disagree about the same todo.
+  const snapshotNow = new Date(snapshot.at)
+  const bucketOf = (row: YoloTodoRow): PlanBucket => planBucketOf(row, snapshot.ledgerDay, snapshotNow)
+  const planToday = openTodos.filter((row) => {
+    const bucket = bucketOf(row)
+    return bucket === 'overdue' || bucket === 'today'
   })
+  const planUpcoming = openTodos.filter((row) => bucketOf(row) === 'upcoming')
+  const planUndated = openTodos.filter((row) => bucketOf(row) === 'undated')
   const changes = visibleChanges(snapshot)
   const homeUpcomingLimit = Math.max(0, options.homeUpcomingLimit ?? 3)
   const homeRecentChangesLimit = Math.max(0, options.homeRecentChangesLimit ?? 3)
@@ -243,6 +278,7 @@ export function buildDashboardSurfaces(
       coverage,
       today: sortedByDue(planToday),
       upcoming: sortedByDue(planUpcoming),
+      undated: sortedByDue(planUndated),
       goals: dedupeRows(snapshot.goals.filter(isActiveGoal), (row) => genericRowKey(row, snapshot.cwd)),
       milestones: dedupeRows(snapshot.milestones.filter(isActiveMilestone), (row) => genericRowKey(row, snapshot.cwd)),
       all: sortedByDue(openTodos),

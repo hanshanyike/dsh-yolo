@@ -82,18 +82,22 @@ test('首次使用空状态不使用轨道话术', async ({ page }) => {
   await expect(empty).not.toContainText('轨道')
 })
 
-test('一级信息架构只有首页、计划、历史，计划提供四个明确分区', async ({ page }) => {
+test('一级信息架构为首页、计划、目标、历史，计划提供四个明确分区', async ({ page }) => {
   const todayTitle = uid('今天确认客户回访安排')
   const upcomingTitle = uid('下月提交差旅报销材料')
+  const undatedTitle = uid('整理以后可能采用的访谈方法')
   const today = await fx.todo(todayTitle, { due: todayStr() })
   const upcoming = await fx.todo(upcomingTitle, { due: localDateOffset(30) })
-  await isolateDashboardToTodos(page, new Set([String(today.id), String(upcoming.id)]))
+  const undated = await fx.todo(undatedTitle)
+  await api.action({ action: 'update', kind: 'todo', id: undated.id, due_at: null })
+  await isolateDashboardToTodos(page, new Set([String(today.id), String(upcoming.id), String(undated.id)]))
 
   await openYoloPanel(page)
   const pages = page.getByRole('tablist', { name: '助手页面' })
-  await expect(pages.getByRole('tab')).toHaveCount(3)
+  await expect(pages.getByRole('tab')).toHaveCount(4)
   await expect(pages.getByRole('tab', { name: /^首页/ })).toHaveAttribute('aria-selected', 'true')
   await expect(pages.getByRole('tab', { name: /^计划/ })).toBeVisible()
+  await expect(pages.getByRole('tab', { name: /^目标/ })).toBeVisible()
   await expect(pages.getByRole('tab', { name: /^历史/ })).toBeVisible()
   await expect(pages.getByRole('tab', { name: /进展/u })).toHaveCount(0)
   await expect(pages.getByRole('tab', { name: /Agent 任务/u })).toHaveCount(0)
@@ -102,30 +106,42 @@ test('一级信息架构只有首页、计划、历史，计划提供四个明�
   await expect(page.locator('.v2-today-row').filter({ hasText: upcomingTitle })).toBeVisible()
   await expect(page.getByRole('heading', { name: '最近变化', exact: true })).toBeVisible()
 
+  // 计划 opens on 全部: the landing segment must account for every open row,
+  // grouped by its own segment, instead of opening on an empty 今天.
   await pages.getByRole('tab', { name: /^计划/ }).click()
   const plan = page.getByRole('tablist', { name: '计划范围' })
   await expect(plan.getByRole('tab')).toHaveCount(4)
-  for (const label of ['今天', '接下来', '目标', '全部']) {
+  for (const label of ['全部', '今天', '接下来', '未排期']) {
     await expect(plan.getByRole('tab', { name: label, exact: true })).toBeVisible()
   }
+  await expect(plan.getByRole('tab', { name: '全部', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('heading', { name: '全部计划' })).toBeVisible()
+  await expect(page.getByRole('listitem', { name: `任务：${todayTitle}` })).toBeVisible()
+  await expect(page.getByRole('listitem', { name: `任务：${upcomingTitle}` })).toBeVisible()
+  await expect(page.getByRole('listitem', { name: `任务：${undatedTitle}` })).toBeVisible()
+  // The undated backlog is named in the list and shows 未排期, never 今天.
+  const undatedRow = page.getByRole('listitem', { name: `任务：${undatedTitle}` })
+  await expect(undatedRow.locator('.due')).toHaveText('未排期')
 
   await plan.getByRole('tab', { name: '今天', exact: true }).click()
   await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
   await expect(page.getByRole('listitem', { name: `任务：${todayTitle}` })).toBeVisible()
   await expect(page.getByRole('listitem', { name: `任务：${todayTitle}` }).getByRole('button', { name: '讨论这项安排' })).toBeVisible()
   await expect(page.getByRole('listitem', { name: `任务：${upcomingTitle}` })).toHaveCount(0)
+  await expect(page.getByRole('listitem', { name: `任务：${undatedTitle}` })).toHaveCount(0)
 
   await plan.getByRole('tab', { name: '接下来', exact: true }).click()
   await expect(page.getByRole('heading', { name: '接下来', exact: true })).toBeVisible()
   await expect(page.getByRole('listitem', { name: `任务：${upcomingTitle}` })).toBeVisible()
 
-  await plan.getByRole('tab', { name: '目标', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '目标与里程碑' })).toBeVisible()
+  await plan.getByRole('tab', { name: '未排期', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '未排期', exact: true })).toBeVisible()
+  await expect(page.getByRole('listitem', { name: `任务：${undatedTitle}` })).toBeVisible()
+  await expect(page.getByRole('listitem', { name: `任务：${todayTitle}` })).toHaveCount(0)
 
-  await plan.getByRole('tab', { name: '全部', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '全部计划' })).toBeVisible()
-  await expect(page.getByRole('listitem', { name: `任务：${todayTitle}` })).toBeVisible()
-  await expect(page.getByRole('listitem', { name: `任务：${upcomingTitle}` })).toBeVisible()
+  await pages.getByRole('tab', { name: /^目标/ }).click()
+  await expect(page.getByRole('heading', { name: '目标与里程碑' })).toBeVisible()
+  await expect(page.locator('.list-tools .flt')).toHaveCount(0)
 })
 
 test('计划中的进行中事项只在圆形控件内显示半圆状态', async ({ page }) => {

@@ -9,11 +9,15 @@ import { localDateStr } from './text.ts'
 
 const DAY_MS = 86_400_000
 
-/** Preset tabs of the filter bar (4.2). */
+/** Preset tabs of the filter bar (4.2). Note the plan page no longer derives
+ * this from its section tabs: the sections map onto the dashboard projection
+ * (`PlanSurface`, 全部/今天/接下来/未排期), which owns that partition. `preset`
+ * remains the composable contract for callers that want one of three base sets. */
 export type PresetTab = 'today' | 'all' | 'done'
 
-/** Focus pill buckets (4.2). `stale` is a flag, not a due bucket. */
-export type FocusBucket = 'overdue' | 'today' | 'week' | 'stale'
+/** Focus pill buckets (4.2). `stale` and `undated` are flags, not due buckets:
+ * one marks an untouched row, the other a row with no usable due day at all. */
+export type FocusBucket = 'overdue' | 'today' | 'week' | 'undated' | 'stale'
 
 /** The full composable filter state of the kanban. */
 export interface KanbanFilter {
@@ -102,6 +106,8 @@ export function hasDetailFilter(f: KanbanFilter): boolean {
 }
 
 const isOpen = (t: YoloTodoRow): boolean => t.status !== 'done' && t.status !== 'completed' && t.status !== 'cancelled'
+/** No usable due day: never listed as 今天/未来7天, and never reminded. */
+const isUndated = (t: YoloTodoRow): boolean => dueAtLocalDate(t.due_at) === undefined
 const nowForDay = (today: string): Date => {
   const now = new Date()
   return localDateStr(now) === today ? now : new Date(`${today}T12:00:00`)
@@ -119,11 +125,12 @@ export function dueBucket(t: YoloTodoRow, today = localDateStr(), now = nowForDa
 
 /** Focus pill counts over ALL todos (not the filtered list). */
 export function focusCounts(todos: readonly YoloTodoRow[], today = localDateStr(), now = nowForDay(today)): Record<FocusBucket, number> {
-  const c: Record<FocusBucket, number> = { overdue: 0, today: 0, week: 0, stale: 0 }
+  const c: Record<FocusBucket, number> = { overdue: 0, today: 0, week: 0, undated: 0, stale: 0 }
   for (const t of todos) {
     if (!isOpen(t)) continue
     const b = dueBucket(t, today, now)
     if (b !== 'none') c[b]++
+    if (isUndated(t)) c.undated++
     if (t.stale) c.stale++
   }
   return c
@@ -153,6 +160,8 @@ export function applyKanbanFilter(
       if (!isOpen(t)) return false
       if (f.focus === 'stale') {
         if (!t.stale) return false
+      } else if (f.focus === 'undated') {
+        if (!isUndated(t)) return false
       } else if (dueBucket(t, today, now) !== f.focus) return false
     }
     if (f.inProgressOnly && t.status !== 'in_progress') return false

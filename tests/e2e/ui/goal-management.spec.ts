@@ -32,9 +32,8 @@ test('目标卡片展示长期结果并支持讨论、暂停和恢复', async ({
 
   await openYoloPanel(page)
   const pages = page.getByRole('tablist', { name: '助手页面' })
-  await pages.getByRole('tab', { name: /^计划/ }).click()
-  const plan = page.getByRole('tablist', { name: '计划范围' })
-  await plan.getByRole('tab', { name: '目标', exact: true }).click()
+  await pages.getByRole('tab', { name: /^目标/ }).click()
+  await expect(page.getByRole('tablist', { name: '计划范围' })).toHaveCount(0)
 
   const card = page.locator('.goal').filter({ hasText: title })
   await expect(card).toBeVisible()
