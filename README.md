@@ -75,9 +75,7 @@ npx @deepseek-ai/dsh web
 npx @deepseek-ai/dsh web --no-open
 ```
 
-如果 3080 端口已被占用，可以追加 `--port 4080`，然后打开
-[http://127.0.0.1:4080](http://127.0.0.1:4080)。GitHub 安装、固定版本和常见问题见
-[使用指南](docs/usage.md)。
+GitHub 安装、固定版本和常见问题见 [使用指南](docs/usage.md)。
 
 也可以直接从源码安装当前稳定版：
 
