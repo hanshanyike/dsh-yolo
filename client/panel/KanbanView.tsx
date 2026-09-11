@@ -5,16 +5,14 @@
 // POST /yolo/actions so a click and a chat reply produce identical transitions
 // + audit events.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { YoloDashboardData, YoloItemSource, YoloMilestoneRow, YoloTodoRow } from '../../src/contracts/dashboard.ts'
 import type { YoloHistoryEvent } from '../../src/contracts/history.ts'
 import { isTodoOpen } from '../../src/shared/dashboard.ts'
 import { buildDashboardSurfaces, planBucketOf, type PlanBucket } from '../../src/shared/dashboard-surfaces.ts'
 import {
   applyKanbanFilter,
-  focusCounts,
   sortForKanban,
-  type FocusBucket,
   type KanbanFilter,
 } from '../../src/shared/filters.ts'
 import { localDateStr } from '../../src/shared/text.ts'
@@ -72,14 +70,6 @@ interface EditorDraft {
 }
 
 const DAY_MS = 86_400_000
-
-const FOCUS_LABEL: Record<FocusBucket, string> = {
-  overdue: '逾期',
-  today: '今日',
-  week: '未来7天',
-  undated: '未排期',
-  stale: '滞留',
-}
 
 /** Segment headers of the 全部 list, in reading order. */
 const PLAN_GROUPS: ReadonlyArray<{ key: PlanBucket; label: string; tone: 'danger' | 'today' | '' }> = [
@@ -151,7 +141,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
   useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }) }, [surface])
 
 
-  const counts = useMemo(() => focusCounts(data.todos), [data.todos])
   const surfaces = useMemo(() => buildDashboardSurfaces(data), [data])
   const milestoneTitles = useMemo(() => data.milestones.map((m) => m.title), [data.milestones])
 
@@ -201,8 +190,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
   // labels). The layout is pure, keyed by milestone id.
   const milestoneLayout = useMemo(() => layoutMilestoneTrack(otherMilestones), [otherMilestones])
   const openGoalTodos = data.todos.filter((todo) => isTodoOpen(todo.status))
-
-  const patch = useCallback((p: Partial<KanbanFilter>) => { patchFilter(p) }, [patchFilter])
 
   const saveEditor = async (): Promise<void> => {
     if (!editor) return
@@ -288,22 +275,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
     )
   )
 
-  const caps = (
-    <div className="caps" role="group" aria-label="聚焦筛选">
-      {(Object.keys(FOCUS_LABEL) as FocusBucket[]).map((k) => (
-        <button
-          key={k}
-          type="button"
-          className={`cap${filter.focus === k ? ' on' : ''}`}
-          aria-pressed={filter.focus === k}
-          onClick={() => { patch({ focus: filter.focus === k ? null : k }) }}
-        >
-          {FOCUS_LABEL[k]} <span className="num">{counts[k]}</span>
-        </button>
-      ))}
-    </div>
-  )
-
   return (
     <div
       id={`yolo-surface-${surface}`}
@@ -335,7 +306,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
           {surface === 'plan-today' && (
             <>
               <div className="heading"><h2>今天</h2><span className="hint">{visiblePlanToday.length} 件</span></div>
-              {caps}
               {visiblePlanToday.length > 0 ? (
                 <section className="sec today" aria-label={`今天 ${visiblePlanToday.length}`}>
                   {visiblePlanToday.map((todo) => renderRow(todo))}
@@ -349,7 +319,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
           {surface === 'plan-upcoming' && (
             <>
               <div className="heading"><h2>接下来</h2><span className="hint">有明确日期的后续安排</span></div>
-              {caps}
               {visiblePlanUpcoming.length > 0 ? (
                 <section className="sec" aria-label={`接下来 ${visiblePlanUpcoming.length}`}>
                   {visiblePlanUpcoming.map((todo) => renderRow(todo))}
@@ -366,7 +335,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
           {surface === 'plan-undated' && (
             <>
               <div className="heading"><h2>未排期</h2><span className="hint">{visiblePlanUndated.length} 件没有日期</span></div>
-              {caps}
               {visiblePlanUndated.length > 0 ? (
                 <section className="sec" aria-label={`未排期 ${visiblePlanUndated.length}`}>
                   {visiblePlanUndated.map((todo) => renderRow(todo))}
@@ -383,7 +351,6 @@ export function KanbanView({ data, refresh, filter, patchFilter, surface, onSurf
           {surface === 'plan-all' && (
             <>
               <div className="heading"><h2>全部计划</h2><span className="hint">{visiblePlanAll.length} 件开放事项</span></div>
-              {caps}
               {planGroups.length > 0 ? (
                 planGroups.map((group) => (
                   <section

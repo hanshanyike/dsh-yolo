@@ -1,7 +1,6 @@
 // Kanban filter logic tests (v0.3.0 E) — pin TE-1..TE-3 semantics: preset
-// bases, focus buckets, AND-combined detail filters and the default ordering.
-// Pure functions with an explicit `today` so results never depend on the
-// machine clock.
+// bases, AND-combined detail filters and the default ordering. Pure functions
+// with an explicit `today` so results never depend on the machine clock.
 
 import { describe, expect, it } from 'vitest'
 import type { YoloTodoRow } from '../src/shared/dashboard.ts'
@@ -9,7 +8,6 @@ import {
   applyKanbanFilter,
   DEFAULT_FILTER,
   dueBucket,
-  focusCounts,
   hasDetailFilter,
   matchRangePreset,
   partitionFocusRows,
@@ -61,17 +59,7 @@ describe('preset tabs (TE-1)', () => {
   })
 })
 
-describe('focus buckets & pills (TE-2)', () => {
-  const todos = [
-    row('overdue', { due_at: '2026-08-20' }),
-    row('today', { due_at: '2026-08-22' }),
-    row('week', { due_at: '2026-08-25' }),
-    row('far', { due_at: '2026-12-01' }),
-    row('undated'),
-    row('stale-overdue', { due_at: '2026-08-19', stale: true }),
-    row('done', { status: 'done', due_at: '2026-08-22' }),
-  ]
-
+describe('due buckets (TE-2)', () => {
   it('dueBucket classifies one row', () => {
     expect(dueBucket(row('o', { due_at: '2026-08-21' }), TODAY)).toBe('overdue')
     expect(dueBucket(row('t', { due_at: TODAY }), TODAY)).toBe('today')
@@ -93,16 +81,6 @@ describe('focus buckets & pills (TE-2)', () => {
       TODAY,
       NOW,
     ).map((item) => item.id)).toEqual(['past-time'])
-  })
-
-  it('counts pills over ALL todos; stale double-counts with its due bucket and undated is its own census', () => {
-    expect(focusCounts(todos, TODAY)).toEqual({ overdue: 2, today: 1, week: 1, undated: 1, stale: 1 })
-  })
-
-  it('focus pill filters to its bucket (stale and undated are flags, not buckets)', () => {
-    expect(applyKanbanFilter(todos, filter({ focus: 'stale' }), TODAY).map((t) => t.id)).toEqual(['stale-overdue'])
-    expect(applyKanbanFilter(todos, filter({ focus: 'overdue' }), TODAY).map((t) => t.id)).toEqual(['overdue', 'stale-overdue'])
-    expect(applyKanbanFilter(todos, filter({ focus: 'undated' }), TODAY).map((t) => t.id)).toEqual(['undated'])
   })
 })
 
@@ -139,7 +117,7 @@ describe('detail filters AND-combine (TE-3)', () => {
 
   it('hasDetailFilter flips on every non-default dimension', () => {
     expect(hasDetailFilter(DEFAULT_FILTER)).toBe(false)
-    expect(hasDetailFilter(filter({ focus: 'today' }))).toBe(true)
+    expect(hasDetailFilter(filter({ staleOnly: true }))).toBe(true)
     expect(hasDetailFilter(filter({ inProgressOnly: true }))).toBe(true)
     expect(hasDetailFilter(filter({ keyword: '' }))).toBe(false)
     expect(hasDetailFilter(filter({ keyword: 'x' }))).toBe(true)

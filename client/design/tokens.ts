@@ -229,7 +229,7 @@ export const YOLO_CSS = `
 .yolo-scope .hero .hcount { margin-left: auto; font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--y-text-2); white-space: nowrap; }
 .yolo-scope .hero .hcount b { color: var(--y-accent-text); font-size: 18px; font-weight: 650; }
 
-/* focus capsules (quick filters over the open rows) */
+/* capsule rows (plan segment tabs, history status filters, …) */
 .yolo-scope .caps { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 0 2px; }
 .yolo-scope .cap { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid var(--y-line-strong); border-radius: 999px; background: none; color: var(--y-text-2); font-size: 12px; cursor: pointer; transition: all var(--y-dur-1); white-space: nowrap; }
 .yolo-scope .cap:hover { color: var(--y-text-1); border-color: var(--y-text-3); }
@@ -238,7 +238,6 @@ export const YOLO_CSS = `
 .yolo-scope .cap.active { border-color: color-mix(in srgb, var(--y-accent) 40%, transparent); color: var(--y-accent-text); }
 .yolo-scope .cap.done { border-style: dashed; color: var(--y-text-3); }
 .yolo-scope .cap.on { background: var(--y-accent-soft); color: var(--y-accent-text); border-color: color-mix(in srgb, var(--y-accent) 40%, transparent); }
-.yolo-scope .cap .num { font-family: var(--y-font-mono); font-variant-numeric: tabular-nums; font-size: 11px; }
 
 /* notification record — a chronological reading surface, never a second task board */
 .yolo-scope .notification-log { display: flex; flex-direction: column; min-width: 0; height: 100%; background: var(--y-surface); }

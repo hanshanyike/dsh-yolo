@@ -1,7 +1,13 @@
 // YOLO kanban filtering (v0.3.0 E) — pure logic shared by the browser panel
 // and the vitest suite. The panel owns no filtering rules of its own: preset
-// tabs, focus buckets and the composable detail filters all resolve here, so
-// TE-1..TE-3 semantics are pinned by tests instead of by UI code.
+// tabs and the composable detail filters all resolve here, so TE-1..TE-3
+// semantics are pinned by tests instead of by UI code.
+//
+// The old focus pills (逾期/今日/未来7天/未排期/滞留) are gone: once the plan page
+// carried 全部/今天/接下来/未排期 as a complete partition, the pills re-used the
+// same words with different meanings and AND-combined with a segment into
+// empty results (今天 + 未排期). Every capability they had lives in the
+// partition or the 筛选 menu (本周 window, 仅逾期, 仅滞留).
 
 import type { YoloTodoRow } from './dashboard.ts'
 import { compareDueAt, dueAtLocalDate, isTodoOverdue } from './due.ts'
@@ -15,15 +21,9 @@ const DAY_MS = 86_400_000
  * remains the composable contract for callers that want one of three base sets. */
 export type PresetTab = 'today' | 'all' | 'done'
 
-/** Focus pill buckets (4.2). `stale` and `undated` are flags, not due buckets:
- * one marks an untouched row, the other a row with no usable due day at all. */
-export type FocusBucket = 'overdue' | 'today' | 'week' | 'undated' | 'stale'
-
 /** The full composable filter state of the kanban. */
 export interface KanbanFilter {
   preset: PresetTab
-  /** Active focus pill, or null when none is selected. */
-  focus: FocusBucket | null
   /** Detail filters (筛选▾) — all optional/null, AND-combined. */
   inProgressOnly: boolean
   overdueOnly: boolean
@@ -39,7 +39,6 @@ export interface KanbanFilter {
 
 export const DEFAULT_FILTER: KanbanFilter = {
   preset: 'all',
-  focus: null,
   inProgressOnly: false,
   overdueOnly: false,
   staleOnly: false,
@@ -91,10 +90,9 @@ export function rangeLabel(from: string | null, to: string | null): string {
   return ''
 }
 
-/** Any non-default detail filter or focus active? (drives the 筛选 chip) */
+/** Any non-default detail filter active? (drives the 筛选 chip) */
 export function hasDetailFilter(f: KanbanFilter): boolean {
   return (
-    f.focus !== null ||
     f.inProgressOnly ||
     f.overdueOnly ||
     f.staleOnly ||
@@ -106,8 +104,6 @@ export function hasDetailFilter(f: KanbanFilter): boolean {
 }
 
 const isOpen = (t: YoloTodoRow): boolean => t.status !== 'done' && t.status !== 'completed' && t.status !== 'cancelled'
-/** No usable due day: never listed as 今天/未来7天, and never reminded. */
-const isUndated = (t: YoloTodoRow): boolean => dueAtLocalDate(t.due_at) === undefined
 const nowForDay = (today: string): Date => {
   const now = new Date()
   return localDateStr(now) === today ? now : new Date(`${today}T12:00:00`)
@@ -121,19 +117,6 @@ export function dueBucket(t: YoloTodoRow, today = localDateStr(), now = nowForDa
   if (due === today) return 'today'
   if (new Date(`${due}T00:00:00`).getTime() <= new Date(`${today}T00:00:00`).getTime() + 7 * DAY_MS) return 'week'
   return 'none'
-}
-
-/** Focus pill counts over ALL todos (not the filtered list). */
-export function focusCounts(todos: readonly YoloTodoRow[], today = localDateStr(), now = nowForDay(today)): Record<FocusBucket, number> {
-  const c: Record<FocusBucket, number> = { overdue: 0, today: 0, week: 0, undated: 0, stale: 0 }
-  for (const t of todos) {
-    if (!isOpen(t)) continue
-    const b = dueBucket(t, today, now)
-    if (b !== 'none') c[b]++
-    if (isUndated(t)) c.undated++
-    if (t.stale) c.stale++
-  }
-  return c
 }
 
 /** Apply the whole filter to a todo list. Preset picks the base set; every
@@ -155,14 +138,6 @@ export function applyKanbanFilter(
         const b = dueBucket(t, today, now)
         if (b !== 'overdue' && b !== 'today') return false
       }
-    }
-    if (f.focus) {
-      if (!isOpen(t)) return false
-      if (f.focus === 'stale') {
-        if (!t.stale) return false
-      } else if (f.focus === 'undated') {
-        if (!isUndated(t)) return false
-      } else if (dueBucket(t, today, now) !== f.focus) return false
     }
     if (f.inProgressOnly && t.status !== 'in_progress') return false
     if (f.overdueOnly && !(t.overdue ?? isTodoOverdue(t.due_at, t.status, now))) return false
