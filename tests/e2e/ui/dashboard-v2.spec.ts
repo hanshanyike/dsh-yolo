@@ -254,3 +254,87 @@ test('约 340px 紧凑模式保留首页、计划、目标、历史与完整 ARI
   expect(panelWidth).toBeGreaterThanOrEqual(320)
   expect(panelWidth).toBeLessThanOrEqual(400)
 })
+
+interface RowActionGeometry {
+  wrapperExists: boolean
+  buttons: Array<{ text: string; w: number; h: number; y: number }>
+}
+
+/**
+ * Regression helper: measure the action buttons of one today row.
+ *
+ * The row CSS keys on a `.v2-today-row-actions` wrapper (flex + nowrap +
+ * min-width), and the compact variant re-places that wrapper into grid
+ * column 2. Without the wrapper the buttons fall into the 22/24px checkbox
+ * column and render one character per line (the reported vertical button),
+ * so the contract asserted here is exactly: wrapper present, every button a
+ * wide single-line pill.
+ */
+async function measureRowActions(page: Page, title: string): Promise<RowActionGeometry> {
+  const row = page.locator('.v2-today-row').filter({ hasText: title }).first()
+  await expect(row).toBeVisible()
+  return row.evaluate((element) => {
+    const wrapper = element.querySelector('.v2-today-row-actions')
+    const buttons = wrapper ? Array.from(wrapper.querySelectorAll('button')) : []
+    return {
+      wrapperExists: wrapper !== null,
+      buttons: buttons.map((button) => {
+        const rect = button.getBoundingClientRect()
+        return { text: (button.textContent ?? '').trim(), w: Math.round(rect.width), h: Math.round(rect.height), y: Math.round(rect.y) }
+      }),
+    }
+  })
+}
+
+test('W7: 紧凑模式行内动作按钮保持单行横排，不竖排', async ({ page }) => {
+  // 未来 3 天到期：不构成 attention 候选（>24h、无提醒），不产生判断卡，
+  // 直接以「接下来」行渲染，行内带 处理 按钮。
+  const title = uid('把演示稿发给研发之前再核对一遍格式')
+  await fx.todo(title, { due: localDateOffset(3) })
+
+  await page.setViewportSize({ width: 400, height: 800 })
+  await openYoloPanel(page)
+  await revealHomeItems(page)
+
+  const geometry = await measureRowActions(page, title)
+  expect(geometry.wrapperExists, '行内动作必须包在 .v2-today-row-actions 容器里（CSS 契约）').toBe(true)
+  expect(geometry.buttons.length, '行内应渲染 处理 按钮').toBeGreaterThanOrEqual(1)
+  for (const button of geometry.buttons) {
+    expect(button.w >= 40, `按钮「${button.text}」宽 ${button.w}px 应 >= 40（不竖排）`).toBe(true)
+    expect(button.h <= 44, `按钮「${button.text}」高 ${button.h}px 应 <= 44（单行）`).toBe(true)
+  }
+})
+
+test('W3: 行内动作与未处理提醒按钮同排展示，不竖排', async ({ page }) => {
+  // A 占据唯一判断卡位（seedPrimaryJudgment 已断言 attention 仅 1 条），
+  // B 才会以「需要处理」行渲染 —— 行内同时出现 处理 + 知道了 两个按钮。
+  await seedPrimaryJudgment('确认客户演示材料的最终交付')
+  const titleB = uid('把演示稿发给研发之前再核对一遍格式')
+  const itemB = await fx.todo(titleB, { due: todayStr() })
+  await fx.notification(`${titleB} 的截止提醒`, {
+    note: '发出去之前先确认最终版本，避免返工。',
+    todoId: String(itemB.id),
+  })
+  await waitForDashboard(
+    api,
+    (dashboard) => {
+      const rows = (dashboard.todos ?? []) as Array<{ title?: string; reminder?: { unhandled?: boolean } }>
+      return rows.find((todo) => todo.title === titleB)?.reminder?.unhandled === true
+    },
+    { label: `fixture ${titleB} to carry an unhandled reminder` },
+  )
+
+  await openYoloPanel(page)
+  await revealHomeItems(page)
+
+  const geometry = await measureRowActions(page, titleB)
+  expect(geometry.wrapperExists, '行内动作必须包在 .v2-today-row-actions 容器里（CSS 契约）').toBe(true)
+  const labels = geometry.buttons.map((button) => button.text)
+  expect(labels, '行内应同时有 处理 和 知道了 按钮').toEqual(expect.arrayContaining(['处理', '知道了']))
+  for (const button of geometry.buttons) {
+    expect(button.w >= 40, `按钮「${button.text}」宽 ${button.w}px 应 >= 40（不竖排）`).toBe(true)
+    expect(button.h <= 44, `按钮「${button.text}」高 ${button.h}px 应 <= 44（单行）`).toBe(true)
+  }
+  const ys = geometry.buttons.map((button) => button.y)
+  expect(Math.max(...ys) - Math.min(...ys), '两个动作按钮应在同一行').toBeLessThan(10)
+})

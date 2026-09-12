@@ -93,10 +93,12 @@ function TodayTaskRow({ row, busy, onIntent }: {
           {row.todo.due_at ? <time dateTime={row.todo.due_at}>{formatDueLabel(row.todo.due_at)}</time> : null}
         </div>
       </div>
-      <button type="button" disabled={busy} onClick={openTask}>处理</button>
-      {row.todo.reminder?.unhandled && row.todo.reminder.id ? (
-        <button type="button" disabled={busy} onClick={() => { onIntent({ type: 'handle_notification', notificationId: row.todo.reminder!.id!, scopeCwd: row.scopeCwd }) }}>知道了</button>
-      ) : null}
+      <div className="v2-today-row-actions">
+        <button type="button" disabled={busy} onClick={openTask}>处理</button>
+        {row.todo.reminder?.unhandled && row.todo.reminder.id ? (
+          <button type="button" disabled={busy} onClick={() => { onIntent({ type: 'handle_notification', notificationId: row.todo.reminder!.id!, scopeCwd: row.scopeCwd }) }}>知道了</button>
+        ) : null}
+      </div>
     </li>
   )
 }
