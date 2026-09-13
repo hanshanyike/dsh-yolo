@@ -1,297 +1,316 @@
-# 计划层重构方案：业界调研 + 数据模型与 IA 重设计
+# 三对象重构：完整方案（评审稿 v3，已合并独立评审意见）
 
-> 前置：`docs/design/three-objects-analysis.md`（现状诊断）。
-> 本文回答「要不要大改、改成什么、动哪些代码」。
->
-> **调研口径**：只采用我实际读过正文的一手文档（Linear Docs、GitHub Docs、Basecamp Help、
-> Todoist 帮助与 GTD 指南）；读不到的页面（Asana 帮助中心、gettingthingsdone.com 正文有反爬）
-> 只用其公开标题/摘要，并已在文中标注。
+> 评审意见：`docs/design/plan-layer-redesign-review.md`（独立 agent，未继承作者上下文，含 13 条发现）。
+> 证据来源：`docs/design/three-objects-analysis.md`（现状与真实数据）。
+> 本文自包含；**v3 相对 v2 的主要变化见 §11**。
 
 ---
 
-## 0. 结论与需要拍板的三件事
+## 0. 一页速览（v3 修订后）
 
-**调研结论一句话**：主流产品里**没有一个把「里程碑」当顶层独立实体**；它们都有一层
-**「包含行动、有明确结果和日期的中间单元」**——Linear 叫 Project，Asana 叫 Project，
-GitHub 叫 Milestone，Basecamp 叫 To-Do List，Todoist 叫 Project。YOLO **缺的正是这一层**，
-而用户已经拿「里程碑」去顶替它（真实数据：`发布 0.5.0 版本` 下面挂着 3 条事项）。
-
-**因此重构的方向不是"把文案写清楚"，而是补上这一层，并把四个名词各归其位。**
-
-需要你拍板（详见 §3.3 对比与 §10）：
-
-0. **先定这一条**：是真要新增「计划」这一层（方案 D），还是**不新增名词**、
-   把"长期／阶段"做成**目标的属性**（方案 E′）。评审提的「计划和目标是什么关系」
-   正是 D 的主要风险；E′ 让这个问题根本不存在。**我的建议：E′**（用户只需记三个词，且不用做分类）。
-1. 若选 D：中间层叫 `计划` 还是 `项目`（你已选「计划」；选 E′ 则此项作废）。
-2. **一级入口怎么排**：5 个（首页/事项/计划/目标/历史）还是 4 个（把事项时间视图放回计划页）。
-   两个方案共用，E′ 下"计划"页替换为"目标"页的两段式。
-3. **现有数据怎么迁移**：自动启发式分诊 + 人工确认（推荐）／只做保守映射不动语义。
+| | 内容 |
+|---|---|
+| **问题** | 用户看不出「事项 / 里程碑 / 目标 / 计划」的区别；确实不是纯文案问题 |
+| **诊断（收敛后）** | ①「里程碑可独立存在」是**既有决策**，与"结果层缺失"冲突 → **需要变更决策**，不是修 bug ②「计划」是视图名与实体平级 → 是**命名撞车**，但"界面从未解释过三者"是**同样成立的另一个病因**（未证伪） ③ 抽取**没有"结果 / 动作"判据**（已核实：`prompt.ts` 只有一行） ④ 目标几乎没被使用（排除夹具后 3 库合计 1 个 candidate；样本极小） |
+| **推荐路径（v3 变更）** | **先做 P0′：零迁移**——重写抽取判据 + 「计划」页改名「事项」 + 把已算好的关系显示出来 + 目标页给一句里程碑定义。**schema 部分（里程碑强制归属）拆成独立提案，只做"加列"，永不自动改判既有行** |
+| **模型选型（若走到 schema 步）** | **E′**（只有「目标」一个结果实体，"长期/阶段"是**可见可点的属性**）；不选 D（新增名词，要求用户当场分类） |
+| **业界立场（v3 修正）** | 分层与命名**没有统一共识**：中间层可叫 Project（Linear/Asana）也可叫 Milestone（GitHub）；进度语义**业界分歧**（Basecamp 明确人工判断，Linear/GitHub/Asana 由 issue/任务数据算）。YOLO 选择"人工确认"是**产品选择**，不是业界通行做法 |
+| **不做** | 不做任务树；不按事项数自动算百分比；不自动改判用户的既有数据；不在创建路径上设分类题 |
 
 ---
 
-## 1. 业界怎么做（一手文档）
+## 1. 现状证据（事实）
 
-| 产品 | 层级（自上而下） | 里程碑在哪一层 | 进度怎么来 |
+### 1.1 数据模型（`src/storage/schema.sql`）
+
+| 表 / 关系 | 是什么 | 关键字段 |
+|---|---|---|
+| `todos` | 事项（唯一有到期提醒） | `due_at`、`priority`、`status`、`milestone_id`（L49，`ON DELETE SET NULL`，语义"支撑哪个检查点"） |
+| `milestones` | 里程碑 | `status`、`target_date`；**归属存在关联表**，本表无归属列 |
+| `goals` | 目标 | `completion_criteria`、`progress`、`progress_source`、`next_todo_id`、`next_review_at`、`target_date`（L98，用户可见） |
+| `goal_todos` | 目标 ↔ 事项 | `relation ∈ {support, next}` |
+| `goal_milestones` | 目标 ↔ 里程碑（**多对多**） | `position` |
+| `todo_merge_log` | 既有"可撤销"范式 | `source_snapshot_json` / `target_before_json` / `target_after_json` / `status('active'\|'undone')` |
+| — | **计划** | **不是实体**：`client/panel/navigation.ts` L4 注释写明「Plan segments are the open-todo partition (no goals: they are their own page)」 |
+
+两个"算了但界面不用"的字段：`dashboard.ts` L230–L231 投影 `milestone_status` 与
+`milestone_open_todo_count`，`client/**` **0 处使用**。
+
+### 1.2 界面（`client/panel/**`）
+
+- 一级入口 4 个：`PAGES = 首页 / 计划 / 目标 / 历史`（`PageTabs.tsx` L12–L17）。
+- 「计划」页装开放事项；「目标」页标题「目标与里程碑」+ hint「N 个长期结果 · 下一步优先」，
+  **全页没有一句定义里程碑**（`KanbanView.tsx` L377 附近）。
+- 里程碑的可见线索：目标卡胶囊、目标页底部「其他里程碑」轴、事项行尾后缀、筛选下拉、事项编辑器下拉。
+
+### 1.3 真实数据（3 个有内容的存储，排除 `[E2E]` 夹具）
+
+| 存储 | 目标 | 里程碑 | 开放事项 |
 |---|---|---|---|
-| **Linear** | Initiative → **Project** → Milestone → Issue | **Project 内部**：「represent different stages in a project's lifecycle」，创建入口在 project overview / details pane，issue 用 `Shift M` 挂到 milestone | Project 有自己的 progress graph（由 issue 汇总）；Initiative 汇总多个 project |
-| **GitHub** | Repository → **Milestone** → Issue/PR | **就是中间层**：「track progress on **groups of** issues or pull requests」，有 due date 与完成百分比（open/closed 计数） | 从挂进来的 issue 计数 |
-| **Asana** | Goals → **Project** → Task（Milestone 是项目内的进度标记） | Project 内：官方发布说明标题即「用里程碑**可视化项目进度**并共享」 | 项目内里程碑；Goals 由 KR/关联工作汇总〔未读到帮助中心正文，仅用公开标题与摘要〕 |
-| **Basecamp** | Project → **To-Do List**（可勾选上 Hill Chart） | 没有里程碑概念；用 **Hill Chart** 表达「阶段」 | **人工判断**：把「一组工作（list）」拖到上坡/下坡，位置变化写入项目历史 |
-| **Todoist** | Project → Section → Task | 无 | 无（只管行动） |
-| **GTD** | 六个高度：宗旨/原则 → 愿景 → **目标** → 关注领域 → **项目** → 下一步行动 | 无里程碑；**「项目」＝需要多个行动才能达成的结果** | 靠每周回顾，不靠百分比〔gettingthingsdone.com 正文有反爬，此处为该方法论的通用表述〕 |
-| **OKR 类工具**（ClickUp 等） | Objective → Key Result → 关联工作 | 无 | 由 KR 或关联任务自动汇总 |
+| `dsh-yolo/.dsh/yolo/yolo-65c0ede8ba5b_default.db` | 0（另有 **6 条 `[E2E]` abandoned 残留**） | 2 | 5 |
+| `SkillSEO/.dsh/yolo/yolo-3ef670deee2d_default.db` | 1（candidate） | 1 | 0 |
+| `dsh-yolo/.dsh/yolo/yolo-decf873e665c_main.db` | 0 | 1 | 5 |
 
-三条可以直接拿来用的业界共识：
-
-1. **必须有一个"装行动"的中间单元**，而且它自带「结果 + 日期」——Linear 的定义原话是
-   *"units of work that have a clear outcome or planned completion date … comprised of issues"*。
-2. **里程碑属于那个单元，不是顶层实体**（Linear 最明确：里程碑是 project 内部的阶段）。
-   GitHub 是唯一让里程碑当顶层的，但那是因为它上面还有 Repository 作为容器。
-3. **进度不要用任务计数糊弄人**。Basecamp 说得最直白：*"42% of the tasks are complete. What does that
-   tell you? Very little."* —— 它把进度做成**人对一组工作的人工判断**，并保存历史快照。
-   这与 YOLO 现有设计（拒绝「按事项完成数自动计算目标进度」）**完全一致**，可以直接沿用。
-
-（AI 日程类工具如 Motion/Reclaim 以任务与日历排程为主，公开材料里看不到成熟的目标/里程碑层——
-这条是类别观察，非本文论据。）
-
----
-
-## 2. 诊断：缺一层 + 三个结构性缺陷
-
-| | 业界 | YOLO 现状 |
-|---|---|---|
-| 装行动的中间层 | Project / Milestone / To-Do List | **没有** |
-| 里程碑位置 | 中间层内部 | **顶层实体**，可属于多个目标或不属于任何目标 |
-| 归属约束 | 行动必须属于某个单元（Linear：issue 只能属于一个 project） | 事项可挂遗留字段 `milestone_id`，也可完全不挂 |
-| 「计划」 | Todoist 的 Project 就是它 | **是页面名**（开放事项的时间划分），不是实体 |
-| 目标使用率 | 目标/KR 是主入口 | 真实数据：活跃工作区 **0 个目标**，全局仅 1 个 candidate |
-
-三个缺陷（都能在真实数据里看到后果）：
-
-- **缺陷 1｜中间层缺失 → 里程碑被迫当容器。** `发布 0.5.0 版本` 下面挂着
-  `更新文档 / npm 发包 0.5.0 / 更新标签`，而它不属于任何目标。用户需要的是「0.5.0 发布」这个**单元**，
-  不是「一个叫里程碑的检查点」。
-- **缺陷 2｜里程碑是顶层却无归属约束 → 孤儿要靠 UI 兜底。** 昨天那个修复（`8a64b21`
-  把无归属里程碑放进「其他里程碑」轴）本质是**给模型缺陷打补丁**：如果里程碑天然属于某个单元，
-  就不存在"孤儿"这种状态。
-- **缺陷 3｜抽取三分类缺失 → 入库形态就错。** 提示词只有一句
-  `milestones: NEW named project phases or checkpoints with target dates`，
-  既没有区分「结果 / 动作 / 单元」，也没说清挂载方向，于是「**进行** PRD 设计」（动作）被存成里程碑。
-
----
-
-## 3. 目标模型（推荐方案 D）
-
-### 3.1 四个对象，各回答一个问题
-
-| 对象 | 回答 | 必须具备 | 状态 | 提醒 |
-|---|---|---|---|---|
-| **事项** Action | 我要做的这一件事 | — | pending / in_progress / done / cancelled | 到期提醒（唯一） |
-| **里程碑** Checkpoint | 这个阶段结果成立了吗 | 属于某个计划 | planned / active / done / abandoned | 阶段检查（低频） |
-| **计划** Unit（**新增**） | 我在推进的这件事，什么算完成 | **完成标准**（结果信号）+ 目标日期（可选） | planned / active / paused / done / abandoned | 回顾（按计划日期/停滞） |
-| **目标** Outcome | 我长期要达成什么 | 完成标准 | candidate / active / paused / achieved / abandoned | 回顾（低频） |
-
-包含关系（**唯一方向**）：`目标 ⊇ 计划 ⊇ {里程碑, 事项}`；`目标` 可直接含事项（如一次性承诺），
-`计划` 可含里程碑（可选）；**里程碑不再独立于计划存在**。
-
-### 3.2 用它重解你现有的真实数据
-
-| 现有数据（今天） | 重构后 | 依据 |
-|---|---|---|
-| 里程碑 `发布 0.5.0 版本`（下面挂 3 条事项、无目标） | **计划**：完成标准＝「0.5.0 已发布到 npm 且标签推送」；3 条事项挂到它下面 | Basecamp/Linear：单元＋行动 |
-| 事项 `更新文档 / npm 发包 0.5.0 / 更新标签` | 计划下的**事项**（归属明确） | 同上 |
-| 里程碑 `内部评审完成`、`灰度验证通过` | 该计划下的**里程碑**（检查点） | Linear：project milestones |
-| 里程碑 `进行 PRD 设计`（动作口吻、有日期） | **事项**（若在推进）或计划 `PRD 设计` + 里程碑「设计定稿」 | 设计文档 L61 的判据 |
-| 里程碑 `能力真值实验：30 skill + 120 请求 + 独立验收` | **计划**（它有完成信号：独立验收） | Linear project 定义 |
-| 目标 `Capability-evidence-anchored skill-selection defense`（candidate、无标准、无日期） | **目标**，并挂上「能力真值实验」这个计划 | Initiative 含多个 project |
-
-### 3.3 备选方案 E′：不新增名词——「目标」自带跨度 + 可选嵌套（**推荐度与 D 并列，待定**）
-
-> 这条是被评审问出来的：「计划和目标是什么关系，这怎么好理解呢？」
-> 疑问成立：**D 方案引入的正是我们要消灭的那类边界**——两个都表示"结果"的名词，
-> 用户每建一条就要判断一次该放哪个。这正是"两排相似控件"的模型版本。
-
-E′ 的做法是**不加名词**：
-
-- 只有一个"结果"名词：**目标**。跨度不是**分类**而是**属性**——
-  它可能没有终点（长期方向），也可能有一个交付时刻（一次发布）。
-- **里程碑**仍然是目标内部的检查点（与 D 相同）。
-- 目标之间可以**可选地嵌套一层**（"这次发布是为那个长期目标服务的"），
-  用关系表达，而不是要求用户把对象建成两种。
-
-于是用户只需要理解三个词，且**永远不需要回答"这是长期还是阶段"**：
-
-| | 方案 D（计划 / 目标两层结果） | 方案 E′（只有目标，跨度是属性） |
-|---|---|---|
-| 用户要记的名词 | 事项、里程碑、**计划**、目标（4） | 事项、里程碑、目标（3） |
-| 每次新建要做分类吗 | **要**：这是交付单元还是长期结果？ | **不要**：都是目标，填不填目标日期而已 |
-| 表达"一个长期目标下的多个交付" | 天然（目标含多个计划） | 靠可选嵌套（多一步），或先并列 |
-| 与业界对照 | 与 Linear/Asana 的字面结构一致 | 与 OKR 类"目标可服务上级目标"的思路一致；Linear 的 Initiative/Project 二分在个人场景里被合并 |
-| 主要风险 | 目标/计划边界要靠解释（**本次质疑点**） | 长期与阶段混在同一列表时，需要靠排序/分组区分，而不是靠名词 |
-
-**判别测试**（决定新条目该进哪一格，用来判断方案是否"可瞬间判断"）：
-
-- 方案 D 的测试：「完成那一刻你会说什么？」→「我把它交付出去了」= 计划；
-  「我现在是那样了 / 这条线不用我盯了」= 目标。→ **需要想一下**（这正是问题）。
-- 方案 E′ 的测试：「有没有一个交付物要交出去？」→ 有就填目标日期，没有就不填。
-  → **不需要想**（同一个对象，只是字段不同）。
-
-**我的判断**：E′ 在"用户能否直接理解"这一目标上明显更优，代价是表达力弱一档
-（长期目标与阶段交付在数据上不再天然分离）。若你更看重表达力（未来要做"一个长期方向下
-若干个发布"的汇总），选 D；若更看重"打开就能用、不用学分类"，选 E′。
-**两者共用同一套里程碑/事项改动**，差别只在"是否新增 `plans` 表"与"目标页是否要分两段"。
-
-### 3.4 为什么不选另外两个方案
-
-- **方案 A：目标兼容器（把目标当 project 用）。** 不用改模型，但每次发布都要建一个"目标"，
-  目标是长期结果，会被迫退化成短周期任务容器 → 目标页变成项目列表，语义再次塌陷。
-  （注意：**E′ 与 A 不是一回事**——A 是"目标被迫同时当两种东西"，E′ 是"取消两种东西的区分，
-  只保留一个名词、跨度由字段表达"。）
-- **方案 C：直接把里程碑定义成容器（顺应用户现状）。** 改动最小，也自洽，但它把「检查点」
-  和「交付单元」两种时间尺度压进一个名词，且与全行业用法相反（除 GitHub 外无人这么做）；
-  更重要的是**放弃了对"阶段结果"的表达**——而「灰度验证通过」这类里程碑恰恰是 YOLO
-  差异化价值（阶段判断）所在。
-
----
-
-## 4. 数据模型改动（DDL 草案）
-
-```sql
--- 新增：计划（交付单元）。与 goals 同级，都是"结果"，但计划有明确终点。
-CREATE TABLE IF NOT EXISTS plans (
-  id            TEXT PRIMARY KEY,
-  title         TEXT NOT NULL,
-  description   TEXT,
-  status        TEXT NOT NULL,            -- planned|active|paused|done|abandoned
-  completion_criteria TEXT,               -- 什么算完成（沿用 goal 的字段语义）
-  target_date   TEXT,
-  progress_note TEXT,
-  progress_source TEXT NOT NULL DEFAULT 'none',
-  next_review_at TEXT,
-  scope_key     TEXT NOT NULL,
-  source        TEXT, session_id TEXT, source_excerpt TEXT, source_turn INTEGER,
-  created_at    INTEGER NOT NULL,
-  updated_at    INTEGER NOT NULL
-);
-
--- 计划 ↔ 事项（一个事项最多属于一个计划；NULL 表示不受计划约束的日常杂事）
-ALTER TABLE todos ADD COLUMN plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_todos_plan ON todos(plan_id);
-
--- 计划 ↔ 里程碑（里程碑归属唯一）
-ALTER TABLE milestones ADD COLUMN plan_id TEXT REFERENCES plans(id) ON DELETE CASCADE;
-CREATE INDEX IF NOT EXISTS idx_milestones_plan ON milestones(plan_id);
-
--- 目标 ↔ 计划
-CREATE TABLE IF NOT EXISTS goal_plans (
-  goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
-  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
-  position INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL,
-  PRIMARY KEY (goal_id, plan_id)
-);
+```
+MS 发布 0.5.0 版本   [planned] goal_links=[] | todos: 更新文档 | npm 发包 0.5.0 | 更新标签
+MS 进行 PRD 设计     [planned] target=2026-08-30 | goal_links=[] | todos: —
+MS 内部评审完成      [planned] …（仅出现在示意，真实库为 SkillSEO/其它 scope）
+MS 能力真值实验：30 skill + 120 请求 + 独立验收 [planned] target_date=null | goal_links=[]
+GOAL [candidate] Capability-evidence-anchored skill-selection defense | criteria=— target=— milestones=[] todos=[]
 ```
 
-**保留不改的**：`todos.milestone_id`（语义仍是"支撑/对应哪个检查点"，不是容器）、
-`goal_milestones`（旧目标仍可直接挂里程碑，迁移期兼容）、`goals` 全部字段。
-**新增但暂不使用的**：`plans.progress_source`（为将来的"里程碑证据驱动计划进度"留位，规则同 goal）。
-
-迁移（v1 → v2，`src/storage/db.ts` 的现有 ALTER TABLE 循环旁）：
-
-1. 现有里程碑按启发式分诊：标题含动作动词（进行/开始/实现/准备）→ 转成事项；
-   含结果词（完成/通过/就绪/发布）→ 转成计划；无法判断 → 保留为孤儿里程碑并**在 UI 里提示整理**。
-2. 每个转成的计划，把它原有的支撑事项（`todos.milestone_id`）改挂到 `plan_id`。
-3. 用户现有 4 条里程碑全部走这条路径，不需要手工 SQL；迁移结果写一条审计事件。
+**样本量必须写明**：全库仅 **4 条里程碑 / 1 个目标**。"2/4 是行动口吻"是**人工归类**（无标注规则、无双人标注），
+不作为验收判据使用；"目标使用率≈0"同样受样本与测试噪音限制。
 
 ---
 
-## 5. 代码改动清单
+## 2. 业界事实（v3 重写：分歧，不是共识）
 
-| 层 | 文件 | 改动 | 规模 |
+> v2 把 Basecamp 的立场写成了"业界共识"，被评审用方案自己的表格与一手文档否证。以下为修正版。
+
+| 产品 | 分层 | 中间层是什么 | 进度语义 |
 |---|---|---|---|
-| storage | `schema.sql`、`db.ts`、`repository.ts`、`index.ts` | `plans` 表 + 关系 + v2 迁移 + repo/façade 方法 | L |
-| domain | `domain/types.ts` | `Plan` 类型、`PlanStatus`、关系类型 | S |
-| application | `commands/apply-yolo-action.ts` | `kind: 'plan'` 的 create/rename/update/link/unlink/set_status/review；goal↔plan 关联动作 | L |
-| application | `ingestion/apply-extraction.ts` | 建计划、把事项/里程碑挂到计划 | M |
-| application | `read-models/dashboard.ts` | `plans[]` 投影（含 `todo_count`/`open_todo_count`/`milestone_count`/`current_milestone`）、goal 增加 `plan_ids` | M |
-| contracts | `shared/dashboard.ts`、`contracts/dashboard.ts` | `YoloPlanRow`、`goal_ids`/`plan_id` 字段 | S |
-| extract | `extract/prompt.ts`、`contracts/extraction.ts` | 输出增加 `plans[]`；三分类判据（结果/动作/单元）+ 反例；`milestones` 增加 `plan_title` | M |
-| memory | `memory/tools.ts` | `yolo_action` 支持 `kind: 'plan'`；`memory_write` 支持 `plan`；`yolo_query` 增加 `plans` 视图 | S |
-| client | `panel/navigation.ts`、`PageTabs.tsx`、`kanban/surfaces.ts` | 新页面与新 surface（见 §6） | M |
-| client | `panel/PlanView.tsx`（新）、`KanbanView.tsx`、`milestone-ownership.ts` | 计划卡（结果/日期/阶段/事项进度）；里程碑只出现在计划内；删掉「其他里程碑」轴 | L |
-| client | `design/tokens.ts` | 计划卡与阶段的视觉（复用现有 Mono 变量，不新增色） | S |
-| tests | 单测 12+、`tests/e2e/api|ui` 6+ | 含「抽取三分类」判例、迁移前后一致性、计划卡交互 | L |
-| docs | `design/goal-management.md`（改结论）、`architecture/modules.md`、`usage.md`、`testing*.md`、`CHANGELOG.md` | 见 §9 | M |
+| [Linear](https://linear.app/docs/projects) | Initiative → **Project** → [Milestone](https://linear.app/docs/project-milestones) → Issue | Project：*"a clear outcome or planned completion date … comprised of issues"* | **由 issue 数据算**：[project graph](https://linear.app/docs/project-graph) 按每周完成的 issue points 算速度并预测完成日，FAQ 甚至解释 *"Why did my progress go down?"* |
+| [GitHub](https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/about-milestones) | Repository → **Milestone** → Issue/PR | **里程碑本身就是中间层**（`track progress on groups of issues`） | **完成百分比**（open/closed 计数） |
+| [Asana](https://asana.com/resources/project-milestones) | Goals → **Project** → Task | Project（里程碑是项目内的进度标记） | 目标进度可按"任务完成数 / 里程碑完成数"配置（[官方论坛对已上线能力的引用](https://forum.asana.com/t/automate-goal-progress-by-tasks-from-specific-project-sections/1017347/4)）〔帮助中心正文未读到〕 |
+| [Basecamp](https://5.basecamp-help.com/article/1066-tracking-work-on-the-hill-chart) | Project → **To-Do List**（可上 Hill Chart） | To-Do List（**纯桶**：无结果定义、无日期字段） | **人工判断**：*"the status is human generated, not computer generated"*，挂在 list 上，每次更新存快照 |
+| [Todoist](https://www.todoist.com/zh-CN/help/todoist/features/introduction-to-sections-rOrK0aEn) | Project → Section → Task | Section（纯分桶） | 无 |
+| GTD | 六高度（愿景→目标→关注领域→**项目**→下一步行动） | 项目＝需多个行动才能达成的结果 | 周回顾 |
+
+**修正后的四条事实**（每条都能被上表支持）：
+
+1. **把行动装起来是必需的，但"桶"就够**：Basecamp 的 To-Do List、Todoist 的 Section 都是纯桶。
+   **YOLO 已经有桶**（`PlanSurface` 的全部/今天/接下来/未排期 + 目标/里程碑/事项的归属表）。
+2. **"结果层"是产品选择，不是行业必备**：Linear 有 Project（结果+日期）；GitHub **没有**独立结果层，
+   让里程碑兼任；Todoist 没有。**所以"里程碑当顶层"本身不是错误设计**——v2 用这条推"YOLO 设计错了"，推理不成立。
+3. **进度语义业界分歧**：Basecamp 明确反对按任务数算；Linear / GitHub / Asana 恰恰**用它**。
+   YOLO 现有立场（`goal-management.md` L491 反例三、L297 用户确认达成）属于 Basecamp 一派，
+   是**自觉的产品选择**，**不是有普遍背书的业界共识**。
+4. **命名不统一**：中间层叫 Project（Linear/Asana）或叫 Milestone（GitHub）都有先例。
+   真正值得对齐的是"**层必须存在**"，而不是"这个层叫什么"。
+
+> 补充一条**支持 E′ 的业界先例**（v2 漏用）：[Linear Project overview](https://linear.app/docs/project-overview)
+> 把 `Milestone` 列为 **Project 自身的单值属性**（默认 `Upcoming`），同时项目内又有里程碑列表——
+> 说明"**跨度/阶段既可以是一个属性，也可以是一个列表**"，E′ 把跨度降为属性并非自创。
 
 ---
 
-## 6. IA：一级入口两个方案
+## 3. 诊断（v3：区分"决策变更"与"缺陷"）
 
-**方案 ①（推荐）5 个入口：首页 / 事项 / 计划 / 目标 / 历史**
+| # | 定性 | 结论 | 证据 |
+|---|---|---|---|
+| **①** | **决策变更**（不是 bug） | 「里程碑可以不属于任何目标」是**显式设计决定**，还进了产品验收标准；本次要动它，必须走"变更决策"的论证路径，并明确撤销哪条承诺 | `goal-management.md` L98「一个里程碑事项必须属于目标 → **不推荐**」、L112「里程碑可以独立存在」、L375「也可以在没有目标时进入独立的阶段检查区域」、**L540 验收标准 3**；`usage.md` L79/L87 |
+| **②** | **两个竞争假设（未判定）** | H1：命名撞车（页面名与实体平级）；H2：界面从未解释过三者。代码只支持"「计划」从来是视图"（`navigation.ts` L4），**不能判定撞车是病因**；目标页无里程碑定义这句是 H2 的证据 | `navigation.ts` L4；`PageTabs.tsx` L14；`KanbanView.tsx` 目标页文案 |
+| **③** | **缺陷（已核实，可零风险修复）** | 抽取判据只有一行、没有"结果 / 动作"规则，导致入库形态就错 | `src/extract/prompt.ts` L51：`- milestones: NEW named project phases or checkpoints with target dates.` |
+| **④** | **样本不足以支撑结论** | 目标使用率极低（排除夹具后 1 个 candidate），提示**结果层没有被用起来**，但 n 太小、且目标表里混有 6 条 `[E2E]` 残留 | §1.3 的 dump；评审已复核计数一致 |
 
-- 「事项」＝现在的计划页（全部/今天/接下来/未排期）**改名**，语义变成"所有要做的事"；
-- 「计划」＝新的单元列表（计划卡片：结果、目标日期、阶段进度、内含事项数），是新的主入口；
-- 「目标」＝只放长期结果，卡片里分组展示它下面的计划；
-- 理由：三者是三种不同的东西，各自一个页面才不会重演"两排相似控件"。
-
-**方案 ②（保守）4 个入口：首页 / 计划 / 目标 / 历史**，计划页内分两段：
-「进行中的计划」卡片 + 下面的时间视图。理由：少一个 Tab；代价是一个页面又承担两种对象。
-
-两方案都必须满足：**里程碑不再有独立的顶层展示**（它只出现在计划内），
-`其他里程碑` 轴删除（模型上不再有孤儿）。
+**v3 的推论**：③ 是唯一"现在就该修且零风险"的缺陷；① 是决策问题，② 未判定，
+④ 是观察。**因此正确的动作顺序是先修 ③、用最小成本验证 ②，而不是先动 schema。**
 
 ---
 
-## 7. 分阶段实施
+## 4. 方案 E′（v3 收窄后的规格）
 
-| 阶段 | 内容 | 验收 |
+### 4.1 核心原则（保留）
+
+> 只有一个结果名词；跨度是**可见可点的属性**；分类由系统建议、用户改。
+
+### 4.2 对象与关系
+
+| 对象 | 定义 | 归属 | 状态 |
+|---|---|---|---|
+| **事项** | 一件要做的行动，唯一有到期提醒 | 可选 → 目标（`goal_todos`）；可选 → 里程碑（`todos.milestone_id`） | pending / in_progress / done / cancelled |
+| **里程碑** | 目标内部的**阶段检查点** | **迁移后**争取单一归属（`milestones.goal_id`）；**无归属仍是合法的长期状态**（见 4.4） | planned / active / done / abandoned |
+| **目标** | 唯一的结果实体 | 无嵌套（**v3 删除 `parent_goal_id`**，见 4.6） | candidate / active / paused / achieved / abandoned |
+
+`horizon ∈ {stage, ongoing}`：**系统填、用户可点改、不决定分组**（分组按 `target_date`，见 4.4）。
+
+### 4.3 数据模型（v3：只加列，不改既有行）
+
+```sql
+-- 目标：跨度作为属性（行业先例：Linear 的 Project Milestone 属性）
+ALTER TABLE goals ADD COLUMN horizon TEXT NOT NULL DEFAULT 'ongoing';   -- ongoing|stage
+
+-- 里程碑：单值归属（可空；ON DELETE SET NULL，与 todos.milestone_id 一致）
+ALTER TABLE milestones ADD COLUMN goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_milestones_goal ON milestones(goal_id);
+```
+
+**v3 删除的设计与原因**（均来自评审）：
+
+| 删除项 | 原因 |
+|---|---|
+| `goals.parent_goal_id` | 3 个库里 **0 条目标需要嵌套**；它引入环检测、跨 workspace 校验、子目标分组归属三个新问题，全是为弥补 D 的表达力缺口而加的范围外复杂度 |
+| `unresolved[]` | `ExtractionResult` 是**闭合接口**（`contracts/extraction.ts` L38–L46），且没有落库位置；"待整理"用 `milestones.goal_id IS NULL` 表达即可（有列可存） |
+| `ON DELETE CASCADE` | 与 `goal-management.md` L112/L540「里程碑可独立存在」冲突；改 `SET NULL`，让"无归属"是合法长期状态 |
+| 「删除『其他里程碑』共享轴」 | 若"无归属"合法，删轴就是**把一个合法状态从界面抹掉**；v3 保留轴，改为**标注**（未归属 / 原属已放弃目标 / 原属多个目标） |
+| 迁移"改判既有行" | 会跨表搬迁实体（里程碑→事项 / 里程碑→目标），真实数据里 `发布 0.5.0 版本` 下挂着 3 条 pending 事项，"升格为目标"与"`todos.milestone_id` 语义不变"无法同时成立；且仓库既有"可撤销"范式需要前后快照（`todo_merge_log`），`events` 不够 |
+
+**迁移（v3）**：
+
+1. 回填 `goals.horizon`：有 `target_date` 或标题含交付词 → `stage`，否则 `ongoing`。
+2. 回填 `milestones.goal_id`：取 `goal_milestones` 中 `position` 最小者；**多归属时**（`milestone-ownership.ts` 与
+   `tests/milestone-ownership.test.ts` 都明确支持多归属）写审计事件并在界面标注「原属 N 个目标」，
+   **不静默丢弃**；无归属 → 保持 `NULL`。
+3. **不做**任何实体类型改判。历史遗留的错误形态（如 `进行 PRD 设计`）改由**用户从界面改判**，
+   走与 `apply-yolo-action` 同一条可撤销路径。
+
+### 4.4 IA（v3 修订）
+
+| 入口 | 变化 | 内容 |
 |---|---|---|
-| **P0** | 数据模型 + 迁移 + 领域/命令/repo + 投影（后端可用，UI 未动） | 单测：v1→v2 迁移幂等、旧数据无损、`plans` CRUD 与关联；api e2e 新增 PLAN-01 |
-| **P1** | 客户端：新入口 + 计划卡 + 里程碑归位 + 删除「其他里程碑」轴 | ui e2e：计划卡闭环、里程碑只在计划内、无孤儿轴；W2/W7/W12 通过 |
-| **P2** | 抽取三分类 + `memory_write/yolo_action` 支持计划 + 真实对话判例 | RM 判例：动作口吻→事项、结果口吻→计划/里程碑；抽样准确率基线 |
-| **P3** | 数据整理引导（把历史孤儿里程碑分诊给用户确认）+ 文档同步 + 复盘 | 真实库迁移后：孤儿里程碑 0、计划挂接率 > 0 |
+| 首页 | 不变 | 判断 / 提醒 / 今日 |
+| ~~计划~~ → **事项** | 改名 | 全部 / 今天 / 接下来 / 未排期（纯行动视图） |
+| **目标** | 两段 + 定义 | 分组**按 `target_date` 有无**：上段「有目标日期的」、下段「持续跟进的」；`horizon` 只作卡片上的标签。里程碑区**固定一句定义**：「里程碑是阶段的结果（如「内部评审完成」），不是要做的动作」 |
+| **其他里程碑**（保留） | 标注而非删除 | 每条标注：未归属 / 原属已放弃目标 / 多个目标共享；提供"先不管"的默认出口 |
+| 历史 | 不变 | — |
 
-每阶段独立可发布、独立回滚（P0/P1 只加不改；P2 的抽取是增量字段；P3 有审计与撤销）。
+### 4.5 抽取重写（③ 的正面修复，零迁移）
 
----
+1. 判据扩成三分类，附正反例：**动作 → 事项**（进行/准备/写/发 X）；**阶段结果 → 里程碑**（X 完成/通过/就绪/定稿）；
+   **结果 → 目标**（有交付物 → `horizon=stage`；持续方向 → `ongoing`）。
+2. `goals[]` 增 `horizon`；`milestones[]` 增**可选** `goal_title`（缺失即进入"待整理"，**不是必填**）。
+3. 不确定就不猜：把该条留给"待整理"（存在 `milestones.goal_id IS NULL`），不新增数组、不新增表。
+4. RM 判例矩阵增加"结果 vs 动作"条目，抽样人工复核并记录判定规则（谁判、按什么标准）。
 
-## 8. 风险与必须避免的反例
+### 4.6 E′ 的代价（v3 更新）
 
-1. **不要做成任务树。** 计划 ⊇ 事项是一层，不设子计划/子事项；层级固定不许无限嵌套。
-2. **不要自动百分比。** 沿用现有立场（设计文档反例三）与 Basecamp 的判断：进度是人的判断，
-   事项完成数只作为卡片上的一行事实（"3/5 件已完成"），不合成百分比。
-3. **不要四个名词都要求用户建。** 用户只需建事项（对话里说）与计划（"我在推 0.5.0 发布"）；
-   里程碑与目标由 YOLO 建议、用户确认。
-4. **抽取误判的兜底**：新增的「待整理」状态（计划/里程碑分类不确定时），在计划页顶部一条提示，
-   一次点击即可改判，改判要写审计。
-5. **迁移不可逆点**：`ALTER TABLE ... ADD COLUMN` 是加法，安全；但**把里程碑改判为计划/事项
-   是有损操作**，必须留审计事件并支持撤销（复用现有 undo 机制）。
-
----
-
-## 9. 与现有设计文档的冲突（必须同步修改）
-
-- `docs/design/goal-management.md` §1.4「一个里程碑事项必须属于目标：**不推荐**」→ 改为
-  「里程碑必须属于计划；计划可选属于目标」。
-- 同文 §1.5「里程碑可以独立存在」→ 改为「计划可以独立存在（不挂目标）」。
-- 同文 §5.2「计划 → 目标会展示…」→ 随新 IA 更新（该处已过期）。
-- `docs/architecture/modules.md` / `usage.md` / `testing*.md` / `CHANGELOG.md` 同步。
+1. 长期与阶段混在同一列表 → 用 `target_date` 分组 + 卡片标签缓解，不再是"隐藏字段决定分组"。
+2. `horizon` 由系统猜 → 界面上始终可见可点，猜错成本 = 一次点击。
+3. 表达"一个长期方向下多次交付"要靠关系补齐（v3 先不做嵌套，等真实需求）。
 
 ---
 
-## 10. 决策清单
+## 5. 方案 D（备选，未变）
 
-| # | 问题 | 选项 | 我的建议 |
+新增「计划」实体（`plans` + `todos.plan_id` + `milestones.plan_id` + `goal_plans`），5 个一级入口。
+优点是与 Linear/Asana 字面一致、长期目标含多次交付天然表达；代价是**用户每建一条结果都要判断
+"交付单元还是长期结果"**，判别测试需要"想一下"。
+
+**v3 结论：若将来要动模型，选 E′。** 但**当前两者都不该先动**——先做 §6 的方案 G。
+
+---
+
+## 6. 方案 G｜分阶段落地（**v3 推荐**）
+
+### G1（P0′，零迁移、零承诺破坏）
+
+1. **抽取判据重写**（③）+ RM 判例（`extract/prompt.ts`、`contracts/extraction.ts`、`testing-e2e.md`）。
+2. **「计划」页改名「事项」**（`PageTabs.tsx` 一处 + 文案）。零风险，可无条件先做；
+   但要按 §3-② 说明：**改名不构成对 H1/H2 的判定**，它只是去掉一个误导性名词。
+3. **把已算好的关系显示出来**：目标卡的里程碑显示 `milestone_open_todo_count`（"N 件事在推进这个阶段"），
+   里程碑胶囊可点 → 按该里程碑筛选。
+4. **目标页给里程碑一句固定定义**（回答用户原始问题的核心）。
+
+验收：`docs/usage.md` L76/L79/L87 与 `goal-management.md` §5.2 的漂移同步；W2 相关 e2e 通过。
+
+### G2（P1′，只在 G1 无法回答时启动）
+
+按 §4 的 E′ 收窄规格做：`goals.horizon` + `milestones.goal_id`（**只加列、只回填、不改判**）+
+目标页两段 + 「其他里程碑」标注。**可逆**（加列可回退，回填不影响既有语义）。
+
+### G3（需独立论证，默认不做）
+
+任何**改判既有行实体类型**的迁移（如把 `进行 PRD 设计` 从里程碑改成事项）：只在
+（a）用户逐条确认、（b）有 `todo_merge_log` 同构的前后快照 ledger 两个条件都满足时做。
+
+**为什么 G1 优先，而不是 v2 的"P0 = 模型 + 迁移"**：
+v2 把风险最高、证据最薄的一步排在最前——用 4 条里程碑 / 1 个目标当依据，去推翻一条写进验收标准的承诺，
+并改动真实数据。G1 直击唯一已核实的缺陷（③）与用户原始问题（②的解释），且完全可逆。
+
+> 对"等 2–4 周真实数据"这一点我做了修正（评审建议的门槛）：**单人产品的数据增长慢，用时间当门槛可能永远等不到**。
+> 更可操作的门槛是**事件**：出现第 2 次"一个里程碑归属多个目标"，或第 3 条无归属里程碑时，再启动 G2。
+> 而 G2 本身只加列、可逆，风险与 G1 同档，因此不必等太久。
+
+---
+
+## 7. 影响面与排期（v3 修正覆盖）
+
+### G1 影响面
+
+| 层 | 文件 | 规模 |
+|---|---|---|
+| extract | `extract/prompt.ts`、`contracts/extraction.ts` | M |
+| client | `PageTabs.tsx`、`KanbanView.tsx`、`tokens.ts` | M |
+| docs | `usage.md`（L76/L79/L87 **重写**，不是同步）、`goal-management.md`（§5.2）、`testing-e2e.md`（RM 判例）、`CHANGELOG.md` | M |
+| tests | RM 判例 + `home-plan-history` / `accessibility-feedback` 的页签名断言 | S |
+
+### G2 影响面（若启动）
+
+| 层 | 文件 | 规模 | v3 修正点 |
 |---|---|---|---|
-| 0 | **要不要「计划」这个名词** | D：新增计划层 / **E′：不新增，跨度做成目标的属性** | **E′**：用户只记三个词，且不必回答"这是长期还是阶段"；D 的名词边界正是本次质疑点 |
-| 1 | 中间层叫什么（仅 D） | `计划` / `项目` | **计划**（已选；选 E′ 则作废） |
-| 2 | 一级入口 | 5 个 / 4 个 | **5 个**：三类对象各一页，避免再次出现"两排相似控件" |
-| 3 | 数据迁移 | 启发式分诊 + 人工确认 / 只做保守映射 | **分诊 + 确认**：否则真实的 4 条里程碑会永远停在错误形态 |
-| 4 | 是否现在就动手 | 从 P0 开始 / 先只更新文档 | 评审已要求「先想想」：**先定 #0，再排期** |
+| storage | `schema.sql`、`db.ts`、`repository.ts`、`index.ts` | M | 只加两列 + 回填；`ON DELETE SET NULL` |
+| application | `apply-yolo-action.ts` | M/L | **修正 v2 事实错误**：里程碑 `link/unlink` **已实现**（L577–L599），需要的是"设置归属目标"的动作 +
+  处理 `goal_milestones` 停写后既有 link/unlink 的语义（拒绝 / 转发 / 读兼容）|
+| application | `apply-extraction.ts` | M | **v2 漏项**：L188–L201 也直接调 `yolo.linkGoalMilestone` 写 `goal_milestones`，必须一并改 |
+| application | `read-models/dashboard.ts` | M | 分组按 `target_date`；`unowned` 要区分"从未归属"与"原属已放弃目标"（`milestone-ownership.ts` L46–L47 注释） |
+| contracts | `shared/dashboard.ts`、`contracts/dashboard.ts` | S | `goal_ids` → `goal_id`（**注意多归属能力被取消，需审计**） |
+| client | `KanbanView.tsx`、`milestone-ownership.ts`、`tokens.ts` | L | 保留共享轴并标注 |
+| scripts | `scripts/e2e.mjs` L172 | S | **v2 漏项**：`[E2E]` 清扫按 `goal_milestones`，改表后必须同步 |
+| tests | `tests/e2e/ui/milestone-ownership.spec.ts` L48/L56、`tests/milestone-ownership.test.ts` L78 | M | **这些是"反转既有断言"**，不是"更新"（有专属多归属用例） |
+| docs | **`docs/VISION.md` L47/L48** | M | **v2 漏项**：VISION 用"计划"定义该入口，改名前必须同步 |
 
-> 我读过的一手文档：Linear（[Projects](https://linear.app/docs/projects)、[Project milestones](https://linear.app/docs/project-milestones)、[Initiatives](https://linear.app/docs/initiatives)）、
-> GitHub（[About milestones](https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/about-milestones)）、
-> Basecamp（[Tracking work on the Hill Chart](https://5.basecamp-help.com/article/1066-tracking-work-on-the-hill-chart)）、
-> Todoist（[GTD 指南](https://www.todoist.com/productivity-methods/getting-things-done)、[版块](https://www.todoist.com/zh-CN/help/todoist/features/introduction-to-sections-rOrK0aEn)）。
-> Asana 帮助中心与 gettingthingsdone.com 正文有反爬未能读取，相关行已标注。
+---
+
+## 8. 风险清单（v3 补入评审发现）
+
+1. 不做任务树；目标嵌套 v1 不做（无真实需求）。
+2. 不自动百分比；完成数只作为事实行。
+3. 分类由系统建议 + 一键改判；创建路径不设分类题。
+4. **多归属能力被取消**：`goal_ids: string[]` → `goal_id` 会静默丢弃第二个归属，而该能力有实现与专属测试；
+   必须写审计 + 界面提示"原属 N 个目标"。（评审发现）
+5. **同 workspace 校验**：`db.ts` L258/L265 的既有回填都 `JOIN … scope_key`，新列写入路径必须同样校验；
+   身份有两套（`milestone-ownership.ts` 用 cwd，`dashboard.ts` 用 `ws.slug|id`），新增查找要选对。（评审发现）
+6. `ON DELETE SET NULL` 而非 CASCADE；未来若加"删除目标"路径，需保证 `pending_reminders.milestone_id`、
+   `events.subject_id` 的指向不变。
+7. **测试是反转而非更新**：`milestone-ownership.spec.ts` / `milestone-ownership.test.ts` / `scripts/e2e.mjs` /
+   `docs/testing-e2e.md` L71 都在断言即将改变的行为，必须逐条列出并重写。（评审发现）
+8. **两种"待整理"含义不同**：从未归属 vs 原属已放弃目标，界面要分开表述。（评审发现）
+9. 度量脚本要同时输出**原始行数 / 排除夹具后行数**（本机 `goals` 表仍有 6 条 `[E2E]` 残留）。
+
+---
+
+## 9. 验收与度量（v3）
+
+| 信号 | 做法 | 基线 |
+|---|---|---|
+| **Q1**「事项和目标有什么区别？」 | 3 位不看文档的用户各说一句（原 v2 的合并问题拆开） | 未测 |
+| **Q2**「里程碑和目标有什么区别？」 | 同上；且要求**产品界面内有答案**（目标页里程碑区的固定定义） | 未测；当前界面无任何定义 |
+| 数据健康度 | 脚本输出：孤儿里程碑 / 多归属里程碑 / 目标挂接率 / 动作口吻占比（**含原始与过滤后两种计数**） | 孤儿 100%（4/4）；多归属 0；挂接 0；动作口吻 2/4（人工归类，n=4，不作通过判据） |
+| 抽取分类 | RM 判例 + 真实对话抽样，记录标注规则 | 未覆盖 |
+
+---
+
+## 10. 待决策（v3 收敛为两个）
+
+| # | 问题 | 选项 | 建议 |
+|---|---|---|---|
+| A | **先做哪一步** | **G1（零迁移）** / 直接上 G2（加列） / 一次做到 v2 的完整 E′ | **G1**：直击已核实的缺陷与用户原始问题，完全可逆；G2 在**事件门槛**出现后启动 |
+| B | 若走到模型改动 | **E′**（属性表达跨度）/ D（新增计划层） | **E′**：只要一个结果名词，不要求用户当场分类 |
+
+（v2 的"中间层叫什么"随 B 一起保留：若选 D 则叫「计划」；选 E′ 则该问题作废。）
+
+---
+
+## 11. 评审处置记录（v3）
+
+独立评审共 13 条发现（含 1 条阻断）。**全部接受**，其中 3 条我另行复核后确认：
+
+| 评审发现 | 处置 | 复核 |
+|---|---|---|
+| [阻断] §4.3「不新增表」与 `unresolved[]`/「可撤销」三者不能同时成立 | 删除 `unresolved[]`，改用 `milestones.goal_id IS NULL`；迁移降为只加列 | 复核 `contracts/extraction.ts` L38–L46 确为闭合接口 ✅ |
+| [高] §2 共识 3「进度不靠任务计数」是 Basecamp 一家之言 | §2 重写为"业界分歧 + YOLO 的选择" | 复核 [Linear project graph](https://linear.app/docs/project-graph) 确由 issue 速度算进度 ✅ |
+| [高] §2 共识 2「里程碑不是顶层实体」有反例（GitHub） | §2 改为"层必须存在，命名不统一"；① 改定性为**决策变更** | 复核本方案 §2 表 GitHub 行自述"里程碑就是中间层" ✅ |
+| [高] 迁移步骤 3 不可执行且会破坏真实数据 | 整段删除；不做实体改判 | 复核真实库 `发布 0.5.0 版本` 下确挂 3 条 pending 事项 ✅ |
+| [高] E′ 只解决 Q1，Q2 仍在 | §9 拆成 Q1/Q2；§4.4 加固定定义 | — |
+| [高] 未与更小方案对比 | 新增 §6 方案 G，并把 G1 提为推荐 | — |
+| [中] 分组标题与 `horizon` 矛盾（真实反例无日期） | 分组改为按 `target_date` | 复核 SkillSEO 该里程碑 `target_date=null` ✅ |
+| [中] 「待整理」把分类交还用户，与 §4.1 矛盾 | 边界收敛：`horizon` 系统填；待整理只针对**归属**且可"先不管" | — |
+| [中] `parent_goal_id` 范围外复杂度 | v3 删除，作为独立后续提案 | — |
+| [中] 影响面漏 `apply-extraction` / `scripts/e2e.mjs` / `VISION.md`；`link/unlink` 已存在 | §7 逐条补入并修正事实错误 | 复核 `apply-yolo-action.ts` L577–L599 确有里程碑 link/unlink ✅ |
+| [中] 测试是反转既有断言 | §7/§8 列出清单 | — |
+| [低] 「其他里程碑」还包含"原属已放弃目标" | §4.4/§8 区分两种待整理 | — |
+| [低] `[E2E]` 目标残留污染"使用率≈0" | §1.3/§9 写明原始与过滤后计数 | — |
+
+**唯一与评审不同的判断**：评审建议"等 2–4 周真实数据再加列"，我认为单人产品数据增长慢，
+时间门槛不可操作，且**只加列本身可逆**，因此改为**事件门槛**（见 §6 末），并把 G2 与 G1 的风险等级视为同档。
