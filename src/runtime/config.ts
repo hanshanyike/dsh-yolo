@@ -58,7 +58,7 @@ export const Config: z<Config> = z.object({
   }),
 })
 
-/** dsh 0.2 Loader schema: the complete YOLO UI section is editable live. */
+/** dsh 0.1.7-rc.2 Loader schema: the complete YOLO UI section is editable live. */
 export const SettingsConfig = Config.volatile()
 
 /** Host settings service key; must remain the literal 'yolo' (dsh 0.1.2 validates

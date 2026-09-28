@@ -1,6 +1,6 @@
 import type { Config as YoloConfig } from './config.ts'
 
-/** The dsh 0.2 settings service exposes live Loader entries through describe(). */
+/** The dsh 0.1.7-rc.2 settings service exposes live Loader entries through describe(). */
 export interface SettingsReader {
   describe(): readonly { ns: string; value: unknown }[]
 }

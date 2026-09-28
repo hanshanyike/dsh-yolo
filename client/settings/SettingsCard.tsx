@@ -1,7 +1,7 @@
 /**
  * The YOLO plugin-configuration card.
  *
- * dsh 0.2's Plugins settings section mounts a feature-owned
+ * dsh 0.1.7-rc.2's Plugins settings section mounts a feature-owned
  * `settings.plugins.tab`. This card supplies its own disclosure, staged form,
  * and save feedback using the host's Tag, Switch, and icon primitives.
  */

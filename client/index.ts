@@ -7,7 +7,7 @@
 // client symbols migrated by domain (upgrade card DSH-0.1.2-A1-25):
 //   ClientContext -> cordis Context · ISessions -> dsh-api-session-controller/client
 //   SessionId -> dsh-session/types · SettingsScope -> dsh-client-ui-settings/client
-// dsh 0.2 exposes Loader configuration through configForms and lets plugins
+// dsh 0.1.7-rc.2 exposes Loader configuration through configForms and lets plugins
 // contribute their own pages to settings.plugins.tab.
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'

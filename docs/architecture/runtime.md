@@ -31,7 +31,7 @@ UI 与 reminder 通过 `ctx.yolo.conversations.get(...)` 取得相同的 session
 
 ## 配置 owner
 
-稳定配置 shape 在 `src/contracts/config.ts`，运行默认值与 schemastery 归一化在 `src/runtime/config.ts`。所有插件 `apply()` 必须先调用 `Config(config ?? {})`。dsh 0.2.0 从 UI 插件导出的 `Config` 建立 `yolo-ui` Loader 配置表单，`src/runtime/settings-read.ts` 从 `SettingsForms.describe()` 读取实时值；`src/ui/config.ts` 只是旧 loader/import compatibility entry。
+稳定配置 shape 在 `src/contracts/config.ts`，运行默认值与 schemastery 归一化在 `src/runtime/config.ts`。所有插件 `apply()` 必须先调用 `Config(config ?? {})`。dsh 0.1.7-rc.2 从 UI 插件导出的 `Config` 建立 `yolo-ui` Loader 配置表单，`src/runtime/settings-read.ts` 从 `SettingsForms.describe()` 读取实时值；`src/ui/config.ts` 只是旧 loader/import compatibility entry。
 
 ## Bundle 装配契约
 
@@ -52,7 +52,7 @@ YOLO 对外仍是五个宿主插件加一个浏览器 bundle：storage、memory�
 - `Agent.followup` 的 user message 必须带 source；程序化 Agent 必须安装 host model selection。
 - SQLite 使用 `node:sqlite`；迁移不能使用 `ADD COLUMN IF NOT EXISTS`。
 - Windows ACL、端口和 linked bundle 验证见 [测试指南](../testing.md) 与 [E2E 指南](../testing-e2e.md)。
-- dsh 0.2 首次浏览器工作区使用系统 Documents；隔离 E2E 必须通过 profile 的 `workspace-controller.documentsDirectory` 明确重定向，不能只改变宿主 cwd。
+- dsh 0.1.7-rc.2 首次浏览器工作区使用系统 Documents；隔离 E2E 必须通过 profile 的 `workspace-controller.documentsDirectory` 明确重定向，不能只改变宿主 cwd。
 
 ## 不变量
 

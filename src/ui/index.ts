@@ -27,7 +27,7 @@ import { registerGoalDetailEndpoint } from './goals.ts'
 import { registerVersionEndpoint } from './version.ts'
 import { registerSessionEndpoints, type AgentsLike } from '../application/conversation/index.ts'
 
-/** Compatibility namespace; the dsh 0.2 form itself uses Loader entry `yolo-ui`. */
+/** Compatibility namespace; the dsh 0.1.7-rc.2 form itself uses Loader entry `yolo-ui`. */
 export const YOLO_NS = YOLO_SETTINGS_NS
 export { SettingsConfig as Config }
 
@@ -48,7 +48,7 @@ export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   const entry = NormalizeConfig((supplied ?? {}) as ConfigSchema) as ConfigSchema
   let configSource = (): ConfigSchema => entry
 
-  // dsh 0.2 derives forms from Loader Config exports. Keep the live value
+  // dsh 0.1.7-rc.2 derives forms from Loader Config exports. Keep the live value
   // available to HTTP handlers; the normalized loader input is the fallback.
   ctx.inject(['settings'], (sctx) => {
     const stopCustomPage = sctx.settings.configure({ auto: false })

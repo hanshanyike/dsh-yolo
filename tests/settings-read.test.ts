@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readYoloConfig } from '../src/runtime/settings-read.ts'
 
-describe('dsh 0.2 Loader settings', () => {
+describe('dsh 0.1.7-rc.2 Loader settings', () => {
   it('reads the UI entry even when other plugin entries are present', () => {
     const value = { reminder: { checkIntervalSec: 45 } }
     expect(readYoloConfig({ describe: () => [

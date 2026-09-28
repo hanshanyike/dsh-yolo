@@ -18,7 +18,7 @@ function makeCtx(yolo: Yolo) {
     get: vi.fn(() => undefined),
     webServer: { register: vi.fn() },
     logger: { info: vi.fn(), warn: vi.fn() },
-    // dsh 0.2 reads live Loader config through the settings descriptor list.
+    // dsh 0.1.7-rc.2 reads live Loader config through the settings descriptor list.
     inject: (_deps: string[], cb: (sctx: unknown) => void) => {
       cb({
         settings: {

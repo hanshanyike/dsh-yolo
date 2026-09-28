@@ -39,9 +39,9 @@ Phase 5 已把高耦合 use-case state 从两个大组件迁到稳定 controller
 | `settings/` | Plugins 页 YOLO 配置 tab 的模型、表单控制器、文案与样式 |
 | `design/` | Mono tokens、icons、style |
 
-## 插件配置卡（dsh 0.2.0）
+## 插件配置卡（dsh 0.1.7-rc.2）
 
-dsh 0.2.0 的「插件」设置页由 `settings.plugins.tab` 列表槽承载各功能自己的页面。
+dsh 0.1.7-rc.2 的「插件」设置页由 `settings.plugins.tab` 列表槽承载各功能自己的页面。
 YOLO 注册独立 tab，使用 `configForms.get('yolo-ui')` 读取和修改同一个 Loader entry；
 宿主 UI 插件导出 `Config` 让 SettingsForms 暴露该 entry，并关闭它的自动生成页面。
 

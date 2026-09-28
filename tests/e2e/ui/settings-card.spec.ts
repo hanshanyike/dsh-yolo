@@ -42,7 +42,7 @@ function chromeOf(locator: Locator): Promise<{ radius: string; background: strin
 test('YOLO 独立插件配置页保存后刷新仍生效（W14）', async ({ page }) => {
   let card = await openYoloSettings(page)
 
-  // ---- 1. the dsh 0.2 Plugins tab owns its card -------------------------
+  // ---- 1. the dsh 0.1.7-rc.2 Plugins tab owns its card -------------------------
   expect(await card.evaluate((el: Element) => el.tagName)).toBe('LI')
   const list = card.locator('xpath=ancestor::ul[1]')
   expect(await list.count()).toBe(1)

@@ -315,7 +315,7 @@ node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
 >
 > **严格干净模式**：设 `DSH_HOME=<全新目录>` + `YOLO_E2E_WORKSPACE=<临时工作区>` 后，
 > runner 从隔离 profile 拉起宿主（先用官方 CLI 一次性
-> `DSH_HOME=<同一目录> dsh plugin --profile web add .`）。dsh 0.2 的首次浏览器工作区
+> `DSH_HOME=<同一目录> dsh plugin --profile web add .`）。dsh 0.1.7-rc.2 的首次浏览器工作区
 > 默认指向系统 Documents；runner 会在隔离 profile 的 `workspace-controller` 配置中把
 > `documentsDirectory` 指向临时工作区下的 `documents/`。只有确认 `/yolo/dashboard` 的
 > 工作区和事项 owner 都在本次隔离目录内，才可认为旧数据没有进入测试。

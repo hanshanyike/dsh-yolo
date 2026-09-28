@@ -90,7 +90,7 @@ if (!skipHost && (!ISOLATED || WORKSPACE.toLowerCase() === ROOT.toLowerCase() ||
 }
 mkdirSync(WORKSPACE, { recursive: true })
 
-/** dsh 0.2 creates its first browser Workspace under Documents, not cwd. */
+/** dsh 0.1.7-rc.2 creates its first browser Workspace under Documents, not cwd. */
 function isolateFirstUseWorkspace() {
   if (!ISOLATED) return
   const patch = join(PROFILE_WEB, 'cordis.patch.yml')
@@ -485,7 +485,9 @@ function selectionArgs() {
 
   const sel = selectionArgs()
   if (sel.length) console.log(`[e2e] selection: ${sel.map((p) => p.slice(ROOT.length + 1)).join(', ')}`)
-  const code = run('pnpm', ['exec', 'playwright', 'test', ...sel], { cwd: ROOT })
+  // Invoke the installed test runner directly. `pnpm exec` may decide to run
+  // an implicit install here, mutating dependencies while the host is live.
+  const code = run(process.execPath, [join(ROOT, 'node_modules', '@playwright', 'test', 'cli.js'), 'test', ...sel], { cwd: ROOT })
 
   const cleanupOk = await stopOwnedHost()
   const report = process.env.YOLO_E2E_REPORT
