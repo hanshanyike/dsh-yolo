@@ -37,6 +37,7 @@ test('W3/W12/W13/W15: 日期范围先预览，批量取消后可永久删除', a
 
   let dialog = await openDataManager(page)
   expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await dialog.getByRole('combobox', { name: '工作区范围' }).selectOption('all')
   await dialog.getByLabel('开始日期（含）').fill(rangeDay)
   await dialog.getByLabel('结束日期（含）').fill(rangeDay)
   await expect(dialog.getByRole('button', { name: '确认取消 2 项' })).toBeEnabled()
@@ -53,6 +54,7 @@ test('W3/W12/W13/W15: 日期范围先预览，批量取消后可永久删除', a
   dialog = await openDataManager(page)
   await expect(page.locator('.yolo-scope')).toHaveClass(/compact/)
   expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await dialog.getByRole('combobox', { name: '工作区范围' }).selectOption('all')
   await dialog.getByRole('radio', { name: /永久删除/u }).check()
   await dialog.getByLabel('开始日期（含）').fill(rangeDay)
   await dialog.getByLabel('结束日期（含）').fill(rangeDay)

@@ -26,6 +26,7 @@
 const STYLE_ID = 'yolo-plugin-card'
 
 const CSS = `
+.yolo-settings-list{list-style:none;margin:0;padding:0}
 .yolo-card{border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);border-radius:16px;list-style:none;transition:border-color .16s,background .16s}
 .yolo-card:hover{border-color:var(--dsw-alias-label-dimmed)}
 .yolo-card.is-open{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}

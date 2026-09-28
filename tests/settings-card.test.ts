@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm as SettingsScope, ConfigFormSnapshot as SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 
 // The card renders the host's own atoms, which the browser resolves from the
 // client module baseline. A node test has no baseline table, and the package's
@@ -8,7 +8,7 @@ import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-clie
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   Tag: () => null,
   Switch: () => null,
-  IconChevronDownOutline14: () => null,
+  IconChevronDownOutlineMedium: () => null,
 }))
 
 import { inject } from '../client/index.ts'
@@ -76,14 +76,17 @@ function writableScope(accept = true): ScopeDouble {
     set: vi.fn(async (field: string, value: unknown) => {
       if (accept) user = applyOp(user, { op: 'set', path: [field], value: value as never })
       revision += 1
+      return accept
     }),
     unset: vi.fn(async (field: string) => {
       if (accept) user = applyOp(user, { op: 'unset', path: [field] })
       revision += 1
+      return accept
     }),
     mutate: vi.fn(async (ops: readonly SettingsPathOpView[]) => {
       if (accept) for (const op of ops) user = applyOp(user, op)
       revision += 1
+      return accept
     }),
     userOf: () => user,
   }
@@ -95,7 +98,7 @@ function form(scope: ScopeDouble): YoloCardForm {
 
 describe('YOLO settings card model', () => {
   it('binds the browser plugin to the durable settings service and the card locale seat', () => {
-    expect(inject).toContain('settingsScope')
+    expect(inject).toContain('configForms')
     expect(inject).toContain('locale')
   })
 

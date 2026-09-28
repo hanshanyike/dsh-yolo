@@ -4,7 +4,7 @@
 // into a short markdown card body. Every failure falls back to the plain
 // fact list — a brief must never fail to appear because the model call did.
 
-import { BlockAssembler, type LlmRuntime, type Message } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, createUserMessage, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type Yolo from '../storage/index.ts'
 import type { Todo, TimelineEvent } from '../domain/types.ts'
 import { contentBlocksToText, dayBounds } from '../shared/text.ts'
@@ -146,12 +146,7 @@ export async function polishBrief(
       provider,
       model,
       system: `你是个人助理 YOLO 的简报撰写器。把给定事实整理成一份${kind === 'morning' ? '早晨开工' : '晚间收工'}简报：中文，markdown，不超过 6 行，只陈述事实、不编造、不加建议，不要重复卡片标题，直接从最重要的事实开始。`,
-      messages: [
-        {
-          role: 'user',
-          content: [{ type: 'text', text: facts.join('\n') }],
-        },
-      ] as Message[],
+      messages: [createUserMessage({ content: [{ type: 'text', text: facts.join('\n') }], source: { kind: 'user' } })],
       temperature: 0.3,
       maxTokens: 512,
       purpose: 'session-title',

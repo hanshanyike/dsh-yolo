@@ -20,7 +20,8 @@ async function openYoloSettings(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: '设置' }).click()
   const dialog = page.getByRole('dialog', { name: '设置' })
   await expect(dialog).toBeVisible()
-  await dialog.getByRole('button', { name: '插件', exact: true }).click()
+  await dialog.getByRole('button', { name: '内置插件', exact: true }).click()
+  await dialog.getByRole('tab', { name: 'YOLO', exact: true }).click()
   const card = dialog.locator('.yolo-settings-card')
   await expect(card).toBeVisible({ timeout: 30_000 })
   return card
@@ -38,14 +39,10 @@ function chromeOf(locator: Locator): Promise<{ radius: string; background: strin
   })
 }
 
-test('YOLO 插件配置卡与其他插件卡一致，保存后刷新仍生效（W14）', async ({ page }) => {
+test('YOLO 独立插件配置页保存后刷新仍生效（W14）', async ({ page }) => {
   let card = await openYoloSettings(page)
 
-  // ---- 1. the card IS a card of the shared Plugins list -------------------
-  // dsh 0.1.5 renders every plugin card as an `<li>` inside one card list; the
-  // old YOLO surface was a `<form>` and therefore never looked like a card at
-  // all. The slot renderer wraps each contribution in a plain `<div>`, so the
-  // container shared with the shipped cards is the nearest ancestor `<ul>`.
+  // ---- 1. the dsh 0.2 Plugins tab owns its card -------------------------
   expect(await card.evaluate((el: Element) => el.tagName)).toBe('LI')
   const list = card.locator('xpath=ancestor::ul[1]')
   expect(await list.count()).toBe(1)
@@ -58,10 +55,10 @@ test('YOLO 插件配置卡与其他插件卡一致，保存后刷新仍生效（
   await expect(card.locator('.yolo-card__description')).toContainText('低打扰提醒')
   await expect(card.locator('.yolo-card__body')).toHaveCount(0)
 
-  // Same chrome declarations as a sibling plugin card (radius, fill, hairline).
-  const sibling = list.locator('li').filter({ hasNotText: 'YOLO — 管理工作与生活的助手' }).first()
-  await expect(sibling).toHaveCount(1)
-  expect(await chromeOf(card)).toEqual(await chromeOf(sibling))
+  const chrome = await chromeOf(card)
+  expect(chrome.radius).toBe('16px')
+  expect(chrome.borderWidth).not.toBe('0px')
+  expect(chrome.background).not.toBe('rgba(0, 0, 0, 0)')
 
   // ---- 2. the form lives inside the disclosure ---------------------------
   await expand(card)
@@ -160,7 +157,7 @@ test('YOLO 配置卡拒绝无效草稿并保留草稿（W14）', async ({ page }
 // browser: the notice must be visible WITHOUT expanding the card, and the
 // expanded card must name the version and the update command.
 test('YOLO 配置卡在宿主报告有新版本时给出提示（VC-01）', async ({ page }) => {
-  const latest = '0.5.0-rc.2'
+  const latest = '0.5.2'
   await page.route('**/yolo/version', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',

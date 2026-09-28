@@ -1,4 +1,4 @@
-import { BlockAssembler, type FinishReason, type LlmRuntime, type Message, type TokenUsage } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, createUserMessage, type FinishReason, type LlmRuntime, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { TodoIdentityCandidate, TodoResolutionDecision, TodoResolutionPrediction } from '../domain/types.ts'
 import { contentBlocksToText, localDateStr } from '../shared/text.ts'
 import { TODO_IDENTITY_MIN_CONFIDENCE } from '../application/ingestion/todo-identity-policy.ts'
@@ -140,7 +140,7 @@ export async function llmResolveTodoIdentity(opts: {
     provider,
     model,
     system: buildTodoResolverPrompt(now, minConfidence),
-    messages: [{ role: 'user', content: [{ type: 'text', text: content }] }] as Message[],
+    messages: [createUserMessage({ content: [{ type: 'text', text: content }], source: { kind: 'user' } })],
     temperature: 0,
     maxTokens: 1024,
     purpose: 'session-title',

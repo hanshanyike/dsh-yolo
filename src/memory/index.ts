@@ -6,6 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import { readYoloConfig, type SettingsReader } from '../runtime/settings-read.ts'
 import { contentBlocksToText } from '../shared/text.ts'
 import { sessionCwd, sessionId } from '../shared/session.ts'
 import { isYoloSessionId } from '../runtime/session-identity.ts'
@@ -25,14 +26,9 @@ import {
 export const name = 'yolo-memory'
 export const inject = ['yolo', 'tools', 'systemPrompt', 'llm', 'settings'] as const
 
-/** dsh 0.1.2 removed `settingsNamespace()` — namespaces are compile-time literals now. */
-const YOLO_NS = 'yolo'
-
-type SettingsLike = { get?(ns: unknown): { semantic?: Partial<SemanticConfig> } | undefined }
-
 /** Read the live semanticRecall config slice from settings (fall back to DEFAULTS). */
-function readSemanticConfig(settings: SettingsLike | undefined): SemanticConfig {
-  const cc = settings?.get?.(YOLO_NS)?.semantic
+function readSemanticConfig(settings: SettingsReader | undefined): SemanticConfig {
+  const cc = readYoloConfig(settings)?.semantic
   return { ...defaultSemanticConfig(), ...(cc ?? {}) }
 }
 
@@ -44,12 +40,12 @@ export function apply(ctx: Context): void {
   // track the latest user message for dynamic recall (AssembleContext has no userMessage in rc.8)
   // and the latest session cwd so recall reads the scope extraction writes to.
   const recallDedup = new RecallDedupTracker()
-  const semantic = new SemanticRecall(readSemanticConfig((ctx as unknown as { settings?: SettingsLike }).settings))
+  const semantic = new SemanticRecall(readSemanticConfig((ctx as unknown as { settings?: SettingsReader }).settings))
 
   const prewarmSemantic = (session: Session, text: string): void => {
     if (!llm) return
     const query = text.trim()
-    const cfg = readSemanticConfig((ctx as unknown as { settings?: SettingsLike }).settings)
+    const cfg = readSemanticConfig((ctx as unknown as { settings?: SettingsReader }).settings)
     semantic.setConfig(cfg)
     if (!semantic.shouldExpand(query)) return
     const cwd = sessionCwd(session) ?? yctx.yolo.observations.latestWorkspaceCwd(process.cwd())

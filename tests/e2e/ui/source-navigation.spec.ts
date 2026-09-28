@@ -27,7 +27,7 @@ async function mockOpenSession(page: import('@playwright/test').Page, mode: Open
   await page.route(/\/plugins\/.*dsh-plugin-yolo\/client\.js/, async (route) => {
     const response = await route.fetch()
     const source = await response.text()
-    const bridge = /openSession:\s*\(sessionId\)\s*=>\s*\{\s*ctx\.sessions\.open\(sessionId\);\s*\},/u
+    const bridge = /openSession:\s*\(sessionId\)\s*=>\s*\{\s*ctx\.uiWorkspace\.openSession\(sessionId\);\s*\},/u
     let replacement: string
     if (mode === 'unavailable') replacement = 'openSession: void 0,'
     else if (mode === 'throw') replacement = 'openSession: (sessionId) => { throw new Error("模拟宿主导航失败"); },'

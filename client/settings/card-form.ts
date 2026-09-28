@@ -1,9 +1,8 @@
 /**
  * Staged form over the `yolo` settings namespace.
  *
- * Mirrors the contract the shipped plugin cards use (`CardShell`, `CardFieldState`,
- * `CardActions` from the settings-plugins surface) so YOLO's card behaves exactly
- * like bash / agent-loop / web-search: edits are staged locally, a save is the
+ * Mirrors the shared `SettingsFormShell`, `SettingsFieldState`, and
+ * `SettingsFormActions` contract: edits are staged locally, a save is the
  * single write point, a field's presence in the namespace's raw user layer — not
  * its value — marks it overridden, and a reset stages a clear so the field falls
  * back to the composition layer.
@@ -18,8 +17,8 @@
  */
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
-import type { CardActions, CardFieldState, CardShell } from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type { ConfigForm as SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsFormActions as CardActions, SettingsFieldState as CardFieldState, SettingsFormShell as CardShell } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { hasPath, readPath, sameValue, type SwitchFieldSpec, type ValueFieldSpec, type YoloFieldSpec, type YoloSettings } from './model.ts'
 
@@ -148,8 +147,8 @@ export class YoloCardForm {
     this.publish()
     let landed = true
     try {
-      await this.scope.mutate(ops, this.fence)
-      landed = plan.every((item) => this.landed(item))
+      landed = await this.scope.mutate(ops, this.fence)
+      if (landed) landed = plan.every((item) => this.landed(item))
     } catch {
       landed = false
     }

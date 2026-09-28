@@ -63,7 +63,7 @@
 | `ui/accessibility-feedback.spec.ts` | 一级 Tab 键盘、单栏 focus trap/背景 inert、双栏非 modal、返回焦点、live region 和所有控件可读名 | W2 / W5 / W14 / A11Y |
 | `ui/dashboard-trust.spec.ts` · `api/dashboard-scope.spec.ts` · `tests/dashboard-aggregate.test.ts` | UI 中 partial 只提示一次且动作固定原 `scope_cwd`；API 验证真实 owner/未知 scope recovery；同 id 双 scope 与 all-fail recovery 由确定性聚合单测验证 | W13 / WS-01～03 |
 | `ui/capture-composition.spec.ts` | 中文输入法组合态 Enter 不误提交，组合结束后只新增一次真实事项 | W4 |
-| `ui/settings-card.spec.ts` | YOLO 插件配置卡与 dsh 自带卡片同构（同一 `<ul>` 下的 `<li>`、默认折叠、相同的圆角/填充/发丝线）；保存后折叠并在刷新后回读；无效草稿阻塞保存且可放弃；宿主报告更新时折叠状态就能看到「有新版本」、展开后有版本与更新命令，没有更新时不留提示位；设置不泄漏内部实现入口 | W14 / VC-01 |
+| `ui/settings-card.spec.ts` | dsh 插件设置页能进入 YOLO 独立 tab，配置卡默认折叠；保存后折叠并在刷新后回读；无效草稿阻塞保存且可放弃；宿主报告更新时折叠状态就能看到「有新版本」、展开后有版本与更新命令，没有更新时不留提示位；设置不泄漏内部实现入口 | W14 / VC-01 |
 | `ui/data-management.spec.ts` | “更多 → 按日期删除事项”进入日期范围预览；批量取消、强确认永久删除、区间外隔离和单条永久删除 | W3 / W12 / W13 / W15 |
 | `ui/goal-management.spec.ts` | 目标卡展示结果、完成标准和目标日期；推进目标打开独立讨论；暂停/恢复状态可见 | W5 / W7 / W12 / W15 |
 | `ui/host-skew.spec.ts` | 升级后宿主未重启时（以拦截 `/yolo/version` 模拟旧宿主/缺端点）面板出现可关闭的重启提醒，同版不误报；删除通知收到 405 时错误信息说明重启宿主而非裸 `HTTP 405`，且行不丢失 | W1 / W12 / W14 |
@@ -315,8 +315,11 @@ node scripts/e2e.mjs --no-clean      # 跳过拉起前的 [E2E] 夹具清扫
 >
 > **严格干净模式**：设 `DSH_HOME=<全新目录>` + `YOLO_E2E_WORKSPACE=<临时工作区>` 后，
 > runner 从隔离 profile 拉起宿主（先用官方 CLI 一次性
-> `DSH_HOME=<同一目录> dsh plugin --profile web add .`），宿主默认工作区指向临时目录，
-> 夹具清扫只触碰隔离目录，真实数据（含其它工作区的真实看板行）不参与看板聚合。
+> `DSH_HOME=<同一目录> dsh plugin --profile web add .`）。dsh 0.2 的首次浏览器工作区
+> 默认指向系统 Documents；runner 会在隔离 profile 的 `workspace-controller` 配置中把
+> `documentsDirectory` 指向临时工作区下的 `documents/`。只有确认 `/yolo/dashboard` 的
+> 工作区和事项 owner 都在本次隔离目录内，才可认为旧数据没有进入测试。
+> 夹具清扫也覆盖该首次浏览器工作区，真实数据不参与看板聚合。
 > 依赖真实看板排名的用例（如 TA-4）必须在此模式下运行才可判定。
 >
 > **不要对 3080 上正在用的宿主跑 E2E**。默认端口就是 3080，runner 会判定「已有宿主」并直接复用，

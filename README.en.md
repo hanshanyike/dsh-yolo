@@ -75,6 +75,10 @@ acknowledgements, generic knowledge, and unrelated personal profiling.
 
 ## Quick Start
 
+The `develop` source now targets dsh `0.2.0-rc.1`; use that host version when
+installing from this branch. The pinned `0.5.0` commands below remain the
+published stable release.
+
 YOLO requires a **dsh 0.1.5-rc.1 or newer** host; older hosts cannot load this
 version's browser panel, and the Plugins settings page does not render this
 version's configuration card (check with `npx @deepseek-ai/dsh --version`, and

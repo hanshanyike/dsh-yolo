@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { LlmRuntime, Message, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
+import { readYoloConfig, type SettingsReader } from '../runtime/settings-read.ts'
 import type Yolo from '../storage/index.ts'
 import type { TodoIdentityCandidate } from '../domain/types.ts'
 import { DEFAULTS } from '../shared/constants.ts'
@@ -46,22 +47,6 @@ export const YOLO_NS = 'yolo'
 interface YoloCtx extends Context {
   yolo: Yolo
   llm: LlmRuntime
-}
-
-/** Minimal structural view of the dsh settings service (config read per turn). */
-interface SettingsLike {
-  get(ns: unknown): {
-    extraction?: {
-      enableLLM?: boolean
-      model?: string
-      minIntervalSec?: number
-      minTurnChars?: number
-      maxRunsPerDay?: number
-      todoIdentityR2Enabled?: boolean
-      todoIdentityR2MinConfidence?: number
-      todoIdentityR3Enabled?: boolean
-    }
-  } | undefined
 }
 
 /** cwd for scope partitioning. Prefer the session's creation cwd when present. */
@@ -165,7 +150,7 @@ function replayRouteFor(ctx: Context, configuredModel?: string): { provider: str
   }
 }
 
-function startConfiguredResolverReplay(ctx: Context, yctx: YoloCtx, settings?: SettingsLike): void {
+function startConfiguredResolverReplay(ctx: Context, yctx: YoloCtx, settings?: SettingsReader): void {
   if (process.env[TODO_RESOLVER_REPLAY_FLAG] !== '1') return
   const input = process.env[TODO_RESOLVER_REPLAY_INPUT]
   const output = process.env[TODO_RESOLVER_REPLAY_OUTPUT]
@@ -180,7 +165,7 @@ function startConfiguredResolverReplay(ctx: Context, yctx: YoloCtx, settings?: S
   // untouched when the explicit replay flag is absent.
   const controller = new AbortController()
   const timer = setTimeout(() => {
-    const route = replayRouteFor(ctx, settings?.get(YOLO_NS)?.extraction?.model)
+    const route = replayRouteFor(ctx, readYoloConfig(settings)?.extraction?.model)
     const rawAsOf = process.env[TODO_RESOLVER_REPLAY_AS_OF] || TODO_RESOLVER_GOLD_AS_OF
     const asOf = new Date(rawAsOf)
     void runTodoResolverReplay({
@@ -231,7 +216,7 @@ async function waitForSpacing(ms: number, signal: AbortSignal): Promise<void> {
 
 export function apply(ctx: Context): void {
   const yctx = ctx as YoloCtx
-  const settings = (ctx as { settings?: SettingsLike }).settings
+  const settings = (ctx as unknown as { settings?: SettingsReader }).settings
   startConfiguredResolverReplay(ctx, yctx, settings)
   const capturedTodoCandidates = new Map<string, Map<number, TodoIdentityCandidate[]>>()
   const jobs = new Map<string, Promise<void>>()
@@ -264,7 +249,7 @@ export function apply(ctx: Context): void {
           cwdOf(payload.agent.session),
           humanMessagesToText(human),
           12,
-          settings?.get(YOLO_NS)?.extraction?.todoIdentityR3Enabled === true,
+          readYoloConfig(settings)?.extraction?.todoIdentityR3Enabled === true,
         )) {
           // Late human steering may introduce another todo. Add new ids but
           // never replace the first pre-tool snapshot of an existing id.
@@ -313,7 +298,7 @@ export function apply(ctx: Context): void {
         if (!completedTurn(agent.session, turn)) return
         const session = agent.session
         const cwd = cwdOf(session)
-        const config = settings?.get(YOLO_NS)?.extraction
+        const config = readYoloConfig(settings)?.extraction
         if (config?.enableLLM === false) return
 
         const route = routeFor(ctx, agent, config?.model)

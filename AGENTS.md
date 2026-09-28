@@ -92,6 +92,9 @@ node scripts/e2e.mjs --spec panel-flow   # 只跑某个 spec（tests/e2e/ui|api/
 >
 > PowerShell 用 `$env:DSH_HOME = ...` 的形式设置同样三个变量。
 > 不要对 3080 上正在服务的宿主跑 `--no-host`，也不要让 E2E 宿主指向真实工作区。
+> dsh 0.2 起首次创建的浏览器工作区默认落在系统 Documents，而非宿主 cwd；
+> runner 在隔离 profile 的 `workspace-controller` 配置中把 Documents 重定向到
+> `YOLO_E2E_WORKSPACE/documents`。手工启动宿主时必须设置同等覆盖并核对实际工作区路径。
 
 > **启动与宿主保持一致**：用官方 CLI 执行 `dsh plugin --profile web add .` + `dsh web`，
 > 不要自建 `dev.mjs` / 本地 host checkout（那会因本地 checkout 的宿主凭证格式与全局不一致而要求扁平化凭证，

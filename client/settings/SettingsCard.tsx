@@ -1,19 +1,14 @@
 /**
  * The YOLO plugin-configuration card.
  *
- * dsh 0.1.5's Plugins settings section dispatches `settings.plugin.item` by
- * settings namespace, and each card owns its own chrome. This card reproduces
- * the chrome the shipped cards render — the same header button, unsaved tag,
- * chevron disclosure, read-only notice, and discard/save footer, with the same
- * declarations and primitives (Tag, Switch, chevron icon) — so YOLO's card is
- * indistinguishable from the shell / agent-loop / web-search cards instead of
- * being the one card with its own look.
+ * dsh 0.2's Plugins settings section mounts a feature-owned
+ * `settings.plugins.tab`. This card supplies its own disclosure, staged form,
+ * and save feedback using the host's Tag, Switch, and icon primitives.
  */
 import { useEffect, useRef, useState } from 'react'
-import { IconChevronDownOutline14, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineMedium, Switch, Tag, type SettingsFieldState as CardFieldState, type SettingsFormShell as CardShell } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { CardFieldState, CardShell } from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import packageJson from '../../package.json' with { type: 'json' }
 import { YOLO_CARD_NS, type YoloCardLocaleKey } from './card-locale.ts'
 import type { SwitchFieldState, YoloCardActions } from './card-form.ts'
@@ -40,7 +35,7 @@ export interface YoloCardFace extends YoloCardActions {
 
 /** Props the renderer binds for the YOLO card. */
 export type YoloSettingsCardProps =
-  PropsRuntime<'settings.plugin.item'> & PropsLocale<typeof YOLO_CARD_NS> & InjectFace<YoloCardFace>
+  PropsRuntime<'settings.plugins.tab'> & PropsLocale<typeof YOLO_CARD_NS> & InjectFace<YoloCardFace>
 
 const SPECS = new Map(YOLO_FIELD_SPECS.map((spec) => [spec.field, spec]))
 
@@ -168,6 +163,7 @@ export function YoloSettingsCard(props: YoloSettingsCardProps): JSX.Element | nu
   }
 
   return (
+    <ul className="yolo-settings-list">
     <li className={open ? 'yolo-settings-card yolo-card is-open' : 'yolo-settings-card yolo-card'}>
       <button
         type="button"
@@ -182,7 +178,7 @@ export function YoloSettingsCard(props: YoloSettingsCardProps): JSX.Element | nu
         </span>
         {update ? <Tag tone="info" className="yolo-card__update">{t('updateTag')}</Tag> : null}
         {state.dirty ? <Tag tone="neutral" className="yolo-card__pending">{t('unsaved')}</Tag> : null}
-        <IconChevronDownOutline14 className={open ? 'yolo-card__chevron is-open' : 'yolo-card__chevron'} />
+        <IconChevronDownOutlineMedium className={open ? 'yolo-card__chevron is-open' : 'yolo-card__chevron'} />
       </button>
       {open ? (
         <div className="yolo-card__body">
@@ -210,5 +206,6 @@ export function YoloSettingsCard(props: YoloSettingsCardProps): JSX.Element | nu
         </div>
       ) : null}
     </li>
+    </ul>
   )
 }

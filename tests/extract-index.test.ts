@@ -51,7 +51,7 @@ function makeCtx(
   const ctx = {
     yolo,
     llm,
-    settings,
+    settings: settings === undefined ? undefined : { describe: () => [{ ns: 'yolo-ui', value: settings.get('yolo') }] },
     logger: { info: vi.fn(), warn: vi.fn() },
     on: (event: string, cb: Handler) => {
       handlers.set(event, cb)

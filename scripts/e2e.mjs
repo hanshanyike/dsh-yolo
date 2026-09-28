@@ -83,7 +83,31 @@ const noClean = argv.includes('--no-clean')
 // workspace rows out of the aggregated dashboard (strict-clean UI runs).
 // (Defined after argv parsing — argValue reads the CLI args.)
 const WORKSPACE = resolve(argValue('workspace') ?? process.env.YOLO_E2E_WORKSPACE ?? ROOT)
+const ISOLATED = Boolean(process.env.DSH_HOME && (process.env.YOLO_E2E_WORKSPACE || argValue('workspace')))
+if (!skipHost && (!ISOLATED || WORKSPACE.toLowerCase() === ROOT.toLowerCase() || DSH_HOME.toLowerCase() === join(homedir(), '.dsh').toLowerCase())) {
+  console.error('[e2e] set a fresh DSH_HOME and YOLO_E2E_WORKSPACE (or --workspace) before starting a host')
+  process.exit(2)
+}
 mkdirSync(WORKSPACE, { recursive: true })
+
+/** dsh 0.2 creates its first browser Workspace under Documents, not cwd. */
+function isolateFirstUseWorkspace() {
+  if (!ISOLATED) return
+  const patch = join(PROFILE_WEB, 'cordis.patch.yml')
+  const current = readFileSync(patch, 'utf8')
+  const documents = join(WORKSPACE, 'documents').replaceAll('\\', '/')
+  const quotedDocuments = `'${documents.replaceAll("'", "''")}'`
+  if (/^\s*- id:\s*workspace-controller\s*$/mu.test(current)) {
+    if (current.includes(`documentsDirectory: ${quotedDocuments}`)) return
+    throw new Error('[e2e] isolated profile already overrides workspace-controller to another directory')
+  }
+  mkdirSync(documents, { recursive: true })
+  const override = `- id: workspace-controller\n  name: '@deepseek-ai/dsh-api-workspace-controller'\n  config:\n    documentsDirectory: ${quotedDocuments}\n`
+  const body = current.split(/\r?\n/u).filter((line) => line.trim() && !line.trimStart().startsWith('#')).join('\n').trim()
+  if (body === '[]') writeFileSync(patch, current.replace(/^\[\]\s*$/mu, override))
+  else appendFileSync(patch, `\n${override}`)
+  console.log(`[e2e] first-use Documents redirected inside ${WORKSPACE}`)
+}
 
 function childEnv() {
   const raw = process.env.NODE_OPTIONS ?? ''
@@ -136,7 +160,11 @@ function sweepE2EFixtures() {
   // Standard lane: the repo checkout store + the user-home fallback store.
   // Strict-clean lane (DSH_HOME/YOLO_E2E_WORKSPACE): the isolated home and
   // temp workspace ONLY — the user's real stores are never touched.
-  const dirs = [...new Set([join(WORKSPACE, '.dsh', 'yolo'), join(DSH_HOME, 'yolo')])]
+  const dirs = [...new Set([
+    join(WORKSPACE, '.dsh', 'yolo'),
+    join(WORKSPACE, 'documents', 'deepseek-harness', 'default-workspace', '.dsh', 'yolo'),
+    join(DSH_HOME, 'yolo'),
+  ])]
   let total = 0
   let errors = 0
   for (const dir of dirs) {
@@ -165,10 +193,12 @@ function sweepE2EFixtures() {
       }
       const n =
         c("DELETE FROM yolo_fts WHERE row_type = 'todo' AND row_id IN (SELECT id FROM todos WHERE title LIKE '[E2E]%')") +
+        c("DELETE FROM yolo_fts WHERE row_type = 'goal' AND row_id IN (SELECT id FROM goals WHERE title LIKE '[E2E]%')") +
         c("DELETE FROM yolo_fts WHERE row_type = 'milestone' AND row_id IN (SELECT id FROM milestones WHERE title LIKE '[E2E]%')") +
         c("DELETE FROM attention_feedback WHERE todo_id IN (SELECT id FROM todos WHERE title LIKE '[E2E]%')") +
         c("DELETE FROM pending_reminders WHERE payload LIKE '%[E2E]%'") +
         c("DELETE FROM todos WHERE title LIKE '[E2E]%'") +
+        c("DELETE FROM goals WHERE title LIKE '[E2E]%'") +
         c("DELETE FROM goal_milestones WHERE milestone_id IN (SELECT id FROM milestones WHERE title LIKE '[E2E]%')") +
         c("DELETE FROM milestones WHERE title LIKE '[E2E]%'") +
         c("DELETE FROM notifications WHERE title LIKE '[E2E]%'") +
@@ -250,6 +280,10 @@ async function bringUpHost() {
 
   const bundled = profileBundlesYolo()
   const useGlobal = globalDshAvailable()
+  if (ISOLATED && !useGlobal) {
+    console.error('[e2e] isolated runs require the installed dsh CLI and its web profile')
+    process.exit(2)
+  }
   let cmd, argsList, cwd
 
   if (useGlobal) {
@@ -259,6 +293,7 @@ async function bringUpHost() {
       console.error('[e2e] then re-run this script; or delete the global dsh shim to force the legacy source path.')
       process.exit(2)
     }
+    isolateFirstUseWorkspace()
     step(3, '[E2E] fixture sweep (DB closed — safe window)')
     if (noClean) console.log('[e2e] skipped (--no-clean)')
     else if (sweepE2EFixtures().errors > 0) process.exit(1)

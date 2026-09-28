@@ -4,7 +4,7 @@
 // defensive parsing. Provider/transport failures throw to the turn handler,
 // which isolates them from the agent loop and writes an error audit row.
 
-import { BlockAssembler, type FinishReason, type LlmRuntime, type Message, type TokenUsage } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, createUserMessage, type FinishReason, type LlmRuntime, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import { contentBlocksToText } from '../shared/text.ts'
 import { buildExtractionPrompt } from './prompt.ts'
 import type { ExtractionResult } from '../contracts/extraction.ts'
@@ -181,7 +181,7 @@ export async function llmExtract(opts: LlmExtractOptions): Promise<ExtractionRes
     provider,
     model,
     system: buildExtractionPrompt(now),
-    messages: [{ role: 'user', content: [{ type: 'text', text: userContent }] }] as Message[],
+    messages: [createUserMessage({ content: [{ type: 'text', text: userContent }], source: { kind: 'user' } })],
     temperature: 0,
     maxTokens: 2048,
     purpose: 'session-title',

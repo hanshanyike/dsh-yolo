@@ -5,6 +5,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, type LlmRuntime } from '@deepseek-ai/dsh-llm'
+import { readYoloConfig, type SettingsReader } from '../runtime/settings-read.ts'
 import type Yolo from '../storage/index.ts'
 import { startReminderScheduler, resolveReminderRuntime } from './scheduler.ts'
 import { maybeWriteTurnSnapshot } from '../application/maintenance/snapshots.ts'
@@ -20,22 +21,14 @@ interface ReminderCtx extends Context {
   yolo: Yolo
 }
 
-/** Minimal structural view of the dsh settings service (config read per tick). */
-interface SettingsLike {
-  get(ns: unknown): {
-    brief?: { enabled?: boolean; morningTime?: string; eveningTime?: string; model?: string }
-    storage?: { snapshotInterval?: string }
-    reminder?: { checkIntervalSec?: number; aheadMin?: number; enabled?: boolean; quietHoursEnabled?: boolean; quietStart?: string; quietEnd?: string }
-  } | undefined
-}
-
 /** Storage snapshot cadence the user can pick in Settings.
  * dsh 0.1.2 removed `settingsNamespace()` — namespaces are compile-time literals now. */
 export const YOLO_NS = 'yolo'
 
 export function apply(ctx: Context): void {
   const yctx = ctx as ReminderCtx
-  const settings = (ctx as { settings?: SettingsLike }).settings
+  const settings = (ctx as unknown as { settings?: SettingsReader }).settings
+  const currentConfig = () => readYoloConfig(settings)
   const currentCwd = (): string => yctx.yolo.observations.latestWorkspaceCwd(process.cwd())
 
   // turn-cadence snapshot: 'every_10_turns' writes a timestamped Markdown
@@ -45,7 +38,7 @@ export function apply(ctx: Context): void {
     if (isYoloSessionId(id)) return
     const count = yctx.yolo.observations.observeTurnStopping(id, payload.turn ?? 0, sessionCwd(payload.agent?.session), false)
     try {
-      const config = settings?.get(YOLO_NS)
+      const config = currentConfig()
       if (config?.storage?.snapshotInterval === 'every_10_turns') {
         const path = maybeWriteTurnSnapshot(yctx.yolo, currentCwd, count)
         if (path) ctx.logger?.info?.('[yolo-reminder] turn snapshot written: %s', path)
@@ -74,7 +67,7 @@ export function apply(ctx: Context): void {
   // scheduler lives for the plugin lifetime; cleanup on unload
   const llm = (ctx as { llm?: LlmRuntime }).llm
   const reminderCfg = (): { checkIntervalSec?: number; aheadMin?: number; enabled?: boolean } | undefined =>
-    settings?.get(YOLO_NS)?.reminder
+    currentConfig()?.reminder
   ctx.effect(() =>
     startReminderScheduler(ctx, {
       yolo: yctx.yolo,
@@ -89,9 +82,9 @@ export function apply(ctx: Context): void {
       intervalMs: resolveReminderRuntime(reminderCfg()).intervalMs,
       aheadMs: () => resolveReminderRuntime(reminderCfg()).aheadMs,
       reminderEnabled: () => resolveReminderRuntime(reminderCfg()).enabled,
-      dailySnapshotsEnabled: () => settings?.get(YOLO_NS)?.storage?.snapshotInterval !== 'every_10_turns',
+      dailySnapshotsEnabled: () => currentConfig()?.storage?.snapshotInterval !== 'every_10_turns',
       quiet: () => {
-        const r = settings?.get(YOLO_NS)?.reminder
+        const r = currentConfig()?.reminder
         return {
           enabled: r?.quietHoursEnabled ?? DEFAULTS.reminderQuietEnabled,
           start: r?.quietStart ?? DEFAULTS.reminderQuietStart,
@@ -100,7 +93,7 @@ export function apply(ctx: Context): void {
       },
       briefs: {
         config: () => {
-          const b = settings?.get(YOLO_NS)?.brief
+          const b = currentConfig()?.brief
           return {
             enabled: b?.enabled ?? DEFAULTS.briefEnabled,
             morningTime: b?.morningTime ?? DEFAULTS.briefMorningTime,

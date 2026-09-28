@@ -12,12 +12,14 @@ type Handler = (...args: any[]) => void
 
 function makeCtx(yolo: Yolo) {
   const handlers = new Map<string, Handler>()
+  const get = vi.fn(() => undefined)
   const ctx = {
     yolo,
     agents: {},
     logger: { info: vi.fn(), warn: vi.fn() },
     settings: {
-      get: vi.fn(() => undefined),
+      get,
+      describe: () => [{ ns: 'yolo-ui', value: get() }],
     },
     on: (event: string, cb: Handler) => {
       handlers.set(event, cb)

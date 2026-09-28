@@ -8,7 +8,7 @@
 //  - rerank never bypasses the deterministic applyRecallPolicy in recall.ts
 //  - a hard deterministic floor keeps at least recallTopK hits on any rerank
 
-import { BlockAssembler, type LlmRuntime, type Message } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, createUserMessage, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import { contentBlocksToText } from '../shared/text.ts'
 import { DEFAULTS } from '../shared/constants.ts'
 import type { SearchHit } from '../domain/types.ts'
@@ -71,7 +71,7 @@ async function llmText(
     provider: 'deepseek',
     model: opts.model,
     system: opts.system,
-    messages: [{ role: 'user', content: [{ type: 'text', text: opts.user }] }] as Message[],
+    messages: [createUserMessage({ content: [{ type: 'text', text: opts.user }], source: { kind: 'user' } })],
     temperature: 0,
     maxTokens: 512,
     purpose: 'session-title',

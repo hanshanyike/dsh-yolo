@@ -15,7 +15,8 @@ import type {} from '@deepseek-ai/dsh-settings'
 // build inlines this JSON, so no runtime path resolution is involved.
 import packageJson from '../../package.json' with { type: 'json' }
 import type Yolo from '../storage/index.ts'
-import { Config, YOLO_NS as YOLO_SETTINGS_NS, type Config as ConfigSchema } from '../runtime/config.ts'
+import { Config as NormalizeConfig, SettingsConfig, YOLO_NS as YOLO_SETTINGS_NS, type Config as ConfigSchema } from '../runtime/config.ts'
+import { readYoloConfig } from '../runtime/settings-read.ts'
 import { registerActionsEndpoint } from './actions.ts'
 import { registerDashboardEndpoint, type WebServerLike } from './dashboard.ts'
 import { registerBadgeEndpoint } from './badge.ts'
@@ -26,8 +27,9 @@ import { registerGoalDetailEndpoint } from './goals.ts'
 import { registerVersionEndpoint } from './version.ts'
 import { registerSessionEndpoints, type AgentsLike } from '../application/conversation/index.ts'
 
-/** The namespace is the join key shared with the client half (settings.plugin.item). */
+/** Compatibility namespace; the dsh 0.2 form itself uses Loader entry `yolo-ui`. */
 export const YOLO_NS = YOLO_SETTINGS_NS
+export { SettingsConfig as Config }
 
 export const name = 'yolo-ui'
 export const inject = ['yolo', 'webServer', 'agents'] as const
@@ -40,22 +42,18 @@ interface UiCtx extends Context {
 export function apply(ctx: UiCtx, config?: Partial<ConfigSchema>): void {
   // normalize: fill schemastery defaults even when the loader passed nothing
   // (runtime accepts partial input and fills defaults; the cast states that)
-  const entry = Config((config ?? {}) as ConfigSchema) as ConfigSchema
+  const supplied = config !== undefined && typeof (config as { get?: unknown }).get === 'function'
+    ? (config as unknown as { get(): Partial<ConfigSchema> }).get()
+    : config
+  const entry = NormalizeConfig((supplied ?? {}) as ConfigSchema) as ConfigSchema
   let configSource = (): ConfigSchema => entry
 
-  // dsh 0.1.2 moved installSettingsSection onto the SettingsProvider as
-  // `installSection(owner, ...)`; the wait-for-service + fallback semantics are
-  // preserved by injecting `settings` before calling it.
+  // dsh 0.2 derives forms from Loader Config exports. Keep the live value
+  // available to HTTP handlers; the normalized loader input is the fallback.
   ctx.inject(['settings'], (sctx) => {
-    sctx.settings.installSection(ctx, YOLO_NS, Config, entry, {
-      // Settings owns the live source after registration. Keep the normalized
-      // loader entry as a defensive fallback while the service is starting or
-      // when a lightweight test/memory provider has no accepted document yet.
-      setSource: (current) => { configSource = () => current() ?? entry },
-      onChange: () => {
-        // Consumers read configSource lazily; no restart callback is needed here.
-      },
-    })
+    const stopCustomPage = sctx.settings.configure({ auto: false })
+    sctx.effect(() => stopCustomPage, 'yolo-ui: custom settings page')
+    configSource = () => readYoloConfig(sctx.settings) ?? entry
   })
 
   // ---- panel data + chat channel ----

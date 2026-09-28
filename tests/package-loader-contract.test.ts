@@ -95,6 +95,7 @@ describe('settings and build-asset contract', () => {
   it('keeps the yolo settings namespace and complete loader defaults stable', () => {
     expect(YOLO_SETTINGS_NAMESPACE).toBe('yolo')
     expect(YOLO_NS).toBe('yolo')
+    expect(uiPlugin.Config.meta.volatile).toBe(true)
     expect(Config(undefined)).toEqual({
       enabled: true,
       extraction: {

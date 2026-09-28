@@ -36,34 +36,33 @@ Phase 5 已把高耦合 use-case state 从两个大组件迁到稳定 controller
 | `panel/ForegroundContext.tsx` | detail/source/chat 单一前景 |
 | `panel/v2/` | 已有 Dashboard v2 展示组件与 API helper；目录名仍为 compatibility，未虚构为新数据版本 |
 | `sidebar/` | 常驻入口、badge 与 non-modal popup |
-| `settings/` | `settings.plugin.item` 插件配置卡的模型、表单控制器、文案与样式 |
+| `settings/` | Plugins 页 YOLO 配置 tab 的模型、表单控制器、文案与样式 |
 | `design/` | Mono tokens、icons、style |
 
-## 插件配置卡（dsh 0.1.5）
+## 插件配置卡（dsh 0.2.0）
 
-dsh 0.1.5 把「插件」设置页做成一个扩展点：`settings.plugins.tab` 是 tab 列表槽，其中
-`configurable` tab 再声明按键（settings namespace）分发的 `settings.plugin.item` 槽。卡片由插件自己
-拥有，所以 YOLO 的卡片要与 dsh 自带卡片（shell / agent-loop / web-search / subagent）一致，靠的是
-**同契约 + 同原子 + 同声明**，而不是复用组件：
+dsh 0.2.0 的「插件」设置页由 `settings.plugins.tab` 列表槽承载各功能自己的页面。
+YOLO 注册独立 tab，使用 `configForms.get('yolo-ui')` 读取和修改同一个 Loader entry；
+宿主 UI 插件导出 `Config` 让 SettingsForms 暴露该 entry，并关闭它的自动生成页面。
 
 | 组成 | 做法 |
 |---|---|
-| `settings/` 注册 | `ctx.slots.register({ name: 'settings.plugin.item', key: 'yolo', locale: 'dsh-plugin-yolo', inject })`；`key` 是 host 侧注册的 settings namespace |
+| `settings/` 注册 | 在 `configForms.whileServed(['yolo-ui'])` 内注册 `settings.plugins.tab`，由宿主是否实际提供该配置决定页面是否出现 |
 | 文案 | `ctx.locale.register('dsh-plugin-yolo', { zh, en })`，注册时声明 `locale`，框架把该命名空间的 `t` 作为标准座位注入 |
 | 卡片外壳 | 复刻 dsh 的卡片契约：根节点是列表里的 `<li>`，头部是 disclosure `<button>`（名称 + 描述 + 未保存 Tag + chevron），正文含只读提示与底部的放弃/保存；`available === false` 时不渲染；保存成功后自动折叠 |
-| 表单状态 | `Settings` scope + `CardShell`（available/writable/dirty/invalid/saving/failed）与 `CardActions`（edit/resetField/save/discard），另加 switch 的 `setSwitch` |
+| 表单状态 | `ConfigForm` + `SettingsFormShell`（available/writable/dirty/invalid/saving/failed）与 `SettingsFormActions`（edit/resetField/save/discard），另加 switch 的 `setSwitch` |
 | 控件 | 值字段复刻 `ValueField` 结构；开关用 shell 提供的 `Tag` / `Switch` / 图标原子（`@deepseek-ai/dsh-client-ui-primitives` 属于客户端 module baseline） |
 | 写入 | 草稿全部暂存，保存时按 dotted path 组装 `SettingsPathOpView[]`，用**一次** revision-fenced `scope.mutate(ops, fence)` 提交，再从 `user` 层回读校验 |
 
-`@deepseek-ai/dsh-client-ui-settings-plugins` 的浏览器产物只导出 `apply` / `inject`，`PluginCard` /
-`ValueField` / `CardForm` 无法被外部插件 `require`，因此卡片外壳与 CSS 声明在 `client/settings/` 内按
-上游声明逐条复刻（见 `card-style.ts`）。样式只使用 host 的 `--dsw-alias-*` token，随宿主主题切换。
+卡片外壳与 CSS 声明仍在 `client/settings/` 内维护（见 `card-style.ts`），并使用宿主
+`@deepseek-ai/dsh-client-ui-primitives` 的 `Tag`、`Switch` 与图标。样式只使用 host 的
+`--dsw-alias-*` token，随宿主主题切换。
 
 | 文件 | 职责 |
 |---|---|
 | `settings/card-locale.ts` | 文案命名空间 `dsh-plugin-yolo` 与中英词典（chrome 用词与 dsh 自带卡片逐字一致） |
 | `settings/model.ts` | 可编辑字段表、dotted path 读写、字段 → 文案键的**全量**映射、分组布局 |
-| `settings/card-form.ts` | 暂存式表单：`CardShell` / `CardFieldState` / `CardActions` + 一次 fenced `mutate` 与回读校验 |
+| `settings/card-form.ts` | 暂存式表单：`SettingsFormShell` / `SettingsFieldState` / `SettingsFormActions` + 一次 fenced `mutate` 与回读校验 |
 | `settings/SettingsCard.tsx` | 卡片组件：复刻 PluginCard / ValueField 外壳，开关用宿主 `Switch`，并渲染版本提醒 |
 | `settings/version-notice.ts` | 向宿主 `/yolo/version` 取一次版本结论；任何失败都等价于「没有更新」 |
 | `settings/card-style.ts` | 卡片样式表（一次性注入、随 fiber 卸载移除） |
